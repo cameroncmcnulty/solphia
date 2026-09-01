@@ -98,6 +98,11 @@ export default function Home() {
           body="Alerts + copy + launches. Buying them separate is 0.70 SOL. This is the simple one."
           href="/pricing"
         />
+        <Card
+          title="Dev tools"
+          body="Launch on Pump.fun, airdrop, burn LP, vest team bags. She scores the form while you fill it."
+          href="/dev"
+        />
       </section>
     </main>
   );

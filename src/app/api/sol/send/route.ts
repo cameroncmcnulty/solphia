@@ -11,7 +11,7 @@ export async function POST(req: NextRequest) {
   }
   const body = await req.json().catch(() => null);
   const b64 = typeof body?.transaction === "string" ? body.transaction : "";
-  if (!b64 || b64.length > 4096) return NextResponse.json({ error: "bad_tx" }, { status: 400 });
+  if (!b64 || b64.length > 24_000) return NextResponse.json({ error: "bad_tx" }, { status: 400 });
   try {
     const raw = Buffer.from(b64, "base64");
     const conn = new Connection(rpcUrl(), { commitment: "confirmed" });

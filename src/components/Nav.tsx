@@ -9,6 +9,7 @@ const LINKS = [
   ["/terminal", "Trade"],
   ["/copy", "Copy"],
   ["/auto", "Auto"],
+  ["/dev", "Dev"],
   ["/pricing", "Pricing"],
 ];
 
