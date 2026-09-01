@@ -1,0 +1,8 @@
+{
+  "name": "SOLPHIA",
+  "short_name": "SOLPHIA",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#050308",
+  "theme_color": "#050308"
+}

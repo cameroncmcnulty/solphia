@@ -1,0 +1,36 @@
+{
+  "name": "solphia",
+  "version": "0.1.0",
+  "private": true,
+  "description": "SOLPHIA — non-custodial Solana memecoin trading terminal. Paper trading first.",
+  "scripts": {
+    "dev": "next dev --port 3100",
+    "build": "next build",
+    "start": "next start --port 3100",
+    "test": "tsx --test src/tests/*.test.ts",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@solana/web3.js": "^1.98.4",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.511.0",
+    "next": "^15.3.4",
+    "nodemailer": "^7.0.5",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "tweetnacl": "^1.0.3",
+    "tweetnacl-util": "^0.15.1",
+    "zod": "^3.24.4"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.21",
+    "@types/nodemailer": "^6.4.17",
+    "@types/react": "^19.1.6",
+    "@types/react-dom": "^19.1.5",
+    "autoprefixer": "^10.4.21",
+    "postcss": "^8.5.3",
+    "tailwindcss": "^3.4.17",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3"
+  }
+}

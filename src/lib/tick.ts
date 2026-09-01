@@ -1,0 +1,65 @@
+import { ingestMarket } from "./feeds";
+import { tickPaper } from "./paper/engine";
+import { scoreToken } from "./risk/engine";
+import { loadState, saveState } from "./store";
+import type { FeedHealth, PaperBook, RiskReport, TokenSnapshot } from "./types";
+
+let lock: Promise<unknown> = Promise.resolve();
+
+export function publicBook(book: PaperBook) {
+  return {
+    startingUsd: book.startingUsd,
+    startedAt: book.startedAt,
+    cashUsd: round2(book.cashUsd),
+    equityUsd: round2(book.equityUsd),
+    realizedPnlUsd: round2(book.realizedPnlUsd),
+    unrealizedUsd: round2(book.positions.reduce((s, p) => s + p.unrealizedUsd, 0)),
+    pnlPct: book.startingUsd ? (book.equityUsd - book.startingUsd) / book.startingUsd : 0,
+    feesPaidUsd: round2(book.feesPaidUsd),
+    slippagePaidUsd: round2(book.slippagePaidUsd),
+    winCount: book.winCount,
+    lossCount: book.lossCount,
+    open: book.positions.length,
+    trades: book.fills.filter((f) => f.side === "sell").length,
+    positions: book.positions,
+    fills: book.fills.slice(-80).reverse(),
+    curve: book.curve.slice(-400),
+  };
+}
+
+function round2(n: number) {
+  return Math.round(n * 100) / 100;
+}
+
+export async function runMarketTick(): Promise<{
+  paper: ReturnType<typeof publicBook>;
+  tokens: { token: TokenSnapshot; report: RiskReport }[];
+  health: FeedHealth[];
+  solUsd: number;
+  entries: number;
+  exits: number;
+}> {
+  const run = lock.then(async () => {
+    const state = loadState();
+    const { tokens, health, solUsd } = await ingestMarket(state.creators);
+    const result = tickPaper(state, tokens);
+    state.feedHealth = health;
+    await saveState(state);
+    const scored = tokens
+      .map((token) => ({ token, report: scoreToken(token, Date.now(), state.settings) }))
+      .sort((a, b) => b.report.score - a.report.score);
+    return {
+      paper: publicBook(state.paper),
+      tokens: scored.slice(0, 80),
+      health,
+      solUsd,
+      entries: result.entries.length,
+      exits: result.exits.length,
+    };
+  });
+  lock = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
+}
