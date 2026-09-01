@@ -74,6 +74,7 @@ export function mergeSnapshots(a: TokenSnapshot, b: TokenSnapshot): TokenSnapsho
     organicBuyRatio: b.organicBuyRatio ?? a.organicBuyRatio,
     devSoldPct: b.devSoldPct ?? a.devSoldPct,
     smartMoneyInflow: b.smartMoneyInflow || a.smartMoneyInflow,
+    copiedBy: [...new Set([...(a.copiedBy || []), ...(b.copiedBy || [])])],
     deployerDeathRate: b.deployerDeathRate ?? a.deployerDeathRate,
     deployerTokenCount: b.deployerTokenCount ?? a.deployerTokenCount,
     athMarketCapUsd: pickMax(a.athMarketCapUsd || 0, b.athMarketCapUsd || 0),

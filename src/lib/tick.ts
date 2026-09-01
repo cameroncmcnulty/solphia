@@ -1,5 +1,5 @@
 import { ingestMarket } from "./feeds";
-import { tickBook, tickPaper } from "./paper/engine";
+import { DEMO_DESKS, tickBook, tickPaper } from "./paper/engine";
 import { scoreToken } from "./risk/engine";
 import { loadState, saveState } from "./store";
 import { bankrollUsd, maybeResizeBook } from "./auto";
@@ -42,8 +42,12 @@ export async function runMarketTick(): Promise<{
 }> {
   const run = lock.then(async () => {
     const state = loadState();
-    const { tokens, health, solUsd } = await ingestMarket(state.creators);
-    const result = tickPaper(state, tokens);
+    const openMints = [
+      ...state.paper.positions.map((p) => p.mint),
+      ...Object.values(state.traders || {}).flatMap((t) => t.book.positions.map((p) => p.mint)),
+    ];
+    const { tokens, health, solUsd } = await ingestMarket(state.creators, openMints);
+    const result = tickPaper(state, tokens, Date.now(), DEMO_DESKS);
     for (const trader of Object.values(state.traders || {})) {
       if (!trader.auto?.armed) continue;
       const target = bankrollUsd(trader.depositedSol, solUsd);
@@ -58,7 +62,12 @@ export async function runMarketTick(): Promise<{
         const cap = (trader.auto.maxSolPerTrade * solUsd) / trader.book.equityUsd;
         if (Number.isFinite(cap) && cap > 0) state.settings.maxPositionPct = Math.min(prev.maxPositionPct, cap);
       }
-      tickBook(state, tokens, trader.book);
+      tickBook(state, tokens, trader.book, Date.now(), {
+        copy: trader.auto.copy,
+        launch: trader.auto.launch,
+        migrate: trader.auto.migrate,
+        scalp: trader.auto.scalp,
+      });
       state.settings = prev;
       trader.updatedAt = Date.now();
     }

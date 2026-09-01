@@ -32,17 +32,26 @@ function ensureDir() {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
+function isScalpDemo(book: { fills?: { strategy: string }[] }) {
+  const fills = book.fills || [];
+  return fills.length > 0 && !fills.some((f) => f.strategy === "copy_trade");
+}
+
 export function loadState(): AppState {
-  if (mem) return mem;
+  if (mem) {
+    if (isScalpDemo(mem.paper)) mem.paper = emptyBook();
+    return mem;
+  }
   try {
     ensureDir();
     if (fs.existsSync(FILE)) {
       const raw = JSON.parse(fs.readFileSync(FILE, "utf8")) as AppState;
+      const rawPaper = raw.paper || emptyBook();
       mem = {
         ...emptyState(),
         ...raw,
         settings: { ...DEFAULT_SETTINGS, ...(raw.settings || {}) },
-        paper: { ...emptyBook(), ...(raw.paper || {}) },
+        paper: isScalpDemo(rawPaper) ? emptyBook() : { ...emptyBook(), ...rawPaper },
         traders: raw.traders || {},
         adminWallets: raw.adminWallets || [],
       };

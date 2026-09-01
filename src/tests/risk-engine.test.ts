@@ -105,6 +105,21 @@ describe("risk engine", () => {
     assert.equal(applyFee(1000, 100), 10);
   });
 
+  it("only allows copy_trade when a followed wallet is in the coin", () => {
+    const organic = scoreToken(token({ smartMoneyInflow: false, organicBuyRatio: 0.9, uniqueTraders1h: 80 }));
+    assert.equal(organic.allowedStrategies.includes("copy_trade"), false);
+    const copied = scoreToken(token({ smartMoneyInflow: true, copiedBy: ["Cented"], organicBuyRatio: 0.9, uniqueTraders1h: 80 }));
+    assert.ok(copied.allowedStrategies.includes("copy_trade"), copied.summary);
+    const huge = scoreToken(
+      token({
+        smartMoneyInflow: true,
+        marketCapUsd: 160_000_000,
+        liquidityUsd: 8_000_000,
+      }),
+    );
+    assert.equal(huge.allowedStrategies.includes("copy_trade"), false);
+  });
+
   it("does not treat telegram links or reply count as safety", () => {
     const r = scoreToken(
       token({

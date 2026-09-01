@@ -53,6 +53,10 @@ async function scrape(slug: string): Promise<{ pnl7d?: number; pnl30d?: number; 
 
 let cache: { at: number; rows: CopyWallet[] } | null = null;
 
+export function copiedRoster(): CopyWallet[] {
+  return SNAPSHOT.filter((w) => w.copied);
+}
+
 export async function copyDesk(): Promise<{ rows: CopyWallet[]; source: string; updatedAt: number }> {
   if (cache && Date.now() - cache.at < 10 * 60 * 1000) {
     return { rows: cache.rows, source: "KOL Explorer (cached)", updatedAt: cache.at };

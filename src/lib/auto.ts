@@ -7,7 +7,7 @@ export const DEFAULT_AUTO: AutoSettings = {
   copy: true,
   launch: false,
   migrate: true,
-  scalp: true,
+  scalp: false,
   maxSolPerTrade: 0.25,
   minScore: 70,
 };

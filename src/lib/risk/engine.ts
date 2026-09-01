@@ -180,7 +180,8 @@ export function allowedStrategies(
     out.push("migration_snipe");
   }
 
-  if (score >= settings.minScoreCopy && (token.smartMoneyInflow || (ctx.unique >= 20 && ctx.organic > 0.65))) {
+  const copySized = token.marketCapUsd <= 0 || token.marketCapUsd <= 8_000_000;
+  if (score >= settings.minScoreCopy && token.smartMoneyInflow && copySized) {
     out.push("copy_trade");
   }
 

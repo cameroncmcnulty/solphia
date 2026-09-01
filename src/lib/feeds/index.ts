@@ -1,4 +1,5 @@
 import type { CreatorStat, FeedHealth, TokenSnapshot } from "../types";
+import { copyUniverse, markMints } from "../copy/flow";
 import { getJson, num, str } from "./http";
 import { blankSnapshot, dexToVenue, mergeSnapshots } from "./normalize";
 
@@ -240,7 +241,10 @@ export async function solPriceUsd(): Promise<number> {
   return p ? num(p.priceUsd, 100) : 100;
 }
 
-export async function ingestMarket(creators: Record<string, CreatorStat> = {}): Promise<{
+export async function ingestMarket(
+  creators: Record<string, CreatorStat> = {},
+  extraMints: string[] = [],
+): Promise<{
   tokens: TokenSnapshot[];
   health: FeedHealth[];
   solUsd: number;
@@ -307,7 +311,20 @@ export async function ingestMarket(creators: Record<string, CreatorStat> = {}): 
     })(),
   ];
 
-  const [solUsd] = await Promise.all([solPriceUsd(), Promise.allSettled(jobs)]);
+  const [solUsd, copy] = await Promise.all([solPriceUsd(), copyUniverse(), Promise.allSettled(jobs)]);
+  for (const t of copy) {
+    const prev = map.get(t.mint);
+    map.set(t.mint, prev ? { ...mergeSnapshots(prev, t), smartMoneyInflow: true, copiedBy: t.copiedBy } : t);
+  }
+  const missing = extraMints.filter((m) => m && !map.has(m));
+  if (missing.length) {
+    const marked = await markMints(missing);
+    health.push({ source: "dex-marks", ok: marked.length > 0, ms: 0, count: marked.length, at: Date.now() });
+    for (const t of marked) {
+      const prev = map.get(t.mint);
+      map.set(t.mint, prev ? mergeSnapshots(prev, t) : t);
+    }
+  }
   const tokens = applyCreators([...map.values()], creators)
     .filter((t) => t.mint.length >= 32)
     .sort((a, b) => (b.volume1h || b.marketCapUsd) - (a.volume1h || a.marketCapUsd));

@@ -57,6 +57,7 @@ export interface TokenSnapshot {
   organicBuyRatio?: number;
   devSoldPct?: number;
   smartMoneyInflow?: boolean;
+  copiedBy?: string[];
   deployerDeathRate?: number;
   deployerTokenCount?: number;
   athMarketCapUsd?: number;

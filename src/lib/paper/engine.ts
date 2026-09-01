@@ -1,6 +1,7 @@
 import type {
   AlertEvent,
   AppState,
+  AutoSettings,
   CreatorStat,
   EngineSettings,
   PaperBook,
@@ -11,6 +12,20 @@ import type {
 } from "../types";
 import { applyFee, positionSizeUsd, scoreToken, slippageBps } from "../risk/engine";
 import { pushBounded } from "../store";
+import { tokenPriceUsd } from "./price";
+
+export type DeskFlags = Pick<AutoSettings, "copy" | "launch" | "migrate" | "scalp">;
+
+export const DEMO_DESKS: DeskFlags = { copy: true, launch: false, migrate: false, scalp: false };
+
+function deskAllows(desks: DeskFlags | undefined, strategy: Strategy): boolean {
+  if (!desks) return true;
+  if (strategy === "copy_trade") return desks.copy !== false;
+  if (strategy === "launch_snipe") return Boolean(desks.launch);
+  if (strategy === "migration_snipe") return Boolean(desks.migrate);
+  if (strategy === "scalp") return Boolean(desks.scalp);
+  return false;
+}
 
 function id(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
@@ -76,7 +91,7 @@ export function enrichWithCreators(tokens: TokenSnapshot[], creators: Record<str
 }
 
 function pickStrategy(allowed: Strategy[]): Strategy | null {
-  const order: Strategy[] = ["migration_snipe", "copy_trade", "scalp", "launch_snipe"];
+  const order: Strategy[] = ["copy_trade", "migration_snipe", "scalp", "launch_snipe"];
   return order.find((s) => allowed.includes(s)) || allowed[0] || null;
 }
 
@@ -94,9 +109,7 @@ export function openPaperBuy(opts: {
   const settings = state.settings;
   if (book.positions.some((p) => p.mint === token.mint)) return null;
   if (book.positions.length >= settings.maxPositions) return null;
-  if (token.priceUsd <= 0 && token.marketCapUsd <= 0) return null;
-
-  const price = token.priceUsd > 0 ? token.priceUsd : token.marketCapUsd / 1_000_000_000;
+  const price = tokenPriceUsd(token);
   if (price <= 0) return null;
 
   const size = Math.min(positionSizeUsd(book.equityUsd, score, settings), book.cashUsd * 0.95);
@@ -166,7 +179,7 @@ export function closePosition(opts: {
 }): PaperFill {
   const { state, pos, reason } = opts;
   const now = opts.now ?? Date.now();
-  const price = opts.price > 0 ? opts.price : pos.markUsd;
+  const price = opts.price >= 0 ? opts.price : pos.markUsd;
   const settings = state.settings;
   const slipBps = slippageBps(pos.strategy, settings);
   const notional = price * pos.qty;
@@ -215,17 +228,51 @@ function shouldExit(pos: PaperPosition, token: TokenSnapshot | undefined, report
   return null;
 }
 
-export function tickBook(state: AppState, tokens: TokenSnapshot[], book: PaperBook, now = Date.now()) {
+export function tickBook(
+  state: AppState,
+  tokens: TokenSnapshot[],
+  book: PaperBook,
+  now = Date.now(),
+  desks?: DeskFlags,
+) {
   const prev = state.paper;
   state.paper = book;
   try {
-    return tickPaper(state, tokens, now);
+    return tickPaper(state, tokens, now, desks);
   } finally {
     state.paper = prev;
   }
 }
 
-export function tickPaper(state: AppState, tokens: TokenSnapshot[], now = Date.now()): {
+function pushExit(
+  state: AppState,
+  pos: PaperPosition,
+  price: number,
+  reason: string,
+  now: number,
+  exits: PaperFill[],
+  alerts: AlertEvent[],
+) {
+  const fill = closePosition({ state, pos, price, reason, now });
+  exits.push(fill);
+  alerts.push({
+    id: id("al"),
+    at: now,
+    kind: "exit",
+    title: `EXIT ${pos.symbol}`,
+    body: `${reason} · ${fill.pnlUsd && fill.pnlUsd >= 0 ? "+" : ""}${(fill.pnlUsd || 0).toFixed(2)}`,
+    mint: pos.mint,
+    score: pos.riskScore,
+    strategy: pos.strategy,
+  });
+}
+
+export function tickPaper(
+  state: AppState,
+  tokens: TokenSnapshot[],
+  now = Date.now(),
+  desks?: DeskFlags,
+): {
   entries: PaperFill[];
   exits: PaperFill[];
   alerts: AlertEvent[];
@@ -243,52 +290,47 @@ export function tickPaper(state: AppState, tokens: TokenSnapshot[], now = Date.n
   }));
 
   state.paper.positions = state.paper.positions.map((pos) => {
-    const t = byMint.get(pos.mint);
-    const price = t?.priceUsd || (t ? t.marketCapUsd / 1_000_000_000 : pos.markUsd);
-    return markPosition(pos, price);
+    const live = tokenPriceUsd(byMint.get(pos.mint));
+    return live > 0 ? markPosition(pos, live) : pos;
   });
 
   for (const pos of [...state.paper.positions]) {
     const t = byMint.get(pos.mint);
+    const live = tokenPriceUsd(t);
+    if (live <= 0 && now - pos.openedAt > 90_000) {
+      pushExit(state, pos, 0, "illiquid", now, exits, alerts);
+      continue;
+    }
     const report = scored.find((s) => s.token.mint === pos.mint)?.report;
     const reason = shouldExit(pos, t, report?.score, settings, now);
-    if (reason) {
-      const fill = closePosition({ state, pos, price: pos.markUsd, reason, now });
-      exits.push(fill);
-      alerts.push({
-        id: id("al"),
-        at: now,
-        kind: "exit",
-        title: `EXIT ${pos.symbol}`,
-        body: `${reason} · ${fill.pnlUsd && fill.pnlUsd >= 0 ? "+" : ""}${(fill.pnlUsd || 0).toFixed(2)}`,
-        mint: pos.mint,
-        score: pos.riskScore,
-        strategy: pos.strategy,
-      });
-    }
+    if (reason) pushExit(state, pos, pos.markUsd, reason, now, exits, alerts);
   }
 
-  const unreal = state.paper.positions.reduce((s, p) => s + p.unrealizedUsd, 0);
-  state.paper.equityUsd = Math.round((state.paper.cashUsd + state.paper.positions.reduce((s, p) => s + p.markUsd * p.qty, 0)) * 100) / 100;
-  void unreal;
+  state.paper.equityUsd =
+    Math.round((state.paper.cashUsd + state.paper.positions.reduce((s, p) => s + p.markUsd * p.qty, 0)) * 100) / 100;
 
   let opened = 0;
   const ranked = scored
-    .filter((s) => !s.report.vetoed && s.report.allowedStrategies.length > 0)
+    .map((s) => ({
+      ...s,
+      allowed: s.report.allowedStrategies.filter((st) => deskAllows(desks, st)),
+    }))
+    .filter((s) => !s.report.vetoed && s.allowed.length > 0)
     .sort((a, b) => b.report.score - a.report.score);
 
   for (const s of ranked) {
     if (opened >= settings.maxNewEntriesPerTick) break;
     if (state.paper.positions.length >= settings.maxPositions) break;
-    const strategy = pickStrategy(s.report.allowedStrategies);
+    const strategy = pickStrategy(s.allowed);
     if (!strategy) continue;
     if (state.paper.positions.some((p) => p.mint === s.token.mint)) continue;
+    const who = s.token.copiedBy?.[0];
     const fill = openPaperBuy({
       state,
       token: s.token,
       strategy,
       score: s.report.score,
-      reason: `auto:${strategy} score ${s.report.score}`,
+      reason: who ? `copy ${who} · safety ${s.report.score}` : `auto:${strategy} score ${s.report.score}`,
       now,
     });
     if (fill) {

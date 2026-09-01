@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { closePosition, openPaperBuy, tickPaper } from "../lib/paper/engine";
+import { tokenPriceUsd } from "../lib/paper/price";
 import { emptyState } from "../lib/store";
 import { blankSnapshot } from "../lib/feeds/normalize";
 import { applyFee } from "../lib/risk/engine";
@@ -86,5 +87,80 @@ describe("paper engine", () => {
 
   it("keeps the 0.35% fee invariant on notional", () => {
     assert.equal(applyFee(250, 35), 0.875);
+  });
+
+  it("does not invent a Raydium price from a 1B supply guess", () => {
+    assert.equal(tokenPriceUsd(blankSnapshot({ mint: "x".repeat(44), name: "T", symbol: "T", venue: "raydium", marketCapUsd: 1_000_000 })), 0);
+    assert.ok(tokenPriceUsd(blankSnapshot({ mint: `${"p".repeat(40)}pump`, name: "P", symbol: "P", venue: "pumpfun", marketCapUsd: 1_000_000 })) > 0);
+  });
+
+  it("demo desks only copy coins a followed wallet is actually in", () => {
+    const state = emptyState();
+    const random = blankSnapshot({
+      mint: "Rand111111111111111111111111111111111111111",
+      name: "Random",
+      symbol: "RND",
+      venue: "pumpswap",
+      priceUsd: 0.02,
+      marketCapUsd: 80_000,
+      liquidityUsd: 50_000,
+      uniqueTraders1h: 120,
+      volume1h: 90_000,
+      buys1h: 100,
+      sells1h: 20,
+      mintAuthorityRevoked: true,
+      freezeAuthorityRevoked: true,
+      lpLockedOrBurned: true,
+      organicBuyRatio: 0.9,
+      bundleRatio: 0.1,
+      bondingProgress: 1,
+      graduated: true,
+      createdAt: Date.now() - 20 * 60 * 1000,
+    });
+    const copied = blankSnapshot({
+      ...random,
+      mint: "Copy111111111111111111111111111111111111111",
+      symbol: "COPY",
+      name: "Copy",
+      smartMoneyInflow: true,
+      copiedBy: ["Cented"],
+    });
+    const { entries } = tickPaper(state, [random, copied], Date.now(), {
+      copy: true,
+      launch: false,
+      migrate: false,
+      scalp: false,
+    });
+    assert.ok(entries.length >= 1);
+    assert.ok(entries.every((e) => e.strategy === "copy_trade"));
+    assert.ok(entries.every((e) => e.mint === copied.mint));
+  });
+
+  it("writes off a copied coin that disappears from the book", () => {
+    const state = emptyState();
+    const token = blankSnapshot({
+      mint: "Dead111111111111111111111111111111111111111",
+      name: "Dead",
+      symbol: "DEAD",
+      venue: "pumpfun",
+      priceUsd: 0.001,
+      marketCapUsd: 40_000,
+      liquidityUsd: 12_000,
+      uniqueTraders1h: 40,
+      volume1h: 20_000,
+      mintAuthorityRevoked: true,
+      freezeAuthorityRevoked: true,
+      smartMoneyInflow: true,
+      copiedBy: ["Decu"],
+    });
+    const fill = openPaperBuy({ state, token, strategy: "copy_trade", score: 72, reason: "copy Decu" });
+    assert.ok(fill);
+    const openedAt = Date.now() - 120_000;
+    state.paper.positions[0].openedAt = openedAt;
+    const { exits } = tickPaper(state, [], Date.now(), { copy: true, launch: false, migrate: false, scalp: false });
+    assert.equal(exits.length, 1);
+    assert.equal(exits[0].reason, "illiquid");
+    assert.ok((exits[0].pnlUsd || 0) < 0);
+    assert.equal(state.paper.positions.length, 0);
   });
 });

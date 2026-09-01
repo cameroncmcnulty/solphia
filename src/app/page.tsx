@@ -38,9 +38,13 @@ export default function Home() {
             </div>
             {paper && (
               <div className="mt-8 grid grid-cols-3 gap-3 border-t border-violet/20 pt-5">
-                <Stat k="Demo P&L" v={`$${paper.equityUsd.toFixed(0)}`} sub="from $1,000" />
-                <Stat k="Fee" v="0.35%" sub="others charge ~1%" />
-                <Stat k="Open" v={String(paper.open)} sub="paper trades" />
+                <Stat
+                  k="Copy P&L"
+                  v={`${paper.equityUsd - paper.startingUsd >= 0 ? "+" : "−"}$${Math.abs(paper.equityUsd - paper.startingUsd).toFixed(0)}`}
+                  sub={`${(paper.pnlPct * 100).toFixed(1)}% on $1,000`}
+                />
+                <Stat k="Book" v={`$${paper.equityUsd.toFixed(0)}`} sub="live marks, 0.35% fee" />
+                <Stat k="Open" v={String(paper.open)} sub="copied coins" />
               </div>
             )}
           </div>
