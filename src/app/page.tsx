@@ -44,7 +44,7 @@ export default function Home() {
               </div>
             )}
           </div>
-          <div className="hidden lg:block">
+          <div className="relative hidden h-[72vh] min-h-[520px] lg:block">
             <SolphiaFace mode="hero" />
           </div>
         </div>
