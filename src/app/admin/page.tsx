@@ -1,11 +1,15 @@
 "use client";
 
 import { useState } from "react";
+import { WalletConnect } from "@/components/WalletConnect";
+import { AutoPilot } from "@/components/AutoPilot";
 
 export default function AdminPage() {
   const [secret, setSecret] = useState("");
   const [data, setData] = useState<any>(null);
   const [err, setErr] = useState("");
+  const [wallet, setWallet] = useState("");
+  const [note, setNote] = useState("");
 
   async function login() {
     const r = await fetch("/api/admin/login", {
@@ -17,9 +21,15 @@ export default function AdminPage() {
       setErr("denied");
       return;
     }
+    await reload();
+    setErr("");
+  }
+
+  async function reload() {
     const dash = await fetch("/api/admin");
     setData(await dash.json());
-    setErr("");
+    const stored = localStorage.getItem("solphia_owner") || "";
+    if (stored) setWallet(stored);
   }
 
   async function saveSetting(key: string, value: number) {
@@ -28,19 +38,40 @@ export default function AdminPage() {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ settings: { [key]: value } }),
     });
-    const dash = await fetch("/api/admin");
-    setData(await dash.json());
+    await reload();
+  }
+
+  async function grant() {
+    const pk = wallet || localStorage.getItem("solphia_owner") || "";
+    if (!pk) {
+      setNote("Connect a wallet first.");
+      return;
+    }
+    const r = await fetch("/api/admin", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ compWallet: pk }),
+    });
+    const j = await r.json();
+    if (!r.ok) {
+      setNote(j.error || "failed");
+      return;
+    }
+    localStorage.setItem("solphia_owner", pk);
+    setNote(`Founder access granted to ${pk.slice(0, 4)}…${pk.slice(-4)}. Full terminal, auto, copy, snipers — no SOL.`);
+    await reload();
   }
 
   if (!data) {
     return (
       <main className="mx-auto max-w-md px-5 py-20">
         <h1 className="font-display text-4xl text-ghost">Admin</h1>
+        <p className="mt-2 font-mono text-xs text-mute">Command login. Then connect your wallet for free founder access.</p>
         <input
           type="password"
           value={secret}
           onChange={(e) => setSecret(e.target.value)}
-          placeholder="ADMIN_SECRET"
+          placeholder="Admin secret"
           className="mt-6 w-full rounded-full border border-line bg-void px-4 py-3 font-mono text-xs outline-none"
         />
         <button onClick={login} className="btn-acid mt-4 w-full rounded-full py-3 font-mono text-xs">
@@ -53,13 +84,45 @@ export default function AdminPage() {
 
   const p = data.paper;
   return (
-    <main className="px-5 pb-24 md:px-8">
-      <div className="flex items-end justify-between">
-        <h1 className="font-display text-5xl text-ghost">Command</h1>
+    <main className="px-4 pb-24 md:px-8">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <h1 className="font-display text-4xl text-ghost md:text-5xl">Command</h1>
         <div className="font-mono text-[11px] text-cyan">
           {data.liveTrading ? "LIVE" : "PAPER"} · HELIUS {data.helius ? "ON" : "OFF"}
         </div>
       </div>
+
+      <section className="panel mt-6 space-y-4 rounded-2xl p-5">
+        <div className="font-mono text-[10px] tracking-[0.3em] text-violet">FOUNDER WALLET</div>
+        <p className="text-sm text-mute">
+          Connect the wallet you trade with. Grant it founder access and every desk is free — Pulse, copy, snipers,
+          auto, no 0.15 / 0.50 SOL.
+        </p>
+        <WalletConnect />
+        <input
+          value={wallet}
+          onChange={(e) => setWallet(e.target.value)}
+          placeholder="Or paste a Solana address"
+          className="w-full rounded-full border border-violet/30 bg-void px-4 py-3 font-mono text-xs outline-none"
+        />
+        <button onClick={grant} className="btn-acid w-full rounded-full py-3 font-mono text-xs sm:w-auto sm:px-6">
+          Grant this wallet full access (free)
+        </button>
+        {note && <p className="font-mono text-xs text-acid">{note}</p>}
+        {(data.adminWallets || []).length > 0 && (
+          <div className="font-mono text-[11px] text-mute">
+            Comped: {(data.adminWallets as string[]).map((a) => `${a.slice(0, 4)}…${a.slice(-4)}`).join(" · ")}
+          </div>
+        )}
+      </section>
+
+      {wallet && (
+        <section className="mt-6">
+          <div className="mb-3 font-mono text-[10px] tracking-[0.3em] text-mute">YOUR AUTO (FOUNDER)</div>
+          <AutoPilot owner={wallet} />
+        </section>
+      )}
+
       <div className="mt-6 grid gap-4 md:grid-cols-4">
         {[
           ["EQUITY", `$${p.equityUsd.toFixed(2)}`],
@@ -106,7 +169,7 @@ export default function AdminPage() {
           <div className="font-mono text-[10px] tracking-[0.3em] text-mute">USERS</div>
           {data.users.map((u: any) => (
             <div key={u.pubkey} className="mt-2 font-mono text-[11px] text-ghost">
-              {u.pubkey.slice(0, 4)}…{u.pubkey.slice(-4)} · {u.email || "no mail"} ·{" "}
+              {u.pubkey.slice(0, 4)}…{u.pubkey.slice(-4)} · {u.comped ? "FOUNDER" : u.email || "no mail"} ·{" "}
               {u.subscribedUntil && u.subscribedUntil > Date.now() ? "SUB" : "FREE"}
             </div>
           ))}

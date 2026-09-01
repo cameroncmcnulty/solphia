@@ -5,7 +5,8 @@ import { clientIp, isEmail, isSolanaAddress, rateLimit, sanitizeText } from "@/l
 import { LIVE_TRADING, TREASURY } from "@/lib/config";
 import { PLANS, planById, lamportsForPlan, type PlanId } from "@/lib/plans";
 import { connection, confirmedSolTransfer } from "@/lib/solana/connection";
-import { mutateState } from "@/lib/store";
+import { loadState, mutateState } from "@/lib/store";
+import { isFounder } from "@/lib/access";
 import { queueEmail } from "@/lib/email/send";
 import { welcomeEmailHtml } from "@/lib/email/templates";
 
@@ -41,6 +42,15 @@ export async function POST(req: NextRequest) {
   const plan = planById(planId) || PLANS[3];
   const until = Date.now() + 30 * 24 * 60 * 60 * 1000;
   const lamports = lamportsForPlan(plan.id);
+  if (isFounder(loadState(), parsed.data.pubkey)) {
+    return NextResponse.json({
+      ok: true,
+      mode: "founder",
+      plan: "full",
+      sol: 0,
+      subscribedUntil: Date.now() + 10 * 365 * 24 * 60 * 60 * 1000,
+    });
+  }
 
   if (parsed.data.paper || !TREASURY) {
     await mutateState(async (s) => {

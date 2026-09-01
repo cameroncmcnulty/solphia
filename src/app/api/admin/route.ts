@@ -5,7 +5,8 @@ import { loadState, mutateState, audit, pushBounded } from "@/lib/store";
 import { publicBook } from "@/lib/tick";
 import { DEFAULT_SETTINGS, LIVE_TRADING } from "@/lib/config";
 import { heliusEnabled } from "@/lib/solana/connection";
-import { clientIp } from "@/lib/security";
+import { clientIp, isSolanaAddress } from "@/lib/security";
+import { grantFounder } from "@/lib/access";
 
 export const dynamic = "force-dynamic";
 
@@ -25,12 +26,14 @@ export async function GET(req: NextRequest) {
     liveTrading: LIVE_TRADING,
     helius: heliusEnabled(),
     defaults: DEFAULT_SETTINGS,
+    adminWallets: s.adminWallets || [],
   });
 }
 
 const Patch = z.object({
   settings: z.record(z.number()).optional(),
   watchWallet: z.string().optional(),
+  compWallet: z.string().optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -47,6 +50,11 @@ export async function POST(req: NextRequest) {
       if (!s.watchWallets.includes(parsed.data.watchWallet)) s.watchWallets.push(parsed.data.watchWallet);
       pushBounded(s.audit, audit("admin", "watch", parsed.data.watchWallet, clientIp(req)), 400);
     }
+    if (parsed.data.compWallet && isSolanaAddress(parsed.data.compWallet)) {
+      grantFounder(s, parsed.data.compWallet);
+      pushBounded(s.audit, audit("admin", "founder", parsed.data.compWallet, clientIp(req)), 400);
+    }
   });
-  return NextResponse.json({ ok: true, settings: loadState().settings });
+  const s = loadState();
+  return NextResponse.json({ ok: true, settings: s.settings, adminWallets: s.adminWallets });
 }

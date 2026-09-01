@@ -13,10 +13,8 @@ export default function Home() {
   return (
     <main className="relative">
       <section className="relative overflow-hidden">
-        <div className="pointer-events-none absolute inset-0 opacity-50 md:opacity-100 lg:left-[38%] lg:right-[-6%]">
-          <SolphiaFace mode="hero" />
-        </div>
-        <div className="relative z-10 px-4 pb-10 pt-8 md:px-10 md:pt-16 lg:grid lg:min-h-[82vh] lg:grid-cols-[minmax(0,1fr)_0.55fr] lg:items-center">
+        <div className="grid items-center lg:min-h-[82vh] lg:grid-cols-[minmax(0,1.05fr)_0.95fr]">
+        <div className="relative z-10 px-4 pb-6 pt-8 md:px-10 md:pt-16">
           <div className="max-w-xl">
             <p className="font-mono text-[10px] tracking-[0.38em] text-violet sm:text-[11px]">SOLANA · AUTO · YOUR WALLET</p>
             <h1 className="mt-3 font-display text-4xl leading-[0.95] text-ghost sm:text-6xl md:text-7xl">
@@ -45,6 +43,10 @@ export default function Home() {
             )}
           </div>
         </div>
+        <div className="px-2 pb-4 lg:h-full lg:pr-6">
+          <SolphiaFace mode="hero" />
+        </div>
+        </div>
       </section>
 
       <section className="border-y border-violet/20 bg-ink/40 px-5 py-4 md:px-10">
@@ -69,17 +71,18 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="grid gap-3 px-4 pb-8 md:grid-cols-3 md:px-10">
-        <Card title="Discover" body="Live Pump.fun, LaunchLab, Raydium and DexScreener. Every row carries a safety score before it can hit the book." href="/terminal" />
-        <Card title="Copy" body="A short list of wallets with public 7-day and 30-day PnL. Solphia only mirrors a print if the coin also clears the engine." href="/copy" />
-        <Card title="Snipers" body="Launch and migration are separate desks with hard gates. Bundles, freeze authority and serial deployers never arm." href="/terminal?desk=launch" />
+      <section className="grid gap-3 px-4 pb-8 md:grid-cols-2 md:px-10">
+        <Card title="Pulse · 0.15 SOL" body="She watches. You get the ping. Email + in-app when a coin clears the safety score, a followed wallet buys, or a curve is about to graduate. You still place the trade yourself." href="/pricing" />
+        <Card title="Copy · 0.25 SOL" body="Auto-mirrors a short list of wallets with public PnL. A fill only fires if the coin also passes the risk engine — that filter is the whole product." href="/copy" />
+        <Card title="Snipers · 0.30 SOL" body="Launch (under 8 minutes, anti-bundle) and migration (bonding ≥82%). Not copy trading. For curve events, not KOL flow." href="/terminal?desk=launch" />
+        <Card title="Full · 0.50 SOL" body="Pulse + copy + both snipers + auto-pilot. Stacking the three desks is 0.70 SOL. Full is the floor pass." href="/pricing" />
       </section>
 
       <section className="px-4 pb-8 md:px-10 md:pb-16">
         <div className="panel flex flex-col items-stretch gap-4 rounded-2xl p-5 sm:p-8 md:flex-row md:items-center md:justify-between">
           <div>
             <div className="font-mono text-[10px] tracking-[0.3em] text-violet">ACCESS</div>
-            <h2 className="mt-1 font-display text-3xl text-ghost">Pulse is 0.15 SOL. The rest is à la carte — or one key for all of it.</h2>
+            <h2 className="mt-1 font-display text-3xl text-ghost">Pulse is the wire. Copy and snipers are desks. Full is cheaper than buying all three.</h2>
           </div>
           <Link href="/pricing" className="btn-acid rounded-full px-6 py-3 font-mono text-xs">
             Pricing

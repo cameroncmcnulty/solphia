@@ -181,6 +181,7 @@ export interface AppUser {
   pubkey: string;
   email?: string;
   plan?: string;
+  comped?: boolean;
   subscribedUntil?: number;
   createdAt: number;
   lastSeen: number;
@@ -256,6 +257,7 @@ export interface AppState {
   audit: AuditEvent[];
   creators: Record<string, CreatorStat>;
   watchWallets: string[];
+  adminWallets: string[];
   traders: Record<string, TraderAccount>;
   feedHealth: FeedHealth[];
   lastTickAt: number;

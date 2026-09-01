@@ -5,6 +5,7 @@ export interface Plan {
   name: string;
   sol: number;
   tagline: string;
+  story: string;
   points: string[];
   includes: PlanId[];
   featured?: boolean;
@@ -15,32 +16,60 @@ export const PLANS: Plan[] = [
     id: "pulse",
     name: "Pulse",
     sol: 0.15,
-    tagline: "The wire only.",
-    points: ["Email + in-app alerts", "Safety score on every ping", "No execution desk"],
+    tagline: "Signals only. You still click buy.",
+    story:
+      "Solphia watches Pump.fun, LaunchLab and the copy wallets, then pings you when something actually clears the safety score. Email + in-app. She does not place the trade. You do, in Phantom, if you want it. This is the cheap 'I want her eyes' plan.",
+    points: [
+      "Push when a coin scores high enough to trade",
+      "Ping when a followed wallet prints",
+      "Ping when a curve is about to graduate",
+      "No auto, no sniper, no copy fills",
+    ],
     includes: ["pulse"],
   },
   {
     id: "copy",
     name: "Copy desk",
     sol: 0.25,
-    tagline: "Follow wallets that actually print.",
-    points: ["Live KOL board with 7D / 30D PnL", "Paper copy fills on cleared coins", "Watchlist + last print"],
+    tagline: "Mirror wallets that already have an edge.",
+    story:
+      "A short list of public KOL wallets (Cented, Cupsey, Decu…) with live 7-day and 30-day PnL. When they buy, Solphia sizes a fill — but only if the coin also passes the risk engine. Most copy bots skip that filter and eat rugs.",
+    points: [
+      "Live PnL board for the wallets she follows",
+      "Auto-mirror buys/sells after the safety gate",
+      "Your bankroll, your trading wallet",
+      "Does not include launch/migration snipers or Pulse mail",
+    ],
     includes: ["copy"],
   },
   {
     id: "snipers",
     name: "Snipers",
     sol: 0.3,
-    tagline: "Launch and graduation only.",
-    points: ["Launch filter (≤8m, bundle <28%)", "Migration desk (≥82% bonded)", "Safety vetoes before arming"],
+    tagline: "First minutes and graduation. Not KOL flow.",
+    story:
+      "Two desks. Launch: token is under 8 minutes old, unique flow is real, bundle under 28%. Migration: bonding curve ≥82% or just graduated. Freeze authority, serial deployers and livestream rugs never arm. This is not copy trading.",
+    points: [
+      "Launch sniper with anti-bundle gates",
+      "Migration sniper on Pump.fun / LaunchLab",
+      "Hard vetoes before anything fires",
+      "No KOL copy board, no alert emails",
+    ],
     includes: ["snipers"],
   },
   {
     id: "full",
     name: "Full terminal",
     sol: 0.5,
-    tagline: "Every desk. One key.",
-    points: ["Pulse + copy + snipers", "Live $1,000 paper book", "0.35% modeled fee vs ~1% industry"],
+    tagline: "Pulse + copy + snipers + auto. One key.",
+    story:
+      "Everything. Alert wire, copy desk, both snipers, and auto-pilot on a trading wallet you own. Stacking the three desks separately is 0.70 SOL. Full is 0.50. 0.35% modeled fee vs ~1% on Axiom/GMGN.",
+    points: [
+      "Pulse alerts",
+      "Copy desk + safety-gated mirrors",
+      "Launch and migration snipers",
+      "Auto-pilot, paper book, founder tools",
+    ],
     includes: ["pulse", "copy", "snipers", "full"],
     featured: true,
   },

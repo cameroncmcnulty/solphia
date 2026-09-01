@@ -20,6 +20,7 @@ export function emptyState(): AppState {
     audit: [],
     creators: {},
     watchWallets: [],
+    adminWallets: [],
     traders: {},
     feedHealth: [],
     lastTickAt: 0,
@@ -43,6 +44,7 @@ export function loadState(): AppState {
         settings: { ...DEFAULT_SETTINGS, ...(raw.settings || {}) },
         paper: { ...emptyBook(), ...(raw.paper || {}) },
         traders: raw.traders || {},
+        adminWallets: raw.adminWallets || [],
       };
       return mem;
     }

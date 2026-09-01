@@ -31,8 +31,8 @@ export default function PricingPage() {
       <p className="font-mono text-[11px] tracking-[0.4em] text-violet">ACCESS</p>
       <h1 className="mt-2 font-display text-3xl text-ghost sm:text-5xl">Pick a desk, or take the whole floor.</h1>
       <p className="mt-4 max-w-2xl text-mute">
-        Pulse is the 0.15 SOL alert wire. Copy and snipers are separate. Full terminal is cheaper than stacking them.
-        Testing seats are paper until a treasury is set.
+        Four products, not one vague subscription. Pulse is alerts. Copy is auto-mirroring wallets. Snipers are
+        launch and graduation. Full is all of it, cheaper than stacking. Testing seats are paper until treasury is set.
       </p>
 
       <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -46,6 +46,7 @@ export default function PricingPage() {
             <div className="mt-2 font-display text-2xl text-ghost">{p.name}</div>
             <div className="mt-1 font-mono text-acid">{p.sol} SOL / 30d</div>
             <p className="mt-3 text-sm text-mute">{p.tagline}</p>
+            <p className="mt-3 text-sm leading-relaxed text-ghost/80">{p.story}</p>
             <ul className="mt-4 space-y-2 font-mono text-[11px] text-mute">
               {p.points.map((x) => (
                 <li key={x}>· {x}</li>
@@ -57,6 +58,7 @@ export default function PricingPage() {
 
       <div className="panel mt-10 max-w-lg space-y-4 rounded-2xl p-6">
         <div className="font-mono text-[10px] tracking-[0.28em] text-mute">SEAT · {selected.name.toUpperCase()}</div>
+        <p className="text-sm leading-relaxed text-mute">{selected.story}</p>
         <WalletConnect />
         <input
           value={pubkey}
