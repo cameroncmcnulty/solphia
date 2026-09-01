@@ -7,7 +7,8 @@ import { WalletConnect } from "./WalletConnect";
 const LINKS = [
   ["/", "Home"],
   ["/terminal", "Terminal"],
-  ["/copy", "Copy desk"],
+  ["/copy", "Copy"],
+  ["/auto", "Auto"],
   ["/pricing", "Pricing"],
 ];
 
@@ -19,7 +20,7 @@ export function Nav() {
         <span className="h-2 w-2 rounded-full bg-acid shadow-[0_0_12px_#14F195]" />
         <span className="font-display text-lg tracking-[0.32em] text-ghost">SOLPHIA</span>
       </Link>
-      <nav className="hidden items-center gap-7 md:flex">
+      <nav className="hidden items-center gap-6 lg:flex">
         {LINKS.map(([href, label]) => (
           <Link
             key={href}

@@ -1,11 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useMarket } from "@/lib/hooks";
 import { TokenTable } from "./TokenTable";
 import { SolphiaFace } from "./SolphiaFace";
 import { WalletDesk } from "./WalletDesk";
+import { AutoPilot } from "./AutoPilot";
 import type { Strategy } from "@/lib/types";
 
 const DESKS: { id: string; label: string; strategy?: Strategy }[] = [
@@ -14,6 +15,7 @@ const DESKS: { id: string; label: string; strategy?: Strategy }[] = [
   { id: "launch", label: "Launch", strategy: "launch_snipe" },
   { id: "migrate", label: "Migrate", strategy: "migration_snipe" },
   { id: "book", label: "Book" },
+  { id: "auto", label: "Auto" },
 ];
 
 export function TerminalClient({
@@ -26,8 +28,13 @@ export function TerminalClient({
   const [desk, setDesk] = useState(initial);
   const { data, err, loading, refresh } = useMarket(12000);
   const [msg, setMsg] = useState("");
+  const [owner, setOwner] = useState<string | null>(null);
   const paper = data?.paper;
   const active = DESKS.find((d) => d.id === desk) || DESKS[0];
+
+  useEffect(() => {
+    setOwner(localStorage.getItem("solphia_owner"));
+  }, []);
 
   const rows = useMemo(() => {
     const list = data?.tokens || [];
@@ -47,11 +54,11 @@ export function TerminalClient({
   }
 
   return (
-    <main className="px-5 pb-24 md:px-8">
-      <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+    <main className="px-3 pb-6 md:px-8">
+      <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="font-mono text-[11px] tracking-[0.4em] text-violet">LIVE MARKET · PAPER FILLS</p>
-          <h1 className="font-display text-4xl text-ghost">Terminal</h1>
+          <p className="font-mono text-[10px] tracking-[0.4em] text-violet">LIVE · AUTO PAPER</p>
+          <h1 className="font-display text-3xl text-ghost md:text-4xl">Terminal</h1>
         </div>
         {paper && (
           <div className="flex gap-6 font-mono text-sm">
@@ -73,13 +80,13 @@ export function TerminalClient({
         )}
       </div>
 
-      <div className="mb-6 flex gap-2 overflow-x-auto">
+      <div className="mb-4 flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {DESKS.map((d) => (
           <button
             key={d.id}
             onClick={() => setDesk(d.id)}
-            className={`rounded-full px-4 py-2 font-mono text-[11px] tracking-[0.18em] ${
-              desk === d.id ? "bg-acid text-void" : "border border-violet/30 text-mute hover:text-ghost"
+            className={`shrink-0 rounded-full px-4 py-2.5 font-mono text-[11px] tracking-[0.18em] ${
+              desk === d.id ? "bg-acid text-void" : "border border-violet/30 text-mute"
             }`}
           >
             {d.label}
@@ -89,6 +96,7 @@ export function TerminalClient({
 
       <div className="grid gap-6 lg:grid-cols-[1.4fr_0.6fr]">
         <div>
+          {desk === "auto" && <AutoPilot owner={owner} />}
           {desk === "copy" && <WalletDesk />}
           {desk === "book" && paper && (
             <div className="panel rounded-2xl p-5">
@@ -114,7 +122,7 @@ export function TerminalClient({
           {err && <p className="mt-3 font-mono text-blood">{err}</p>}
           {msg && <p className="mt-3 font-mono text-acid">{msg}</p>}
         </div>
-        <aside className="space-y-4">
+        <aside className="hidden space-y-4 lg:block">
           <div className="panel overflow-hidden rounded-2xl">
             <SolphiaFace mode="panel" />
           </div>

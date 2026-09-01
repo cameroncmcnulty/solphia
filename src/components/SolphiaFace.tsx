@@ -82,7 +82,7 @@ export function SolphiaFace({
   return (
     <div
       ref={wrap}
-      className={`relative ${hero ? "h-[78vh] min-h-[520px] w-full" : "h-[280px] w-full"}`}
+      className={`relative ${hero ? "h-[42vh] min-h-[240px] w-full sm:h-[56vh] lg:h-[78vh] lg:min-h-[520px]" : "h-[180px] w-full md:h-[280px]"}`}
       style={{ transformStyle: "preserve-3d", transition: "transform 0.45s ease" }}
     >
       <img

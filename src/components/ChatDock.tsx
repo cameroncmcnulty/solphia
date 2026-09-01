@@ -30,7 +30,7 @@ export function ChatDock() {
   }
 
   return (
-    <div className="fixed bottom-5 right-5 z-40 w-[min(100%-2rem,360px)]">
+    <div className="fixed bottom-24 right-3 z-40 w-[min(100%-1.5rem,360px)] md:bottom-5 md:right-5">
       {open && (
         <div className="panel mb-3 rounded-2xl p-4">
           <div className="mb-3 font-mono text-[10px] tracking-[0.4em] text-cyan">SOLPHIA · VOICE</div>

@@ -1,7 +1,8 @@
 import { ingestMarket } from "./feeds";
-import { tickPaper } from "./paper/engine";
+import { tickBook, tickPaper } from "./paper/engine";
 import { scoreToken } from "./risk/engine";
 import { loadState, saveState } from "./store";
+import { bankrollUsd, maybeResizeBook } from "./auto";
 import type { FeedHealth, PaperBook, RiskReport, TokenSnapshot } from "./types";
 
 let lock: Promise<unknown> = Promise.resolve();
@@ -43,6 +44,24 @@ export async function runMarketTick(): Promise<{
     const state = loadState();
     const { tokens, health, solUsd } = await ingestMarket(state.creators);
     const result = tickPaper(state, tokens);
+    for (const trader of Object.values(state.traders || {})) {
+      if (!trader.auto?.armed) continue;
+      const target = bankrollUsd(trader.depositedSol, solUsd);
+      trader.book = maybeResizeBook(trader.book, target);
+      const min = trader.auto.minScore;
+      const prev = { ...state.settings };
+      state.settings.minScoreCopy = Math.max(prev.minScoreCopy, min);
+      state.settings.minScoreLaunch = Math.max(prev.minScoreLaunch, min);
+      state.settings.minScoreMigration = Math.max(prev.minScoreMigration, min);
+      state.settings.minScoreScalp = Math.max(prev.minScoreScalp, min);
+      if (trader.book.equityUsd > 0) {
+        const cap = (trader.auto.maxSolPerTrade * solUsd) / trader.book.equityUsd;
+        if (Number.isFinite(cap) && cap > 0) state.settings.maxPositionPct = Math.min(prev.maxPositionPct, cap);
+      }
+      tickBook(state, tokens, trader.book);
+      state.settings = prev;
+      trader.updatedAt = Date.now();
+    }
     state.feedHealth = health;
     await saveState(state);
     const scored = tokens

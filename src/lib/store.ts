@@ -1,31 +1,14 @@
 import fs from "fs";
 import path from "path";
-import { PAPER_STARTING_USD, DEFAULT_SETTINGS } from "./config";
-import type { AppState, AuditEvent, PaperBook } from "./types";
+import { DEFAULT_SETTINGS } from "./config";
+import { emptyBook } from "./auto";
+import type { AppState, AuditEvent } from "./types";
 
 const DATA_DIR = process.env.DATA_DIR || (process.env.VERCEL ? "/tmp/solphia" : path.join(process.cwd(), "data"));
 const FILE = path.join(DATA_DIR, "state.json");
 
 let mem: AppState | null = null;
 let writing = Promise.resolve();
-
-function emptyBook(): PaperBook {
-  const now = Date.now();
-  return {
-    startingUsd: PAPER_STARTING_USD,
-    startedAt: now,
-    cashUsd: PAPER_STARTING_USD,
-    equityUsd: PAPER_STARTING_USD,
-    realizedPnlUsd: 0,
-    feesPaidUsd: 0,
-    slippagePaidUsd: 0,
-    winCount: 0,
-    lossCount: 0,
-    positions: [],
-    fills: [],
-    curve: [{ t: now, equity: PAPER_STARTING_USD }],
-  };
-}
 
 export function emptyState(): AppState {
   return {
@@ -37,6 +20,7 @@ export function emptyState(): AppState {
     audit: [],
     creators: {},
     watchWallets: [],
+    traders: {},
     feedHealth: [],
     lastTickAt: 0,
     lastSnapshots: [],
@@ -58,6 +42,7 @@ export function loadState(): AppState {
         ...raw,
         settings: { ...DEFAULT_SETTINGS, ...(raw.settings || {}) },
         paper: { ...emptyBook(), ...(raw.paper || {}) },
+        traders: raw.traders || {},
       };
       return mem;
     }

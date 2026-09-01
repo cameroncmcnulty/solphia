@@ -41,8 +41,8 @@ export function WalletConnect({ compact = false }: { compact?: boolean }) {
   async function connect() {
     const found = pick();
     if (!found) {
-      setLabel("INSTALL PHANTOM");
-      window.open("https://phantom.app", "_blank");
+      const target = encodeURIComponent(window.location.href);
+      window.location.href = `https://phantom.app/ul/browse/${target}?ref=https://solphia.io`;
       return;
     }
     setBusy(true);
@@ -50,6 +50,7 @@ export function WalletConnect({ compact = false }: { compact?: boolean }) {
       const res = await found.provider.connect();
       const pubkey = res.publicKey.toString();
       setAddr(pubkey);
+      localStorage.setItem("solphia_owner", pubkey);
       const nonceRes = await fetch("/api/session");
       const nonceJson = await nonceRes.json();
       if (found.provider.signMessage) {

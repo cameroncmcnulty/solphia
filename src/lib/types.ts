@@ -187,6 +187,27 @@ export interface AppUser {
   alertsEnabled: boolean;
 }
 
+export interface AutoSettings {
+  armed: boolean;
+  mode: "paper" | "live";
+  copy: boolean;
+  launch: boolean;
+  migrate: boolean;
+  scalp: boolean;
+  maxSolPerTrade: number;
+  minScore: number;
+  tradingPubkey?: string;
+}
+
+export interface TraderAccount {
+  owner: string;
+  tradingPubkey?: string;
+  depositedSol: number;
+  auto: AutoSettings;
+  book: PaperBook;
+  updatedAt: number;
+}
+
 export interface AlertEvent {
   id: string;
   at: number;
@@ -235,6 +256,7 @@ export interface AppState {
   audit: AuditEvent[];
   creators: Record<string, CreatorStat>;
   watchWallets: string[];
+  traders: Record<string, TraderAccount>;
   feedHealth: FeedHealth[];
   lastTickAt: number;
   lastSnapshots: TokenSnapshot[];

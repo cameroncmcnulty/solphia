@@ -3,6 +3,7 @@
   "short_name": "SOLPHIA",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#050308",
-  "theme_color": "#050308"
+  "background_color": "#04000a",
+  "theme_color": "#04000a",
+  "orientation": "portrait"
 }

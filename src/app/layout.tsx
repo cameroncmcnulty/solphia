@@ -8,9 +8,11 @@ const plex = IBM_Plex_Mono({ subsets: ["latin"], weight: ["400", "500", "600"], 
 const cormorant = Cormorant_Garamond({ subsets: ["latin"], weight: ["400", "500", "600"], variable: "--font-cormorant" });
 
 export const viewport: Viewport = {
-  themeColor: "#050308",
+  themeColor: "#04000a",
   width: "device-width",
   initialScale: 1,
+  viewportFit: "cover",
+  maximumScale: 1,
 };
 
 export const metadata: Metadata = {
@@ -20,7 +22,7 @@ export const metadata: Metadata = {
     template: "%s · SOLPHIA",
   },
   description:
-    "Non-custodial Solana memecoin terminal. Safety-scored copy trading, launch and migration desks, live paper book. Pulse 0.15 SOL. Full terminal 0.50 SOL.",
+    "Mobile-first Solana memecoin terminal. Connect Phantom, deposit SOL into a wallet you own, and let Solphia auto-trade only what clears the safety score.",
   applicationName: "SOLPHIA",
   openGraph: {
     title: "SOLPHIA",

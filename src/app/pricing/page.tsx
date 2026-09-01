@@ -27,15 +27,15 @@ export default function PricingPage() {
   }
 
   return (
-    <main className="mx-auto max-w-5xl px-5 pb-24 md:px-8">
+    <main className="mx-auto max-w-5xl px-4 pb-8 md:px-8 md:pb-24">
       <p className="font-mono text-[11px] tracking-[0.4em] text-violet">ACCESS</p>
-      <h1 className="mt-2 font-display text-5xl text-ghost">Pick a desk, or take the whole floor.</h1>
+      <h1 className="mt-2 font-display text-3xl text-ghost sm:text-5xl">Pick a desk, or take the whole floor.</h1>
       <p className="mt-4 max-w-2xl text-mute">
         Pulse is the 0.15 SOL alert wire. Copy and snipers are separate. Full terminal is cheaper than stacking them.
         Testing seats are paper until a treasury is set.
       </p>
 
-      <div className="mt-10 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {PLANS.map((p) => (
           <button
             key={p.id}

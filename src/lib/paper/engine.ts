@@ -3,6 +3,7 @@ import type {
   AppState,
   CreatorStat,
   EngineSettings,
+  PaperBook,
   PaperFill,
   PaperPosition,
   Strategy,
@@ -212,6 +213,16 @@ function shouldExit(pos: PaperPosition, token: TokenSnapshot | undefined, report
   if (reportScore != null && reportScore < 28) return "risk-collapse";
   if (token?.banned) return "banned";
   return null;
+}
+
+export function tickBook(state: AppState, tokens: TokenSnapshot[], book: PaperBook, now = Date.now()) {
+  const prev = state.paper;
+  state.paper = book;
+  try {
+    return tickPaper(state, tokens, now);
+  } finally {
+    state.paper = prev;
+  }
 }
 
 export function tickPaper(state: AppState, tokens: TokenSnapshot[], now = Date.now()): {
