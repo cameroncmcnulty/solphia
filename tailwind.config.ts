@@ -5,15 +5,16 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        void: "#050308",
-        ink: "#0b0712",
-        panel: "#100a18",
-        line: "#2a1d3a",
-        ghost: "#c9c2d4",
-        mute: "#7a708c",
-        acid: "#b8ff3c",
-        cyan: "#5cffd8",
-        blood: "#ff3d6e",
+        void: "#04000a",
+        ink: "#0b0614",
+        panel: "#100818",
+        line: "#2a1848",
+        ghost: "#efeaf8",
+        mute: "#8b82a0",
+        acid: "#14F195",
+        violet: "#9945FF",
+        cyan: "#80eaff",
+        blood: "#ff4d7a",
         warn: "#ffb020",
       },
       fontFamily: {

@@ -180,6 +180,7 @@ export interface CreatorStat {
 export interface AppUser {
   pubkey: string;
   email?: string;
+  plan?: string;
   subscribedUntil?: number;
   createdAt: number;
   lastSeen: number;

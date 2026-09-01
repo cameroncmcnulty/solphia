@@ -20,11 +20,11 @@ export const metadata: Metadata = {
     template: "%s · SOLPHIA",
   },
   description:
-    "Non-custodial Solana memecoin terminal. Copy, launch sniper, migration sniper, safety score 0–100, 0.35% fee, 0.15 SOL / month. Paper trading until Helius goes live.",
+    "Non-custodial Solana memecoin terminal. Safety-scored copy trading, launch and migration desks, live paper book. Pulse 0.15 SOL. Full terminal 0.50 SOL.",
   applicationName: "SOLPHIA",
   openGraph: {
     title: "SOLPHIA",
-    description: "She runs the book. You keep the keys.",
+    description: "Copy wallets that survive. You keep the keys.",
     url: "https://solphia.io",
     siteName: "SOLPHIA",
     images: [{ url: "/og.jpg", width: 1376, height: 768 }],
@@ -33,7 +33,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "SOLPHIA",
-    description: "She runs the book. You keep the keys.",
+    description: "Copy wallets that survive. You keep the keys.",
     images: ["/og.jpg"],
   },
   icons: { icon: "/favicon.svg" },

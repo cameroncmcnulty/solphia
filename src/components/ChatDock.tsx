@@ -55,7 +55,7 @@ export function ChatDock() {
           </div>
         </div>
       )}
-      <button onClick={() => setOpen((v) => !v)} className="ml-auto flex h-12 w-12 items-center justify-center rounded-full border border-cyan/40 bg-ink text-cyan shadow-glow">
+      <button onClick={() => setOpen((v) => !v)} className="ml-auto flex h-12 w-12 items-center justify-center rounded-full border border-violet/40 bg-ink text-acid">
         ⌬
       </button>
     </div>

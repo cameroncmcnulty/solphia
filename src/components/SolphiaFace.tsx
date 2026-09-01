@@ -2,105 +2,109 @@
 
 import { useEffect, useRef } from "react";
 
-const MORSE: Record<string, string> = {
-  S: "...",
-  O: "---",
-  L: ".-..",
-  P: ".--.",
-  H: "....",
-  I: "..",
-  A: ".-",
-};
-
-export function SolphiaFace({ size = 520, interactive = true }: { size?: number; interactive?: boolean }) {
+export function SolphiaFace({
+  mode = "panel",
+}: {
+  mode?: "hero" | "panel";
+}) {
   const wrap = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
     const el = wrap.current;
-    if (!el || !interactive) return;
-    const onMove = (e: PointerEvent) => {
+    if (!el) return;
+    const move = (e: PointerEvent) => {
       const r = el.getBoundingClientRect();
       const x = (e.clientX - r.left) / r.width - 0.5;
       const y = (e.clientY - r.top) / r.height - 0.5;
-      el.style.setProperty("--rx", `${y * -12}deg`);
-      el.style.setProperty("--ry", `${x * 16}deg`);
+      el.style.transform = `perspective(1400px) rotateY(${x * 10}deg) rotateX(${-y * 6}deg)`;
     };
     const leave = () => {
-      el.style.setProperty("--rx", "0deg");
-      el.style.setProperty("--ry", "0deg");
+      el.style.transform = "perspective(1400px) rotateY(-8deg) rotateX(2deg)";
     };
-    window.addEventListener("pointermove", onMove);
+    leave();
+    window.addEventListener("pointermove", move);
     el.addEventListener("pointerleave", leave);
     return () => {
-      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointermove", move);
       el.removeEventListener("pointerleave", leave);
     };
-  }, [interactive]);
+  }, []);
 
   useEffect(() => {
     const c = canvas.current;
     if (!c) return;
     const ctx = c.getContext("2d");
     if (!ctx) return;
-    const code = "SOLPHIA".split("").map((ch) => MORSE[ch] || "").join(" / ");
-    let frame = 0;
     let raf = 0;
-    const draw = () => {
-      const w = c.width;
-      const h = c.height;
+    let t = 0;
+    const nodes = Array.from({ length: 48 }, (_, i) => ({
+      a: (i / 48) * Math.PI * 2,
+      r: 0.28 + (i % 7) * 0.04,
+      phase: Math.random() * Math.PI * 2,
+      hot: Math.random(),
+    }));
+    const loop = () => {
+      const w = (c.width = c.clientWidth * 2);
+      const h = (c.height = c.clientHeight * 2);
       ctx.clearRect(0, 0, w, h);
-      ctx.fillStyle = "rgba(92,255,216,0.55)";
-      const t = frame / 40;
-      for (let i = 0; i < code.length; i++) {
-        const ch = code[i];
-        const a = (i / code.length) * Math.PI * 2 + t;
-        const rad = Math.min(w, h) * 0.46;
-        const x = w / 2 + Math.cos(a) * rad;
-        const y = h / 2 + Math.sin(a) * rad * 0.72;
-        if (ch === ".") {
-          ctx.beginPath();
-          ctx.arc(x, y, 1.4, 0, Math.PI * 2);
-          ctx.fill();
-        } else if (ch === "-") {
-          ctx.fillRect(x - 5, y - 0.7, 10, 1.4);
-        }
+      t += 0.008;
+      const cx = w * 0.42;
+      const cy = h * 0.48;
+      for (let i = 0; i < nodes.length; i++) {
+        const n = nodes[i];
+        const pulse = 0.35 + 0.65 * (0.5 + 0.5 * Math.sin(t * 0.9 + n.phase));
+        n.hot = pulse;
+        const x = cx + Math.cos(n.a + t * 0.05) * n.r * w;
+        const y = cy + Math.sin(n.a + t * 0.05) * n.r * h * 0.85;
+        const nxt = nodes[(i + 5) % nodes.length];
+        const x2 = cx + Math.cos(nxt.a + t * 0.05) * nxt.r * w;
+        const y2 = cy + Math.sin(nxt.a + t * 0.05) * nxt.r * h * 0.85;
+        ctx.strokeStyle = `rgba(153,69,255,${0.08 + pulse * 0.18})`;
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+        ctx.fillStyle = pulse > 0.82 ? `rgba(20,241,149,${pulse})` : `rgba(128,234,255,${0.35 + pulse * 0.5})`;
+        ctx.beginPath();
+        ctx.arc(x, y, pulse > 0.82 ? 3.2 : 1.6, 0, Math.PI * 2);
+        ctx.fill();
       }
-      frame += 1;
-      raf = requestAnimationFrame(draw);
+      raf = requestAnimationFrame(loop);
     };
-    draw();
+    loop();
     return () => cancelAnimationFrame(raf);
   }, []);
+
+  const hero = mode === "hero";
 
   return (
     <div
       ref={wrap}
-      className="relative"
-      style={{
-        width: size,
-        height: size,
-        perspective: 1200,
-        transform: "rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg))",
-        transition: "transform 0.4s ease-out",
-      }}
+      className={`relative ${hero ? "h-[78vh] min-h-[520px] w-full" : "h-[280px] w-full"}`}
+      style={{ transformStyle: "preserve-3d", transition: "transform 0.45s ease" }}
     >
-      <div className="face-orbit absolute inset-0">
-        <div className="absolute inset-[8%] overflow-hidden rounded-full border border-cyan/20 shadow-glow">
-          <img
-            src="/solphia-face.jpg"
-            alt="Solphia"
-            className="h-full w-full object-cover opacity-90"
-            draggable={false}
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-void via-transparent to-cyan/10" />
-        </div>
-      </div>
-      <canvas ref={canvas} width={size} height={size} className="absolute inset-0" />
-      <div className="pointer-events-none absolute inset-[6%] rounded-full border border-acid/20 animate-[pulse-glow_4s_ease-in-out_infinite]" />
-      <div className="pointer-events-none absolute left-1/2 top-[8%] -translate-x-1/2 font-mono text-[10px] tracking-[0.5em] text-cyan/70">
-        ··· --- ·-·· ·--· ···· ·· ·-
-      </div>
+      <img
+        src="/solphia-face.jpg"
+        alt="Solphia"
+        className="absolute inset-0 h-full w-full object-cover object-[18%_center] opacity-95"
+        draggable={false}
+      />
+      <div className="absolute inset-0 bg-gradient-to-r from-void via-void/10 to-transparent" />
+      <div className="absolute inset-0 bg-gradient-to-t from-void via-transparent to-void/40" />
+      <canvas ref={canvas} className="absolute inset-0 h-full w-full mix-blend-screen opacity-80" />
+      <div
+        className="pointer-events-none absolute rounded-full bg-void"
+        style={{
+          left: "46%",
+          top: "38%",
+          width: hero ? 42 : 22,
+          height: hero ? 14 : 8,
+          animation: "blink-lid 5.6s ease-in-out infinite",
+          boxShadow: "0 0 18px 8px #04000a",
+        }}
+      />
     </div>
   );
 }

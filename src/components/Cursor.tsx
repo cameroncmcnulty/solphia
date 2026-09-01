@@ -30,10 +30,10 @@ export function Cursor() {
           transform: `translate(-50%, -50%) scale(${down ? 0.6 : 1})`,
         }}
       >
-        <div className="h-1.5 w-1.5 rounded-full bg-cyan" />
+        <div className="h-1.5 w-1.5 rounded-full bg-acid" />
       </div>
       <div
-        className="cursor-ring pointer-events-none fixed z-[79] border border-cyan/50 rounded-full mix-blend-screen transition-transform duration-200"
+        className="cursor-ring pointer-events-none fixed z-[79] border border-violet/60 rounded-full mix-blend-screen transition-transform duration-200"
         style={{
           left: pos.x,
           top: pos.y,

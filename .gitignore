@@ -12,3 +12,6 @@ data/*.lock
 coverage
 tsconfig.tsbuildinfo
 .vercel
+
+.vercel
+.env*
