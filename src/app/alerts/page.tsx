@@ -19,14 +19,14 @@ export default function AlertsPage() {
 
   return (
     <main className="px-5 pb-24 md:px-8">
-      <p className="font-mono text-[11px] tracking-[0.4em] text-violet">PULSE</p>
-      <h1 className="mt-2 font-display text-5xl text-ghost">Alert wire</h1>
+      <p className="font-mono text-[11px] tracking-[0.28em] text-violet">ALERTS</p>
+      <h1 className="mt-2 font-display text-4xl text-ghost">When she would have bought</h1>
       <p className="mt-3 max-w-2xl text-mute">
-        Same signals the engine uses, laid out as mail. Pulse is 0.15 SOL. Full terminal includes it.
+        These are the pings. 0.15 SOL if you only want the email. The copy bot plan already includes them.
       </p>
       <div className="mt-6 flex gap-3">
         <Link href="/pricing" className="btn-acid rounded-full px-5 py-2 font-mono text-[11px]">
-          Get Pulse
+          Get alerts
         </Link>
         <a href="/api/alerts/preview" className="btn-ghost rounded-full px-5 py-2 font-mono text-[11px]">
           Preview email

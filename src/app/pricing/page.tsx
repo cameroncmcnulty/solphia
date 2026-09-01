@@ -28,11 +28,11 @@ export default function PricingPage() {
 
   return (
     <main className="mx-auto max-w-5xl px-4 pb-8 md:px-8 md:pb-24">
-      <p className="font-mono text-[11px] tracking-[0.4em] text-violet">ACCESS</p>
-      <h1 className="mt-2 font-display text-3xl text-ghost sm:text-5xl">Pick a desk, or take the whole floor.</h1>
+      <p className="font-mono text-[11px] tracking-[0.28em] text-violet">PRICING</p>
+      <h1 className="mt-2 font-display text-3xl text-ghost sm:text-5xl">Pay for the bot you actually want.</h1>
       <p className="mt-4 max-w-2xl text-mute">
-        Four products, not one vague subscription. Pulse is alerts. Copy is auto-mirroring wallets. Snipers are
-        launch and graduation. Full is all of it, cheaper than stacking. Testing seats are paper until treasury is set.
+        Alerts if you still like clicking buy. Copy bot if you want passive. Launch bot if you want her hunting new
+        coins. Everything is cheaper than buying all three. Right now fills are paper until live trading is switched on.
       </p>
 
       <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -42,7 +42,7 @@ export default function PricingPage() {
             onClick={() => setPlan(p.id)}
             className={`panel rounded-2xl p-5 text-left ${plan === p.id ? "border-acid/70 shadow-[0_0_40px_rgba(20,241,149,0.12)]" : ""} ${p.featured ? "md:scale-[1.02]" : ""}`}
           >
-            <div className="font-mono text-[10px] tracking-[0.28em] text-violet">{p.featured ? "BEST VALUE" : "DESK"}</div>
+            <div className="font-mono text-[10px] tracking-[0.28em] text-violet">{p.featured ? "MOST PEOPLE WANT THIS" : "PLAN"}</div>
             <div className="mt-2 font-display text-2xl text-ghost">{p.name}</div>
             <div className="mt-1 font-mono text-acid">{p.sol} SOL / 30d</div>
             <p className="mt-3 text-sm text-mute">{p.tagline}</p>
@@ -57,7 +57,7 @@ export default function PricingPage() {
       </div>
 
       <div className="panel mt-10 max-w-lg space-y-4 rounded-2xl p-6">
-        <div className="font-mono text-[10px] tracking-[0.28em] text-mute">SEAT · {selected.name.toUpperCase()}</div>
+        <div className="font-mono text-[10px] tracking-[0.28em] text-mute">START · {selected.name.toUpperCase()}</div>
         <p className="text-sm leading-relaxed text-mute">{selected.story}</p>
         <WalletConnect />
         <input
@@ -73,7 +73,7 @@ export default function PricingPage() {
           className="w-full rounded-full border border-violet/30 bg-void px-4 py-3 font-mono text-xs outline-none"
         />
         <button onClick={subscribe} className="btn-acid w-full rounded-full py-3 font-mono text-xs">
-          Seat {selected.name} · {selected.sol} SOL
+          Start {selected.name} · {selected.sol} SOL
         </button>
         {msg && <p className="font-mono text-sm text-acid">{msg}</p>}
       </div>

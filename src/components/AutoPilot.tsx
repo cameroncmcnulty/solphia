@@ -100,26 +100,26 @@ export function AutoPilot({ owner }: { owner: string | null }) {
   return (
     <div className="space-y-4">
       <div className="panel rounded-2xl p-5">
-        <div className="font-mono text-[10px] tracking-[0.3em] text-violet">AUTO</div>
-        <h2 className="mt-1 font-display text-2xl text-ghost">She trades. You keep the keys.</h2>
+        <div className="font-mono text-[10px] tracking-[0.28em] text-violet">COPY BOT</div>
+        <h2 className="mt-1 font-display text-2xl text-ghost">Turn her on. Close the phone.</h2>
         <p className="mt-2 text-sm leading-relaxed text-mute">
-          Deposit SOL into <span className="text-ghost">your</span> trading wallet — not Solphia. The secret stays on
-          this device. Auto runs paper against that bankroll until Helius is live, then the same rules fire real swaps.
+          SOL goes into a trading wallet on this device — not to us. While testing, she paper-trades that amount so you
+          can see if the bot would have made you money. Real swaps stay off until we flip live.
         </p>
         <button
           onClick={() => patch({ armed: !auto?.armed })}
-          className={`mt-5 w-full rounded-full py-4 font-mono text-sm tracking-[0.2em] ${
+          className={`mt-5 min-h-[52px] w-full rounded-full py-4 font-mono text-sm tracking-[0.16em] ${
             auto?.armed ? "bg-acid text-void" : "btn-ghost"
           }`}
         >
-          {auto?.armed ? "AUTO ARMED" : "ARM AUTO"}
+          {auto?.armed ? "SHE'S ON" : "TURN SOLPHIA ON"}
         </button>
       </div>
 
       <div className="panel rounded-2xl p-5">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <div className="font-mono text-[10px] tracking-[0.22em] text-mute">TRADING WALLET</div>
+            <div className="font-mono text-[10px] tracking-[0.22em] text-mute">YOUR TRADING WALLET</div>
             <div className="break-all font-mono text-xs text-acid">{tradePk || "—"}</div>
           </div>
           <div className="text-right">
@@ -157,10 +157,10 @@ export function AutoPilot({ owner }: { owner: string | null }) {
       )}
 
       <div className="panel rounded-2xl p-5 space-y-3">
-        <div className="font-mono text-[10px] tracking-[0.22em] text-mute">RULES</div>
-        <Toggle label="Copy desk" on={auto?.copy} onChange={(v) => patch({ copy: v })} />
-        <Toggle label="Launch sniper" on={auto?.launch} onChange={(v) => patch({ launch: v })} />
-        <Toggle label="Migration sniper" on={auto?.migrate} onChange={(v) => patch({ migrate: v })} />
+        <div className="font-mono text-[10px] tracking-[0.22em] text-mute">WHAT SHE'S ALLOWED TO DO</div>
+        <Toggle label="Copy winning wallets" on={auto?.copy} onChange={(v) => patch({ copy: v })} />
+        <Toggle label="Buy new launches" on={auto?.launch} onChange={(v) => patch({ launch: v })} />
+        <Toggle label="Buy graduations" on={auto?.migrate} onChange={(v) => patch({ migrate: v })} />
         <label className="flex items-center justify-between gap-3 font-mono text-xs text-mute">
           Max SOL / trade
           <input
@@ -185,7 +185,7 @@ export function AutoPilot({ owner }: { owner: string | null }) {
         </label>
       </div>
       {msg && <p className="font-mono text-xs text-acid">{msg}</p>}
-      {!owner && <p className="font-mono text-xs text-mute">On iPhone, open solphia.io inside Phantom, then connect.</p>}
+      {!owner && <p className="text-xs text-mute">On iPhone, open solphia.io inside the Phantom app, then tap Connect.</p>}
     </div>
   );
 }

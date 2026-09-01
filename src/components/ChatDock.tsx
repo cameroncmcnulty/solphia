@@ -6,7 +6,7 @@ export function ChatDock() {
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
   const [log, setLog] = useState<{ role: string; text: string }[]>([
-    { role: "solphia", text: "I am Solphia. I do not take keys. Ask about the book, the score, or the wire." },
+    { role: "solphia", text: "Deposit SOL, turn me on, I copy wallets that are already up — and skip the rugs. Ask me anything." },
   ]);
   const [busy, setBusy] = useState(false);
 

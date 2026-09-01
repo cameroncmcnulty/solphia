@@ -28,10 +28,6 @@ export function buySellRatio(token: TokenSnapshot): number {
   return token.buys1h / sells;
 }
 
-export function socialCount(token: TokenSnapshot): number {
-  return [token.socials.twitter, token.socials.telegram, token.socials.website].filter(Boolean).length;
-}
-
 /**
  * Safety score 0–100. Higher = safer.
  *
@@ -53,25 +49,24 @@ export function scoreToken(token: TokenSnapshot, now = Date.now(), settings: Eng
   const age = ageMs(token, now);
   const ageMin = age / 60000;
   const bsr = buySellRatio(token);
-  const socials = socialCount(token);
   const unique = token.uniqueTraders1h || 0;
   const bundle = token.bundleRatio ?? 0;
   const organic = token.organicBuyRatio ?? (bundle ? clamp(1 - bundle, 0, 1) : undefined);
 
-  if (token.banned) vetoReasons.push("Token is banned on its launchpad.");
-  if (token.nsfw && token.livestream) vetoReasons.push("NSFW livestream — historically a high-rug cluster.");
-  if (token.freezeAuthorityRevoked === false) vetoReasons.push("Freeze authority still live.");
+  if (token.banned) vetoReasons.push("This token is banned on its launchpad.");
+  if (token.nsfw && token.livestream) vetoReasons.push("Livestream launches like this rug more often than they pay.");
+  if (token.freezeAuthorityRevoked === false) vetoReasons.push("They can still freeze your tokens.");
   if (token.mintAuthorityRevoked === false && token.graduated) {
-    vetoReasons.push("Mint authority still live after graduation.");
+    vetoReasons.push("They can still print more tokens.");
   }
-  if ((token.bundleRatio ?? 0) > 0.55) vetoReasons.push("Bundle ratio above 55% — sniper dump likely.");
+  if ((token.bundleRatio ?? 0) > 0.55) vetoReasons.push("Snipers already own most of this. You'll be exit liquidity.");
   if ((token.deployerDeathRate ?? 0) > 0.85 && (token.deployerTokenCount ?? 0) > 3) {
-    vetoReasons.push("Serial deployer with >85% dead tokens.");
+    vetoReasons.push("This creator's other coins mostly died.");
   }
 
-  if (token.mintAuthorityRevoked) add(factors, "mint", "Mint revoked", 12, "Cannot inflate supply.");
-  if (token.freezeAuthorityRevoked) add(factors, "freeze", "Freeze revoked", 12, "Cannot freeze holders.");
-  if (token.lpLockedOrBurned) add(factors, "lp", "LP locked/burned", 16, "Classic LP-pull vector closed.");
+  if (token.mintAuthorityRevoked) add(factors, "mint", "Can't print extra tokens", 12, "Mint authority is off.");
+  if (token.freezeAuthorityRevoked) add(factors, "freeze", "Can't freeze your bag", 12, "Freeze authority is off.");
+  if (token.lpLockedOrBurned) add(factors, "lp", "Liquidity can't be yanked", 16, "LP locked or burned.");
 
   if (token.top10HolderPct != null) {
     if (token.top10HolderPct < 25) add(factors, "h10", "Dispersed holders", 10, `Top 10 hold ${token.top10HolderPct.toFixed(1)}%.`);
@@ -84,69 +79,47 @@ export function scoreToken(token: TokenSnapshot, now = Date.now(), settings: Eng
   else if (unique >= 30) add(factors, "u1h", "Decent unique flow", 5, `${unique} unique traders.`);
   else if (unique > 0 && unique < 8) add(factors, "u1h", "Thin unique flow", -12, `${unique} unique traders.`);
 
-  if (token.volume1h >= 50_000) add(factors, "v1h", "High 1h volume", 8, `$${Math.round(token.volume1h).toLocaleString()}`);
-  else if (token.volume1h >= 15_000) add(factors, "v1h", "Healthy 1h volume", 4, `$${Math.round(token.volume1h).toLocaleString()}`);
-  else if (token.volume1h < 2_000 && ageMin > 20) add(factors, "v1h", "Dead volume", -10, `$${Math.round(token.volume1h).toLocaleString()} after ${ageMin.toFixed(0)}m`);
-
-  if (socials >= 3) add(factors, "soc", "Full social set", 6, "Twitter + Telegram + site.");
-  else if (socials === 1) add(factors, "soc", "Thin socials", 2, "One social link.");
-  else if (socials === 0 && ageMin > 3) add(factors, "soc", "No socials", -4, "Anonymous launch with no links.");
+  if (token.volume1h >= 50_000) add(factors, "v1h", "Real 1h volume", 8, `$${Math.round(token.volume1h).toLocaleString()}`);
+  else if (token.volume1h >= 15_000) add(factors, "v1h", "Decent 1h volume", 4, `$${Math.round(token.volume1h).toLocaleString()}`);
+  else if (token.volume1h < 2_000 && ageMin > 20) add(factors, "v1h", "Nobody is trading this", -10, `$${Math.round(token.volume1h).toLocaleString()} after ${ageMin.toFixed(0)}m`);
 
   if (organic != null) {
-    if (organic > 0.7) add(factors, "org", "Organic buys", 8, `${(organic * 100).toFixed(0)}% organic.`);
-    else if (organic < 0.4) add(factors, "org", "Inorganic buys", -10, `${(organic * 100).toFixed(0)}% organic.`);
+    if (organic > 0.7) add(factors, "org", "Looks like real buyers", 8, `${(organic * 100).toFixed(0)}% unbundled.`);
+    else if (organic < 0.4) add(factors, "org", "Mostly bots buying each other", -10, `${(organic * 100).toFixed(0)}% unbundled.`);
   }
-  if (bundle > 0.4) add(factors, "bun", "Heavy bundle", -14, `${(bundle * 100).toFixed(0)}% bundled.`);
-  else if (bundle > 0.25) add(factors, "bun", "Moderate bundle", -6, `${(bundle * 100).toFixed(0)}% bundled.`);
+  if (bundle > 0.4) add(factors, "bun", "Snipers already stacked", -14, `${(bundle * 100).toFixed(0)}% bundled.`);
+  else if (bundle > 0.25) add(factors, "bun", "Some bundled supply", -6, `${(bundle * 100).toFixed(0)}% bundled.`);
 
   if (token.bondingProgress >= 0.85 && token.bondingProgress < 1 && (organic ?? 1) > 0.55) {
-    add(factors, "mig", "Organic migration setup", 10, `${(token.bondingProgress * 100).toFixed(0)}% bonded.`);
+    add(factors, "mig", "About to graduate with real flow", 10, `${(token.bondingProgress * 100).toFixed(0)}% bonded.`);
   }
-  if (token.graduated) add(factors, "grad", "Graduated", 4, "Off the curve.");
 
   const death = token.deployerDeathRate;
   const dcount = token.deployerTokenCount ?? 0;
   if (death != null && dcount >= 1) {
-    if (death < 0.3) add(factors, "dev", "Cleaner deployer", 8, `${(death * 100).toFixed(0)}% dead of ${dcount}.`);
-    else if (death > 0.6) add(factors, "dev", "Dirty deployer", -12, `${(death * 100).toFixed(0)}% dead of ${dcount}.`);
+    if (death < 0.3) add(factors, "dev", "This deployer doesn't usually rug", 8, `${(death * 100).toFixed(0)}% dead of ${dcount}.`);
+    else if (death > 0.6) add(factors, "dev", "This deployer usually rugs", -12, `${(death * 100).toFixed(0)}% dead of ${dcount}.`);
   }
 
-  if (token.smartMoneyInflow) add(factors, "sm", "Smart-money inflow", 10, "Tracked profitable wallets buying.");
-  if ((token.devSoldPct ?? 0) > 0.5) add(factors, "dump", "Dev dumping", -15, `${((token.devSoldPct || 0) * 100).toFixed(0)}% of dev stack sold.`);
-  if (token.replyCount > 50) add(factors, "chat", "Active thread", 3, `${token.replyCount} replies.`);
-  if (token.verified) add(factors, "ver", "Launchpad verified", 5, "Platform verification flag.");
+  if (token.smartMoneyInflow) add(factors, "sm", "A wallet we copy is buying", 10, "Followed profitable wallet is in.");
+  if ((token.devSoldPct ?? 0) > 0.5) add(factors, "dump", "Creator is selling into you", -15, `${((token.devSoldPct || 0) * 100).toFixed(0)}% of creator stack sold.`);
 
-  if (token.marketCapUsd >= 20_000 && token.marketCapUsd <= 400_000) {
-    add(factors, "mc", "Tradeable mcap band", 6, `$${Math.round(token.marketCapUsd).toLocaleString()}`);
-  } else if (token.marketCapUsd > 0 && token.marketCapUsd < 5_000) {
-    add(factors, "mc", "Micro mcap", -4, `$${Math.round(token.marketCapUsd).toLocaleString()}`);
-  } else if (token.marketCapUsd > 5_000_000) {
-    add(factors, "mc", "Late / crowded", -3, `$${Math.round(token.marketCapUsd).toLocaleString()}`);
-  }
+  if (token.liquidityUsd > 40_000) add(factors, "liq", "You can actually exit", 8, `$${Math.round(token.liquidityUsd).toLocaleString()} liquidity.`);
+  else if (token.liquidityUsd > 0 && token.liquidityUsd < 4_000) add(factors, "liq", "You may not get out", -10, `$${Math.round(token.liquidityUsd).toLocaleString()} liquidity.`);
 
-  if (token.liquidityUsd > 40_000) add(factors, "liq", "Real liquidity", 8, `$${Math.round(token.liquidityUsd).toLocaleString()}`);
-  else if (token.liquidityUsd > 0 && token.liquidityUsd < 4_000) add(factors, "liq", "Fragile liquidity", -10, `$${Math.round(token.liquidityUsd).toLocaleString()}`);
-
-  if (token.priceChange5m > 80) add(factors, "spike", "Vertical 5m candle", -8, `+${token.priceChange5m.toFixed(0)}% in 5m — dump risk.`);
-  if (bsr > 1.6) add(factors, "bsr", "Buy-side 1h", 5, `buy/sell ${bsr.toFixed(2)}`);
-  else if (token.buys1h + token.sells1h > 8 && bsr < 0.7) add(factors, "bsr", "Sell-side 1h", -8, `buy/sell ${bsr.toFixed(2)}`);
-
-  if (ageMin >= 3 && ageMin <= 45) add(factors, "age", "Not instant, not dead", 4, `${ageMin.toFixed(1)} minutes old.`);
-  if (token.graduated && token.pairAddress) add(factors, "pool", "Pool exists", 5, token.venue);
+  if (token.priceChange5m > 80) add(factors, "spike", "Already pumped in 5 minutes", -8, `+${token.priceChange5m.toFixed(0)}% — late.`);
+  if (bsr > 1.6) add(factors, "bsr", "More buys than sells", 5, `buy/sell ${bsr.toFixed(2)}`);
+  else if (token.buys1h + token.sells1h > 8 && bsr < 0.7) add(factors, "bsr", "Sellers are leaving", -8, `buy/sell ${bsr.toFixed(2)}`);
 
   for (const f of factors) score += f.delta;
 
   if (token.graduated && token.lpLockedOrBurned === false) {
     score = Math.min(score, 35);
-    caps.push("Graduated with unlocked LP — cap 35.");
+    caps.push("Graduated but liquidity can still be pulled.");
   }
   if (unique > 0 && unique < 12 && ageMin > 8) {
     score = Math.min(score, 40);
-    caps.push("Fewer than 12 unique traders — cap 40.");
-  }
-  if (age < 60_000 && socials === 0) {
-    score = Math.min(score, 45);
-    caps.push("Sub-60s anonymous launch — cap 45.");
+    caps.push("Almost nobody unique is trading this.");
   }
 
   if (vetoReasons.length) {
@@ -156,21 +129,28 @@ export function scoreToken(token: TokenSnapshot, now = Date.now(), settings: Eng
   score = Math.round(clamp(score, 0, 100));
 
   const allowed = allowedStrategies(token, score, { age, unique, bundle, organic: organic ?? 0 }, settings);
-
-  const summary = vetoReasons.length
-    ? `VETO ${score}/100 — ${vetoReasons[0]}`
-    : `${grade(score)} ${score}/100 — ${allowed.length ? allowed.join(", ") : "no strategy cleared"}`;
+  const top = [...factors].sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))[0];
+  const why = vetoReasons[0] || top?.detail || "Not enough of a read yet.";
+  const verdict: RiskReport["verdict"] = vetoReasons.length || score < 52 ? "skip" : allowed.length && score >= 68 ? "trade" : "wait";
+  const summary =
+    verdict === "skip"
+      ? `Skip — ${why}`
+      : verdict === "trade"
+        ? `Take it — ${why}`
+        : `Wait — ${why}`;
 
   return {
     mint: token.mint,
     score,
     grade: grade(score),
+    verdict,
     vetoed: vetoReasons.length > 0,
     vetoReasons,
     caps,
     factors,
     allowedStrategies: allowed,
     summary,
+    why,
     scoredAt: now,
   };
 }

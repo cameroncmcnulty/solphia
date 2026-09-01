@@ -10,12 +10,12 @@ import { AutoPilot } from "./AutoPilot";
 import type { Strategy } from "@/lib/types";
 
 const DESKS: { id: string; label: string; strategy?: Strategy }[] = [
-  { id: "discover", label: "Discover" },
-  { id: "copy", label: "Copy" },
-  { id: "launch", label: "Launch", strategy: "launch_snipe" },
-  { id: "migrate", label: "Migrate", strategy: "migration_snipe" },
-  { id: "book", label: "Book" },
-  { id: "auto", label: "Auto" },
+  { id: "discover", label: "Markets" },
+  { id: "copy", label: "Copy bot" },
+  { id: "launch", label: "New coins", strategy: "launch_snipe" },
+  { id: "migrate", label: "Graduating", strategy: "migration_snipe" },
+  { id: "book", label: "My trades" },
+  { id: "auto", label: "Turn on" },
 ];
 
 export function TerminalClient({
@@ -57,8 +57,8 @@ export function TerminalClient({
     <main className="px-3 pb-6 md:px-8">
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="font-mono text-[10px] tracking-[0.4em] text-violet">LIVE · AUTO PAPER</p>
-          <h1 className="font-display text-3xl text-ghost md:text-4xl">Terminal</h1>
+          <p className="font-mono text-[10px] tracking-[0.28em] text-violet">LIVE MARKET · PAPER UNTIL YOU GO LIVE</p>
+          <h1 className="font-display text-3xl text-ghost md:text-4xl">Trade</h1>
         </div>
         {paper && (
           <div className="flex gap-6 font-mono text-sm">
@@ -129,8 +129,8 @@ export function TerminalClient({
           <div className="panel rounded-2xl p-5">
             <div className="font-mono text-[10px] tracking-[0.3em] text-mute">ENGINE</div>
             <p className="mt-2 text-sm text-mute">
-              {loading ? "Syncing feeds…" : "Pump.fun, LaunchLab, Raydium, DexScreener live."} Safety score gates
-              every paper fill. 0.35% fee already in the book.
+              {loading ? "Loading coins…" : "Watching Pump.fun, LaunchLab and Raydium."} She only copies a coin if
+              it looks safe enough to keep your money.
             </p>
           </div>
         </aside>

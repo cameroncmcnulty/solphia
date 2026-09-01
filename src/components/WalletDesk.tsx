@@ -27,8 +27,8 @@ export function WalletDesk({ compact = false }: { compact?: boolean }) {
     <div className="panel overflow-hidden rounded-2xl">
       <div className="flex flex-col gap-1 border-b border-violet/20 px-4 py-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <div className="font-mono text-[10px] tracking-[0.32em] text-violet">COPY DESK</div>
-          <h2 className="font-display text-xl text-ghost sm:text-2xl">Wallets she follows</h2>
+          <div className="font-mono text-[10px] tracking-[0.28em] text-violet">COPY BOT</div>
+          <h2 className="font-display text-xl text-ghost sm:text-2xl">Wallets she copies</h2>
         </div>
         <div className="font-mono text-[10px] text-mute">{meta.source || "KOL Explorer"}</div>
       </div>
@@ -47,7 +47,7 @@ export function WalletDesk({ compact = false }: { compact?: boolean }) {
               <div className="truncate font-mono text-[10px] text-mute">{w.address.slice(0, 4)}…{w.address.slice(-4)}</div>
             </div>
             <span className={`font-mono text-[10px] md:hidden ${w.copied ? "text-acid" : "text-mute"}`}>
-              {w.copied ? "MIRRORED" : "WATCH"}
+              {w.copied ? "COPYING" : "WATCHING"}
             </span>
           </div>
           <div className="mt-2 flex justify-between font-mono text-sm md:contents">
@@ -56,7 +56,7 @@ export function WalletDesk({ compact = false }: { compact?: boolean }) {
             <span className="text-ghost md:col-span-2">{w.winRate.toFixed(1)}%</span>
           </div>
           <div className="hidden text-right font-mono text-[10px] tracking-[0.18em] md:col-span-3 md:block">
-            {w.copied ? <span className="text-acid">MIRRORED</span> : <span className="text-mute">WATCH</span>}
+            {w.copied ? <span className="text-acid">COPYING</span> : <span className="text-mute">WATCHING</span>}
           </div>
         </div>
       ))}

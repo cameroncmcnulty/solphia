@@ -6,7 +6,7 @@ import { WalletConnect } from "./WalletConnect";
 
 const LINKS = [
   ["/", "Home"],
-  ["/terminal", "Terminal"],
+  ["/terminal", "Trade"],
   ["/copy", "Copy"],
   ["/auto", "Auto"],
   ["/pricing", "Pricing"],

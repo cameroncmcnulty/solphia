@@ -9,12 +9,12 @@ export function alertEmailHtml(alert: AlertEvent, extra?: { score?: number; pnl?
   <table width="100%" cellpadding="0" cellspacing="0" style="background:#050308;padding:32px 12px;">
     <tr><td align="center">
       <table width="560" cellpadding="0" cellspacing="0" style="background:#100a18;border:1px solid #2a1d3a;border-radius:18px;overflow:hidden;">
-        <tr><td style="padding:28px 32px 12px;letter-spacing:0.4em;font-size:11px;color:#5cffd8;font-family:ui-monospace,monospace;">SOLPHIA // SIGNAL</td></tr>
+        <tr><td style="padding:28px 32px 12px;letter-spacing:0.4em;font-size:11px;color:#14f195;font-family:ui-monospace,monospace;">SOLPHIA WOULD TAKE THIS</td></tr>
         <tr><td style="padding:0 32px 8px;font-size:28px;color:#f4f0ea;">${escapeHtml(alert.title)}</td></tr>
         <tr><td style="padding:0 32px 20px;font-size:15px;line-height:1.6;color:#7a708c;">${escapeHtml(alert.body)}</td></tr>
         <tr><td style="padding:0 32px 24px;">
           <table cellpadding="0" cellspacing="0"><tr>
-            <td style="background:${tone};color:#050308;padding:8px 14px;border-radius:999px;font-family:ui-monospace,monospace;font-size:12px;letter-spacing:0.12em;">SAFETY ${score}</td>
+            <td style="background:${tone};color:#050308;padding:8px 14px;border-radius:999px;font-family:ui-monospace,monospace;font-size:12px;letter-spacing:0.12em;">SCORE ${score}</td>
             <td style="padding-left:10px;color:#7a708c;font-family:ui-monospace,monospace;font-size:12px;">${alert.strategy || "watch"} · ${new Date(alert.at).toISOString()}</td>
           </tr></table>
         </td></tr>

@@ -22,11 +22,11 @@ export const metadata: Metadata = {
     template: "%s · SOLPHIA",
   },
   description:
-    "Mobile-first Solana memecoin terminal. Connect Phantom, deposit SOL into a wallet you own, and let Solphia auto-trade only what clears the safety score.",
+    "Solana copy bot. Deposit SOL into a wallet you own. Solphia copies profitable traders and skips coins that look like rugs.",
   applicationName: "SOLPHIA",
   openGraph: {
     title: "SOLPHIA",
-    description: "Copy wallets that survive. You keep the keys.",
+    description: "Deposit SOL. She copies the wallets that are already up.",
     url: "https://solphia.io",
     siteName: "SOLPHIA",
     images: [{ url: "/og.jpg", width: 1376, height: 768 }],
@@ -35,7 +35,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "SOLPHIA",
-    description: "Copy wallets that survive. You keep the keys.",
+    description: "Deposit SOL. She copies the wallets that are already up.",
     images: ["/og.jpg"],
   },
   icons: { icon: "/favicon.svg" },

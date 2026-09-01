@@ -13,8 +13,8 @@ export default function AutoPage() {
     <main className="mx-auto max-w-lg px-4 pb-8 pt-2 md:px-8">
       <div className="mb-4 flex items-center justify-between">
         <div>
-          <p className="font-mono text-[11px] tracking-[0.35em] text-violet">PILOT</p>
-          <h1 className="font-display text-3xl text-ghost">Auto</h1>
+          <p className="font-mono text-[11px] tracking-[0.28em] text-violet">PASSIVE</p>
+          <h1 className="font-display text-3xl text-ghost">Turn her on</h1>
         </div>
         <WalletConnect compact />
       </div>

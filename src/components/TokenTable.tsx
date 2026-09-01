@@ -26,7 +26,7 @@ export function TokenTable({
       <div className="max-h-[70vh] overflow-auto md:max-h-[640px]">
         {rows.map((row) => {
           const t = row.token || row;
-          const r = row.report || { score: 0, grade: "X", allowedStrategies: [] };
+          const r = row.report || { score: 0, grade: "X", verdict: "skip", why: "", allowedStrategies: [] };
           return (
             <div key={t.mint} className="panel mb-2 rounded-2xl p-3 md:mb-0 md:grid md:grid-cols-12 md:items-center md:gap-2 md:rounded-none md:border-0 md:border-b md:border-line/60 md:bg-transparent md:p-4 md:shadow-none">
               <div className="flex items-center gap-3 md:col-span-3">
@@ -41,21 +41,24 @@ export function TokenTable({
                   <div className="truncate font-mono text-[10px] text-mute">{t.name} · {t.venue}</div>
                 </div>
                 <div className="ml-auto md:hidden">
-                  <SafetyBadge score={r.score} grade={r.grade} />
+                  <SafetyBadge score={r.score} verdict={r.verdict} />
                 </div>
               </div>
               <div className="hidden font-mono text-[11px] uppercase text-cyan md:col-span-2 md:block">{t.venue}</div>
               <div className="mt-2 font-mono text-sm md:col-span-2 md:mt-0">${Math.round(t.marketCapUsd || 0).toLocaleString()}</div>
               <div className="hidden md:col-span-2 md:block">
-                <SafetyBadge score={r.score} grade={r.grade} />
+                <SafetyBadge score={r.score} verdict={r.verdict} />
+              </div>
+              <div className="mt-2 font-mono text-[11px] leading-snug text-mute md:col-span-12">
+                {r.why || r.summary}
               </div>
               <div className="mt-3 flex gap-2 md:col-span-3 md:mt-0 md:justify-end">
                 <button
                   onClick={() => onBuy?.(t.mint, r.allowedStrategies?.[0])}
-                  disabled={r.vetoed}
+                  disabled={r.vetoed || r.verdict === "skip"}
                   className="btn-acid min-h-[44px] flex-1 rounded-full px-3 font-mono text-[11px] disabled:opacity-30 md:min-h-0 md:flex-none md:py-1.5"
                 >
-                  BUY
+                  COPY THIS
                 </button>
                 <button onClick={() => onSell?.(t.mint)} className="btn-ghost min-h-[44px] flex-1 rounded-full px-3 font-mono text-[11px] md:min-h-0 md:flex-none md:py-1.5">
                   FLAT

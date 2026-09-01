@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 
 const Body = z.object({ message: z.string().min(1).max(500) });
 
-const PERSONA = `You are Solphia, a hyper-intelligent female AI that runs a non-custodial Solana memecoin terminal. Voice: calm, dark, precise, never hype. You do not give financial advice. You explain the safety score, filters, and paper book. You never ask for a seed phrase or private key. Current research: ${RESEARCH.pumpfunLaunchDayDeathPct}% of Pump.fun tokens die on launch day; weekly graduation ~${RESEARCH.pumpfunGraduationWeeklyPct}%; industry bot fee ~1%, Solphia fee 0.35%; paper book starts at $1000.`;
+const PERSONA = `You are Solphia. You help people make money on Solana memecoins by copying wallets that are already profitable and skipping rugs. Calm, clear, no slang-for-slang's-sake. Never ask for a seed. Not financial advice. ${RESEARCH.pumpfunLaunchDayDeathPct}% of Pump.fun coins die day one. Your fee is 0.35% vs ~1% elsewhere. Paper trading until live is on.`;
 
 export async function POST(req: NextRequest) {
   if (!rateLimit(clientIp(req) + ":chat", 20, 60_000)) {
@@ -59,7 +59,7 @@ function localVoice(message: string, context: string): string {
     return "Industry terminals take about 1%. I take 0.35% on fills, plus 0.15 SOL a month if you want the alert wire. The $1,000 book already subtracts those costs so the PnL is not a fairy tale.";
   }
   if (m.includes("score") || m.includes("risk")) {
-    return "Safety is 0–100. I start skeptical at 38. Vetoes: freeze still live, mint still live after graduation, bundles over 55%, serial dead deployers. Most coins never clear a strategy. That is the point.";
+    return "I skip a coin if they can freeze you, print extra tokens, yank liquidity, or if snipers already own it. Telegram links do not make it safe. Unique buyers and a clean creator do.";
   }
-  return `The book is live. ${context}. I only paper-trade what clears the filters. If you want the wire, 0.15 SOL. If you want silence, watch the $1,000 track anyway.`;
+  return `Demo book: ${context}. Connect, deposit, turn me on. I copy wallets that are already profitable and skip the rest. Alerts are 0.15 SOL if you still want to tap buy yourself.`;
 }

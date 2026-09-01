@@ -63,7 +63,7 @@ describe("risk engine", () => {
       }),
     );
     assert.ok(r.score <= 35);
-    assert.ok(r.caps.some((c) => c.toLowerCase().includes("unlocked lp")));
+    assert.ok(r.caps.some((c) => c.toLowerCase().includes("liquidity")));
   });
 
   it("allows migration snipe only near graduation with unique flow", () => {
@@ -103,5 +103,26 @@ describe("risk engine", () => {
   it("charges 35 bps not the industry 100 bps", () => {
     assert.equal(applyFee(1000, 35), 3.5);
     assert.equal(applyFee(1000, 100), 10);
+  });
+
+  it("does not treat telegram links or reply count as safety", () => {
+    const r = scoreToken(
+      token({
+        uniqueTraders1h: 4,
+        volume1h: 400,
+        liquidityUsd: 900,
+        mintAuthorityRevoked: undefined,
+        freezeAuthorityRevoked: undefined,
+        lpLockedOrBurned: undefined,
+        top10HolderPct: undefined,
+        bundleRatio: 0.2,
+        organicBuyRatio: 0.5,
+        socials: { twitter: "x", telegram: "t", website: "w" },
+        verified: true,
+        replyCount: 400,
+      }),
+    );
+    assert.ok(r.score < 68, `socials should not mint a trade score, got ${r.score}`);
+    assert.equal(r.verdict, "skip");
   });
 });

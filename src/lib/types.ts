@@ -73,12 +73,14 @@ export interface RiskReport {
   mint: string;
   score: number;
   grade: "X" | "D" | "C" | "B" | "A" | "S";
+  verdict: "skip" | "wait" | "trade";
   vetoed: boolean;
   vetoReasons: string[];
   caps: string[];
   factors: RiskFactor[];
   allowedStrategies: Strategy[];
   summary: string;
+  why: string;
   scoredAt: number;
 }
 
