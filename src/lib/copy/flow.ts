@@ -1,9 +1,8 @@
 import type { TokenSnapshot } from "../types";
-import { getJson, getText, num } from "../feeds/http";
+import { getJson, num } from "../feeds/http";
 import { blankSnapshot, dexToVenue } from "../feeds/normalize";
-import { copiedRoster } from "./desk";
+import { gradeDesk } from "./desk";
 
-const MINT_RE = /\/token\/([1-9A-HJ-NP-Za-km-z]{32,44})/g;
 const WSOL = "So11111111111111111111111111111111111111112";
 const MAX_COPY_MCAP = 8_000_000;
 const MIN_COPY_MCAP = 6_000;
@@ -24,9 +23,14 @@ type DexPair = {
   info?: { imageUrl?: string };
 };
 
-let cache: { at: number; tokens: TokenSnapshot[] } | null = null;
+export type LeaderBook = {
+  held: Map<string, { handles: string[]; maxHoldPct: number }>;
+  dumped: Map<string, string[]>;
+};
 
-function pairToToken(pair: DexPair, copiedBy: string[]): TokenSnapshot | null {
+let cache: { at: number; tokens: TokenSnapshot[]; book: LeaderBook } | null = null;
+
+function pairToToken(pair: DexPair, copiedBy: string[], holding: boolean, holdPct: number): TokenSnapshot | null {
   const base = pair.baseToken;
   if (!base?.address || base.address === WSOL) return null;
   const buys = num(pair.txns?.h1?.buys);
@@ -55,16 +59,18 @@ function pairToToken(pair: DexPair, copiedBy: string[]): TokenSnapshot | null {
     buys1h: buys,
     sells1h: sells,
     uniqueTraders1h: Math.round((buys + sells) * 0.62),
+    uniqueEstimated: true,
     priceChange5m: num(pair.priceChange?.m5),
     priceChange1h: num(pair.priceChange?.h1),
     priceChange6h: num(pair.priceChange?.h6),
     priceChange24h: num(pair.priceChange?.h24),
     bondingProgress: pair.dexId === "pumpfun" ? 0.45 : 1,
     graduated: pair.dexId !== "pumpfun",
-    mintAuthorityRevoked: pair.dexId !== "pumpfun" ? true : undefined,
-    freezeAuthorityRevoked: pair.dexId !== "pumpfun" ? true : undefined,
     smartMoneyInflow: true,
     copiedBy,
+    copiedHolding: holding,
+    leaderHoldPct: holdPct || undefined,
+    farmCluster: copiedBy.length >= 4,
   });
 }
 
@@ -87,36 +93,54 @@ async function dexTokens(mints: string[]): Promise<Map<string, DexPair>> {
 }
 
 export async function copyUniverse(): Promise<TokenSnapshot[]> {
-  if (cache && Date.now() - cache.at < 8 * 60 * 1000) return cache.tokens;
-  const wallets = copiedRoster();
-  const byMint = new Map<string, string[]>();
-  await Promise.all(
-    wallets.map(async (w) => {
-      const page = await getText(`https://kolexplorer.com/kol/${w.slug}`, 7000);
-      if (!page.ok || !page.data) return;
-      const found: string[] = [];
-      for (const m of page.data.matchAll(MINT_RE)) {
-        const mint = m[1];
-        if (mint === WSOL || found.includes(mint)) continue;
-        found.push(mint);
+  const { tokens } = await copyTape();
+  return tokens;
+}
+
+export async function copyTape(): Promise<{ tokens: TokenSnapshot[]; book: LeaderBook }> {
+  if (cache && Date.now() - cache.at < 8 * 60 * 1000) return { tokens: cache.tokens, book: cache.book };
+  const desk = await gradeDesk();
+  const active = desk.rows.filter((w) => w.copied);
+  const held = new Map<string, { handles: string[]; maxHoldPct: number }>();
+  const dumped = new Map<string, string[]>();
+  const buyMints = new Map<string, string[]>();
+
+  for (const w of active) {
+    const holds = (w.holdings || []).map((h) => h.mint);
+    const holdPct = new Map((w.holdings || []).map((h) => [h.mint, h.holdPct || 0]));
+    for (const mint of holds) {
+      const row = held.get(mint) || { handles: [], maxHoldPct: 0 };
+      if (!row.handles.includes(w.handle)) row.handles.push(w.handle);
+      row.maxHoldPct = Math.max(row.maxHoldPct, holdPct.get(mint) || 0);
+      held.set(mint, row);
+      const buyers = buyMints.get(mint) || [];
+      if (!buyers.includes(w.handle)) buyers.push(w.handle);
+      buyMints.set(mint, buyers);
+    }
+    for (const mint of w.tradeMints || []) {
+      const buyers = buyMints.get(mint) || [];
+      if (!buyers.includes(w.handle)) buyers.push(w.handle);
+      buyMints.set(mint, buyers);
+      if (!holds.includes(mint)) {
+        const d = dumped.get(mint) || [];
+        if (!d.includes(w.handle)) d.push(w.handle);
+        dumped.set(mint, d);
       }
-      const pick = [...found.slice(0, 5), ...found.slice(-8)];
-      for (const mint of new Set(pick)) {
-        const list = byMint.get(mint) || [];
-        list.push(w.handle);
-        byMint.set(mint, list);
-      }
-    }),
-  );
-  const mints = [...byMint.keys()].slice(0, 36);
+    }
+  }
+
+  const mints = [...buyMints.keys()].slice(0, 36);
   const pairs = await dexTokens(mints);
   const tokens: TokenSnapshot[] = [];
   for (const [mint, pair] of pairs) {
-    const t = pairToToken(pair, byMint.get(mint) || []);
+    const copiedBy = buyMints.get(mint) || [];
+    const bag = held.get(mint);
+    const t = pairToToken(pair, copiedBy, Boolean(bag), bag?.maxHoldPct || 0);
     if (t) tokens.push(t);
   }
-  cache = { at: Date.now(), tokens };
-  return tokens;
+  const book: LeaderBook = { held, dumped };
+  cache = { at: Date.now(), tokens, book };
+  return { tokens, book };
 }
 
 export async function markMints(mints: string[]): Promise<TokenSnapshot[]> {
@@ -138,8 +162,19 @@ export async function markMints(mints: string[]): Promise<TokenSnapshot[]> {
         priceUsd: num(pair.priceUsd),
         marketCapUsd: num(pair.marketCap) || num(pair.fdv),
         liquidityUsd: num(pair.liquidity?.usd),
+        uniqueEstimated: true,
       }),
     );
   }
   return out;
+}
+
+export function leaderDumped(mint: string, copiedFrom: string | undefined, book: LeaderBook | undefined): boolean {
+  if (!copiedFrom || !book) return false;
+  const still = book.held.get(mint)?.handles.includes(copiedFrom);
+  if (still) return false;
+  const sold = book.dumped.get(mint)?.includes(copiedFrom);
+  if (sold) return true;
+  const weHaveHoldings = [...book.held.values()].some((h) => h.handles.includes(copiedFrom));
+  return weHaveHoldings;
 }

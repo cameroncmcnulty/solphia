@@ -105,6 +105,25 @@ describe("risk engine", () => {
     assert.equal(applyFee(1000, 100), 10);
   });
 
+  it("rejects random 2-minute coins as launches", () => {
+    const r = scoreToken(
+      token({
+        createdAt: Date.now() - 90_000,
+        bondingProgress: 0.08,
+        uniqueTraders1h: 80,
+        bundleRatio: 0.1,
+      }),
+    );
+    assert.equal(r.allowedStrategies.includes("launch_snipe"), false);
+  });
+
+  it("hard-skips 38% bundled supply", () => {
+    const r = scoreToken(token({ bundleRatio: 0.4, smartMoneyInflow: true, copiedBy: ["Cented"] }));
+    assert.equal(r.vetoed, true);
+    assert.ok(r.vetoReasons.some((x) => /bundled/i.test(x)));
+    assert.equal(r.allowedStrategies.includes("copy_trade"), false);
+  });
+
   it("only allows copy_trade when a followed wallet is in the coin", () => {
     const organic = scoreToken(token({ smartMoneyInflow: false, organicBuyRatio: 0.9, uniqueTraders1h: 80 }));
     assert.equal(organic.allowedStrategies.includes("copy_trade"), false);

@@ -85,12 +85,12 @@ export default function Home() {
         />
         <Card
           title="Copy bot · 0.25 SOL"
-          body="The passive path. She copies wallets that are already up, and only if the coin also looks safe."
+          body="The passive path. She copies wallets that are still good this week, skips farms and bundles, and sells when they sell."
           href="/auto"
         />
         <Card
           title="Launch bot · 0.30 SOL"
-          body="Higher risk. She hunts brand-new coins and graduations that pass the same safety checks."
+          body="Higher risk. Curve-fill and first minutes after graduation — not random 2-minute coins. Most names are skipped."
           href="/terminal?desk=launch"
         />
         <Card

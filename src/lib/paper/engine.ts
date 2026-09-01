@@ -11,8 +11,11 @@ import type {
   TokenSnapshot,
 } from "../types";
 import { applyFee, positionSizeUsd, scoreToken, slippageBps } from "../risk/engine";
+import { copyBlockReason } from "../risk/copy";
 import { pushBounded } from "../store";
 import { tokenPriceUsd } from "./price";
+import { dayPnlUsd, exitPlan } from "./exits";
+import type { LeaderBook } from "../copy/flow";
 
 export type DeskFlags = Pick<AutoSettings, "copy" | "launch" | "migrate" | "scalp">;
 
@@ -31,27 +34,18 @@ function id(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function timeStop(strategy: Strategy, settings: EngineSettings): number {
-  switch (strategy) {
-    case "launch_snipe":
-      return settings.timeStopLaunchMs;
-    case "migration_snipe":
-      return settings.timeStopMigrationMs;
-    case "copy_trade":
-      return settings.timeStopCopyMs;
-    default:
-      return settings.timeStopScalpMs;
-  }
-}
-
-function markPosition(pos: PaperPosition, price: number): PaperPosition {
+function markPosition(pos: PaperPosition, price: number, settings: EngineSettings): PaperPosition {
   const mark = price > 0 ? price : pos.markUsd;
+  const scaled = pos.scaledOut || 0;
   return {
     ...pos,
+    originalQty: pos.originalQty || pos.qty,
+    originalSizeUsd: pos.originalSizeUsd || pos.sizeUsd,
+    scaledOut: scaled,
     markUsd: mark,
     unrealizedUsd: (mark - pos.entryUsd) * pos.qty,
     trailPeakUsd: Math.max(pos.trailPeakUsd, mark),
-    trailArmed: pos.trailArmed || mark >= pos.entryUsd * (1 + 0.18),
+    trailArmed: pos.trailArmed || scaled >= settings.partialTp1Sell || mark >= pos.entryUsd * (1 + settings.trailingArmPct),
   };
 }
 
@@ -149,7 +143,9 @@ export function openPaperBuy(opts: {
     openedAt: now,
     entryUsd: price * (1 + slipBps / 10_000),
     qty,
+    originalQty: qty,
     sizeUsd: size,
+    originalSizeUsd: size,
     feeUsd: fee,
     slippageUsd: slip,
     tpUsd: price * (1 + settings.takeProfitPct),
@@ -160,6 +156,8 @@ export function openPaperBuy(opts: {
     unrealizedUsd: 0,
     riskScore: score,
     venue: token.venue,
+    copiedFrom: token.copiedBy?.[0],
+    scaledOut: 0,
   };
 
   book.cashUsd -= spend;
@@ -218,14 +216,61 @@ export function closePosition(opts: {
   return fill;
 }
 
-function shouldExit(pos: PaperPosition, token: TokenSnapshot | undefined, reportScore: number | undefined, settings: EngineSettings, now: number): string | null {
-  if (pos.markUsd >= pos.tpUsd) return "take-profit";
-  if (pos.markUsd <= pos.slUsd) return "stop-loss";
-  if (pos.trailArmed && pos.markUsd <= pos.trailPeakUsd * (1 - settings.trailingGivebackPct)) return "trailing-stop";
-  if (now - pos.openedAt >= timeStop(pos.strategy, settings)) return "time-stop";
-  if (reportScore != null && reportScore < 28) return "risk-collapse";
-  if (token?.banned) return "banned";
-  return null;
+export function closePartial(opts: {
+  state: AppState;
+  pos: PaperPosition;
+  price: number;
+  fraction: number;
+  reason: string;
+  now?: number;
+}): PaperFill {
+  const frac = Math.min(1, Math.max(0, opts.fraction));
+  if (frac >= 0.99) return closePosition(opts);
+  const { state, pos, reason } = opts;
+  const now = opts.now ?? Date.now();
+  const price = opts.price >= 0 ? opts.price : pos.markUsd;
+  const settings = state.settings;
+  const sellQty = pos.qty * frac;
+  const cost = pos.sizeUsd * frac;
+  const slipBps = slippageBps(pos.strategy, settings);
+  const notional = price * sellQty;
+  const slip = applyFee(notional, slipBps);
+  const fee = applyFee(notional, settings.feeBps);
+  const proceeds = Math.max(0, notional - fee - slip);
+  const pnl = proceeds - cost;
+  const originalQty = pos.originalQty || pos.qty;
+  const fill: PaperFill = {
+    id: id("fill"),
+    mint: pos.mint,
+    symbol: pos.symbol,
+    name: pos.name,
+    strategy: pos.strategy,
+    side: "sell",
+    at: now,
+    priceUsd: price,
+    qty: sellQty,
+    sizeUsd: notional,
+    feeUsd: fee,
+    slippageUsd: slip,
+    pnlUsd: pnl,
+    pnlPct: cost ? pnl / cost : 0,
+    reason,
+    riskScore: pos.riskScore,
+    venue: pos.venue,
+  };
+  state.paper.cashUsd += proceeds;
+  state.paper.feesPaidUsd += fee;
+  state.paper.slippagePaidUsd += slip;
+  state.paper.realizedPnlUsd += pnl;
+  const live = state.paper.positions.find((p) => p.id === pos.id);
+  if (live) {
+    live.qty = pos.qty - sellQty;
+    live.sizeUsd = pos.sizeUsd - cost;
+    live.scaledOut = (pos.scaledOut || 0) + (originalQty ? sellQty / originalQty : frac);
+    live.trailArmed = true;
+  }
+  pushBounded(state.paper.fills, fill, 400);
+  return fill;
 }
 
 export function tickBook(
@@ -234,11 +279,12 @@ export function tickBook(
   book: PaperBook,
   now = Date.now(),
   desks?: DeskFlags,
+  copyBook?: LeaderBook,
 ) {
   const prev = state.paper;
   state.paper = book;
   try {
-    return tickPaper(state, tokens, now, desks);
+    return tickPaper(state, tokens, now, desks, copyBook);
   } finally {
     state.paper = prev;
   }
@@ -252,8 +298,12 @@ function pushExit(
   now: number,
   exits: PaperFill[],
   alerts: AlertEvent[],
+  fraction = 1,
 ) {
-  const fill = closePosition({ state, pos, price, reason, now });
+  const fill =
+    fraction < 0.99
+      ? closePartial({ state, pos, price, fraction, reason, now })
+      : closePosition({ state, pos, price, reason, now });
   exits.push(fill);
   alerts.push({
     id: id("al"),
@@ -272,6 +322,7 @@ export function tickPaper(
   tokens: TokenSnapshot[],
   now = Date.now(),
   desks?: DeskFlags,
+  copyBook?: LeaderBook,
 ): {
   entries: PaperFill[];
   exits: PaperFill[];
@@ -291,7 +342,7 @@ export function tickPaper(
 
   state.paper.positions = state.paper.positions.map((pos) => {
     const live = tokenPriceUsd(byMint.get(pos.mint));
-    return live > 0 ? markPosition(pos, live) : pos;
+    return live > 0 ? markPosition(pos, live, settings) : markPosition(pos, pos.markUsd, settings);
   });
 
   for (const pos of [...state.paper.positions]) {
@@ -302,13 +353,27 @@ export function tickPaper(
       continue;
     }
     const report = scored.find((s) => s.token.mint === pos.mint)?.report;
-    const reason = shouldExit(pos, t, report?.score, settings, now);
-    if (reason) pushExit(state, pos, pos.markUsd, reason, now, exits, alerts);
+    const plan = exitPlan(pos, t, report?.score, settings, now, copyBook);
+    if (plan) pushExit(state, pos, pos.markUsd, plan.reason, now, exits, alerts, plan.fraction);
   }
 
   state.paper.equityUsd =
     Math.round((state.paper.cashUsd + state.paper.positions.reduce((s, p) => s + p.markUsd * p.qty, 0)) * 100) / 100;
 
+  const lostToday = dayPnlUsd(state.paper.fills, state.paper.positions, now);
+  if (lostToday <= -settings.dailyLossPct * state.paper.startingUsd && (state.paper.haltedUntil || 0) < now) {
+    state.paper.haltedUntil = now + 24 * 60 * 60 * 1000;
+    state.paper.haltReason = `Daily loss cap (${Math.round(settings.dailyLossPct * 100)}%). She is off until tomorrow.`;
+    alerts.push({
+      id: id("al"),
+      at: now,
+      kind: "halt",
+      title: "DAILY LOSS CAP",
+      body: state.paper.haltReason,
+    });
+  }
+
+  const halted = (state.paper.haltedUntil || 0) > now;
   let opened = 0;
   const ranked = scored
     .map((s) => ({
@@ -319,6 +384,7 @@ export function tickPaper(
     .sort((a, b) => b.report.score - a.report.score);
 
   for (const s of ranked) {
+    if (halted) break;
     if (opened >= settings.maxNewEntriesPerTick) break;
     if (state.paper.positions.length >= settings.maxPositions) break;
     const strategy = pickStrategy(s.allowed);
@@ -350,7 +416,19 @@ export function tickPaper(
   }
 
   for (const s of scored) {
-    if (s.report.score >= 80 && s.token.smartMoneyInflow) {
+    const blocked = s.token.smartMoneyInflow ? copyBlockReason(s.token, settings) : null;
+    if (blocked && /bundled/i.test(blocked)) {
+      alerts.push({
+        id: id("al"),
+        at: now,
+        kind: "bundle",
+        title: `SKIP ${s.token.symbol}`,
+        body: blocked,
+        mint: s.token.mint,
+        score: s.report.score,
+        strategy: "copy_trade",
+      });
+    } else if (s.report.score >= 80 && s.token.smartMoneyInflow) {
       alerts.push({
         id: id("al"),
         at: now,

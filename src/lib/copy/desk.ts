@@ -1,3 +1,6 @@
+import { fromCopyWallet, gradeWallets, type WalletQuality } from "./quality";
+import { parseTradeMints, scrapeKol } from "./scrape";
+
 export interface CopyWallet {
   handle: string;
   slug: string;
@@ -20,57 +23,67 @@ const SNAPSHOT: CopyWallet[] = [
   { handle: "Clukz", slug: "clukz", address: "G6fUXjMKPJzCY1rveAE6Qm7wy5U3vZgKDJmN1VPAdiZC", style: "Measured", pnl7d: 3000, pnl30d: 136527, winRate: 57.9, copied: true },
 ];
 
-function usd(raw: string): number | null {
-  const t = raw.replace(/,/g, "").toUpperCase();
-  const m = t.match(/([0-9.]+)\s*([KMB])?/);
-  if (!m) return null;
-  const n = Number(m[1]);
-  if (!Number.isFinite(n)) return null;
-  const mul = m[2] === "B" ? 1e9 : m[2] === "M" ? 1e6 : m[2] === "K" ? 1e3 : 1;
-  return n * mul;
+let cache: { at: number; rows: WalletQuality[] } | null = null;
+
+export function seedRoster(): CopyWallet[] {
+  return SNAPSHOT.map((w) => ({ ...w }));
 }
 
-async function scrape(slug: string): Promise<{ pnl7d?: number; pnl30d?: number; winRate?: number } | null> {
-  try {
-    const r = await fetch(`https://kolexplorer.com/kol/${slug}`, {
-      headers: { "user-agent": "Solphia/0.2 (+https://solphia.io)", accept: "text/html" },
-      cache: "no-store",
-    });
-    if (!r.ok) return null;
-    const html = await r.text();
-    const p7 = html.match(/7D PnL[\s\S]{0,160}\+?\$([\d,.]+)\s*([KMB])?/i);
-    const p30 = html.match(/30D PnL[\s\S]{0,160}\+?\$([\d,.]+)\s*([KMB])?/i);
-    const wr = html.match(/([0-9.]+)\s*%\s*WR/i);
-    return {
-      pnl7d: p7 ? usd(p7[1] + (p7[2] || "")) || undefined : undefined,
-      pnl30d: p30 ? usd(p30[1] + (p30[2] || "")) || undefined : undefined,
-      winRate: wr ? Number(wr[1]) : undefined,
-    };
-  } catch {
-    return null;
-  }
-}
-
-let cache: { at: number; rows: CopyWallet[] } | null = null;
-
-export function copiedRoster(): CopyWallet[] {
-  return SNAPSHOT.filter((w) => w.copied);
-}
-
-export async function copyDesk(): Promise<{ rows: CopyWallet[]; source: string; updatedAt: number }> {
-  if (cache && Date.now() - cache.at < 10 * 60 * 1000) {
+export async function gradeDesk(force = false): Promise<{ rows: WalletQuality[]; source: string; updatedAt: number }> {
+  if (!force && cache && Date.now() - cache.at < 10 * 60 * 1000) {
     return { rows: cache.rows, source: "KOL Explorer (cached)", updatedAt: cache.at };
   }
-  const rows = await Promise.all(
+  const stats = await Promise.all(
     SNAPSHOT.map(async (w) => {
-      const live = await scrape(w.slug);
+      const live = await scrapeKol(w.slug);
       const pnl7d = live?.pnl7d && live.pnl7d >= 50 ? live.pnl7d : w.pnl7d;
       const pnl30d = live?.pnl30d && live.pnl30d >= 500 ? live.pnl30d : w.pnl30d;
       const winRate = live?.winRate && live.winRate > 5 && live.winRate < 95 ? live.winRate : w.winRate;
-      return { ...w, pnl7d, pnl30d, winRate };
+      return fromCopyWallet(
+        { ...w, pnl7d, pnl30d, winRate },
+        {
+          winRate1d: live?.winRate1d,
+          trades7d: live?.trades7d,
+          tokens7d: live?.tokens7d,
+          avgTradeUsd: live?.avgTradeUsd,
+          worstTradeUsd: live?.worstTradeUsd,
+          holdings: live?.holdings || [],
+          tradeMints: live?.html ? parseTradeMints(live.html) : [],
+        },
+      );
     }),
   );
-  rows.sort((a, b) => b.pnl30d - a.pnl30d);
+  const rows = gradeWallets(stats);
   cache = { at: Date.now(), rows };
   return { rows, source: "KOL Explorer", updatedAt: cache.at };
+}
+
+export async function copyDesk(): Promise<{ rows: WalletQuality[]; source: string; updatedAt: number }> {
+  return gradeDesk();
+}
+
+export function copiedRoster(): CopyWallet[] {
+  if (cache?.rows) {
+    return cache.rows
+      .filter((w) => w.copied)
+      .map((w) => ({
+        handle: w.handle,
+        slug: w.slug,
+        address: w.address,
+        style: w.styleLabel,
+        pnl7d: w.pnl7d,
+        pnl30d: w.pnl30d,
+        winRate: w.winRate,
+        copied: true,
+      }));
+  }
+  return SNAPSHOT.filter((w) => w.copied);
+}
+
+export function activeCopyHandles(): string[] {
+  return copiedRoster().map((w) => w.handle);
+}
+
+export function walletQuality(handle: string): WalletQuality | undefined {
+  return cache?.rows.find((w) => w.handle === handle);
 }

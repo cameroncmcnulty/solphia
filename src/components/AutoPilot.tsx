@@ -155,6 +155,9 @@ export function AutoPilot({ owner }: { owner: string | null }) {
           <Mini k="Open" v={String(paper.open)} />
         </div>
       )}
+      {paper?.haltReason && (paper.haltedUntil || 0) > Date.now() && (
+        <p className="font-mono text-xs text-blood">{paper.haltReason}</p>
+      )}
 
       <div className="panel rounded-2xl p-5 space-y-3">
         <div className="font-mono text-[10px] tracking-[0.22em] text-mute">WHAT SHE'S ALLOWED TO DO</div>

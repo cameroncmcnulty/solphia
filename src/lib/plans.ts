@@ -33,12 +33,12 @@ export const PLANS: Plan[] = [
     sol: 0.25,
     tagline: "The passive one. She copies people who are already up.",
     story:
-      "You fund a trading wallet you own and turn her on. When wallets like Cented or Cupsey buy, she copies — but only if the coin also passes safety (no freeze, no bundle dump, real buyers). That's how this is supposed to make you money while you're not staring at a chart.",
+      "You fund a trading wallet you own and turn her on. She only copies wallets that are still good this week — not a 30-day highlight reel — and she sells when they sell. Size caps and a daily loss switch keep a passive book from blowing up.",
     points: [
-      "Follows a short list of wallets with public 7-day and 30-day profit",
-      "Skips the trade if the coin looks like a rug",
+      "Wallet quality: win rate, 7d vs 30d decay, clusters, style tags",
+      "Copies entries and exits. Drops a coin the leader already dumped",
+      "Max size per trade, bundle skip, daily loss cap that turns her off",
       "Uses your deposit, never a Solphia-held wallet",
-      "Does not include launch sniping or email alerts",
     ],
     includes: ["copy"],
   },
@@ -48,11 +48,11 @@ export const PLANS: Plan[] = [
     sol: 0.3,
     tagline: "Catches new coins and graduations. Higher risk.",
     story:
-      "Not copy trading. This bot buys very new tokens and coins about to graduate — only when they pass the same safety checks. Faster, noisier, easier to lose. Use this if you want her hunting, not just following.",
+      "Not copy trading. Two tight windows only: curve filling with real buyers, then the first minutes after PumpSwap/Raydium. Random 2-minute coins are skipped. Most names still get a hard no.",
     points: [
-      "New coins under 8 minutes, if buyers look real and snipers don't already own it",
-      "Graduations when the bonding curve is almost full",
-      "Still skips freeze, mint, and serial-rug creators",
+      "Pre-grad: curve 35–82% filled, unique buyers, no bundle, creator not a serial rug",
+      "Post-grad: first minutes on PumpSwap or Raydium, same safety bar",
+      "Bundled or insider-looking flow is a skip, and you see why",
       "Not the set-and-forget copy bot",
     ],
     includes: ["snipers"],

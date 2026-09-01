@@ -1,5 +1,5 @@
 import type { CreatorStat, FeedHealth, TokenSnapshot } from "../types";
-import { copyUniverse, markMints } from "../copy/flow";
+import { copyTape, markMints, type LeaderBook } from "../copy/flow";
 import { getJson, num, str } from "./http";
 import { blankSnapshot, dexToVenue, mergeSnapshots } from "./normalize";
 
@@ -151,6 +151,7 @@ function fromDex(pair: DexPair): TokenSnapshot | null {
     buys1h: buys,
     sells1h: sells,
     uniqueTraders1h: uniqueProxy,
+    uniqueEstimated: true,
     priceChange5m: num(pair.priceChange?.m5),
     priceChange1h: num(pair.priceChange?.h1),
     priceChange6h: num(pair.priceChange?.h6),
@@ -248,6 +249,7 @@ export async function ingestMarket(
   tokens: TokenSnapshot[];
   health: FeedHealth[];
   solUsd: number;
+  copyBook: LeaderBook;
 }> {
   const health: FeedHealth[] = [];
   const map = new Map<string, TokenSnapshot>();
@@ -311,8 +313,8 @@ export async function ingestMarket(
     })(),
   ];
 
-  const [solUsd, copy] = await Promise.all([solPriceUsd(), copyUniverse(), Promise.allSettled(jobs)]);
-  for (const t of copy) {
+  const [solUsd, tape] = await Promise.all([solPriceUsd(), copyTape(), Promise.allSettled(jobs)]);
+  for (const t of tape.tokens) {
     const prev = map.get(t.mint);
     map.set(t.mint, prev ? { ...mergeSnapshots(prev, t), smartMoneyInflow: true, copiedBy: t.copiedBy } : t);
   }
@@ -329,5 +331,5 @@ export async function ingestMarket(
     .filter((t) => t.mint.length >= 32)
     .sort((a, b) => (b.volume1h || b.marketCapUsd) - (a.volume1h || a.marketCapUsd));
 
-  return { tokens, health, solUsd };
+  return { tokens, health, solUsd, copyBook: tape.book };
 }

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { closePosition, openPaperBuy, tickPaper } from "../lib/paper/engine";
+import { closePartial, closePosition, openPaperBuy, tickPaper } from "../lib/paper/engine";
 import { tokenPriceUsd } from "../lib/paper/price";
 import { emptyState } from "../lib/store";
 import { blankSnapshot } from "../lib/feeds/normalize";
@@ -162,5 +162,81 @@ describe("paper engine", () => {
     assert.equal(exits[0].reason, "illiquid");
     assert.ok((exits[0].pnlUsd || 0) < 0);
     assert.equal(state.paper.positions.length, 0);
+  });
+
+  it("scales out half at 2x and leaves a trailing remainder", () => {
+    const state = emptyState();
+    const token = blankSnapshot({
+      mint: "Moon111111111111111111111111111111111111111",
+      name: "Moon",
+      symbol: "MOON",
+      venue: "pumpswap",
+      priceUsd: 1,
+      marketCapUsd: 80_000,
+      liquidityUsd: 40_000,
+      uniqueTraders1h: 80,
+      volume1h: 50_000,
+      mintAuthorityRevoked: true,
+      freezeAuthorityRevoked: true,
+      lpLockedOrBurned: true,
+      smartMoneyInflow: true,
+      copiedBy: ["Decu"],
+    });
+    const fill = openPaperBuy({ state, token, strategy: "copy_trade", score: 80, reason: "copy Decu" });
+    assert.ok(fill);
+    const pos = state.paper.positions[0];
+    const qty0 = pos.qty;
+    const sold = closePartial({ state, pos, price: 2.2, fraction: 0.5, reason: "take-profit-2x" });
+    assert.ok((sold.pnlUsd || 0) > 0);
+    assert.equal(state.paper.positions.length, 1);
+    assert.ok(state.paper.positions[0].qty < qty0);
+    assert.ok(state.paper.positions[0].trailArmed);
+  });
+
+  it("turns her off after the daily loss cap", () => {
+    const state = emptyState();
+    state.paper.fills.push({
+      id: "loss",
+      mint: "x".repeat(44),
+      symbol: "X",
+      name: "X",
+      strategy: "copy_trade",
+      side: "sell",
+      at: Date.now(),
+      priceUsd: 1,
+      qty: 1,
+      sizeUsd: 1,
+      feeUsd: 0,
+      slippageUsd: 0,
+      pnlUsd: -150,
+      reason: "stop-loss",
+      riskScore: 70,
+      venue: "pumpfun",
+    });
+    const token = blankSnapshot({
+      mint: "Copy111111111111111111111111111111111111111",
+      name: "Copy",
+      symbol: "COPY",
+      venue: "pumpswap",
+      priceUsd: 0.02,
+      marketCapUsd: 80_000,
+      liquidityUsd: 50_000,
+      uniqueTraders1h: 120,
+      volume1h: 90_000,
+      mintAuthorityRevoked: true,
+      freezeAuthorityRevoked: true,
+      lpLockedOrBurned: true,
+      smartMoneyInflow: true,
+      copiedBy: ["Cented"],
+    });
+    const { entries, alerts } = tickPaper(state, [token], Date.now(), {
+      copy: true,
+      launch: false,
+      migrate: false,
+      scalp: false,
+    });
+    assert.equal(entries.length, 0);
+    assert.ok(alerts.some((a) => a.kind === "halt"));
+    assert.ok((state.paper.haltedUntil || 0) > Date.now());
   });
 });

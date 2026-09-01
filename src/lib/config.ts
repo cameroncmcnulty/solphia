@@ -45,6 +45,15 @@ export const DEFAULT_SETTINGS: EngineSettings = {
   timeStopMigrationMs: 2 * 60 * 60 * 1000,
   timeStopCopyMs: 4 * 60 * 60 * 1000,
   timeStopScalpMs: 90 * 60 * 1000,
+  dailyLossPct: 0.12,
+  maxCoinPct: 0.1,
+  bundleVeto: 0.38,
+  leaderSupplyVeto: 0.4,
+  minWalletQuality: 64,
+  partialTp1: 1,
+  partialTp1Sell: 0.5,
+  partialTp2: 4,
+  partialTp2Sell: 0.25,
 };
 
 export const RESEARCH = {

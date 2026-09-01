@@ -1,5 +1,6 @@
 import type { EngineSettings, RiskFactor, RiskReport, Strategy, TokenSnapshot } from "../types";
 import { DEFAULT_SETTINGS } from "../config";
+import { copyBlockReason } from "./copy";
 
 function clamp(n: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, n));
@@ -59,9 +60,18 @@ export function scoreToken(token: TokenSnapshot, now = Date.now(), settings: Eng
   if (token.mintAuthorityRevoked === false && token.graduated) {
     vetoReasons.push("They can still print more tokens.");
   }
-  if ((token.bundleRatio ?? 0) > 0.55) vetoReasons.push("Snipers already own most of this. You'll be exit liquidity.");
-  if ((token.deployerDeathRate ?? 0) > 0.85 && (token.deployerTokenCount ?? 0) > 3) {
+  const bundleVeto = settings.bundleVeto ?? 0.38;
+  if ((token.bundleRatio ?? 0) >= bundleVeto) {
+    vetoReasons.push(`${Math.round((token.bundleRatio || 0) * 100)}% was bundled. She didn't copy.`);
+  }
+  if ((token.deployerDeathRate ?? 0) > 0.7 && (token.deployerTokenCount ?? 0) > 2) {
     vetoReasons.push("This creator's other coins mostly died.");
+  }
+  if (token.graduated && (token.devSoldPct ?? 0) > 0.3) {
+    vetoReasons.push("Creator already sold into the graduation.");
+  }
+  if ((token.top10HolderPct ?? 0) >= 80) {
+    vetoReasons.push("Top 10 wallets own this coin.");
   }
 
   if (token.mintAuthorityRevoked) add(factors, "mint", "Can't print extra tokens", 12, "Mint authority is off.");
@@ -74,9 +84,10 @@ export function scoreToken(token: TokenSnapshot, now = Date.now(), settings: Eng
     else if (token.top10HolderPct > 70) add(factors, "h10", "Whale concentration", -18, `Top 10 hold ${token.top10HolderPct.toFixed(1)}%.`);
   }
 
-  if (unique >= 200) add(factors, "u1h", "Dense first-hour flow", 14, `${unique} unique traders.`);
-  else if (unique >= 80) add(factors, "u1h", "Strong unique flow", 9, `${unique} unique traders.`);
-  else if (unique >= 30) add(factors, "u1h", "Decent unique flow", 5, `${unique} unique traders.`);
+  const uniqueW = token.uniqueEstimated ? 0.45 : 1;
+  if (unique >= 200) add(factors, "u1h", "Dense first-hour flow", Math.round(14 * uniqueW), `${unique} unique traders.`);
+  else if (unique >= 80) add(factors, "u1h", "Strong unique flow", Math.round(9 * uniqueW), `${unique} unique traders.`);
+  else if (unique >= 30) add(factors, "u1h", "Decent unique flow", Math.round(5 * uniqueW), `${unique} unique traders.`);
   else if (unique > 0 && unique < 8) add(factors, "u1h", "Thin unique flow", -12, `${unique} unique traders.`);
 
   if (token.volume1h >= 50_000) add(factors, "v1h", "Real 1h volume", 8, `$${Math.round(token.volume1h).toLocaleString()}`);
@@ -107,7 +118,11 @@ export function scoreToken(token: TokenSnapshot, now = Date.now(), settings: Eng
   if (token.liquidityUsd > 40_000) add(factors, "liq", "You can actually exit", 8, `$${Math.round(token.liquidityUsd).toLocaleString()} liquidity.`);
   else if (token.liquidityUsd > 0 && token.liquidityUsd < 4_000) add(factors, "liq", "You may not get out", -10, `$${Math.round(token.liquidityUsd).toLocaleString()} liquidity.`);
 
-  if (token.priceChange5m > 80) add(factors, "spike", "Already pumped in 5 minutes", -8, `+${token.priceChange5m.toFixed(0)}% — late.`);
+  if (token.priceChange5m > 120) {
+    vetoReasons.push(`Already +${token.priceChange5m.toFixed(0)}% in 5 minutes. You're late.`);
+  } else if (token.priceChange5m > 80) {
+    add(factors, "spike", "Already pumped in 5 minutes", -16, `+${token.priceChange5m.toFixed(0)}% — late.`);
+  }
   if (bsr > 1.6) add(factors, "bsr", "More buys than sells", 5, `buy/sell ${bsr.toFixed(2)}`);
   else if (token.buys1h + token.sells1h > 8 && bsr < 0.7) add(factors, "bsr", "Sellers are leaving", -8, `buy/sell ${bsr.toFixed(2)}`);
 
@@ -163,29 +178,45 @@ export function allowedStrategies(
 ): Strategy[] {
   const out: Strategy[] = [];
   if (token.banned || token.nsfw) return out;
+  const ageMin = ctx.age / 60000;
 
-  if (
-    score >= settings.minScoreLaunch &&
-    ctx.age <= settings.launchMaxAgeMs &&
-    ctx.unique >= 25 &&
-    ctx.bundle < 0.28 &&
-    !token.livestream
-  ) {
+  const preGrad =
+    !token.graduated &&
+    token.bondingProgress >= 0.35 &&
+    token.bondingProgress < settings.migrationMinBonding &&
+    ageMin >= 3 &&
+    ageMin <= 20 &&
+    ctx.unique >= 40 &&
+    ctx.bundle < 0.22 &&
+    !token.livestream &&
+    (token.deployerDeathRate == null || token.deployerDeathRate < 0.5);
+  if (score >= settings.minScoreLaunch && preGrad) {
     out.push("launch_snipe");
   }
 
-  const nearGrad = token.bondingProgress >= settings.migrationMinBonding && token.bondingProgress < 1;
-  const justGrad = token.graduated && ctx.age < 8 * 60 * 1000;
-  if (score >= settings.minScoreMigration && (nearGrad || justGrad) && ctx.unique >= 40 && ctx.bundle < 0.32) {
+  const nearGrad =
+    !token.graduated &&
+    token.bondingProgress >= Math.max(settings.migrationMinBonding, 0.88) &&
+    token.bondingProgress < 1 &&
+    ctx.unique >= 50 &&
+    ctx.bundle < 0.25 &&
+    (ctx.organic || 0) > 0.5;
+  const justMigrated =
+    token.graduated &&
+    (token.venue === "pumpswap" || token.venue === "raydium") &&
+    ageMin < 12 &&
+    ctx.unique >= 40 &&
+    ctx.bundle < 0.28;
+  if (score >= settings.minScoreMigration && (nearGrad || justMigrated)) {
     out.push("migration_snipe");
   }
 
   const copySized = token.marketCapUsd <= 0 || token.marketCapUsd <= 8_000_000;
-  if (score >= settings.minScoreCopy && token.smartMoneyInflow && copySized) {
+  if (score >= settings.minScoreCopy && token.smartMoneyInflow && copySized && !copyBlockReason(token, settings)) {
     out.push("copy_trade");
   }
 
-  if (score >= settings.minScoreScalp && token.liquidityUsd > 25_000 && ctx.age > 15 * 60 * 1000) {
+  if (score >= settings.minScoreScalp && token.liquidityUsd > 40_000 && ageMin > 30 && ctx.bundle < 0.25) {
     out.push("scalp");
   }
 

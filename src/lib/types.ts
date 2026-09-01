@@ -37,6 +37,7 @@ export interface TokenSnapshot {
   buys1h: number;
   sells1h: number;
   uniqueTraders1h: number;
+  uniqueEstimated?: boolean;
   priceChange5m: number;
   priceChange1h: number;
   priceChange6h: number;
@@ -58,6 +59,9 @@ export interface TokenSnapshot {
   devSoldPct?: number;
   smartMoneyInflow?: boolean;
   copiedBy?: string[];
+  copiedHolding?: boolean;
+  leaderHoldPct?: number;
+  farmCluster?: boolean;
   deployerDeathRate?: number;
   deployerTokenCount?: number;
   athMarketCapUsd?: number;
@@ -108,6 +112,15 @@ export interface EngineSettings {
   timeStopMigrationMs: number;
   timeStopCopyMs: number;
   timeStopScalpMs: number;
+  dailyLossPct: number;
+  maxCoinPct: number;
+  bundleVeto: number;
+  leaderSupplyVeto: number;
+  minWalletQuality: number;
+  partialTp1: number;
+  partialTp1Sell: number;
+  partialTp2: number;
+  partialTp2Sell: number;
 }
 
 export interface PaperPosition {
@@ -119,7 +132,9 @@ export interface PaperPosition {
   openedAt: number;
   entryUsd: number;
   qty: number;
+  originalQty: number;
   sizeUsd: number;
+  originalSizeUsd: number;
   feeUsd: number;
   slippageUsd: number;
   tpUsd: number;
@@ -130,6 +145,8 @@ export interface PaperPosition {
   unrealizedUsd: number;
   riskScore: number;
   venue: Venue;
+  copiedFrom?: string;
+  scaledOut: number;
 }
 
 export interface PaperFill {
@@ -170,6 +187,8 @@ export interface PaperBook {
   positions: PaperPosition[];
   fills: PaperFill[];
   curve: EquityPoint[];
+  haltedUntil?: number;
+  haltReason?: string;
 }
 
 export interface CreatorStat {
@@ -215,7 +234,7 @@ export interface TraderAccount {
 export interface AlertEvent {
   id: string;
   at: number;
-  kind: "smart_money" | "launch" | "migration" | "risk" | "exit" | "entry";
+  kind: "smart_money" | "launch" | "migration" | "risk" | "exit" | "entry" | "bundle" | "halt";
   title: string;
   body: string;
   mint?: string;
