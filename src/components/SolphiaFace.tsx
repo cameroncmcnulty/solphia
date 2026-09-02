@@ -461,7 +461,7 @@ export function SolphiaFace({ mode = "panel" }: { mode?: "hero" | "panel" }) {
       ref={wrap}
       className={`relative touch-none select-none outline-none ${
         hero
-          ? "mx-auto h-[560px] w-full max-w-[380px] sm:h-[680px] sm:max-w-[460px] lg:h-[min(92vh,860px)] lg:max-w-none"
+          ? "mx-auto aspect-[3/4] w-full"
           : "h-[240px] w-full overflow-hidden md:h-[300px]"
       }`}
       style={{
@@ -493,30 +493,33 @@ export function SolphiaFace({ mode = "panel" }: { mode?: "hero" | "panel" }) {
         alt=""
         draggable={false}
         className={`pointer-events-none absolute inset-0 h-full w-full outline-none ${
-          hero ? "object-contain object-top" : "object-cover"
+          hero ? "object-cover object-top" : "object-cover"
         }`}
         style={{
           filter: "brightness(1.18) saturate(1.12) contrast(1.08)",
           outline: "none",
           userSelect: "none",
+          ...(hero
+            ? {
+                WebkitMaskImage: "linear-gradient(to bottom, #000 0%, #000 70%, rgba(0,0,0,0.5) 86%, transparent 100%)",
+                maskImage: "linear-gradient(to bottom, #000 0%, #000 70%, rgba(0,0,0,0.5) 86%, transparent 100%)",
+              }
+            : {}),
         }}
       />
       <canvas
         ref={canvas}
         className="pointer-events-none absolute inset-0 h-full w-full outline-none"
-        style={{ outline: "none" }}
+        style={{
+          outline: "none",
+          ...(hero
+            ? {
+                WebkitMaskImage: "linear-gradient(to bottom, #000 0%, #000 70%, rgba(0,0,0,0.5) 86%, transparent 100%)",
+                maskImage: "linear-gradient(to bottom, #000 0%, #000 70%, rgba(0,0,0,0.5) 86%, transparent 100%)",
+              }
+            : {}),
+        }}
       />
-      {hero && (
-        <div
-          className="pointer-events-none absolute inset-0"
-          style={{
-            background: [
-              "linear-gradient(to bottom, transparent 0%, transparent 78%, rgba(4,0,10,0.35) 88%, rgba(4,0,10,0.82) 95%, #04000a 100%)",
-              "linear-gradient(to right, #04000a 0%, transparent 10%, transparent 90%, #04000a 100%)",
-            ].join(", "),
-          }}
-        />
-      )}
     </div>
   );
 }

@@ -16,13 +16,13 @@ export default function Home() {
   return (
     <main className="relative">
       <section className="relative">
-        <div className="mx-auto grid max-w-6xl items-end gap-2 px-4 pt-2 md:px-12 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)] lg:min-h-[88vh] lg:gap-8 lg:py-4">
-          <div className="order-1 mx-auto w-full lg:order-2">
+        <div className="mx-auto grid max-w-6xl items-center gap-6 px-4 pt-2 md:px-12 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] lg:min-h-[78vh] lg:gap-10 lg:py-8">
+          <div className="order-1 mx-auto w-full max-w-[240px] sm:max-w-[340px] lg:order-2 lg:max-w-[480px]">
             <SolphiaFace mode="hero" />
           </div>
-          <div className="order-2 pb-10 pt-4 lg:order-1 lg:py-12">
+          <div className="order-2 pb-16 pt-2 lg:order-1 lg:pb-8 lg:pt-8">
             <p className="text-lg font-medium tracking-wide text-mute sm:text-2xl">Meet</p>
-            <h1 className="solphia-flow mt-1 font-display text-[clamp(2.75rem,14vw,7.5rem)] font-bold leading-[0.9] tracking-[-0.04em]">
+            <h1 className="solphia-flow mt-1 font-display text-[clamp(2.5rem,11vw,5.75rem)] font-bold leading-[0.9] tracking-[-0.04em]">
               SOLPHIA
             </h1>
             <p className="mt-5 max-w-xl text-xl leading-snug text-ghost sm:text-3xl sm:leading-tight">
