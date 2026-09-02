@@ -65,6 +65,7 @@ export interface TokenSnapshot {
   deployerDeathRate?: number;
   deployerTokenCount?: number;
   creatorRecentLaunches?: number;
+  fundingDump?: boolean;
   athMarketCapUsd?: number;
 }
 

@@ -10,6 +10,7 @@ export function flattenNow(
   prev?: CurveTick,
   now = Date.now(),
 ): { flatten: boolean; reason: string } {
+  if (token.fundingDump) return { flatten: true, reason: "same-block-dump" };
   if (token.farmCluster) return { flatten: true, reason: "farm-cluster" };
   if ((token.devSoldPct ?? 0) >= 0.25) return { flatten: true, reason: "creator-sold" };
   if ((token.creatorRecentLaunches ?? 0) >= 3) return { flatten: true, reason: "creator-spray" };

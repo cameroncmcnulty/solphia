@@ -63,6 +63,7 @@ export function riskVeto(opts: {
   const { hit, now, settings } = opts;
   const { token, report } = hit;
   if (report.vetoed) return { ok: false, reason: report.vetoReasons[0] || report.why };
+  if (token.fundingDump) return { ok: false, reason: "Funding graph says dump. Flatten, don't ape." };
   const toxic = toxicFlow(token);
   if (toxic.toxic) return { ok: false, reason: toxic.reason };
   if (token.mintAuthorityRevoked === false) return { ok: false, reason: "Mint authority is live." };

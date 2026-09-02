@@ -3,6 +3,7 @@ import { DEMO_DESKS, tickBook, tickPaper } from "./paper/engine";
 import { scoreToken } from "./risk/engine";
 import { loadState, saveState } from "./store";
 import { bankrollUsd, maybeResizeBook } from "./auto";
+import { tagFundingDumps } from "./helius/watch";
 import type { FeedHealth, PaperBook, RiskReport, TokenSnapshot } from "./types";
 
 let lock: Promise<unknown> = Promise.resolve();
@@ -49,6 +50,8 @@ export async function runMarketTick(): Promise<{
       ...Object.values(state.traders || {}).flatMap((t) => t.book.positions.map((p) => p.mint)),
     ];
     const { tokens, health, solUsd, copyBook } = await ingestMarket(state.creators, openMints);
+    const copyMints = tokens.filter((t) => t.smartMoneyInflow).slice(0, 4).map((t) => t.mint);
+    await tagFundingDumps(tokens, [...openMints, ...copyMints]);
     const result = tickPaper(state, tokens, Date.now(), DEMO_DESKS, copyBook);
     for (const trader of Object.values(state.traders || {})) {
       if (!trader.auto?.armed) continue;

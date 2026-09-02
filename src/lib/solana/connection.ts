@@ -4,7 +4,8 @@ import { rpcUrl, HELIUS_API_KEY, SUBSCRIPTION_SOL } from "../config";
 let conn: Connection | null = null;
 
 export function connection(): Connection {
-  if (!conn) conn = new Connection(rpcUrl(), { commitment: "confirmed" });
+  const url = rpcUrl();
+  if (!conn || conn.rpcEndpoint !== url) conn = new Connection(url, { commitment: "confirmed" });
   return conn;
 }
 

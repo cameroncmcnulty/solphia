@@ -13,7 +13,7 @@ export async function GET() {
     watch: s.watchWallets,
     helius: heliusEnabled(),
     note: heliusEnabled()
-      ? "Helius connected — signature history enabled."
+      ? "Helius connected — signature history and funding-graph rug clock are on."
       : "Testing stage: add wallets now. Live copy-stream waits for Helius.",
   });
 }
