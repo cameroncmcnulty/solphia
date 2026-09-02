@@ -6,6 +6,7 @@ import { copyBlockReason } from "../risk/copy";
 import { policyCheck, type Intent } from "./intent";
 import { slippageBps } from "../risk/engine";
 import type { LabKind, LabStrategy } from "./shadow";
+import { execSize } from "./exec";
 
 type DeskFlags = Pick<AutoSettings, "copy" | "launch" | "migrate" | "scalp">;
 
@@ -141,7 +142,14 @@ export function decide(opts: {
   }
   const risk = riskVeto({ hit, now: opts.now, settings: opts.settings });
   if (!risk.ok) return { ok: false, reason: risk.reason, kind, fade: false };
-  const intent = toIntent(hit, opts.sizeUsd, opts.settings, opts.now);
+  const sized = execSize({
+    strategy: hit.strategy,
+    baseUsd: opts.sizeUsd,
+    lab: opts.lab,
+    live: opts.live,
+  });
+  if (!sized.ok) return { ok: false, reason: sized.reason, kind };
+  const intent = toIntent(hit, sized.sizeUsd, opts.settings, opts.now);
   const policy = policyCheck(intent, {
     book: opts.book,
     settings: opts.settings,

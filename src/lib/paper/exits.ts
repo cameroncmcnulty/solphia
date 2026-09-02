@@ -1,7 +1,7 @@
-import type { EngineSettings, PaperPosition, TokenSnapshot } from "../types";
+import type { CurveTick, EngineSettings, PaperPosition, TokenSnapshot } from "../types";
 import type { LeaderBook } from "../copy/flow";
 import { leaderDumped } from "../copy/flow";
-import { flattenNow } from "../desk/rugClock";
+import { curveStalled, flattenNow } from "../desk/rugClock";
 
 export function multiple(pos: PaperPosition): number {
   return pos.entryUsd > 0 ? pos.markUsd / pos.entryUsd : 1;
@@ -14,6 +14,7 @@ export function exitPlan(
   settings: EngineSettings,
   now: number,
   book?: LeaderBook,
+  watch?: CurveTick,
 ): { reason: string; fraction: number } | null {
   const m = multiple(pos);
   const scaled = pos.scaledOut || 0;
@@ -24,16 +25,16 @@ export function exitPlan(
   if (token?.banned) return { reason: "banned", fraction: 1 };
   if (reportScore != null && reportScore < 28) return { reason: "risk-collapse", fraction: 1 };
   if (token) {
-    const rug = flattenNow(token);
+    const rug = flattenNow(token, watch, now);
     if (rug.flatten) return { reason: rug.reason, fraction: 1 };
   }
   if ((token?.bundleRatio ?? 0) >= (settings.bundleVeto ?? 0.38) && pos.strategy !== "copy_trade") {
     return { reason: "bundle-woke", fraction: 1 };
   }
   if ((pos.strategy === "launch_snipe" || pos.strategy === "migration_snipe") && token && !token.graduated) {
-    const heldMin = (now - pos.openedAt) / 60000;
-    if (heldMin >= 1.5 && token.bondingProgress < 0.4) return { reason: "curve-stall", fraction: 1 };
-    if (heldMin >= 4 && token.bondingProgress < 0.7) return { reason: "curve-stall", fraction: 1 };
+    if (curveStalled(token, watch, pos.openedAt, pos.entryBonding, now)) {
+      return { reason: "curve-stall", fraction: 1 };
+    }
   }
   if (pos.trailPeakUsd > 0 && pos.markUsd <= pos.trailPeakUsd * 0.75 && m < 1) {
     return { reason: "kill-from-high", fraction: 1 };

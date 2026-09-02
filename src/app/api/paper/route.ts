@@ -89,6 +89,7 @@ export async function POST(req: NextRequest) {
         score: report.score,
         reason: d.intent.reason,
         now,
+        sizeUsd: d.intent.sizeUsd,
       });
       if (opened) applyShadow(s.lab, opened, s.paper.startingUsd, now);
       return opened;

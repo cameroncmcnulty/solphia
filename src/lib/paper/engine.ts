@@ -18,6 +18,7 @@ import { dayPnlUsd, exitPlan } from "./exits";
 import type { LeaderBook } from "../copy/flow";
 import { decide } from "../desk/consensus";
 import { applyShadow, emptyLab, noteDenial } from "../desk/shadow";
+import { nextCurveTick } from "../desk/rugClock";
 
 export type DeskFlags = Pick<AutoSettings, "copy" | "launch" | "migrate" | "scalp">;
 
@@ -56,6 +57,7 @@ export function updateCreators(state: AppState, tokens: TokenSnapshot[], now: nu
     // Count unique mints approximately by bumping on first sight in this process via lastSeen window.
     if (!known || now - prev.lastSeen > 30_000) {
       prev.tokens += 1;
+      prev.launches = [...(prev.launches || []), now].slice(-8);
     }
     const ageMin = (now - t.createdAt) / 60000;
     if (t.marketCapUsd < 1000 && ageMin > 90) prev.dead += 1;
@@ -65,14 +67,20 @@ export function updateCreators(state: AppState, tokens: TokenSnapshot[], now: nu
   }
 }
 
-export function enrichWithCreators(tokens: TokenSnapshot[], creators: Record<string, CreatorStat>): TokenSnapshot[] {
+export function enrichWithCreators(
+  tokens: TokenSnapshot[],
+  creators: Record<string, CreatorStat>,
+  now = Date.now(),
+): TokenSnapshot[] {
   return tokens.map((t) => {
     if (!t.creator || !creators[t.creator]) return t;
     const s = creators[t.creator];
+    const recent = (s.launches || []).filter((at) => now - at < 20 * 60 * 1000).length;
     return {
       ...t,
       deployerTokenCount: s.tokens,
       deployerDeathRate: s.tokens ? s.dead / Math.max(s.tokens, 1) : 0,
+      creatorRecentLaunches: recent,
     };
   });
 }
@@ -84,6 +92,7 @@ export function openPaperBuy(opts: {
   score: number;
   reason: string;
   now?: number;
+  sizeUsd?: number;
 }): PaperFill | null {
   const { state, token, strategy, score, reason } = opts;
   const now = opts.now ?? Date.now();
@@ -94,7 +103,10 @@ export function openPaperBuy(opts: {
   const price = tokenPriceUsd(token);
   if (price <= 0) return null;
 
-  const size = Math.min(positionSizeUsd(book.equityUsd, score, settings), book.cashUsd * 0.95);
+  const size = Math.min(
+    opts.sizeUsd ?? positionSizeUsd(book.equityUsd, score, settings),
+    book.cashUsd * 0.95,
+  );
   if (size < 8) return null;
 
   const slipBps = slippageBps(strategy, settings);
@@ -146,6 +158,7 @@ export function openPaperBuy(opts: {
     venue: token.venue,
     copiedFrom: token.copiedBy?.[0],
     scaledOut: 0,
+    entryBonding: token.bondingProgress || 0,
   };
 
   book.cashUsd -= spend;
@@ -325,7 +338,8 @@ export function tickPaper(
   const alerts: AlertEvent[] = [];
 
   updateCreators(state, tokens, now);
-  const scored = enrichWithCreators(tokens, state.creators).map((t) => ({
+  if (!state.curveWatch) state.curveWatch = {};
+  const scored = enrichWithCreators(tokens, state.creators, now).map((t) => ({
     token: t,
     report: scoreToken(t, now, settings),
   }));
@@ -343,7 +357,7 @@ export function tickPaper(
       continue;
     }
     const report = scored.find((s) => s.token.mint === pos.mint)?.report;
-    const plan = exitPlan(pos, t, report?.score, settings, now, copyBook);
+    const plan = exitPlan(pos, t, report?.score, settings, now, copyBook, state.curveWatch[pos.mint]);
     if (plan) pushExit(state, pos, pos.markUsd, plan.reason, now, exits, alerts, plan.fraction);
   }
 
@@ -420,6 +434,7 @@ export function tickPaper(
       score: s.report.score,
       reason: d.intent.reason,
       now,
+      sizeUsd: d.intent.sizeUsd,
     });
     if (fill) {
       applyShadow(state.lab, fill, state.paper.startingUsd, now);
@@ -437,6 +452,21 @@ export function tickPaper(
       });
     }
   }
+
+  const watch: typeof state.curveWatch = {};
+  for (const s of scored) {
+    watch[s.token.mint] = nextCurveTick(s.token, s.report.pGrad || 0, now);
+  }
+  const mints = new Set([...Object.keys(watch), ...state.paper.positions.map((p) => p.mint)]);
+  for (const mint of mints) {
+    if (watch[mint]) continue;
+    if (state.curveWatch[mint] && now - state.curveWatch[mint].at < 10 * 60 * 1000) watch[mint] = state.curveWatch[mint];
+  }
+  const keep = Object.keys(watch);
+  if (keep.length > 400) {
+    for (const k of keep.slice(0, keep.length - 400)) delete watch[k];
+  }
+  state.curveWatch = watch;
 
   pushBounded(state.paper.curve, { t: now, equity: state.paper.equityUsd }, 2000);
   for (const a of alerts) pushBounded(state.alerts, a, 300);

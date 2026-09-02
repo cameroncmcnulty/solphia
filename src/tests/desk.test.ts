@@ -8,9 +8,10 @@ import { graduationRead, armLaunch, armMigrate } from "../lib/desk/grad";
 import { toxicFlow } from "../lib/desk/toxic";
 import { copyDecision } from "../lib/desk/copyDecision";
 import { policyCheck, type Intent } from "../lib/desk/intent";
-import { applyShadow, emptyLab } from "../lib/desk/shadow";
+import { applyShadow, emptyLab, sizeBudget } from "../lib/desk/shadow";
 import { decide, riskVeto, scout } from "../lib/desk/consensus";
 import { flattenNow } from "../lib/desk/rugClock";
+import { execSize } from "../lib/desk/exec";
 import { exitPlan } from "../lib/paper/exits";
 import { tickPaper, openPaperBuy } from "../lib/paper/engine";
 import type { PaperFill, TokenSnapshot } from "../lib/types";
@@ -96,6 +97,14 @@ describe("P(grad) engine", () => {
     assert.equal(armMigrate(g, 0.91), true);
   });
 
+  it("uses a Telegram URL as a P(grad) feature, not a mention count", () => {
+    const withTg = graduationRead(token({ socials: { telegram: "https://t.me/realroom" }, uniqueTraders1h: 28, bondingProgress: 0.5 }));
+    const mentions = graduationRead(token({ socials: {}, uniqueTraders1h: 28, bondingProgress: 0.5, replyCount: 400 }));
+    assert.ok(withTg.telegram);
+    assert.equal(mentions.telegram, false);
+    assert.ok(withTg.p > mentions.p, `telegram ${withTg.p} vs mentions ${mentions.p}`);
+  });
+
   it("puts P(grad) on the risk report and withholds launch without the bar", () => {
     const young = scoreToken(token({ createdAt: Date.now() - 90_000, bondingProgress: 0.4, uniqueTraders1h: 80 }));
     assert.ok(typeof young.pGrad === "number");
@@ -145,16 +154,32 @@ describe("copy the decision", () => {
 });
 
 describe("intent → policy", () => {
-  it("refuses a live mint authority", () => {
+  it("refuses a live mint authority after graduation", () => {
     const state = emptyState();
     const r = policyCheck(buyIntent(), {
       book: state.paper,
       settings: state.settings,
-      token: token({ mintAuthorityRevoked: false }),
+      token: token({
+        venue: "pumpswap",
+        graduated: true,
+        bondingProgress: 1,
+        mintAuthorityRevoked: false,
+      }),
       now: Date.now(),
     });
     assert.equal(r.ok, false);
     assert.match(r.reason, /mint/i);
+  });
+
+  it("does not treat Pump mint-authority as a rug before graduation", () => {
+    const state = emptyState();
+    const r = policyCheck(buyIntent(), {
+      book: state.paper,
+      settings: state.settings,
+      token: token({ venue: "pumpfun", graduated: false, mintAuthorityRevoked: false }),
+      now: Date.now(),
+    });
+    assert.equal(r.ok, true, r.reason);
   });
 
   it("refuses an expired intent", () => {
@@ -235,6 +260,19 @@ describe("scout / risk consensus", () => {
   });
 });
 
+describe("exec size budget", () => {
+  it("gives copy full size and launch a probe until promoted", () => {
+    const lab = emptyLab();
+    assert.equal(sizeBudget(lab.copy, 80, false), 80);
+    assert.equal(sizeBudget(lab.launch, 80, false), 20);
+    assert.equal(sizeBudget(lab.launch, 80, true), 0);
+    lab.launch.demoted = true;
+    assert.equal(sizeBudget(lab.launch, 80, false), 0);
+    const probe = execSize({ strategy: "launch_snipe", baseUsd: 80, lab, live: false });
+    assert.equal(probe.ok, false);
+  });
+});
+
 describe("shadow promote / demote", () => {
   it("demotes a desk that burns 15% of start", () => {
     const lab = emptyLab();
@@ -298,6 +336,18 @@ describe("rug clock + exit machine", () => {
   it("flattens on creator dump without inventing same-block edges", () => {
     const f = flattenNow(token({ devSoldPct: 0.4 }));
     assert.equal(f.flatten, true);
+  });
+
+  it("flattens when bundle share jumps on the next tick", () => {
+    const prev = { bonding: 0.4, bundle: 0.08, pGrad: 0.4, at: Date.now() - 20_000 };
+    const f = flattenNow(token({ bundleRatio: 0.28 }), prev);
+    assert.equal(f.flatten, true);
+    assert.equal(f.reason, "bundle-woke");
+  });
+
+  it("flattens a creator spraying three names in twenty minutes", () => {
+    const f = flattenNow(token({ creatorRecentLaunches: 3 }));
+    assert.equal(f.reason, "creator-spray");
   });
 
   it("kills 25% off the local high when underwater", () => {

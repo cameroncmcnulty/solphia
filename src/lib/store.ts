@@ -25,6 +25,7 @@ export function emptyState(): AppState {
     adminWallets: [],
     traders: {},
     feedHealth: [],
+    curveWatch: {},
     lastTickAt: 0,
     lastSnapshots: [],
   };
@@ -55,6 +56,7 @@ export function loadState(): AppState {
         settings: { ...DEFAULT_SETTINGS, ...(raw.settings || {}) },
         paper: isScalpDemo(rawPaper) ? emptyBook() : { ...emptyBook(), ...rawPaper },
         lab: mergeLab(raw.lab),
+        curveWatch: raw.curveWatch || {},
         traders: raw.traders || {},
         adminWallets: raw.adminWallets || [],
       };

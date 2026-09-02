@@ -64,6 +64,7 @@ export interface TokenSnapshot {
   farmCluster?: boolean;
   deployerDeathRate?: number;
   deployerTokenCount?: number;
+  creatorRecentLaunches?: number;
   athMarketCapUsd?: number;
 }
 
@@ -151,6 +152,7 @@ export interface PaperPosition {
   venue: Venue;
   copiedFrom?: string;
   scaledOut: number;
+  entryBonding?: number;
 }
 
 export interface PaperFill {
@@ -201,6 +203,14 @@ export interface CreatorStat {
   dead: number;
   survivors: number;
   lastSeen: number;
+  launches?: number[];
+}
+
+export interface CurveTick {
+  bonding: number;
+  bundle: number;
+  pGrad: number;
+  at: number;
 }
 
 export interface AppUser {
@@ -301,6 +311,7 @@ export interface AppState {
   adminWallets: string[];
   traders: Record<string, TraderAccount>;
   feedHealth: FeedHealth[];
+  curveWatch: Record<string, CurveTick>;
   lastTickAt: number;
   lastSnapshots: TokenSnapshot[];
 }

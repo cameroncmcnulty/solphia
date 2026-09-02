@@ -56,7 +56,9 @@ export function applyShadow(lab: Record<LabKind, LabStrategy>, fill: PaperFill, 
   }
 }
 
-export function sizeBudget(lab: LabStrategy, baseUsd: number): number {
-  if (lab.demoted || !lab.enabled) return 0;
+export function sizeBudget(lab: LabStrategy, baseUsd: number, live = false): number {
+  if (lab.demoted) return 0;
+  if (live && !lab.enabled) return 0;
+  if (!live && !lab.enabled) return Math.round(baseUsd * 0.25 * 100) / 100;
   return baseUsd;
 }

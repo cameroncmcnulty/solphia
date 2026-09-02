@@ -8,6 +8,8 @@ export type GradRead = {
   solPerUnique: number;
   botShare: number;
   social: boolean;
+  telegram: boolean;
+  twitter: boolean;
   ageMin: number;
   why: string;
 };
@@ -23,11 +25,24 @@ function tanh01(x: number) {
   return (1 - e) / (1 + e);
 }
 
+export function hasTelegram(s?: string): boolean {
+  if (!s) return false;
+  return /t\.me\/[A-Za-z0-9_]+/i.test(s);
+}
+
+export function hasTwitter(s?: string): boolean {
+  if (!s) return false;
+  return /(?:twitter\.com|x\.com)\/[A-Za-z0-9_]+/i.test(s) || /^@[A-Za-z0-9_]{3,15}$/.test(s);
+}
+
 export function graduationRead(token: TokenSnapshot, now = Date.now()): GradRead {
   const ageMin = Math.max(0, (now - (token.createdAt || now)) / 60000);
   const unique = Math.max(0, token.uniqueTraders1h || 0);
   const botShare = token.bundleRatio ?? (token.organicBuyRatio != null ? 1 - token.organicBuyRatio : 0.35);
-  const social = Boolean(token.socials?.twitter || token.socials?.telegram || token.socials?.website);
+  const telegram = hasTelegram(token.socials?.telegram);
+  const twitter = hasTwitter(token.socials?.twitter);
+  const website = Boolean(token.socials?.website && /^https?:\/\//i.test(token.socials.website));
+  const social = telegram || twitter || website;
   const death = token.deployerDeathRate ?? 0.45;
   const fill = token.graduated ? 1 : Math.max(0, Math.min(1, token.bondingProgress || 0));
   const solInCurve = fill * PUMP_GRAD_SOL;
@@ -40,7 +55,9 @@ export function graduationRead(token: TokenSnapshot, now = Date.now()): GradRead
   z += 1.85 * tanh01(solPerUnique / 0.45);
   z -= 2.55 * Math.max(0, Math.min(1, botShare));
   z -= 1.7 * Math.max(0, Math.min(1, death));
-  z += social ? 0.95 : 0;
+  z += telegram ? 0.85 : 0;
+  z += twitter ? 0.35 : 0;
+  z += website ? 0.12 : 0;
   z += 0.55 * tanh01(unique / 70);
   z -= 1.15 * Math.max(0, ageMin - 22) / 45;
   if (token.uniqueEstimated) z -= 0.45;
@@ -56,9 +73,11 @@ export function graduationRead(token: TokenSnapshot, now = Date.now()): GradRead
         ? `Real SOL per buyer · P(grad) ${(p * 100).toFixed(0)}%`
         : botShare >= 0.4
           ? `Bot-heavy flow · P(grad) ${(p * 100).toFixed(0)}%`
-          : `P(grad) ${(p * 100).toFixed(0)}% · ${Math.round(solInCurve)} SOL in curve`;
+          : telegram
+            ? `Telegram on the page · P(grad) ${(p * 100).toFixed(0)}%`
+            : `P(grad) ${(p * 100).toFixed(0)}% · ${Math.round(solInCurve)} SOL in curve`;
 
-  return { p, solInCurve, solPerUnique, botShare, social, ageMin, why };
+  return { p, solInCurve, solPerUnique, botShare, social, telegram, twitter, ageMin, why };
 }
 
 export function armLaunch(read: GradRead, minP = 0.42): boolean {
