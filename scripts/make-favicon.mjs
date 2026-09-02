@@ -7,19 +7,25 @@ const buf = fs.readFileSync(src);
 const img = PNG.sync.read(buf);
 const { width: w, height: h, data } = img;
 
+function lumAt(i) {
+  return data[i] * 0.21 + data[i + 1] * 0.72 + data[i + 2] * 0.07;
+}
+
 for (let i = 0; i < data.length; i += 4) {
-  const r = data[i];
-  const g = data[i + 1];
-  const b = data[i + 2];
-  const lum = r * 0.21 + g * 0.72 + b * 0.07;
+  const lum = lumAt(i);
   if (lum < 22) data[i + 3] = 0;
   else if (lum < 48) data[i + 3] = Math.round(((lum - 22) / 26) * 255);
+}
+
+function alpha(x, y) {
+  if (x < 0 || y < 0 || x >= w || y >= h) return 0;
+  return data[(y * w + x) * 4 + 3];
 }
 
 let top = h;
 for (let y = 0; y < h; y++) {
   for (let x = 0; x < w; x++) {
-    if (data[(y * w + x) * 4 + 3] > 24) {
+    if (alpha(x, y) > 24) {
       top = y;
       y = h;
       break;
@@ -27,13 +33,12 @@ for (let y = 0; y < h; y++) {
   }
 }
 
-// Head width from the top 38% of the figure — not the shoulders.
-const headBand = Math.max(40, Math.round(h * 0.22));
+const probe = Math.max(40, Math.round(h * 0.2));
 let hx0 = w;
 let hx1 = 0;
-for (let y = top; y < Math.min(h, top + headBand); y++) {
+for (let y = top; y < Math.min(h, top + probe); y++) {
   for (let x = 0; x < w; x++) {
-    if (data[(y * w + x) * 4 + 3] > 24) {
+    if (alpha(x, y) > 24) {
       if (x < hx0) hx0 = x;
       if (x > hx1) hx1 = x;
     }
@@ -41,27 +46,65 @@ for (let y = top; y < Math.min(h, top + headBand); y++) {
 }
 const headW = Math.max(1, hx1 - hx0 + 1);
 const cx = Math.round((hx0 + hx1) / 2);
-// Crown → chin. Head width at the temples × 1.42 is a face square, not shoulders.
-const side = Math.round(headW * 1.42);
-let x0 = Math.round(cx - side / 2);
-let y0 = Math.max(0, top - Math.round(side * 0.04));
-if (x0 < 0) x0 = 0;
-if (x0 + side > w) x0 = Math.max(0, w - side);
-if (y0 + side > h) y0 = Math.max(0, h - side);
 
+// Walk down the head. Neck is where the opaque span gets clearly narrower than the temples.
+let chin = Math.min(h - 1, top + Math.round(headW * 1.55));
+for (let y = top + Math.round(headW * 0.7); y < Math.min(h - 1, top + Math.round(headW * 1.7)); y++) {
+  let lo = w;
+  let hi = 0;
+  for (let x = Math.max(0, cx - headW); x < Math.min(w, cx + headW); x++) {
+    if (alpha(x, y) > 24) {
+      if (x < lo) lo = x;
+      if (x > hi) hi = x;
+    }
+  }
+  const span = hi >= lo ? hi - lo + 1 : 0;
+  if (span > 0 && span < headW * 0.62) {
+    chin = y;
+    break;
+  }
+}
+
+const contentH = chin - top + 1;
+const contentW = headW;
+// Shrink her inside the square so circular/browser chrome doesn't clip the chin.
+const pad = Math.round(Math.max(contentW, contentH) * 0.22);
+const side = Math.max(contentW, contentH) + pad * 2;
 const square = new PNG({ width: side, height: side, colorType: 6 });
 square.data.fill(0);
-for (let y = 0; y < side; y++) {
-  for (let x = 0; x < side; x++) {
-    const sx = x0 + x;
-    const sy = y0 + y;
+
+const ox = Math.round((side - contentW) / 2);
+const oy = Math.round((side - contentH) / 2);
+const srcX = Math.max(0, cx - Math.floor(contentW / 2));
+
+for (let y = 0; y < contentH; y++) {
+  for (let x = 0; x < contentW; x++) {
+    const sx = srcX + x;
+    const sy = top + y;
     if (sx < 0 || sy < 0 || sx >= w || sy >= h) continue;
     const si = (sy * w + sx) * 4;
-    const di = (y * side + x) * 4;
+    const di = ((oy + y) * side + (ox + x)) * 4;
     square.data[di] = data[si];
     square.data[di + 1] = data[si + 1];
     square.data[di + 2] = data[si + 2];
     square.data[di + 3] = data[si + 3];
+  }
+}
+
+// Soft circular fade so round favicon masks don't hard-clip.
+const r = side * 0.48;
+const rInner = r * 0.82;
+const mid = (side - 1) / 2;
+for (let y = 0; y < side; y++) {
+  for (let x = 0; x < side; x++) {
+    const d = Math.hypot(x - mid, y - mid);
+    const i = (y * side + x) * 4;
+    if (d >= r) {
+      square.data[i + 3] = 0;
+    } else if (d > rInner) {
+      const t = 1 - (d - rInner) / (r - rInner);
+      square.data[i + 3] = Math.round(square.data[i + 3] * t);
+    }
   }
 }
 
@@ -90,4 +133,4 @@ fs.writeFileSync(path.join(outDir, "apple-touch-icon.png"), PNG.sync.write(resiz
 fs.writeFileSync(path.join(outDir, "icon-192.png"), PNG.sync.write(resize(square, 192)));
 fs.writeFileSync(path.join(outDir, "icon-512.png"), PNG.sync.write(resize(square, 512)));
 fs.writeFileSync(path.join(outDir, "solphia-head.png"), PNG.sync.write(resize(square, 512)));
-console.log("wrote face-square favicon", { headW, side, x0, y0, top });
+console.log("wrote padded face favicon", { headW, contentH, side, top, chin, pad });

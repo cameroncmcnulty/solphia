@@ -15,7 +15,7 @@ export default function Home() {
 
   return (
     <main className="relative">
-      <section className="relative overflow-hidden">
+      <section className="relative">
         <div className="mx-auto grid max-w-6xl items-center gap-2 px-4 pt-2 md:px-12 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] lg:min-h-[82vh] lg:gap-12 lg:py-6">
           <div className="order-1 mx-auto w-full lg:order-2">
             <SolphiaFace mode="hero" />
