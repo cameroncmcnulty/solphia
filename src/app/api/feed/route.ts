@@ -19,6 +19,7 @@ export async function GET(req: NextRequest) {
       tokens: tick.tokens,
       health: tick.health,
       solUsd: tick.solUsd,
+      lab: loadState().lab,
       lastTickAt: Date.now(),
     });
   }
@@ -30,6 +31,7 @@ export async function GET(req: NextRequest) {
     paper: publicBook(state.paper),
     tokens,
     health: state.feedHealth,
+    lab: state.lab,
     lastTickAt: state.lastTickAt,
   });
 }

@@ -50,6 +50,7 @@ export function TokenTable({
                 <SafetyBadge score={r.score} verdict={r.verdict} />
               </div>
               <div className="mt-2 font-mono text-[11px] leading-snug text-mute md:col-span-12">
+                {r.pGrad != null ? `P(grad) ${Math.round(r.pGrad * 100)}% · ` : ""}
                 {r.why || r.summary}
               </div>
               <div className="mt-3 flex gap-2 md:col-span-3 md:mt-0 md:justify-end">

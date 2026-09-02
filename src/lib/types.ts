@@ -87,6 +87,7 @@ export interface RiskReport {
   summary: string;
   why: string;
   scoredAt: number;
+  pGrad?: number;
 }
 
 export interface EngineSettings {
@@ -121,6 +122,9 @@ export interface EngineSettings {
   partialTp1Sell: number;
   partialTp2: number;
   partialTp2Sell: number;
+  minPGradLaunch: number;
+  minPGradMigrate: number;
+  intentTtlMs: number;
 }
 
 export interface PaperPosition {
@@ -234,7 +238,7 @@ export interface TraderAccount {
 export interface AlertEvent {
   id: string;
   at: number;
-  kind: "smart_money" | "launch" | "migration" | "risk" | "exit" | "entry" | "bundle" | "halt";
+  kind: "smart_money" | "launch" | "migration" | "risk" | "exit" | "entry" | "bundle" | "halt" | "deny";
   title: string;
   body: string;
   mint?: string;
@@ -270,8 +274,23 @@ export interface FeedHealth {
   at: number;
 }
 
+export type LabKind = "copy" | "launch" | "migrate";
+
+export interface LabStrategy {
+  id: LabKind;
+  enabled: boolean;
+  demoted: boolean;
+  shadowPnlUsd: number;
+  greenDays: number;
+  lastDayKey: string;
+  lastDayPnl: number;
+  trades: number;
+  denied: number;
+}
+
 export interface AppState {
   paper: PaperBook;
+  lab: Record<LabKind, LabStrategy>;
   settings: EngineSettings;
   users: AppUser[];
   alerts: AlertEvent[];

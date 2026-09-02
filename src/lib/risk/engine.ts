@@ -1,6 +1,8 @@
 import type { EngineSettings, RiskFactor, RiskReport, Strategy, TokenSnapshot } from "../types";
 import { DEFAULT_SETTINGS } from "../config";
 import { copyBlockReason } from "./copy";
+import { armLaunch, armMigrate, graduationRead } from "../desk/grad";
+import { toxicFlow } from "../desk/toxic";
 
 function clamp(n: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, n));
@@ -143,10 +145,18 @@ export function scoreToken(token: TokenSnapshot, now = Date.now(), settings: Eng
 
   score = Math.round(clamp(score, 0, 100));
 
-  const allowed = allowedStrategies(token, score, { age, unique, bundle, organic: organic ?? 0 }, settings);
+  const toxic = toxicFlow(token);
+  if (toxic.toxic && !token.smartMoneyInflow) {
+    caps.push(toxic.reason);
+    score = Math.min(score, 48);
+  }
+
+  const grad = graduationRead(token, now);
+  const allowed = allowedStrategies(token, score, { age, unique, bundle, organic: organic ?? 0 }, settings, now);
   const top = [...factors].sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))[0];
   const why = vetoReasons[0] || top?.detail || "Not enough of a read yet.";
   const verdict: RiskReport["verdict"] = vetoReasons.length || score < 52 ? "skip" : allowed.length && score >= 68 ? "trade" : "wait";
+  const pGrad = token.graduated ? 1 : grad.p;
   const summary =
     verdict === "skip"
       ? `Skip — ${why}`
@@ -167,6 +177,7 @@ export function scoreToken(token: TokenSnapshot, now = Date.now(), settings: Eng
     summary,
     why,
     scoredAt: now,
+    pGrad,
   };
 }
 
@@ -175,10 +186,12 @@ export function allowedStrategies(
   score: number,
   ctx: { age: number; unique: number; bundle: number; organic: number },
   settings: EngineSettings,
+  now = Date.now(),
 ): Strategy[] {
   const out: Strategy[] = [];
   if (token.banned || token.nsfw) return out;
   const ageMin = ctx.age / 60000;
+  const grad = graduationRead(token, now);
 
   const preGrad =
     !token.graduated &&
@@ -190,7 +203,7 @@ export function allowedStrategies(
     ctx.bundle < 0.22 &&
     !token.livestream &&
     (token.deployerDeathRate == null || token.deployerDeathRate < 0.5);
-  if (score >= settings.minScoreLaunch && preGrad) {
+  if (score >= settings.minScoreLaunch && preGrad && armLaunch(grad, settings.minPGradLaunch ?? 0.42)) {
     out.push("launch_snipe");
   }
 
@@ -207,7 +220,11 @@ export function allowedStrategies(
     ageMin < 12 &&
     ctx.unique >= 40 &&
     ctx.bundle < 0.28;
-  if (score >= settings.minScoreMigration && (nearGrad || justMigrated)) {
+  if (
+    score >= settings.minScoreMigration &&
+    (nearGrad || justMigrated) &&
+    armMigrate(grad, token.bondingProgress, settings.minPGradMigrate ?? 0.55)
+  ) {
     out.push("migration_snipe");
   }
 

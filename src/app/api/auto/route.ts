@@ -19,6 +19,7 @@ export async function GET(req: NextRequest) {
     tradingPubkey: trader.tradingPubkey || null,
     depositedSol: trader.depositedSol,
     paper: publicBook(trader.book),
+    lab: loadState().lab,
     liveTrading: LIVE_TRADING,
   });
 }
@@ -70,6 +71,7 @@ export async function POST(req: NextRequest) {
     tradingPubkey: trader.tradingPubkey || null,
     depositedSol: trader.depositedSol,
     paper: publicBook(trader.book),
+    lab: loadState().lab,
     liveTrading: LIVE_TRADING,
   });
 }

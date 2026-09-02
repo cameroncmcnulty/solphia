@@ -11,24 +11,17 @@ import type {
   TokenSnapshot,
 } from "../types";
 import { applyFee, positionSizeUsd, scoreToken, slippageBps } from "../risk/engine";
-import { copyBlockReason } from "../risk/copy";
+import { LIVE_TRADING } from "../config";
 import { pushBounded } from "../store";
 import { tokenPriceUsd } from "./price";
 import { dayPnlUsd, exitPlan } from "./exits";
 import type { LeaderBook } from "../copy/flow";
+import { decide } from "../desk/consensus";
+import { applyShadow, emptyLab, noteDenial } from "../desk/shadow";
 
 export type DeskFlags = Pick<AutoSettings, "copy" | "launch" | "migrate" | "scalp">;
 
 export const DEMO_DESKS: DeskFlags = { copy: true, launch: false, migrate: false, scalp: false };
-
-function deskAllows(desks: DeskFlags | undefined, strategy: Strategy): boolean {
-  if (!desks) return true;
-  if (strategy === "copy_trade") return desks.copy !== false;
-  if (strategy === "launch_snipe") return Boolean(desks.launch);
-  if (strategy === "migration_snipe") return Boolean(desks.migrate);
-  if (strategy === "scalp") return Boolean(desks.scalp);
-  return false;
-}
 
 function id(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
@@ -82,11 +75,6 @@ export function enrichWithCreators(tokens: TokenSnapshot[], creators: Record<str
       deployerDeathRate: s.tokens ? s.dead / Math.max(s.tokens, 1) : 0,
     };
   });
-}
-
-function pickStrategy(allowed: Strategy[]): Strategy | null {
-  const order: Strategy[] = ["copy_trade", "migration_snipe", "scalp", "launch_snipe"];
-  return order.find((s) => allowed.includes(s)) || allowed[0] || null;
 }
 
 export function openPaperBuy(opts: {
@@ -305,6 +293,8 @@ function pushExit(
       ? closePartial({ state, pos, price, fraction, reason, now })
       : closePosition({ state, pos, price, reason, now });
   exits.push(fill);
+  if (!state.lab) state.lab = emptyLab();
+  applyShadow(state.lab, fill, state.paper.startingUsd, now);
   alerts.push({
     id: id("al"),
     at: now,
@@ -373,33 +363,66 @@ export function tickPaper(
     });
   }
 
+  if (!state.lab) state.lab = emptyLab();
   const halted = (state.paper.haltedUntil || 0) > now;
   let opened = 0;
-  const ranked = scored
-    .map((s) => ({
-      ...s,
-      allowed: s.report.allowedStrategies.filter((st) => deskAllows(desks, st)),
-    }))
-    .filter((s) => !s.report.vetoed && s.allowed.length > 0)
-    .sort((a, b) => b.report.score - a.report.score);
+  let denies = 0;
+  const ranked = [...scored].sort((a, b) => {
+    const ac = a.token.smartMoneyInflow ? 1 : 0;
+    const bc = b.token.smartMoneyInflow ? 1 : 0;
+    if (bc !== ac) return bc - ac;
+    const pg = (b.report.pGrad || 0) - (a.report.pGrad || 0);
+    if (pg) return pg;
+    return b.report.score - a.report.score;
+  });
 
   for (const s of ranked) {
-    if (halted) break;
-    if (opened >= settings.maxNewEntriesPerTick) break;
-    if (state.paper.positions.length >= settings.maxPositions) break;
-    const strategy = pickStrategy(s.allowed);
-    if (!strategy) continue;
     if (state.paper.positions.some((p) => p.mint === s.token.mint)) continue;
-    const who = s.token.copiedBy?.[0];
+    const size = Math.min(positionSizeUsd(state.paper.equityUsd, s.report.score, settings), state.paper.cashUsd * 0.95);
+    const d = decide({
+      token: s.token,
+      report: s.report,
+      desks,
+      now,
+      settings,
+      book: state.paper,
+      sizeUsd: Math.max(size, 8),
+      lab: state.lab,
+      live: LIVE_TRADING,
+    });
+    if (!d.ok) {
+      if (d.kind) {
+        noteDenial(state.lab, d.kind);
+        if (denies < 8 && d.reason !== "Scout passed.") {
+          denies += 1;
+          alerts.push({
+            id: id("al"),
+            at: now,
+            kind: d.fade || /bundle/i.test(d.reason) ? "bundle" : "deny",
+            title: `NO ${s.token.symbol}`,
+            body: d.reason,
+            mint: s.token.mint,
+            score: s.report.score,
+            strategy: d.kind === "copy" ? "copy_trade" : d.kind === "launch" ? "launch_snipe" : "migration_snipe",
+          });
+        }
+      }
+      continue;
+    }
+    if (halted) continue;
+    if (opened >= settings.maxNewEntriesPerTick) continue;
+    if (state.paper.positions.length >= settings.maxPositions) continue;
+    if (size < 8) continue;
     const fill = openPaperBuy({
       state,
       token: s.token,
-      strategy,
+      strategy: d.hit.strategy,
       score: s.report.score,
-      reason: who ? `copy ${who} · safety ${s.report.score}` : `auto:${strategy} score ${s.report.score}`,
+      reason: d.intent.reason,
       now,
     });
     if (fill) {
+      applyShadow(state.lab, fill, state.paper.startingUsd, now);
       opened += 1;
       entries.push(fill);
       alerts.push({
@@ -407,59 +430,10 @@ export function tickPaper(
         at: now,
         kind: "entry",
         title: `ENTRY ${s.token.symbol}`,
-        body: `${strategy.replace("_", " ")} · safety ${s.report.score} · $${fill.sizeUsd.toFixed(2)}`,
+        body: `${d.hit.strategy.replace("_", " ")} · P(grad) ${((s.report.pGrad || 0) * 100).toFixed(0)}% · $${fill.sizeUsd.toFixed(2)}`,
         mint: s.token.mint,
         score: s.report.score,
-        strategy,
-      });
-    }
-  }
-
-  for (const s of scored) {
-    const blocked = s.token.smartMoneyInflow ? copyBlockReason(s.token, settings) : null;
-    if (blocked && /bundled/i.test(blocked)) {
-      alerts.push({
-        id: id("al"),
-        at: now,
-        kind: "bundle",
-        title: `SKIP ${s.token.symbol}`,
-        body: blocked,
-        mint: s.token.mint,
-        score: s.report.score,
-        strategy: "copy_trade",
-      });
-    } else if (s.report.score >= 80 && s.token.smartMoneyInflow) {
-      alerts.push({
-        id: id("al"),
-        at: now,
-        kind: "smart_money",
-        title: `SMART MONEY ${s.token.symbol}`,
-        body: `Safety ${s.report.score}. ${s.report.summary}`,
-        mint: s.token.mint,
-        score: s.report.score,
-        strategy: "copy_trade",
-      });
-    } else if (s.report.allowedStrategies.includes("launch_snipe")) {
-      alerts.push({
-        id: id("al"),
-        at: now,
-        kind: "launch",
-        title: `LAUNCH CLEAR ${s.token.symbol}`,
-        body: s.report.summary,
-        mint: s.token.mint,
-        score: s.report.score,
-        strategy: "launch_snipe",
-      });
-    } else if (s.report.allowedStrategies.includes("migration_snipe")) {
-      alerts.push({
-        id: id("al"),
-        at: now,
-        kind: "migration",
-        title: `MIGRATION ${s.token.symbol}`,
-        body: `${(s.token.bondingProgress * 100).toFixed(0)}% bonded · ${s.report.summary}`,
-        mint: s.token.mint,
-        score: s.report.score,
-        strategy: "migration_snipe",
+        strategy: d.hit.strategy,
       });
     }
   }

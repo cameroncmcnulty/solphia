@@ -239,4 +239,32 @@ describe("paper engine", () => {
     assert.ok(alerts.some((a) => a.kind === "halt"));
     assert.ok((state.paper.haltedUntil || 0) > Date.now());
   });
+
+  it("scales 25% at 1.5x on the next tick", () => {
+    const state = emptyState();
+    const token = blankSnapshot({
+      mint: "Moon111111111111111111111111111111111111111",
+      name: "Moon",
+      symbol: "MOON",
+      venue: "pumpswap",
+      priceUsd: 1,
+      marketCapUsd: 80_000,
+      liquidityUsd: 40_000,
+      uniqueTraders1h: 80,
+      volume1h: 50_000,
+      mintAuthorityRevoked: true,
+      freezeAuthorityRevoked: true,
+      lpLockedOrBurned: true,
+      smartMoneyInflow: true,
+      copiedBy: ["Decu"],
+      graduated: true,
+      bondingProgress: 1,
+    });
+    openPaperBuy({ state, token, strategy: "copy_trade", score: 80, reason: "copy Decu" });
+    const live = { ...token, priceUsd: 1.6 };
+    const { exits } = tickPaper(state, [live], Date.now(), { copy: true, launch: false, migrate: false, scalp: false });
+    assert.ok(exits.some((e) => e.reason === "take-profit-1.5x"));
+    assert.equal(state.paper.positions.length, 1);
+    assert.ok((state.paper.positions[0].scaledOut || 0) >= 0.24);
+  });
 });

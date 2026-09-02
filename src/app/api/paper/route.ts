@@ -4,8 +4,11 @@ import { clientIp, isSolanaAddress, rateLimit, sanitizeText } from "@/lib/securi
 import { emptyState, loadState, mutateState } from "@/lib/store";
 import { publicBook } from "@/lib/tick";
 import { closePosition, openPaperBuy } from "@/lib/paper/engine";
-import { scoreToken } from "@/lib/risk/engine";
+import { positionSizeUsd, scoreToken } from "@/lib/risk/engine";
 import { ingestMarket } from "@/lib/feeds";
+import { decide } from "@/lib/desk/consensus";
+import { applyShadow, emptyLab, noteDenial } from "@/lib/desk/shadow";
+import { LIVE_TRADING } from "@/lib/config";
 
 export const dynamic = "force-dynamic";
 
@@ -30,7 +33,9 @@ export async function POST(req: NextRequest) {
 
   if (parsed.data.action === "reset") {
     await mutateState((s) => {
-      s.paper = emptyState().paper;
+      const fresh = emptyState();
+      s.paper = fresh.paper;
+      s.lab = fresh.lab;
     });
     return NextResponse.json({ ok: true, paper: publicBook(loadState().paper) });
   }
@@ -47,13 +52,48 @@ export async function POST(req: NextRequest) {
   if (!token) return NextResponse.json({ error: "unknown_mint" }, { status: 404 });
 
   if (parsed.data.action === "buy") {
-    const report = scoreToken(token, Date.now(), state.settings);
+    const now = Date.now();
+    const report = scoreToken(token, now, state.settings);
     if (report.vetoed) return NextResponse.json({ error: "vetoed", report }, { status: 400 });
-    const strategy = parsed.data.strategy || report.allowedStrategies[0] || "scalp";
-    const fill = await mutateState((s) =>
-      openPaperBuy({ state: s, token, strategy, score: report.score, reason: "manual" }),
-    );
-    if (!fill) return NextResponse.json({ error: "cannot_open" }, { status: 400 });
+    const strategy = parsed.data.strategy || report.allowedStrategies[0];
+    if (!strategy || !report.allowedStrategies.includes(strategy)) {
+      return NextResponse.json({ error: "refused", report }, { status: 400 });
+    }
+    const fill = await mutateState((s) => {
+      if (!s.lab) s.lab = emptyLab();
+      const size = Math.min(positionSizeUsd(s.paper.equityUsd, report.score, s.settings), s.paper.cashUsd * 0.95);
+      const d = decide({
+        token,
+        report,
+        desks: {
+          copy: strategy === "copy_trade",
+          launch: strategy === "launch_snipe",
+          migrate: strategy === "migration_snipe",
+          scalp: false,
+        },
+        now,
+        settings: s.settings,
+        book: s.paper,
+        sizeUsd: Math.max(size, 8),
+        lab: s.lab,
+        live: LIVE_TRADING,
+      });
+      if (!d.ok) {
+        if (d.kind) noteDenial(s.lab, d.kind);
+        return null;
+      }
+      const opened = openPaperBuy({
+        state: s,
+        token,
+        strategy: d.hit.strategy,
+        score: report.score,
+        reason: d.intent.reason,
+        now,
+      });
+      if (opened) applyShadow(s.lab, opened, s.paper.startingUsd, now);
+      return opened;
+    });
+    if (!fill) return NextResponse.json({ error: "refused", report }, { status: 400 });
     return NextResponse.json({ ok: true, fill, paper: publicBook(loadState().paper), report });
   }
 

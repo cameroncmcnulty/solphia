@@ -39,7 +39,7 @@ export function welcomeEmailHtml(pubkey: string, untilIso: string): string {
         <tr><td style="padding:32px;letter-spacing:0.45em;color:#5cffd8;font-size:11px;font-family:ui-monospace,monospace;">SOLPHIA IS ONLINE</td></tr>
         <tr><td style="padding:0 32px 12px;font-size:32px;color:#f4f0ea;">You are inside the terminal.</td></tr>
         <tr><td style="padding:0 32px 20px;line-height:1.7;color:#7a708c;">
-          0.15 SOL / 30 days. Alerts, copy book, launch + migration snipers, and the live $1,000 paper track.
+          0.15 SOL / 30 days. Alerts, copy bot, P(grad) launch desk, and the live $1,000 paper track.
           Wallet <span style="color:#5cffd8;font-family:ui-monospace,monospace;">${escapeHtml(pubkey.slice(0, 4))}…${escapeHtml(pubkey.slice(-4))}</span>
           is covered until ${escapeHtml(untilIso)}.
         </td></tr>

@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 
 const Body = z.object({ message: z.string().min(1).max(500) });
 
-const PERSONA = `You are Solphia. You help people make money on Solana memecoins by copying wallets that are already profitable and skipping rugs. Calm, clear, no slang-for-slang's-sake. Never ask for a seed. Not financial advice. ${RESEARCH.pumpfunLaunchDayDeathPct}% of Pump.fun coins die day one. Your fee is 0.35% vs ~1% elsewhere. Paper trading until live is on.`;
+const PERSONA = `You are Solphia. You help people make money on Solana memecoins by refusing more trades than you fire. Scout proposes, Risk vetoes, policy caps size and daily loss, then a fill. Keys never sit in the model. You copy the decision (visible setup + the exit), not first-block bags. Launch only when P(grad) clears the bar. Calm, clear. Never ask for a seed. Not financial advice. ${RESEARCH.pumpfunLaunchDayDeathPct}% of Pump.fun coins die day one. Fee 0.35%. Paper until live.`;
 
 export async function POST(req: NextRequest) {
   if (!rateLimit(clientIp(req) + ":chat", 20, 60_000)) {
@@ -59,7 +59,10 @@ function localVoice(message: string, context: string): string {
     return "Industry terminals take about 1%. I take 0.35% on fills, plus 0.15 SOL a month if you want the alert wire. The $1,000 book already subtracts those costs so the PnL is not a fairy tale.";
   }
   if (m.includes("score") || m.includes("risk")) {
-    return "I skip a coin if they can freeze you, print extra tokens, yank liquidity, or if snipers already own it. Telegram links do not make it safe. Unique buyers and a clean creator do.";
+    return "I skip a coin if they can freeze you, print extra tokens, yank liquidity, or if snipers already own it. Telegram links are a P(grad) feature, not a buy signal. Unique buyers and a clean creator do more work than mention counts.";
   }
-  return `Demo book: ${context}. Connect, deposit, turn me on. I copy wallets that are already profitable and skip the rest. Alerts are 0.15 SOL if you still want to tap buy yourself.`;
+  if (m.includes("grad") || m.includes("launch")) {
+    return "Launch is not a sniper. I estimate P(grad) from curve fill, SOL per unique buyer, bot-share, creator history, and whether a social link is actually there. Under the bar, she stays off.";
+  }
+  return `Demo book: ${context}. Connect, deposit, turn me on. Scout and Risk both have to agree. I copy the exit, not just the buy. Alerts are 0.15 SOL if you still want to tap buy yourself.`;
 }

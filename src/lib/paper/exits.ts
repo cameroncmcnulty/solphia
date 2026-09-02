@@ -1,6 +1,7 @@
 import type { EngineSettings, PaperPosition, TokenSnapshot } from "../types";
 import type { LeaderBook } from "../copy/flow";
 import { leaderDumped } from "../copy/flow";
+import { flattenNow } from "../desk/rugClock";
 
 export function multiple(pos: PaperPosition): number {
   return pos.entryUsd > 0 ? pos.markUsd / pos.entryUsd : 1;
@@ -20,25 +21,42 @@ export function exitPlan(
   if (leaderDumped(pos.mint, pos.copiedFrom, book)) {
     return { reason: "leader-sold", fraction: 1 };
   }
-  if (pos.markUsd <= pos.slUsd) return { reason: "stop-loss", fraction: 1 };
   if (token?.banned) return { reason: "banned", fraction: 1 };
   if (reportScore != null && reportScore < 28) return { reason: "risk-collapse", fraction: 1 };
-
-  const tp1 = settings.partialTp1 ?? 1;
-  const tp1Sell = settings.partialTp1Sell ?? 0.5;
-  const tp2 = settings.partialTp2 ?? 4;
-  const tp2Sell = settings.partialTp2Sell ?? 0.25;
-  if (m >= 1 + tp2 && scaled < tp1Sell + tp2Sell - 0.01) {
-    const left = 1 - scaled;
-    return { reason: "take-profit-5x", fraction: Math.min(1, tp2Sell / left) };
+  if (token) {
+    const rug = flattenNow(token);
+    if (rug.flatten) return { reason: rug.reason, fraction: 1 };
   }
-  if (m >= 1 + tp1 && scaled < tp1Sell - 0.01) {
-    const left = 1 - scaled;
-    return { reason: "take-profit-2x", fraction: Math.min(1, tp1Sell / left) };
+  if ((token?.bundleRatio ?? 0) >= (settings.bundleVeto ?? 0.38) && pos.strategy !== "copy_trade") {
+    return { reason: "bundle-woke", fraction: 1 };
+  }
+  if ((pos.strategy === "launch_snipe" || pos.strategy === "migration_snipe") && token && !token.graduated) {
+    const heldMin = (now - pos.openedAt) / 60000;
+    if (heldMin >= 1.5 && token.bondingProgress < 0.4) return { reason: "curve-stall", fraction: 1 };
+    if (heldMin >= 4 && token.bondingProgress < 0.7) return { reason: "curve-stall", fraction: 1 };
+  }
+  if (pos.trailPeakUsd > 0 && pos.markUsd <= pos.trailPeakUsd * 0.75 && m < 1) {
+    return { reason: "kill-from-high", fraction: 1 };
+  }
+  if (pos.markUsd <= pos.slUsd) return { reason: "stop-loss", fraction: 1 };
+
+  const ladder: { multiple: number; sold: number; reason: string }[] = [
+    { multiple: 1.5, sold: 0.25, reason: "take-profit-1.5x" },
+    { multiple: 2, sold: 0.5, reason: "take-profit-2x" },
+    { multiple: 3, sold: 0.7, reason: "take-profit-3x" },
+    { multiple: 5, sold: 0.85, reason: "take-profit-5x" },
+  ];
+  for (let i = ladder.length - 1; i >= 0; i--) {
+    const step = ladder[i];
+    if (m >= step.multiple && scaled < step.sold - 0.01) {
+      const left = 1 - scaled;
+      return { reason: step.reason, fraction: Math.min(1, (step.sold - scaled) / left) };
+    }
   }
 
-  const trailArmed = pos.trailArmed || scaled >= settings.partialTp1Sell || m >= 1 + settings.trailingArmPct;
-  if (trailArmed && pos.markUsd <= pos.trailPeakUsd * (1 - settings.trailingGivebackPct)) {
+  const trailArmed = pos.trailArmed || scaled >= 0.25 || m >= 1 + (settings.trailingArmPct ?? 0.18);
+  const give = scaled >= 0.25 ? Math.min(settings.trailingGivebackPct ?? 0.09, 0.12) : settings.trailingGivebackPct ?? 0.09;
+  if (trailArmed && pos.markUsd <= pos.trailPeakUsd * (1 - give)) {
     return { reason: "trailing-stop", fraction: 1 };
   }
 

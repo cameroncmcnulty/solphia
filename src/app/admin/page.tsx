@@ -58,7 +58,7 @@ export default function AdminPage() {
       return;
     }
     localStorage.setItem("solphia_owner", pk);
-    setNote(`Founder access granted to ${pk.slice(0, 4)}…${pk.slice(-4)}. Full terminal, auto, copy, snipers — no SOL.`);
+    setNote(`Founder access granted to ${pk.slice(0, 4)}…${pk.slice(-4)}. Full terminal, auto, copy, launch desk — no SOL.`);
     await reload();
   }
 
@@ -95,7 +95,7 @@ export default function AdminPage() {
       <section className="panel mt-6 space-y-4 rounded-2xl p-5">
         <div className="font-mono text-[10px] tracking-[0.3em] text-violet">FOUNDER WALLET</div>
         <p className="text-sm text-mute">
-          Connect the wallet you trade with. Grant it founder access and every desk is free — Pulse, copy, snipers,
+          Connect the wallet you trade with. Grant it founder access and every desk is free — Pulse, copy, launch,
           auto, no 0.15 / 0.50 SOL.
         </p>
         <WalletConnect />

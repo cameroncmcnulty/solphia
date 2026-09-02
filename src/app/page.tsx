@@ -9,6 +9,8 @@ export default function Home() {
   const { data } = useMarket(15000);
   const paper = data?.paper;
   const tape = (data?.tokens || []).slice(0, 6);
+  const lab = data?.lab;
+  const refused = lab ? (lab.copy?.denied || 0) + (lab.launch?.denied || 0) + (lab.migrate?.denied || 0) : 0;
 
   return (
     <main className="relative">
@@ -18,15 +20,15 @@ export default function Home() {
         </div>
         <div className="grid items-center gap-6 lg:min-h-[78vh] lg:grid-cols-2">
           <div className="max-w-xl pb-4 pt-4 lg:py-12">
-            <p className="font-mono text-[10px] tracking-[0.28em] text-violet">SOLANA COPY BOT</p>
+            <p className="font-mono text-[10px] tracking-[0.28em] text-violet">AUTOMATION WITH A KILL SWITCH</p>
             <h1 className="mt-3 font-display text-4xl leading-[1.02] text-ghost sm:text-5xl lg:text-6xl">
-              Deposit once.
+              She refuses more
               <br />
-              <span className="text-acid">She copies the winners.</span>
+              <span className="text-acid">than she fires.</span>
             </h1>
             <p className="mt-4 text-base leading-relaxed text-mute sm:text-lg">
-              Connect Phantom, put SOL in a wallet only you control, and turn Solphia on. She copies traders who are
-              already profitable — and skips coins that look like rugs. That is the whole product.
+              Scout finds a setup. Risk has to agree. Policy caps size and daily loss. Then she copies the exit, not
+              just the buy. Nothing trades because an LLM felt like it.
             </p>
             <div className="mt-6 flex flex-col gap-3 sm:flex-row">
               <Link href="/auto" className="btn-acid min-h-[48px] rounded-full px-6 py-3 text-center font-mono text-xs">
@@ -44,7 +46,7 @@ export default function Home() {
                   sub={`${(paper.pnlPct * 100).toFixed(1)}% on $1,000`}
                 />
                 <Stat k="Book" v={`$${paper.equityUsd.toFixed(0)}`} sub="live marks, 0.35% fee" />
-                <Stat k="Open" v={String(paper.open)} sub="copied coins" />
+                <Stat k="Refused" v={String(refused)} sub={`${paper.open} open copies`} />
               </div>
             )}
           </div>
@@ -85,23 +87,18 @@ export default function Home() {
         />
         <Card
           title="Copy bot · 0.25 SOL"
-          body="The passive path. She copies wallets that are still good this week, skips farms and bundles, and sells when they sell."
+          body="The passive path. She copies the setup a follower could have seen, fades first-block bundles, and always copies the exit."
           href="/auto"
         />
         <Card
           title="Launch bot · 0.30 SOL"
-          body="Higher risk. Curve-fill and first minutes after graduation — not random 2-minute coins. Most names are skipped."
+          body="Only when P(grad) clears the bar. Toxic flow and bot churn are a stand-down. Most names are a no."
           href="/terminal?desk=launch"
         />
         <Card
           title="Everything · 0.50 SOL"
           body="Alerts + copy + launches. Buying them separate is 0.70 SOL. This is the simple one."
           href="/pricing"
-        />
-        <Card
-          title="Dev tools"
-          body="Launch on Pump.fun, airdrop, burn LP, vest team bags. She scores the form while you fill it."
-          href="/dev"
         />
       </section>
     </main>

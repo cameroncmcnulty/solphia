@@ -12,6 +12,7 @@ function pickProvider() {
 export function AutoPilot({ owner }: { owner: string | null }) {
   const [auto, setAuto] = useState<any>(null);
   const [paper, setPaper] = useState<any>(null);
+  const [lab, setLab] = useState<any>(null);
   const [tradePk, setTradePk] = useState("");
   const [bal, setBal] = useState(0);
   const [solAmt, setSolAmt] = useState(0.5);
@@ -23,6 +24,7 @@ export function AutoPilot({ owner }: { owner: string | null }) {
     const a = await fetch(`/api/auto?owner=${pk}`).then((r) => r.json());
     setAuto(a.auto);
     setPaper(a.paper);
+    setLab(a.lab);
     const tpk = a.tradingPubkey || tradingPubkey();
     setTradePk(tpk);
     const b = await fetch(`/api/sol/balance?pubkey=${tpk}`).then((r) => r.json());
@@ -64,6 +66,7 @@ export function AutoPilot({ owner }: { owner: string | null }) {
     const j = await r.json();
     setAuto(j.auto);
     setPaper(j.paper);
+    if (j.lab) setLab(j.lab);
   }
 
   async function deposit() {
@@ -100,11 +103,11 @@ export function AutoPilot({ owner }: { owner: string | null }) {
   return (
     <div className="space-y-4">
       <div className="panel rounded-2xl p-5">
-        <div className="font-mono text-[10px] tracking-[0.28em] text-violet">COPY BOT</div>
+        <div className="font-mono text-[10px] tracking-[0.28em] text-violet">KILL SWITCH ON</div>
         <h2 className="mt-1 font-display text-2xl text-ghost">Turn her on. Close the phone.</h2>
         <p className="mt-2 text-sm leading-relaxed text-mute">
-          SOL goes into a trading wallet on this device — not to us. While testing, she paper-trades that amount so you
-          can see if the bot would have made you money. Real swaps stay off until we flip live.
+          Scout finds a setup. Risk has to agree. Policy caps size and daily loss. Keys stay on this device — never in
+          the model. She paper-trades first. Live stays off until a desk stays green.
         </p>
         <button
           onClick={() => patch({ armed: !auto?.armed })}
@@ -159,11 +162,19 @@ export function AutoPilot({ owner }: { owner: string | null }) {
         <p className="font-mono text-xs text-blood">{paper.haltReason}</p>
       )}
 
+      {lab && (
+        <div className="grid grid-cols-3 gap-2">
+          <Mini k="Refused" v={String((lab.copy?.denied || 0) + (lab.launch?.denied || 0) + (lab.migrate?.denied || 0))} />
+          <Mini k="Copy lab" v={`${lab.copy?.shadowPnlUsd >= 0 ? "+" : ""}$${Number(lab.copy?.shadowPnlUsd || 0).toFixed(0)}`} />
+          <Mini k="Desks live" v={[lab.copy?.enabled && "copy", lab.launch?.enabled && "launch", lab.migrate?.enabled && "grad"].filter(Boolean).join(" · ") || "none"} />
+        </div>
+      )}
+
       <div className="panel rounded-2xl p-5 space-y-3">
         <div className="font-mono text-[10px] tracking-[0.22em] text-mute">WHAT SHE'S ALLOWED TO DO</div>
-        <Toggle label="Copy winning wallets" on={auto?.copy} onChange={(v) => patch({ copy: v })} />
-        <Toggle label="Buy new launches" on={auto?.launch} onChange={(v) => patch({ launch: v })} />
-        <Toggle label="Buy graduations" on={auto?.migrate} onChange={(v) => patch({ migrate: v })} />
+        <Toggle label="Copy the decision, not the bag" on={auto?.copy} onChange={(v) => patch({ copy: v })} />
+        <Toggle label="Launch only if P(grad) clears" on={auto?.launch} onChange={(v) => patch({ launch: v })} />
+        <Toggle label="Graduation fills only" on={auto?.migrate} onChange={(v) => patch({ migrate: v })} />
         <label className="flex items-center justify-between gap-3 font-mono text-xs text-mute">
           Max SOL / trade
           <input

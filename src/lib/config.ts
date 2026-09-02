@@ -38,7 +38,6 @@ export const DEFAULT_SETTINGS: EngineSettings = {
   slippageBpsMigration: 70,
   slippageBpsCopy: 45,
   slippageBpsScalp: 55,
-  maxNewEntriesPerTick: 2,
   launchMaxAgeMs: 8 * 60 * 1000,
   migrationMinBonding: 0.82,
   timeStopLaunchMs: 45 * 60 * 1000,
@@ -54,6 +53,10 @@ export const DEFAULT_SETTINGS: EngineSettings = {
   partialTp1Sell: 0.5,
   partialTp2: 4,
   partialTp2Sell: 0.25,
+  minPGradLaunch: 0.42,
+  minPGradMigrate: 0.55,
+  intentTtlMs: 4000,
+  maxNewEntriesPerTick: 1,
 };
 
 export const RESEARCH = {
