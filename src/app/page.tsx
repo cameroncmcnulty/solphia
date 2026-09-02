@@ -14,138 +14,134 @@ export default function Home() {
 
   return (
     <main className="relative">
-      <LiveStats />
-
-      <section className="px-4 pt-6 md:px-10 md:pt-10">
-        <div className="mx-auto max-w-lg lg:hidden">
+      <section className="relative min-h-[92vh] overflow-hidden">
+        <div className="pointer-events-none absolute inset-0 opacity-45 lg:opacity-55">
           <SolphiaFace mode="hero" />
         </div>
-        <div className="grid items-center gap-6 lg:min-h-[72vh] lg:grid-cols-2">
-          <div className="max-w-xl pb-4 pt-4 lg:py-12">
-            <p className="font-mono text-[10px] tracking-[0.28em] text-violet">AUTOMATION WITH A KILL SWITCH</p>
-            <h1 className="mt-3 font-display text-4xl leading-[1.02] text-ghost sm:text-5xl lg:text-6xl">
-              She refuses more
-              <br />
-              <span className="text-acid">than she fires.</span>
-            </h1>
-            <p className="mt-4 text-base leading-relaxed text-mute sm:text-lg">
-              Live tape. Real paper P&amp;L after fees. A configuration desk you can actually read. Scout finds a setup,
-              Risk has to agree, policy caps size. Solphia Picks is her own book — extremely picky, and it only gets
-              stricter after losses.
-            </p>
-            <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-              <Link href="/auto" className="btn-acid min-h-[48px] rounded-full px-6 py-3 text-center font-mono text-xs">
-                Turn her on
-              </Link>
-              <Link href="/terminal" className="btn-ghost min-h-[48px] rounded-full px-6 py-3 text-center font-mono text-xs">
-                Open live tape
-              </Link>
-              <Link href="/pricing" className="btn-ghost min-h-[48px] rounded-full px-6 py-3 text-center font-mono text-xs">
-                Compare plans
-              </Link>
-            </div>
-          </div>
-          <div className="relative hidden h-[68vh] min-h-[480px] lg:block">
-            <SolphiaFace mode="hero" />
+        <div className="relative z-10 mx-auto flex min-h-[92vh] max-w-6xl flex-col justify-center px-5 py-16 md:px-12">
+          <p className="text-xl font-medium tracking-wide text-mute sm:text-2xl md:text-3xl">Welcome to</p>
+          <h1 className="solphia-flow mt-2 font-display text-[18vw] font-bold leading-[0.88] tracking-[-0.04em] sm:text-[14vw] md:text-[11vw] lg:text-[9.5rem]">
+            SOLPHIA
+          </h1>
+          <p className="mt-6 max-w-3xl text-2xl leading-snug text-ghost sm:text-3xl md:text-4xl md:leading-tight">
+            She refuses more than she fires.
+          </p>
+          <p className="mt-4 max-w-2xl text-lg leading-relaxed text-mute sm:text-xl">
+            A Solana copy bot with a kill switch. Scout finds a setup. Risk has to agree. You keep the keys.
+          </p>
+          <div className="mt-10 flex flex-col gap-4 sm:flex-row">
+            <Link
+              href="/auto"
+              className="btn-acid inline-flex min-h-[56px] items-center justify-center rounded-full px-10 py-4 text-center text-lg"
+            >
+              Get started
+            </Link>
+            <Link
+              href="/terminal"
+              className="btn-ghost inline-flex min-h-[56px] items-center justify-center rounded-full px-10 py-4 text-center text-lg"
+            >
+              Open the tape
+            </Link>
           </div>
         </div>
       </section>
 
-      <section className="border-y border-violet/20 px-4 py-3 md:px-10">
-        <div className="mb-2 font-mono text-[10px] tracking-[0.2em] text-mute">TAPE · TAP A NAME</div>
-        <div className="flex gap-2 overflow-x-auto pb-1">
+      <LiveStats />
+
+      <section className="px-5 py-6 md:px-12">
+        <div className="mb-3 text-sm text-mute">Live tape</div>
+        <div className="flex gap-3 overflow-x-auto pb-1">
           {tape.map((row: any) => (
             <Link
               key={row.token.mint}
               href="/terminal"
-              className="flex shrink-0 items-center gap-2 rounded-full border border-violet/30 px-3 py-2 font-mono text-[11px]"
+              className="flex shrink-0 items-center gap-3 rounded-full border border-violet/30 px-5 py-3 text-base"
             >
-              <span className="text-ghost">{row.token.symbol}</span>
+              <span className="font-display text-xl text-ghost">{row.token.symbol}</span>
               <span className={row.report.verdict === "trade" ? "text-acid" : "text-mute"}>
                 {row.report.verdict === "trade" ? "take" : row.report.verdict}
               </span>
-              {row.report.pGrad != null && (
-                <span className="text-violet">P(grad) {Math.round(row.report.pGrad * 100)}%</span>
-              )}
             </Link>
           ))}
-          {!tape.length && <span className="font-mono text-[11px] text-mute">Waiting on Pump.fun / Raydium…</span>}
+          {!tape.length && <span className="text-lg text-mute">Waiting on the market…</span>}
         </div>
       </section>
 
-      <section className="px-4 py-12 md:px-10">
-        <p className="font-mono text-[10px] tracking-[0.22em] text-violet">HOW IT WORKS</p>
-        <h2 className="mt-2 font-display text-3xl text-ghost">Four steps. No mystery menu.</h2>
-        <div className="mt-6 grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+      <section className="px-5 py-16 md:px-12">
+        <p className="text-lg text-acid">How it works</p>
+        <h2 className="mt-2 max-w-3xl font-display text-4xl leading-tight text-ghost md:text-6xl">
+          Four steps. No mystery menu.
+        </h2>
+        <div className="mt-10 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <Step n="01" t="Connect" d="Phantom or Solflare. You sign. She never sees a seed." href="/auto" c="Connect wallet" />
-          <Step n="02" t="Configure" d="Max SOL, min safety, stop, first take-profit. Preview updates as you drag." href="/auto" c="Open config" />
-          <Step n="03" t="Watch the tape" d="Live stats, P(grad), refused names. Paper fills until live is on." href="/terminal" c="Open tape" />
+          <Step n="02" t="Configure" d="Max SOL, safety, stop, take-profit. The preview updates as you drag." href="/auto" c="Open config" />
+          <Step n="03" t="Watch" d="The tape, P(grad), names she refused. Paper until live is on." href="/terminal" c="Open tape" />
           <Step n="04" t="Turn her on" d="Scout + Risk + policy. Kill switch on. Close the phone." href="/auto" c="Turn her on" />
         </div>
       </section>
 
-      <section className="px-4 py-4 md:px-10">
-        <p className="font-mono text-[10px] tracking-[0.22em] text-violet">WHY SHE’S DIFFERENT</p>
-        <h2 className="mt-2 font-display text-3xl text-ghost">Picky on purpose.</h2>
-        <div className="mt-6 grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-          <Feature t="Live stats that are real" d="Paper book, refused count, mind bar, coins on the tape. No 136k fake traders." href="/terminal" />
-          <Feature t="Configuration you can read" d="Sliders for size, safety, stop, take-profit. A preview card that says if the rails are valid." href="/auto" />
-          <Feature t="P(grad), not a sniper" d="Bonding curve is a survival problem. Under 5 minutes is a no on Picks." href="/terminal?desk=launch" />
+      <section className="px-5 py-8 md:px-12">
+        <p className="text-lg text-acid">Why she’s different</p>
+        <h2 className="mt-2 font-display text-4xl text-ghost md:text-6xl">Picky on purpose.</h2>
+        <div className="mt-10 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <Feature t="Live stats that are real" d="Paper book, refused count, mind bar. No fake trader counters." href="/terminal" />
+          <Feature t="Configuration you can read" d="Sliders for size, safety, stop, take-profit." href="/auto" />
+          <Feature t="P(grad), not a sniper" d="Under 5 minutes is a no on Picks." href="/terminal?desk=launch" />
           <Feature t="Copy the decision" d="Only when a follower could have seen the setup. Always copy the exit." href="/copy" />
-          <Feature t="Solphia Picks" d="Self-learning on after-fee PnL. Telegram required. Bars only move up after losses." href="/terminal?desk=picks" />
-          <Feature t="0.35% vs ~1%" d="Industry terminals take about 1% a side. She takes 35 bps on fills." href="/pricing" />
+          <Feature t="Solphia Picks" d="Learns from after-fee PnL. Bars only move up after losses." href="/terminal?desk=picks" />
+          <Feature t="0.35% vs ~1%" d="Other terminals take about 1% a side. She takes 35 bps." href="/pricing" />
         </div>
       </section>
 
-      <section className="px-4 py-10 md:px-10">
+      <section className="px-5 py-16 md:px-12">
         <div className="flex items-end justify-between gap-3">
           <div>
-            <h2 className="font-display text-2xl text-ghost">Who the copy bot follows</h2>
-            <p className="mt-1 text-sm text-mute">Quality this week, not a 30-day highlight reel.</p>
+            <h2 className="font-display text-4xl text-ghost md:text-5xl">Who she copies</h2>
+            <p className="mt-2 text-lg text-mute">Quality this week, not a 30-day highlight reel.</p>
           </div>
-          <Link href="/copy" className="btn-ghost rounded-full px-4 py-2 font-mono text-[11px]">
+          <Link href="/copy" className="btn-ghost rounded-full px-6 py-3 text-base">
             Full list
           </Link>
         </div>
-        <div className="mt-4">
+        <div className="mt-6">
           <WalletDesk compact />
         </div>
       </section>
 
-      <section className="px-4 py-10 md:px-10">
-        <h2 className="font-display text-3xl text-ghost">Plans, compared.</h2>
-        <p className="mt-2 max-w-2xl text-sm text-mute">
-          Paper is free. Pay in SOL for 30 days. Everything is 0.50 — cheaper than buying the desks separate (0.70).
+      <section className="px-5 py-16 md:px-12">
+        <h2 className="font-display text-4xl text-ghost md:text-6xl">Plans, compared.</h2>
+        <p className="mt-3 max-w-2xl text-xl text-mute">
+          Paper is free. Everything is 0.50 SOL / 30 days — cheaper than buying the desks separate.
         </p>
-        <div className="mt-6">
+        <div className="mt-8">
           <PlanCompare />
         </div>
       </section>
 
-      <section className="px-4 py-10 md:px-10">
+      <section className="px-5 py-16 md:px-12">
         <div className="flex items-end justify-between">
-          <h2 className="font-display text-3xl text-ghost">Questions</h2>
-          <Link href="/faq" className="font-mono text-[11px] text-violet">
+          <h2 className="font-display text-4xl text-ghost md:text-5xl">Questions</h2>
+          <Link href="/faq" className="text-lg text-violet">
             All FAQ →
           </Link>
         </div>
-        <div className="mt-4 max-w-3xl">
+        <div className="mt-6 max-w-3xl">
           <FaqList limit={4} />
         </div>
       </section>
 
-      <section className="px-4 pb-12 md:px-10">
-        <div className="panel rounded-2xl p-6 md:flex md:items-center md:justify-between md:p-8">
+      <section className="px-5 pb-20 md:px-12">
+        <div className="panel rounded-3xl p-8 md:flex md:items-center md:justify-between md:p-14">
           <div>
-            <div className="font-mono text-[10px] tracking-[0.22em] text-violet">READY</div>
-            <h2 className="mt-1 font-display text-3xl text-ghost">Turn her on. Close the phone.</h2>
-            <p className="mt-2 max-w-lg text-sm text-mute">Paper first. Keys on your device. Kill switch on.</p>
+            <p className="text-lg text-mute">Ready</p>
+            <h2 className="mt-2 font-display text-4xl text-ghost md:text-6xl">Turn her on.</h2>
+            <p className="mt-3 text-xl text-mute">Paper first. Keys on your device. Kill switch on.</p>
           </div>
-          <div className="mt-4 flex flex-col gap-2 sm:flex-row md:mt-0">
-            <Link href="/auto" className="btn-acid min-h-[48px] rounded-full px-6 py-3 text-center font-mono text-xs">
-              Open Auto
+          <div className="mt-6 flex flex-col gap-3 sm:flex-row md:mt-0">
+            <Link href="/auto" className="btn-acid inline-flex min-h-[56px] items-center justify-center rounded-full px-10 py-4 text-lg">
+              Get started
             </Link>
-            <Link href="/pricing" className="btn-ghost min-h-[48px] rounded-full px-6 py-3 text-center font-mono text-xs">
+            <Link href="/pricing" className="btn-ghost inline-flex min-h-[56px] items-center justify-center rounded-full px-10 py-4 text-lg">
               See pricing
             </Link>
           </div>
@@ -157,21 +153,21 @@ export default function Home() {
 
 function Step({ n, t, d, href, c }: { n: string; t: string; d: string; href: string; c: string }) {
   return (
-    <Link href={href} className="panel rounded-2xl p-5">
-      <div className="font-mono text-[10px] text-acid">{n}</div>
-      <div className="mt-2 font-display text-xl text-ghost">{t}</div>
-      <p className="mt-2 text-sm leading-relaxed text-mute">{d}</p>
-      <div className="mt-4 font-mono text-[11px] text-violet">{c} →</div>
+    <Link href={href} className="panel rounded-3xl p-7">
+      <div className="text-lg text-acid">{n}</div>
+      <div className="mt-3 font-display text-3xl text-ghost">{t}</div>
+      <p className="mt-3 text-lg leading-relaxed text-mute">{d}</p>
+      <div className="mt-6 text-base text-acid">{c} →</div>
     </Link>
   );
 }
 
 function Feature({ t, d, href }: { t: string; d: string; href: string }) {
   return (
-    <Link href={href} className="panel rounded-2xl p-5">
-      <div className="font-display text-xl text-ghost">{t}</div>
-      <p className="mt-2 text-sm leading-relaxed text-mute">{d}</p>
-      <div className="mt-4 font-mono text-[11px] text-acid">Open →</div>
+    <Link href={href} className="panel rounded-3xl p-7">
+      <div className="font-display text-3xl leading-tight text-ghost">{t}</div>
+      <p className="mt-3 text-lg leading-relaxed text-mute">{d}</p>
+      <div className="mt-6 text-base text-acid">Open →</div>
     </Link>
   );
 }

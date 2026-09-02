@@ -16,7 +16,7 @@ body {
 }
 
 body {
-  cursor: none;
+  cursor: auto;
 }
 
 * {
@@ -90,24 +90,54 @@ body {
 .btn-acid {
   background: #14f195;
   color: #04000a;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.04em;
   font-weight: 700;
+  font-size: 1rem;
   transition: transform 0.18s ease, box-shadow 0.18s ease;
 }
 .btn-acid:hover {
   transform: translateY(-1px);
-  box-shadow: 0 0 28px rgba(20, 241, 149, 0.4);
+  box-shadow: 0 0 36px rgba(20, 241, 149, 0.45);
 }
 
 .btn-ghost {
-  border: 1px solid rgba(153, 69, 255, 0.45);
-  color: #cbb6ff;
-  letter-spacing: 0.14em;
+  border: 1px solid rgba(201, 168, 255, 0.5);
+  color: #efe8ff;
+  letter-spacing: 0.04em;
+  font-size: 1rem;
   transition: background 0.18s ease, color 0.18s ease;
 }
 .btn-ghost:hover {
-  background: rgba(153, 69, 255, 0.12);
+  background: rgba(153, 69, 255, 0.16);
   color: #fff;
+}
+
+.solphia-flow {
+  background-image: linear-gradient(
+    90deg,
+    #14f195 0%,
+    #80eaff 18%,
+    #9945ff 38%,
+    #14f195 55%,
+    #c9a8ff 72%,
+    #14f195 100%
+  );
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: sol-flow 9s ease-in-out infinite;
+  filter: drop-shadow(0 0 28px rgba(20, 241, 149, 0.28)) drop-shadow(0 0 48px rgba(153, 69, 255, 0.22));
+}
+
+@keyframes sol-flow {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .solphia-flow { animation: none; background-position: 30% 50%; }
 }
 
 input[type="range"] {
@@ -126,7 +156,4 @@ input[type="range"]::-webkit-slider-thumb {
   background-size: 48px 48px;
 }
 
-@media (pointer: coarse) {
-  body { cursor: auto; }
-  .cursor-dot, .cursor-ring { display: none !important; }
-}
+.cursor-dot, .cursor-ring { display: none !important; }

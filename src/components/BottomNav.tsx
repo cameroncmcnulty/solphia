@@ -21,7 +21,7 @@ export function BottomNav() {
             <Link
               key={href}
               href={href}
-              className={`flex min-h-[52px] items-center justify-center font-mono text-[10px] tracking-[0.18em] ${
+              className={`flex min-h-[56px] items-center justify-center text-sm ${
                 active ? "text-acid" : "text-mute"
               }`}
             >
