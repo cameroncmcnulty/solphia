@@ -97,7 +97,7 @@ export function WalletConnect({ compact = false }: { compact?: boolean }) {
       onClick={connect}
       className="btn-ghost inline-flex min-h-[40px] items-center rounded-full px-3 py-2 font-mono text-[11px] sm:min-h-[44px] sm:px-4"
     >
-      {busy ? "Signing…" : compact ? "Connect" : "Connect wallet"}
+      {busy ? "Signing…" : "Connect"}
     </button>
   );
 }

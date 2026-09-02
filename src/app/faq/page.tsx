@@ -7,11 +7,9 @@ export default function FaqPage() {
     <main className="pb-12">
       <LiveStats compact />
       <div className="mx-auto max-w-3xl px-4 pt-8 md:px-8">
-        <p className="font-mono text-[11px] tracking-[0.28em] text-violet">FAQ</p>
-        <h1 className="mt-2 font-display text-3xl text-ghost sm:text-5xl">Plain answers.</h1>
-        <p className="mt-4 text-mute">
-          If a bot needs a novel to explain a toggle, the toggle is wrong. These are the questions people actually ask.
-        </p>
+        <p className="text-base text-acid">FAQ</p>
+        <h1 className="mt-2 font-display text-4xl text-ghost sm:text-5xl">Plain answers.</h1>
+        <p className="mt-4 text-lg text-mute">Short questions. Short answers.</p>
         <div className="mt-8">
           <FaqList />
         </div>

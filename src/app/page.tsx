@@ -6,6 +6,7 @@ import { WalletDesk } from "@/components/WalletDesk";
 import { LiveStats } from "@/components/LiveStats";
 import { FaqList } from "@/components/FaqList";
 import { PlanCompare } from "@/components/PlanCompare";
+import { PLANS } from "@/lib/plans";
 import { useMarket } from "@/lib/hooks";
 
 export default function Home() {
@@ -28,7 +29,7 @@ export default function Home() {
               She refuses more than she fires.
             </p>
             <p className="mt-3 max-w-lg text-base leading-relaxed text-mute sm:text-xl">
-              A Solana copy bot with a kill switch. Scout finds a setup. Risk has to agree. You keep the keys.
+              Solana copy bot. Kill switch on. You keep the keys.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <Link
@@ -72,13 +73,13 @@ export default function Home() {
       <section className="px-4 py-12 md:px-12 md:py-16">
         <p className="text-base text-acid sm:text-lg">How it works</p>
         <h2 className="mt-2 max-w-3xl font-display text-3xl leading-tight text-ghost sm:text-4xl md:text-6xl">
-          Four steps. No mystery menu.
+          Connect. Set size. Launch.
         </h2>
         <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Step n="01" t="Connect" d="Phantom or Solflare. You sign. She never sees a seed." href="/trading" c="Connect wallet" />
-          <Step n="02" t="Configure" d="Max SOL, safety, stop, take-profit. The preview updates as you drag." href="/trading" c="Set the rails" />
-          <Step n="03" t="Watch" d="The tape, P(grad), names she refused. Paper until live is on." href="/trading" c="Open hub" />
-          <Step n="04" t="Launch" d="Scout + Risk + policy. Kill switch on. Close the phone." href="/trading" c="LAUNCH BOT" />
+          <Step n="01" t="Connect" d="Phantom or Solflare. You sign." href="/trading" c="Connect" />
+          <Step n="02" t="Set size" d="Max SOL, stop, take-profit." href="/trading" c="Configure" />
+          <Step n="03" t="Paper first" d="Live tape. Fake fills. No risk." href="/trading" c="Open hub" />
+          <Step n="04" t="Launch" d="Scout + Risk agree. Kill switch on." href="/trading" c="LAUNCH BOT" />
         </div>
       </section>
 
@@ -86,12 +87,12 @@ export default function Home() {
         <p className="text-base text-acid sm:text-lg">Why she’s different</p>
         <h2 className="mt-2 font-display text-3xl text-ghost sm:text-4xl md:text-6xl">Picky on purpose.</h2>
         <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <Feature t="Live stats that are real" d="Paper book, refused count, mind bar. No fake trader counters." href="/trading" />
-          <Feature t="Configuration you can read" d="Sliders for size, safety, stop, take-profit." href="/trading" />
-          <Feature t="P(grad), not a sniper" d="Under 5 minutes is a no on Picks." href="/trading" />
-          <Feature t="Copy the decision" d="Only when a follower could have seen the setup. Always copy the exit." href="/copy" />
-          <Feature t="Solphia Picks" d="Learns from after-fee PnL. Bars only move up after losses." href="/trading" />
-          <Feature t="0.35% vs ~1%" d="Other terminals take about 1% a side. She takes 35 bps." href="/pricing" />
+          <Feature t="Real stats" d="Paper book and refused count. No fake trader counters." href="/trading" />
+          <Feature t="Simple rails" d="Size, safety, stop, take-profit. Drag to set." href="/trading" />
+          <Feature t="P(grad)" d="Under 5 minutes is a no on Picks." href="/trading" />
+          <Feature t="Copy" d="Visible setups only. She always copies the sell." href="/copy" />
+          <Feature t="Picks" d="Learns from every close. Bars only move up." href="/trading" />
+          <Feature t="0.35% fees" d="Other desks take ~1% a side." href="/pricing" />
         </div>
       </section>
 
@@ -111,10 +112,31 @@ export default function Home() {
       </section>
 
       <section className="px-4 py-12 md:px-12 md:py-16">
-        <h2 className="font-display text-3xl text-ghost sm:text-4xl md:text-6xl">Plans, compared.</h2>
-        <p className="mt-3 max-w-2xl text-base text-mute sm:text-xl">
-          Paper is free. Everything is 0.50 SOL / 30 days — cheaper than buying the desks separate.
-        </p>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-base text-acid">Plans</p>
+            <h2 className="mt-1 font-display text-3xl text-ghost sm:text-4xl md:text-6xl">Pick a desk</h2>
+          </div>
+          <Link href="/pricing" className="btn-ghost min-h-[44px] rounded-full px-6 text-base">
+            See pricing
+          </Link>
+        </div>
+        <div className="mt-8 grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {PLANS.map((p) => (
+            <Link key={p.id} href="/pricing" className="panel rounded-3xl p-5">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={p.icon} alt="" className="h-14 w-14 rounded-2xl" />
+              <div className="mt-4 font-display text-2xl text-ghost">{p.name}</div>
+              <div className="mt-1 text-acid">{p.sol} SOL</div>
+              <p className="mt-2 text-sm text-mute">{p.tagline}</p>
+            </Link>
+          ))}
+        </div>
+      </section>
+
+      <section className="px-4 py-12 md:px-12 md:py-16">
+        <h2 className="font-display text-3xl text-ghost sm:text-4xl md:text-6xl">Compare</h2>
+        <p className="mt-3 max-w-2xl text-base text-mute sm:text-xl">Paper is free. Everything is 0.50 SOL / 30 days.</p>
         <div className="mt-8">
           <PlanCompare />
         </div>

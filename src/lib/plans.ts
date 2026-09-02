@@ -8,6 +8,7 @@ export interface Plan {
   story: string;
   points: string[];
   includes: PlanId[];
+  icon: string;
   featured?: boolean;
 }
 
@@ -16,61 +17,41 @@ export const PLANS: Plan[] = [
     id: "pulse",
     name: "Alerts",
     sol: 0.15,
-    tagline: "She texts you. You still buy yourself.",
-    story:
-      "Solphia watches new coins and the wallets we copy. When something looks actually tradeable, you get an email and an in-app ping with a plain-English reason. You open Phantom and decide. No bot is placing trades for you.",
-    points: [
-      "Ping when a followed wallet buys something clean",
-      "Ping when a new coin is about to graduate",
-      "Every ping includes why she thinks it's worth a look",
-      "You place the trade. She does not.",
-    ],
+    tagline: "She pings. You buy.",
+    story: "Clean setups hit your inbox. You still place the trade.",
+    points: ["Wallet-buy pings", "Graduation pings", "Plain-English why", "You click buy"],
     includes: ["pulse"],
+    icon: "/icons/plan-alerts.jpg",
   },
   {
     id: "copy",
-    name: "Copy bot",
+    name: "Copy",
     sol: 0.25,
-    tagline: "The passive one. She copies the setup, then the exit.",
-    story:
-      "You fund a trading wallet you own and turn her on. She reconstructs why a wallet bought — time from create, holder shape, curve fill — and only copies when that setup is visible from here. First-block bundles she cannot access are faded. She always copies the sell.",
-    points: [
-      "Copy the decision, not the bag. Fade wallets whose edge is first-block access",
-      "Scout and Risk both have to agree. Policy caps size and daily loss",
-      "Exit agent: leader sold, ladder at 1.5/2/3/5x, kill −25% from local high",
-      "Uses your deposit. Keys never sit in the model",
-    ],
+    tagline: "She copies the setup, then the exit.",
+    story: "Fund a wallet you own. She copies visible setups only — never first-block bags.",
+    points: ["Visible setups only", "Scout + Risk agree", "Always copies the sell", "Your keys stay yours"],
     includes: ["copy"],
+    icon: "/icons/plan-copy.jpg",
   },
   {
     id: "snipers",
-    name: "Launch bot",
+    name: "Launch",
     sol: 0.3,
-    tagline: "P(grad) first. She skips more names than she takes.",
-    story:
-      "Not a paste-CA sniper. The bonding curve is a survival problem. She only arms when P(grad) clears the bar — real SOL per unique buyer, not bot churn. Random 2-minute coins are a no.",
-    points: [
-      "P(grad) every tick: curve fill, SOL per unique, bot-share, creator, social link, age",
-      "Launch only if that number clears the bar. Fast SOL from few trades beats high-turnover bots",
-      "Toxic flow and first-block bundles are a stand-down, not a snipe",
-      "Exit agent is wired in: ladder, leader-sold, curve stall, kill from local high",
-    ],
+    tagline: "P(grad) first. Most names she skips.",
+    story: "Not a paste-CA sniper. She only arms when P(grad) clears.",
+    points: ["P(grad) every tick", "No 2-minute coins", "No first-block snipes", "Exit ladder on"],
     includes: ["snipers"],
+    icon: "/icons/plan-launch.jpg",
   },
   {
     id: "full",
     name: "Everything",
     sol: 0.5,
-    tagline: "Alerts + copy + launch + Solphia Picks. Cheaper together.",
-    story:
-      "All four. Buying them separate is more. Everything is 0.50. Copy is the passive path. Picks is her own learned book — extremely picky, deny-first, and it only gets stricter after losses.",
-    points: [
-      "Email and in-app alerts",
-      "Copy bot on the wallets we follow",
-      "Launch and graduation bot",
-      "Solphia Picks: self-learning mind, Telegram + P(grad) + after-fee P(pay) bar",
-    ],
+    tagline: "All desks. Cheaper together.",
+    story: "Alerts + copy + launch + Picks. Buying them separate is 0.70.",
+    points: ["Alerts", "Copy bot", "Launch + grad", "Solphia Picks"],
     includes: ["pulse", "copy", "snipers", "full"],
+    icon: "/icons/plan-full.jpg",
     featured: true,
   },
 ];
@@ -85,16 +66,16 @@ export function lamportsForPlan(id: PlanId): number {
 }
 
 export const COMPARE_ROWS: { label: string; hint?: string; values: [string, string, string, string, string] }[] = [
-  { label: "Paper book, live marks, 0.35% fee", values: ["Yes", "Yes", "Yes", "Yes", "Yes"] },
-  { label: "Kill switch · daily loss cap", hint: "Turns her off. Not optional.", values: ["Yes", "Yes", "Yes", "Yes", "Yes"] },
-  { label: "Email + in-app alerts", values: ["—", "Yes", "—", "—", "Yes"] },
-  { label: "Copy bot (decision + exit)", values: ["—", "—", "Yes", "—", "Yes"] },
-  { label: "Launch · P(grad) bar", values: ["—", "—", "—", "Yes", "Yes"] },
-  { label: "Graduation fills", values: ["—", "—", "—", "Yes", "Yes"] },
-  { label: "Solphia Picks (self-learning)", values: ["—", "—", "—", "—", "Yes"] },
-  { label: "You place the trade", values: ["If you want", "Always", "She does", "She does", "She does"] },
-  { label: "Keys in the model", values: ["Never", "Never", "Never", "Never", "Never"] },
-  { label: "Price / 30 days", values: ["Free", "0.15 SOL", "0.25 SOL", "0.30 SOL", "0.50 SOL"] },
+  { label: "Paper book", values: ["Yes", "Yes", "Yes", "Yes", "Yes"] },
+  { label: "Kill switch", hint: "Always on.", values: ["Yes", "Yes", "Yes", "Yes", "Yes"] },
+  { label: "Email alerts", values: ["—", "Yes", "—", "—", "Yes"] },
+  { label: "Copy bot", values: ["—", "—", "Yes", "—", "Yes"] },
+  { label: "Launch bot", values: ["—", "—", "—", "Yes", "Yes"] },
+  { label: "Graduation", values: ["—", "—", "—", "Yes", "Yes"] },
+  { label: "Solphia Picks", values: ["—", "—", "—", "—", "Yes"] },
+  { label: "Who trades", values: ["You", "You", "She", "She", "She"] },
+  { label: "Keys with us", values: ["Never", "Never", "Never", "Never", "Never"] },
+  { label: "30 days", values: ["Free", "0.15 SOL", "0.25 SOL", "0.30 SOL", "0.50 SOL"] },
 ];
 
 export const FAQS: { q: string; a: string }[] = [

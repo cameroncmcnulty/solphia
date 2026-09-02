@@ -4,11 +4,10 @@ import { WalletDesk } from "@/components/WalletDesk";
 export default function CopyPage() {
   return (
     <main className="mx-auto max-w-5xl px-4 pb-24 pt-4 md:px-8">
-      <p className="font-mono text-[11px] tracking-[0.28em] text-violet">COPY DESK</p>
+      <p className="text-base text-acid">Copy</p>
       <h1 className="mt-2 font-display text-3xl text-ghost sm:text-5xl">Who she copies</h1>
       <p className="mt-3 max-w-2xl text-base text-mute sm:text-lg">
-        Quality this week, not a 30-day highlight reel. She copies the decision when a follower could have seen it —
-        then she copies the exit.
+        Quality this week. Visible setups only. She always copies the sell.
       </p>
       <div className="mt-6">
         <WalletDesk />

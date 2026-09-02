@@ -5,6 +5,13 @@ import { COMPARE_ROWS } from "@/lib/plans";
 
 const HEADS = ["Paper", "Alerts", "Copy", "Launch", "Everything"];
 const PRICES = ["Free", "0.15", "0.25", "0.30", "0.50"];
+const ICONS = [
+  "/icons/plan-paper.jpg",
+  "/icons/plan-alerts.jpg",
+  "/icons/plan-copy.jpg",
+  "/icons/plan-launch.jpg",
+  "/icons/plan-full.jpg",
+];
 
 export function PlanCompare() {
   return (
@@ -17,6 +24,8 @@ export function PlanCompare() {
               i === 4 ? "border-acid/40 bg-acid/5" : "border-violet/20 bg-void/40"
             }`}
           >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={ICONS[i]} alt="" className="mb-3 h-12 w-12 rounded-xl" />
             <div className={`font-display text-2xl ${i === 4 ? "text-acid" : "text-ghost"}`}>{h}</div>
             <div className="mt-1 font-mono text-sm text-mute">
               {PRICES[i]} {i ? "SOL / 30d" : ""}
@@ -40,6 +49,8 @@ export function PlanCompare() {
               <th className="px-4 py-3">What you get</th>
               {HEADS.map((h, i) => (
                 <th key={h} className={`px-3 py-3 ${i === 4 ? "text-acid" : "text-ghost"}`}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={ICONS[i]} alt="" className="mb-2 h-8 w-8 rounded-lg" />
                   {h}
                   <div className="mt-1 tracking-normal text-mute">
                     {PRICES[i]} {i ? "SOL" : ""}

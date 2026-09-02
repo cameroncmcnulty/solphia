@@ -6,7 +6,6 @@ import { PLANS, type PlanId } from "@/lib/plans";
 import { WalletConnect } from "@/components/WalletConnect";
 import { PlanCompare } from "@/components/PlanCompare";
 import { FaqList } from "@/components/FaqList";
-import { LiveStats } from "@/components/LiveStats";
 
 export default function PricingPage() {
   const [plan, setPlan] = useState<PlanId>("full");
@@ -27,96 +26,110 @@ export default function PricingPage() {
       }),
     });
     const j = await r.json();
-    setMsg(j.error || `${selected.name} seated until ${new Date(j.subscribedUntil).toLocaleDateString()}`);
+    setMsg(j.error || `${selected.name} on until ${new Date(j.subscribedUntil).toLocaleDateString()}`);
   }
 
   return (
-    <main className="pb-8 md:pb-24">
-      <LiveStats compact />
-      <div className="mx-auto max-w-6xl px-4 pt-8 md:px-8">
-        <p className="font-mono text-[11px] tracking-[0.28em] text-violet">PRICING</p>
-        <h1 className="mt-2 font-display text-3xl leading-tight text-ghost sm:text-5xl">Pay for the desk you actually use.</h1>
-        <p className="mt-4 max-w-2xl text-mute">
-          Paper is free. Paid plans are 30 days in SOL. Everything is 0.50 — Alerts + Copy + Launch bought separate is
-          0.70. 0.35% on fills, not the ~1% the other terminals take.
-        </p>
+    <main className="pb-24">
+      <div className="mx-auto max-w-6xl px-4 pt-6 md:px-8 md:pt-10">
+        <p className="text-base text-acid">Pricing</p>
+        <h1 className="mt-2 font-display text-4xl leading-tight text-ghost sm:text-6xl">Four desks. Paper is free.</h1>
+        <p className="mt-4 max-w-xl text-lg text-mute">30 days in SOL. Everything is 0.50 — cheaper than buying them separate.</p>
 
-        <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {PLANS.map((p) => (
-            <button
-              key={p.id}
-              onClick={() => setPlan(p.id)}
-              className={`panel rounded-2xl p-5 text-left ${plan === p.id ? "border-acid/70 shadow-[0_0_40px_rgba(20,241,149,0.12)]" : ""}`}
-            >
-              <div className="font-mono text-[10px] tracking-[0.28em] text-violet">
-                {p.featured ? "MOST PEOPLE WANT THIS" : "30 DAYS"}
-              </div>
-              <div className="mt-2 font-display text-2xl text-ghost">{p.name}</div>
-              <div className="mt-1 font-mono text-2xl text-acid">{p.sol} SOL</div>
-              <p className="mt-3 text-sm text-mute">{p.tagline}</p>
-              <ul className="mt-4 space-y-2 text-[12px] text-mute">
-                {p.points.map((x) => (
-                  <li key={x} className="flex gap-2">
-                    <span className="mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-[#14F195] text-[#04000a]">
-                      <svg width="9" height="9" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                        <path d="M3.2 8.4l3.1 3.1 6.5-7" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
-                      </svg>
-                    </span>
-                    <span>{x}</span>
-                  </li>
-                ))}
-              </ul>
-              <div className={`mt-5 min-h-[40px] rounded-full px-4 py-2 text-center font-mono text-[11px] ${plan === p.id ? "btn-acid" : "btn-ghost"}`}>
-                {plan === p.id ? "Selected" : "Select"}
-              </div>
-            </button>
-          ))}
-        </div>
-
-        <h2 className="mt-12 font-display text-2xl text-ghost">Side-by-side</h2>
-        <p className="mt-2 text-sm text-mute">Scroll sideways on a phone. Everything includes Picks.</p>
-        <div className="mt-4">
-          <PlanCompare />
-        </div>
-
-        <div className="mt-10 grid gap-4 lg:grid-cols-2">
-          <div className="panel rounded-2xl p-6">
-            <div className="font-mono text-[10px] tracking-[0.22em] text-mute">VS 1% TERMINALS</div>
-            <h3 className="mt-2 font-display text-2xl text-ghost">Fees that don’t eat the 3–8% move.</h3>
-            <p className="mt-3 text-sm leading-relaxed text-mute">
-              Axiom / Photon / BullX style desks take about 1% a side. On a 0.5 SOL fill that’s already the edge on a
-              lot of meme wicks. Solphia is 0.35% on fills, plus a flat 30-day SOL plan if you want the wire.
-            </p>
-            <Link href="/trading" className="btn-acid mt-5 inline-flex min-h-[44px] items-center rounded-full px-5 font-mono text-[11px]">
-              LAUNCH BOT
-            </Link>
+        <Link
+          href="/trading"
+          className="panel mt-8 flex items-center gap-4 rounded-3xl p-4 sm:p-5"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/icons/plan-paper.jpg" alt="" className="h-14 w-14 shrink-0 rounded-2xl" />
+          <div className="min-w-0 flex-1">
+            <div className="font-display text-2xl text-ghost">Paper</div>
+            <p className="text-sm text-mute">Live tape. Fake fills. No SOL at risk.</p>
           </div>
-          <div className="panel space-y-4 rounded-2xl p-6">
-            <div className="font-mono text-[10px] tracking-[0.28em] text-mute">CHECKOUT · {selected.name.toUpperCase()}</div>
-            <p className="text-sm leading-relaxed text-mute">{selected.story}</p>
+          <span className="btn-acid min-h-[44px] shrink-0 rounded-full px-5 text-sm">Try free</span>
+        </Link>
+
+        <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {PLANS.map((p) => {
+            const on = plan === p.id;
+            return (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => setPlan(p.id)}
+                className={`panel rounded-3xl p-5 text-left transition ${
+                  on ? "ring-2 ring-acid shadow-[0_0_40px_rgba(20,241,149,0.18)]" : ""
+                }`}
+              >
+                {p.featured && (
+                  <div className="mb-3 font-mono text-[10px] tracking-[0.2em] text-acid">BEST VALUE</div>
+                )}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={p.icon} alt="" className="h-16 w-16 rounded-2xl" />
+                <div className="mt-4 font-display text-2xl text-ghost">{p.name}</div>
+                <div className="mt-1 font-display text-3xl text-acid">
+                  {p.sol} <span className="text-lg text-mute">SOL</span>
+                </div>
+                <p className="mt-2 text-sm text-mute">{p.tagline}</p>
+                <ul className="mt-4 space-y-2 text-sm text-ghost">
+                  {p.points.map((x) => (
+                    <li key={x} className="flex items-center gap-2">
+                      <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-acid text-void">
+                        <svg width="10" height="10" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                          <path d="M3.2 8.4l3.1 3.1 6.5-7" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      </span>
+                      {x}
+                    </li>
+                  ))}
+                </ul>
+                <div className={`mt-6 min-h-[48px] w-full rounded-full text-sm ${on ? "btn-acid" : "btn-ghost"}`}>
+                  {on ? "Selected" : "Choose"}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="panel mt-8 grid gap-6 rounded-3xl p-6 md:grid-cols-[1.1fr_0.9fr] md:p-8">
+          <div>
+            <p className="text-sm text-acid">Checkout</p>
+            <h2 className="mt-1 font-display text-3xl text-ghost">{selected.name}</h2>
+            <p className="mt-2 text-mute">{selected.story}</p>
+            <p className="mt-4 font-display text-4xl text-acid">
+              {selected.sol} SOL <span className="text-lg text-mute">/ 30 days</span>
+            </p>
+          </div>
+          <div className="space-y-3">
             <WalletConnect />
             <input
               value={pubkey}
               onChange={(e) => setPubkey(e.target.value)}
               placeholder="Wallet"
-              className="w-full rounded-full border border-violet/30 bg-void px-4 py-3 font-mono text-xs outline-none"
+              className="w-full rounded-full border border-violet/30 bg-void px-5 py-3 text-sm outline-none"
             />
             <input
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="Email if you want Pulse alerts"
-              className="w-full rounded-full border border-violet/30 bg-void px-4 py-3 font-mono text-xs outline-none"
+              placeholder="Email for alerts"
+              className="w-full rounded-full border border-violet/30 bg-void px-5 py-3 text-sm outline-none"
             />
-            <button onClick={subscribe} className="btn-acid min-h-[48px] w-full rounded-full py-3 font-mono text-xs">
-              Start {selected.name} · {selected.sol} SOL
+            <button onClick={subscribe} className="btn-acid min-h-[52px] w-full rounded-full text-base">
+              Pay {selected.sol} SOL
             </button>
-            {msg && <p className="font-mono text-sm text-acid">{msg}</p>}
+            {msg && <p className="text-sm text-acid">{msg}</p>}
           </div>
         </div>
 
-        <h2 className="mt-12 font-display text-2xl text-ghost">Pricing questions</h2>
-        <div className="mt-4 max-w-3xl">
-          <FaqList />
+        <h2 className="mt-14 font-display text-3xl text-ghost">Compare</h2>
+        <p className="mt-2 text-mute">Same kill switch on every plan.</p>
+        <div className="mt-5">
+          <PlanCompare />
+        </div>
+
+        <h2 className="mt-14 font-display text-3xl text-ghost">Questions</h2>
+        <div className="mt-5 max-w-3xl">
+          <FaqList limit={5} />
         </div>
       </div>
     </main>

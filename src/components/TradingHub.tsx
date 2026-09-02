@@ -232,10 +232,8 @@ export function TradingHub() {
       <header className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <p className="font-mono text-[11px] tracking-[0.28em] text-violet">TRADING HUB · PAPER FIRST</p>
-          <h1 className="mt-1 font-display text-3xl leading-none text-ghost sm:text-4xl md:text-6xl">Operate the bot</h1>
-          <p className="mt-3 max-w-xl text-base text-mute sm:text-lg">
-            Connect. Set the rails. Launch. She still skips more than she buys.
-          </p>
+          <h1 className="mt-1 font-display text-3xl leading-none text-ghost sm:text-4xl md:text-6xl">Launch</h1>
+          <p className="mt-3 max-w-xl text-base text-mute sm:text-lg">Connect. Set size. Launch. She still skips more than she buys.</p>
         </div>
         <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center">
           <WalletConnect />
