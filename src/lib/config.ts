@@ -55,6 +55,10 @@ export const DEFAULT_SETTINGS: EngineSettings = {
   partialTp2Sell: 0.25,
   minPGradLaunch: 0.42,
   minPGradMigrate: 0.55,
+  minScorePick: 82,
+  minPickP: 0.76,
+  slippageBpsPick: 50,
+  timeStopPickMs: 3 * 60 * 60 * 1000,
   intentTtlMs: 4000,
   maxNewEntriesPerTick: 1,
 };

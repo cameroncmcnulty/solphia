@@ -6,6 +6,7 @@ import { DEFAULT_AUTO, emptyTrader, bankrollUsd, maybeResizeBook } from "@/lib/a
 import { publicBook } from "@/lib/tick";
 import { solPriceUsd } from "@/lib/feeds";
 import { LIVE_TRADING } from "@/lib/config";
+import { publicMind } from "@/lib/mind/engine";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +21,7 @@ export async function GET(req: NextRequest) {
     depositedSol: trader.depositedSol,
     paper: publicBook(trader.book),
     lab: loadState().lab,
+    mind: publicMind(loadState().mind),
     liveTrading: LIVE_TRADING,
   });
 }
@@ -36,6 +38,7 @@ const Body = z.object({
       launch: z.boolean().optional(),
       migrate: z.boolean().optional(),
       scalp: z.boolean().optional(),
+      picks: z.boolean().optional(),
       maxSolPerTrade: z.number().positive().max(50).optional(),
       minScore: z.number().min(50).max(95).optional(),
     })
@@ -72,6 +75,7 @@ export async function POST(req: NextRequest) {
     depositedSol: trader.depositedSol,
     paper: publicBook(trader.book),
     lab: loadState().lab,
+    mind: publicMind(loadState().mind),
     liveTrading: LIVE_TRADING,
   });
 }

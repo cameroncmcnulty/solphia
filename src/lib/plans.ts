@@ -61,14 +61,14 @@ export const PLANS: Plan[] = [
     id: "full",
     name: "Everything",
     sol: 0.5,
-    tagline: "Alerts + copy bot + launch bot. Cheaper together.",
+    tagline: "Alerts + copy + launch + Solphia Picks. Cheaper together.",
     story:
-      "All three. Buying them separate is 0.70 SOL. Everything is 0.50. Copy is the passive income path. Alerts if you still want to tap in yourself. Launch bot if you want the aggressive side too.",
+      "All four. Buying them separate is more. Everything is 0.50. Copy is the passive path. Picks is her own learned book — extremely picky, deny-first, and it only gets stricter after losses.",
     points: [
       "Email and in-app alerts",
       "Copy bot on the wallets we follow",
       "Launch and graduation bot",
-      "One auto switch, one trading wallet you own",
+      "Solphia Picks: self-learning mind, Telegram + P(grad) + after-fee P(pay) bar",
     ],
     includes: ["pulse", "copy", "snipers", "full"],
     featured: true,

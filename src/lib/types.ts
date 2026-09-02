@@ -7,7 +7,7 @@ export type Venue =
   | "orca"
   | "unknown";
 
-export type Strategy = "launch_snipe" | "migration_snipe" | "copy_trade" | "scalp";
+export type Strategy = "launch_snipe" | "migration_snipe" | "copy_trade" | "scalp" | "solphia_pick";
 
 export type Side = "buy" | "sell";
 
@@ -126,6 +126,10 @@ export interface EngineSettings {
   partialTp2Sell: number;
   minPGradLaunch: number;
   minPGradMigrate: number;
+  minScorePick: number;
+  minPickP: number;
+  slippageBpsPick: number;
+  timeStopPickMs: number;
   intentTtlMs: number;
 }
 
@@ -232,6 +236,7 @@ export interface AutoSettings {
   launch: boolean;
   migrate: boolean;
   scalp: boolean;
+  picks: boolean;
   maxSolPerTrade: number;
   minScore: number;
   tradingPubkey?: string;
@@ -285,7 +290,36 @@ export interface FeedHealth {
   at: number;
 }
 
-export type LabKind = "copy" | "launch" | "migrate";
+export type LabKind = "copy" | "launch" | "migrate" | "pick";
+
+export interface MindWatch {
+  mint: string;
+  at: number;
+  p: number;
+  x: number[];
+  graduated?: boolean;
+}
+
+export interface Mind {
+  version: number;
+  studied: number;
+  closed: number;
+  pickWins: number;
+  pickLosses: number;
+  intercept: number;
+  weights: Record<string, number>;
+  pickThreshold: number;
+  bars: {
+    minPGradLaunch: number;
+    minPGradMigrate: number;
+    minScoreCopy: number;
+    minScorePick: number;
+    bundleVeto: number;
+  };
+  recentPickPnl: number[];
+  open: Record<string, { x: number[]; strategy: Strategy; at: number }>;
+  watch: Record<string, MindWatch>;
+}
 
 export interface LabStrategy {
   id: LabKind;
@@ -302,6 +336,7 @@ export interface LabStrategy {
 export interface AppState {
   paper: PaperBook;
   lab: Record<LabKind, LabStrategy>;
+  mind: Mind;
   settings: EngineSettings;
   users: AppUser[];
   alerts: AlertEvent[];

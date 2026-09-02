@@ -13,6 +13,7 @@ export function AutoPilot({ owner }: { owner: string | null }) {
   const [auto, setAuto] = useState<any>(null);
   const [paper, setPaper] = useState<any>(null);
   const [lab, setLab] = useState<any>(null);
+  const [mind, setMind] = useState<any>(null);
   const [tradePk, setTradePk] = useState("");
   const [bal, setBal] = useState(0);
   const [solAmt, setSolAmt] = useState(0.5);
@@ -25,6 +26,7 @@ export function AutoPilot({ owner }: { owner: string | null }) {
     setAuto(a.auto);
     setPaper(a.paper);
     setLab(a.lab);
+    setMind(a.mind);
     const tpk = a.tradingPubkey || tradingPubkey();
     setTradePk(tpk);
     const b = await fetch(`/api/sol/balance?pubkey=${tpk}`).then((r) => r.json());
@@ -67,6 +69,7 @@ export function AutoPilot({ owner }: { owner: string | null }) {
     setAuto(j.auto);
     setPaper(j.paper);
     if (j.lab) setLab(j.lab);
+    if (j.mind) setMind(j.mind);
   }
 
   async function deposit() {
@@ -162,17 +165,33 @@ export function AutoPilot({ owner }: { owner: string | null }) {
         <p className="font-mono text-xs text-blood">{paper.haltReason}</p>
       )}
 
+      {mind && (
+        <div className="panel rounded-2xl p-5">
+          <div className="font-mono text-[10px] tracking-[0.22em] text-violet">SOLPHIA MIND</div>
+          <p className="mt-2 text-sm text-mute">
+            She studies the tape every tick. Bars only move up after losses. Picks need Telegram, P(grad) ≥ 62%, and
+            learned P(pay) ≥ {(mind.pickThreshold * 100).toFixed(0)}%.
+          </p>
+          <div className="mt-3 grid grid-cols-3 gap-2">
+            <Mini k="Studied" v={String(mind.studied || 0)} />
+            <Mini k="Closed" v={String(mind.closed || 0)} />
+            <Mini k="Pick bar" v={`${Math.round((mind.pickThreshold || 0) * 100)}%`} />
+          </div>
+        </div>
+      )}
+
       {lab && (
         <div className="grid grid-cols-3 gap-2">
-          <Mini k="Refused" v={String((lab.copy?.denied || 0) + (lab.launch?.denied || 0) + (lab.migrate?.denied || 0))} />
+          <Mini k="Refused" v={String((lab.copy?.denied || 0) + (lab.launch?.denied || 0) + (lab.migrate?.denied || 0) + (lab.pick?.denied || 0))} />
           <Mini k="Copy lab" v={`${lab.copy?.shadowPnlUsd >= 0 ? "+" : ""}$${Number(lab.copy?.shadowPnlUsd || 0).toFixed(0)}`} />
-          <Mini k="Desks live" v={[lab.copy?.enabled && "copy", lab.launch?.enabled && "launch", lab.migrate?.enabled && "grad"].filter(Boolean).join(" · ") || "none"} />
+          <Mini k="Desks live" v={[lab.copy?.enabled && "copy", lab.pick?.enabled && "picks", lab.launch?.enabled && "launch", lab.migrate?.enabled && "grad"].filter(Boolean).join(" · ") || "none"} />
         </div>
       )}
 
       <div className="panel rounded-2xl p-5 space-y-3">
         <div className="font-mono text-[10px] tracking-[0.22em] text-mute">WHAT SHE'S ALLOWED TO DO</div>
         <Toggle label="Copy the decision, not the bag" on={auto?.copy} onChange={(v) => patch({ copy: v })} />
+        <Toggle label="Solphia Picks — extremely picky, self-learning" on={auto?.picks} onChange={(v) => patch({ picks: v })} />
         <Toggle label="Launch only if P(grad) clears" on={auto?.launch} onChange={(v) => patch({ launch: v })} />
         <Toggle label="Graduation fills only" on={auto?.migrate} onChange={(v) => patch({ migrate: v })} />
         <label className="flex items-center justify-between gap-3 font-mono text-xs text-mute">

@@ -3,6 +3,7 @@ import { DEFAULT_SETTINGS } from "../config";
 import { copyBlockReason } from "./copy";
 import { armLaunch, armMigrate, graduationRead } from "../desk/grad";
 import { toxicFlow } from "../desk/toxic";
+import { hardPickGates } from "../mind/features";
 
 function clamp(n: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, n));
@@ -233,6 +234,10 @@ export function allowedStrategies(
     out.push("copy_trade");
   }
 
+  if (score >= (settings.minScorePick ?? 82) && hardPickGates(token, score, now).ok) {
+    out.push("solphia_pick");
+  }
+
   if (score >= settings.minScoreScalp && token.liquidityUsd > 40_000 && ageMin > 30 && ctx.bundle < 0.25) {
     out.push("scalp");
   }
@@ -258,6 +263,8 @@ export function slippageBps(strategy: Strategy, settings: EngineSettings): numbe
       return settings.slippageBpsMigration;
     case "copy_trade":
       return settings.slippageBpsCopy;
+    case "solphia_pick":
+      return settings.slippageBpsPick ?? 50;
     default:
       return settings.slippageBpsScalp;
   }

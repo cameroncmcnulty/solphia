@@ -4,6 +4,7 @@ import { scoreToken } from "./risk/engine";
 import { loadState, saveState } from "./store";
 import { bankrollUsd, maybeResizeBook } from "./auto";
 import { tagFundingDumps } from "./helius/watch";
+import { publicMind } from "./mind/engine";
 import type { FeedHealth, PaperBook, RiskReport, TokenSnapshot } from "./types";
 
 let lock: Promise<unknown> = Promise.resolve();
@@ -42,6 +43,7 @@ export async function runMarketTick(): Promise<{
   solUsd: number;
   entries: number;
   exits: number;
+  mind: ReturnType<typeof publicMind>;
 }> {
   const run = lock.then(async () => {
     const state = loadState();
@@ -77,6 +79,7 @@ export async function runMarketTick(): Promise<{
           launch: trader.auto.launch,
           migrate: trader.auto.migrate,
           scalp: trader.auto.scalp,
+          picks: trader.auto.picks,
         },
         copyBook,
       );
@@ -95,6 +98,7 @@ export async function runMarketTick(): Promise<{
       solUsd,
       entries: result.entries.length,
       exits: result.exits.length,
+      mind: publicMind(state.mind),
     };
   });
   lock = run.then(

@@ -7,6 +7,7 @@ export function emptyLab(): Record<LabKind, LabStrategy> {
     copy: { id: "copy", enabled: true, demoted: false, shadowPnlUsd: 0, greenDays: 0, lastDayKey: "", lastDayPnl: 0, trades: 0, denied: 0 },
     launch: { id: "launch", enabled: false, demoted: false, shadowPnlUsd: 0, greenDays: 0, lastDayKey: "", lastDayPnl: 0, trades: 0, denied: 0 },
     migrate: { id: "migrate", enabled: false, demoted: false, shadowPnlUsd: 0, greenDays: 0, lastDayKey: "", lastDayPnl: 0, trades: 0, denied: 0 },
+    pick: { id: "pick", enabled: false, demoted: false, shadowPnlUsd: 0, greenDays: 0, lastDayKey: "", lastDayPnl: 0, trades: 0, denied: 0 },
   };
 }
 
@@ -23,6 +24,7 @@ export function kindOf(strategy: string): LabKind | null {
   if (strategy === "copy_trade") return "copy";
   if (strategy === "launch_snipe") return "launch";
   if (strategy === "migration_snipe") return "migrate";
+  if (strategy === "solphia_pick") return "pick";
   return null;
 }
 
@@ -50,7 +52,10 @@ export function applyShadow(lab: Record<LabKind, LabStrategy>, fill: PaperFill, 
   if (s.shadowPnlUsd < -0.15 * startingUsd || s.lastDayPnl < -0.08 * startingUsd) {
     s.enabled = false;
     s.demoted = true;
-  } else if (kind !== "copy" && s.greenDays >= 2 && s.shadowPnlUsd > 0 && s.trades >= 5) {
+  } else if (kind === "pick" && s.greenDays >= 3 && s.shadowPnlUsd > 0 && s.trades >= 8) {
+    s.enabled = true;
+    s.demoted = false;
+  } else if (kind !== "copy" && kind !== "pick" && s.greenDays >= 2 && s.shadowPnlUsd > 0 && s.trades >= 5) {
     s.enabled = true;
     s.demoted = false;
   }

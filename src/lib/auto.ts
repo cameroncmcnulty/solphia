@@ -8,6 +8,7 @@ export const DEFAULT_AUTO: AutoSettings = {
   launch: false,
   migrate: true,
   scalp: false,
+  picks: false,
   maxSolPerTrade: 0.25,
   minScore: 70,
 };

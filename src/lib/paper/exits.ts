@@ -68,7 +68,9 @@ export function exitPlan(
         ? settings.timeStopMigrationMs
         : pos.strategy === "copy_trade"
           ? settings.timeStopCopyMs
-          : settings.timeStopScalpMs;
+          : pos.strategy === "solphia_pick"
+            ? settings.timeStopPickMs ?? settings.timeStopCopyMs
+            : settings.timeStopScalpMs;
   if (now - pos.openedAt >= timeStop) return { reason: "time-stop", fraction: 1 };
   return null;
 }

@@ -3,6 +3,7 @@ import { clientIp, rateLimit } from "@/lib/security";
 import { loadState } from "@/lib/store";
 import { runMarketTick, publicBook } from "@/lib/tick";
 import { scoreToken } from "@/lib/risk/engine";
+import { publicMind } from "@/lib/mind/engine";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +21,7 @@ export async function GET(req: NextRequest) {
       health: tick.health,
       solUsd: tick.solUsd,
       lab: loadState().lab,
+      mind: publicMind(loadState().mind),
       lastTickAt: Date.now(),
     });
   }
@@ -32,6 +34,7 @@ export async function GET(req: NextRequest) {
     tokens,
     health: state.feedHealth,
     lab: state.lab,
+    mind: publicMind(state.mind),
     lastTickAt: state.lastTickAt,
   });
 }

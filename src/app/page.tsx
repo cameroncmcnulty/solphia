@@ -10,7 +10,9 @@ export default function Home() {
   const paper = data?.paper;
   const tape = (data?.tokens || []).slice(0, 6);
   const lab = data?.lab;
-  const refused = lab ? (lab.copy?.denied || 0) + (lab.launch?.denied || 0) + (lab.migrate?.denied || 0) : 0;
+  const refused = lab
+    ? (lab.copy?.denied || 0) + (lab.launch?.denied || 0) + (lab.migrate?.denied || 0) + (lab.pick?.denied || 0)
+    : 0;
 
   return (
     <main className="relative">
@@ -27,8 +29,9 @@ export default function Home() {
               <span className="text-acid">than she fires.</span>
             </h1>
             <p className="mt-4 text-base leading-relaxed text-mute sm:text-lg">
-              Scout finds a setup. Risk has to agree. Policy caps size and daily loss. Then she copies the exit, not
-              just the buy. Nothing trades because an LLM felt like it.
+              Scout finds a setup. Risk has to agree. Policy caps size and daily loss. Solphia Picks is her own book —
+              she studies every tape and only buys when the learned bar clears. Nothing trades because an LLM felt like
+              it.
             </p>
             <div className="mt-6 flex flex-col gap-3 sm:flex-row">
               <Link href="/auto" className="btn-acid min-h-[48px] rounded-full px-6 py-3 text-center font-mono text-xs">
@@ -96,8 +99,13 @@ export default function Home() {
           href="/terminal?desk=launch"
         />
         <Card
+          title="Solphia Picks"
+          body="Her own trades. Telegram, high P(grad), low bot-share, clean funding graph, and a learned P(pay) bar that only moves up after losses. Most hours she does nothing."
+          href="/terminal?desk=picks"
+        />
+        <Card
           title="Everything · 0.50 SOL"
-          body="Alerts + copy + launches. Buying them separate is 0.70 SOL. This is the simple one."
+          body="Alerts + copy + launches + Picks. Buying them separate is more. This is the simple one."
           href="/pricing"
         />
       </section>

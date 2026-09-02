@@ -12,6 +12,7 @@ import type { Strategy } from "@/lib/types";
 const DESKS: { id: string; label: string; strategy?: Strategy }[] = [
   { id: "discover", label: "Markets" },
   { id: "copy", label: "Copy bot" },
+  { id: "picks", label: "Picks", strategy: "solphia_pick" },
   { id: "launch", label: "P(grad)", strategy: "launch_snipe" },
   { id: "migrate", label: "Graduating", strategy: "migration_snipe" },
   { id: "book", label: "My trades" },
@@ -129,8 +130,8 @@ export function TerminalClient({
           <div className="panel rounded-2xl p-5">
             <div className="font-mono text-[10px] tracking-[0.3em] text-mute">ENGINE</div>
             <p className="mt-2 text-sm text-mute">
-              {loading ? "Loading coins…" : "Stream → P(grad) + bundle graph → intent → policy → fill → exit."} She
-              refuses more names than she takes. Nothing trades because a model felt like it.
+              {loading ? "Loading coins…" : "Stream → P(grad) + mind → intent → policy → fill → exit."} Picks are
+              extremely picky. She studies every tape and refuses more names than she takes.
             </p>
           </div>
         </aside>

@@ -19,10 +19,12 @@ import type { LeaderBook } from "../copy/flow";
 import { decide } from "../desk/consensus";
 import { applyShadow, emptyLab, noteDenial } from "../desk/shadow";
 import { nextCurveTick } from "../desk/rugClock";
+import { applyBars, emptyMind, learnFromFill, noteOpen, studyMarket } from "../mind/engine";
+import { extractFeatures } from "../mind/features";
 
-export type DeskFlags = Pick<AutoSettings, "copy" | "launch" | "migrate" | "scalp">;
+export type DeskFlags = Pick<AutoSettings, "copy" | "launch" | "migrate" | "scalp"> & { picks?: boolean };
 
-export const DEMO_DESKS: DeskFlags = { copy: true, launch: false, migrate: false, scalp: false };
+export const DEMO_DESKS: DeskFlags = { copy: true, launch: false, migrate: false, scalp: false, picks: false };
 
 function id(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
@@ -308,6 +310,9 @@ function pushExit(
   exits.push(fill);
   if (!state.lab) state.lab = emptyLab();
   applyShadow(state.lab, fill, state.paper.startingUsd, now);
+  if (fraction >= 0.99 && state.mind) {
+    learnFromFill(state.mind, pos.mint, fill.pnlPct || 0, pos.strategy);
+  }
   alerts.push({
     id: id("al"),
     at: now,
@@ -339,10 +344,14 @@ export function tickPaper(
 
   updateCreators(state, tokens, now);
   if (!state.curveWatch) state.curveWatch = {};
+  if (!state.mind) state.mind = emptyMind();
   const scored = enrichWithCreators(tokens, state.creators, now).map((t) => ({
     token: t,
     report: scoreToken(t, now, settings),
   }));
+  const safety = new Map(scored.map((s) => [s.token.mint, s.report.score]));
+  studyMarket(state.mind, scored.map((s) => s.token), safety, now);
+  applyBars(state.mind, settings);
 
   state.paper.positions = state.paper.positions.map((pos) => {
     const live = tokenPriceUsd(byMint.get(pos.mint));
@@ -403,6 +412,7 @@ export function tickPaper(
       sizeUsd: Math.max(size, 8),
       lab: state.lab,
       live: LIVE_TRADING,
+      mind: state.mind,
     });
     if (!d.ok) {
       if (d.kind) {
@@ -417,7 +427,14 @@ export function tickPaper(
             body: d.reason,
             mint: s.token.mint,
             score: s.report.score,
-            strategy: d.kind === "copy" ? "copy_trade" : d.kind === "launch" ? "launch_snipe" : "migration_snipe",
+            strategy:
+              d.kind === "copy"
+                ? "copy_trade"
+                : d.kind === "launch"
+                  ? "launch_snipe"
+                  : d.kind === "pick"
+                    ? "solphia_pick"
+                    : "migration_snipe",
           });
         }
       }
@@ -438,6 +455,8 @@ export function tickPaper(
     });
     if (fill) {
       applyShadow(state.lab, fill, state.paper.startingUsd, now);
+      const { x } = extractFeatures(s.token, now, s.report.score);
+      noteOpen(state.mind, s.token.mint, x, d.hit.strategy);
       opened += 1;
       entries.push(fill);
       alerts.push({

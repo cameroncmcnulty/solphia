@@ -3,6 +3,7 @@ import path from "path";
 import { DEFAULT_SETTINGS } from "./config";
 import { emptyBook } from "./auto";
 import { emptyLab, mergeLab } from "./desk/shadow";
+import { emptyMind, mergeMind } from "./mind/engine";
 import type { AppState, AuditEvent } from "./types";
 
 const DATA_DIR = process.env.DATA_DIR || (process.env.VERCEL ? "/tmp/solphia" : path.join(process.cwd(), "data"));
@@ -15,6 +16,7 @@ export function emptyState(): AppState {
   return {
     paper: emptyBook(),
     lab: emptyLab(),
+    mind: emptyMind(),
     settings: { ...DEFAULT_SETTINGS },
     users: [],
     alerts: [],
@@ -56,6 +58,7 @@ export function loadState(): AppState {
         settings: { ...DEFAULT_SETTINGS, ...(raw.settings || {}) },
         paper: isScalpDemo(rawPaper) ? emptyBook() : { ...emptyBook(), ...rawPaper },
         lab: mergeLab(raw.lab),
+        mind: mergeMind(raw.mind),
         curveWatch: raw.curveWatch || {},
         traders: raw.traders || {},
         adminWallets: raw.adminWallets || [],

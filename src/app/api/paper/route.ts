@@ -15,7 +15,7 @@ export const dynamic = "force-dynamic";
 const Body = z.object({
   action: z.enum(["buy", "sell", "reset"]),
   mint: z.string().optional(),
-  strategy: z.enum(["launch_snipe", "migration_snipe", "copy_trade", "scalp"]).optional(),
+  strategy: z.enum(["launch_snipe", "migration_snipe", "copy_trade", "scalp", "solphia_pick"]).optional(),
 });
 
 export async function GET() {
@@ -70,6 +70,7 @@ export async function POST(req: NextRequest) {
           launch: strategy === "launch_snipe",
           migrate: strategy === "migration_snipe",
           scalp: false,
+          picks: strategy === "solphia_pick",
         },
         now,
         settings: s.settings,
@@ -77,6 +78,7 @@ export async function POST(req: NextRequest) {
         sizeUsd: Math.max(size, 8),
         lab: s.lab,
         live: LIVE_TRADING,
+        mind: s.mind,
       });
       if (!d.ok) {
         if (d.kind) noteDenial(s.lab, d.kind);
