@@ -461,7 +461,7 @@ export function SolphiaFace({ mode = "panel" }: { mode?: "hero" | "panel" }) {
       ref={wrap}
       className={`relative touch-none select-none outline-none ${
         hero
-          ? "mx-auto h-[420px] w-full max-w-[340px] sm:h-[520px] sm:max-w-[420px] lg:h-[min(82vh,720px)] lg:max-w-none"
+          ? "mx-auto h-[560px] w-full max-w-[380px] sm:h-[680px] sm:max-w-[460px] lg:h-[min(92vh,860px)] lg:max-w-none"
           : "h-[240px] w-full overflow-hidden md:h-[300px]"
       }`}
       style={{
@@ -511,9 +511,8 @@ export function SolphiaFace({ mode = "panel" }: { mode?: "hero" | "panel" }) {
           className="pointer-events-none absolute inset-0"
           style={{
             background: [
-              "linear-gradient(to bottom, rgba(4,0,10,0.2) 0%, transparent 14%, transparent 42%, rgba(4,0,10,0.45) 68%, rgba(4,0,10,0.85) 86%, #04000a 100%)",
-              "linear-gradient(to right, #04000a 0%, transparent 18%, transparent 82%, #04000a 100%)",
-              "radial-gradient(ellipse 70% 62% at 50% 38%, transparent 55%, #04000a 100%)",
+              "linear-gradient(to bottom, transparent 0%, transparent 78%, rgba(4,0,10,0.35) 88%, rgba(4,0,10,0.82) 95%, #04000a 100%)",
+              "linear-gradient(to right, #04000a 0%, transparent 10%, transparent 90%, #04000a 100%)",
             ].join(", "),
           }}
         />
