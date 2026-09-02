@@ -28,3 +28,37 @@ export function useMarket(pollMs = 15000) {
 
   return { data, err, loading, refresh };
 }
+
+export function useOwner() {
+  const [owner, setOwner] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    try {
+      return localStorage.getItem("solphia_owner");
+    } catch {
+      return null;
+    }
+  });
+
+  useEffect(() => {
+    const sync = () => {
+      try {
+        setOwner(localStorage.getItem("solphia_owner"));
+      } catch {
+        setOwner(null);
+      }
+    };
+    sync();
+    const onCustom = (e: Event) => {
+      const detail = (e as CustomEvent<string | null>).detail;
+      setOwner(detail || localStorage.getItem("solphia_owner"));
+    };
+    window.addEventListener("solphia-owner", onCustom as EventListener);
+    window.addEventListener("storage", sync);
+    return () => {
+      window.removeEventListener("solphia-owner", onCustom as EventListener);
+      window.removeEventListener("storage", sync);
+    };
+  }, []);
+
+  return owner;
+}

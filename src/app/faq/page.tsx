@@ -16,10 +16,10 @@ export default function FaqPage() {
           <FaqList />
         </div>
         <div className="mt-10 flex flex-col gap-3 sm:flex-row">
-          <Link href="/auto" className="btn-acid min-h-[48px] rounded-full px-6 py-3 text-center font-mono text-xs">
-            Open configuration
+          <Link href="/trading" className="btn-acid inline-flex min-h-[48px] items-center justify-center rounded-full px-6 py-3 text-center font-mono text-xs">
+            LAUNCH BOT
           </Link>
-          <Link href="/pricing" className="btn-ghost min-h-[48px] rounded-full px-6 py-3 text-center font-mono text-xs">
+          <Link href="/pricing" className="btn-ghost inline-flex min-h-[48px] items-center justify-center rounded-full px-6 py-3 text-center font-mono text-xs">
             Compare plans
           </Link>
         </div>

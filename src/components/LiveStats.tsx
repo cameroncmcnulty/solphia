@@ -26,17 +26,17 @@ export function LiveStats({ compact = false }: { compact?: boolean }) {
     { k: "Mind bar", v: mind ? `${Math.round((mind.pickThreshold || 0) * 100)}%` : "76%", sub: `${mind?.studied || 0} studied` },
   ];
   return (
-    <div className={`border-y border-violet/25 bg-void/80 ${compact ? "px-3 py-2" : "px-4 py-3 md:px-10"}`}>
-      <div className="mb-2 flex items-center gap-2 font-mono text-[10px] tracking-[0.22em] text-violet">
-        <span className={`h-1.5 w-1.5 rounded-full ${live ? "bg-acid shadow-[0_0_10px_#14F195]" : "bg-mute"}`} />
-        LIVE STATS · PAPER · NOT A FAKE COUNTER
+    <div className={`border-y border-violet/25 bg-void/80 ${compact ? "px-3 py-3" : "px-4 py-4 md:px-10"}`}>
+      <div className="mb-3 flex items-center gap-2 font-mono text-[11px] tracking-[0.22em] text-violet">
+        <span className={`h-2 w-2 rounded-full ${live ? "bg-acid shadow-[0_0_10px_#14F195]" : "bg-mute"}`} />
+        LIVE STATS · PAPER
       </div>
-      <div className="grid grid-cols-3 gap-2 lg:grid-cols-6">
+      <div className="flex gap-3 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] sm:grid sm:grid-cols-3 sm:overflow-visible lg:grid-cols-6 [&::-webkit-scrollbar]:hidden">
         {items.map((s) => (
-          <div key={s.k} className="min-w-0">
-            <div className="font-mono text-[9px] tracking-[0.16em] text-mute">{s.k}</div>
-            <div className="truncate font-display text-lg text-acid sm:text-xl">{s.v}</div>
-            <div className="truncate font-mono text-[9px] text-mute">{s.sub}</div>
+          <div key={s.k} className="min-w-[42%] shrink-0 sm:min-w-0">
+            <div className="font-mono text-[11px] tracking-[0.16em] text-mute">{s.k}</div>
+            <div className="truncate font-display text-xl text-acid sm:text-2xl">{s.v}</div>
+            <div className="truncate font-mono text-[11px] text-mute">{s.sub}</div>
           </div>
         ))}
       </div>

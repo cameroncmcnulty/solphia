@@ -39,7 +39,7 @@ function ensureDir() {
 
 function isScalpDemo(book: { fills?: { strategy: string }[] }) {
   const fills = book.fills || [];
-  return fills.length > 0 && !fills.some((f) => f.strategy === "copy_trade");
+  return fills.length > 0 && fills.every((f) => f.strategy === "scalp");
 }
 
 export function loadState(): AppState {

@@ -5,9 +5,9 @@ import { usePathname } from "next/navigation";
 
 const TABS = [
   ["/", "Home"],
-  ["/terminal", "Trade"],
-  ["/auto", "Auto"],
+  ["/trading", "Launch"],
   ["/pricing", "Price"],
+  ["/faq", "FAQ"],
 ];
 
 export function BottomNav() {

@@ -116,7 +116,7 @@ export const FAQS: { q: string; a: string }[] = [
   },
   {
     q: "Can I change size, stop, and take-profit?",
-    a: "Yes. Auto has a configuration desk: max SOL per trade, min safety, first take-profit, stop-loss, max creator bag. The kill switch and daily loss cap cannot be turned off.",
+    a: "Yes. The trading hub has sliders for max SOL per trade, min safety, first take-profit, stop-loss, and max creator bag. The kill switch and daily loss cap cannot be turned off.",
   },
   {
     q: "How do I pay?",
@@ -125,5 +125,9 @@ export const FAQS: { q: string; a: string }[] = [
   {
     q: "Is this a sniper?",
     a: "No. Sub-5-minute coins are a hard no on Picks. First-block bundles are faded. Faster paste-CA is how accounts die.",
+  },
+  {
+    q: "What is the SOL / USDT desk?",
+    a: "A conservative spot scalp of SOL against Tether. She sizes from the stop (at least 0.5%, from structure), takes the first target at 2R after fees, and stops new entries at a 0.5% daily goal. No leverage. Memecoin 35 bps fees would eat a 1% scalp — this desk models 9 bps a side, which is still conservative for SOL/USDT.",
   },
 ];

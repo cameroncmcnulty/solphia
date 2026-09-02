@@ -5,9 +5,10 @@ export type Venue =
   | "raydium"
   | "meteora"
   | "orca"
+  | "stable"
   | "unknown";
 
-export type Strategy = "launch_snipe" | "migration_snipe" | "copy_trade" | "scalp" | "solphia_pick";
+export type Strategy = "launch_snipe" | "migration_snipe" | "copy_trade" | "scalp" | "solphia_pick" | "sol_usd";
 
 export type Side = "buy" | "sell";
 
@@ -158,6 +159,7 @@ export interface PaperPosition {
   copiedFrom?: string;
   scaledOut: number;
   entryBonding?: number;
+  dir?: "long" | "short";
 }
 
 export interface PaperFill {
@@ -231,12 +233,14 @@ export interface AppUser {
 
 export interface AutoSettings {
   armed: boolean;
+  armedAt?: number;
   mode: "paper" | "live";
   copy: boolean;
   launch: boolean;
   migrate: boolean;
   scalp: boolean;
   picks: boolean;
+  solUsd: boolean;
   maxSolPerTrade: number;
   minScore: number;
   takeProfitPct: number;

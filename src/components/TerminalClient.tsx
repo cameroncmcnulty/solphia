@@ -80,7 +80,7 @@ export function TerminalClient({ forcedDesk }: { forcedDesk?: string }) {
     <main className="mx-auto max-w-2xl px-4 pb-8 pt-4 md:px-8">
       <div className="flex items-end justify-between gap-3">
         <div>
-          <h1 className="font-display text-3xl text-ghost">Trade</h1>
+          <h1 className="font-display text-3xl text-ghost">The tape</h1>
           <p className="mt-1 text-sm text-mute">Paper until live. She skips more than she buys.</p>
         </div>
         {paper && (
@@ -105,7 +105,7 @@ export function TerminalClient({ forcedDesk }: { forcedDesk?: string }) {
               if (d.id !== "likes") setFocus(undefined);
             }}
             className={`shrink-0 rounded-full px-5 py-2.5 font-mono text-[12px] ${
-              tab === d.id ? "bg-acid text-void" : "border border-violet/30 text-ghost"
+              tab === d.id ? "btn-on" : "btn-ghost"
             }`}
           >
             {d.label}
@@ -131,10 +131,10 @@ export function TerminalClient({ forcedDesk }: { forcedDesk?: string }) {
       {msg && <p className="mt-3 text-sm text-acid">{msg}</p>}
 
       <div className="mt-8 flex gap-2">
-        <Link href="/auto" className="btn-ghost min-h-[44px] flex-1 rounded-full px-4 py-2 text-center font-mono text-[11px]">
-          Turn her on
+        <Link href="/trading" className="btn-acid inline-flex min-h-[44px] flex-1 items-center justify-center rounded-full px-4 py-2 text-center font-mono text-[11px]">
+          LAUNCH BOT
         </Link>
-        <Link href="/copy" className="btn-ghost min-h-[44px] flex-1 rounded-full px-4 py-2 text-center font-mono text-[11px]">
+        <Link href="/copy" className="btn-ghost inline-flex min-h-[44px] flex-1 items-center justify-center rounded-full px-4 py-2 text-center font-mono text-[11px]">
           Who she copies
         </Link>
       </div>

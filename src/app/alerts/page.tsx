@@ -25,10 +25,10 @@ export default function AlertsPage() {
         These are the pings. 0.15 SOL if you only want the email. The copy bot plan already includes them.
       </p>
       <div className="mt-6 flex gap-3">
-        <Link href="/pricing" className="btn-acid rounded-full px-5 py-2 font-mono text-[11px]">
+        <Link href="/pricing" className="btn-acid inline-flex min-h-[44px] items-center rounded-full px-5 py-2 font-mono text-[11px]">
           Get alerts
         </Link>
-        <a href="/api/alerts/preview" className="btn-ghost rounded-full px-5 py-2 font-mono text-[11px]">
+        <a href="/api/alerts/preview" className="btn-ghost inline-flex min-h-[44px] items-center rounded-full px-5 py-2 font-mono text-[11px]">
           Preview email
         </a>
       </div>

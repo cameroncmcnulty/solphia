@@ -23,12 +23,20 @@ export async function GET(req: NextRequest) {
       lab: loadState().lab,
       mind: publicMind(loadState().mind),
       lastTickAt: Date.now(),
+      sol: tick.sol,
     });
   }
   const tokens = state.lastSnapshots.map((token) => ({
     token,
     report: scoreToken(token, Date.now(), state.settings),
   }));
+  const { readSolDesk } = await import("@/lib/sol/paper");
+  let sol = null;
+  try {
+    sol = await readSolDesk(state.paper);
+  } catch {
+    sol = null;
+  }
   return NextResponse.json({
     paper: publicBook(state.paper),
     tokens,
@@ -36,5 +44,6 @@ export async function GET(req: NextRequest) {
     lab: state.lab,
     mind: publicMind(state.mind),
     lastTickAt: state.lastTickAt,
+    sol,
   });
 }

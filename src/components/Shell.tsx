@@ -7,7 +7,7 @@ import { BottomNav } from "./BottomNav";
 
 export function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="relative min-h-screen overflow-x-hidden pb-20 md:pb-0">
+    <div className="relative min-h-screen overflow-x-hidden pb-24 md:pb-8">
       <ParticleField />
       <div className="vignette" />
       <div className="relative z-10">

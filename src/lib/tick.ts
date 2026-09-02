@@ -5,6 +5,8 @@ import { loadState, saveState } from "./store";
 import { bankrollUsd, maybeResizeBook } from "./auto";
 import { tagFundingDumps } from "./helius/watch";
 import { publicMind } from "./mind/engine";
+import { tickSolBook, readSolDesk } from "./sol/paper";
+import type { SolDeskPublic } from "./sol/engine";
 import type { FeedHealth, PaperBook, RiskReport, TokenSnapshot } from "./types";
 
 let lock: Promise<unknown> = Promise.resolve();
@@ -44,6 +46,7 @@ export async function runMarketTick(): Promise<{
   entries: number;
   exits: number;
   mind: ReturnType<typeof publicMind>;
+  sol: SolDeskPublic | null;
 }> {
   const run = lock.then(async () => {
     const state = loadState();
@@ -86,10 +89,20 @@ export async function runMarketTick(): Promise<{
         },
         copyBook,
       );
+      if (trader.auto.solUsd || trader.book.positions.some((p) => p.strategy === "sol_usd")) {
+        await tickSolBook(trader.book, Date.now());
+      }
       state.settings = prev;
       trader.updatedAt = Date.now();
     }
     state.feedHealth = health;
+    const solBook = Object.values(state.traders || {}).find((t) => t.auto?.solUsd)?.book || state.paper;
+    let sol: SolDeskPublic | null = null;
+    try {
+      sol = await readSolDesk(solBook, Date.now());
+    } catch {
+      sol = null;
+    }
     await saveState(state);
     const scored = tokens
       .map((token) => ({ token, report: scoreToken(token, Date.now(), state.settings) }))
@@ -102,6 +115,7 @@ export async function runMarketTick(): Promise<{
       entries: result.entries.length,
       exits: result.exits.length,
       mind: publicMind(state.mind),
+      sol,
     };
   });
   lock = run.then(

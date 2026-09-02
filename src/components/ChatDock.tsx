@@ -30,7 +30,7 @@ export function ChatDock() {
   }
 
   return (
-    <div className="fixed bottom-24 right-3 z-40 w-[min(100%-1.5rem,360px)] md:bottom-5 md:right-5">
+    <div className="fixed bottom-[5.75rem] right-3 z-40 w-[min(100%-1.5rem,360px)] md:bottom-5 md:right-5">
       {open && (
         <div className="panel mb-3 rounded-2xl p-4">
           <div className="mb-3 font-mono text-[10px] tracking-[0.4em] text-cyan">SOLPHIA · VOICE</div>
@@ -49,13 +49,17 @@ export function ChatDock() {
               placeholder="Ask her"
               className="w-full rounded-full border border-line bg-void px-4 py-2 font-mono text-xs outline-none"
             />
-            <button onClick={send} className="btn-acid rounded-full px-4 font-mono text-[10px]">
+            <button onClick={send} className="btn-acid min-h-[40px] rounded-full px-4 font-mono text-[10px]">
               {busy ? "…" : "SEND"}
             </button>
           </div>
         </div>
       )}
-      <button onClick={() => setOpen((v) => !v)} className="ml-auto flex h-12 w-12 items-center justify-center rounded-full border border-violet/40 bg-ink text-acid">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="btn-acid ml-auto flex h-12 w-12 items-center justify-center rounded-full text-lg"
+        aria-label={open ? "Close chat" : "Ask Solphia"}
+      >
         ⌬
       </button>
     </div>

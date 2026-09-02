@@ -35,7 +35,12 @@ export function WalletConnect({ compact = false }: { compact?: boolean }) {
 
   useEffect(() => {
     const found = pick();
-    if (found?.provider.publicKey) setAddr(found.provider.publicKey.toString());
+    if (found?.provider.publicKey) {
+      const pubkey = found.provider.publicKey.toString();
+      setAddr(pubkey);
+      localStorage.setItem("solphia_owner", pubkey);
+      window.dispatchEvent(new CustomEvent("solphia-owner", { detail: pubkey }));
+    }
   }, []);
 
   async function connect() {
@@ -51,6 +56,7 @@ export function WalletConnect({ compact = false }: { compact?: boolean }) {
       const pubkey = res.publicKey.toString();
       setAddr(pubkey);
       localStorage.setItem("solphia_owner", pubkey);
+      window.dispatchEvent(new CustomEvent("solphia-owner", { detail: pubkey }));
       const nonceRes = await fetch("/api/session");
       const nonceJson = await nonceRes.json();
       if (found.provider.signMessage) {
@@ -86,8 +92,12 @@ export function WalletConnect({ compact = false }: { compact?: boolean }) {
   }
 
   return (
-    <button disabled={busy} onClick={connect} className="btn-ghost rounded-full px-4 py-2 font-mono text-[11px]">
-      {busy ? "SIGNING" : "PHANTOM / SOLFLARE"}
+    <button
+      disabled={busy}
+      onClick={connect}
+      className="btn-ghost inline-flex min-h-[40px] items-center rounded-full px-3 py-2 font-mono text-[11px] sm:min-h-[44px] sm:px-4"
+    >
+      {busy ? "Signing…" : compact ? "Connect" : "Connect wallet"}
     </button>
   );
 }

@@ -34,6 +34,7 @@ export function AutoPilot({ owner }: { owner: string | null }) {
       picks: Boolean(a?.picks),
       launch: Boolean(a?.launch),
       migrate: a?.migrate !== false,
+      solUsd: Boolean(a?.solUsd),
     };
   }
 

@@ -29,7 +29,10 @@ const nextConfig: NextConfig = {
   outputFileTracingRoot: path.join(__dirname),
   poweredByHeader: false,
   async redirects() {
-    return [{ source: "/subscribe", destination: "/pricing", permanent: false }];
+    return [
+      { source: "/subscribe", destination: "/pricing", permanent: false },
+      { source: "/auto", destination: "/trading", permanent: false },
+    ];
   },
   images: {
     remotePatterns: [

@@ -354,11 +354,13 @@ export function tickPaper(
   applyBars(state.mind, settings);
 
   state.paper.positions = state.paper.positions.map((pos) => {
+    if (pos.strategy === "sol_usd") return pos;
     const live = tokenPriceUsd(byMint.get(pos.mint));
     return live > 0 ? markPosition(pos, live, settings) : markPosition(pos, pos.markUsd, settings);
   });
 
   for (const pos of [...state.paper.positions]) {
+    if (pos.strategy === "sol_usd") continue;
     const t = byMint.get(pos.mint);
     const live = tokenPriceUsd(t);
     if (live <= 0 && now - pos.openedAt > 90_000) {
@@ -370,8 +372,14 @@ export function tickPaper(
     if (plan) pushExit(state, pos, pos.markUsd, plan.reason, now, exits, alerts, plan.fraction);
   }
 
-  state.paper.equityUsd =
-    Math.round((state.paper.cashUsd + state.paper.positions.reduce((s, p) => s + p.markUsd * p.qty, 0)) * 100) / 100;
+  state.paper.equityUsd = Math.round(
+    (state.paper.cashUsd +
+      state.paper.positions.reduce(
+        (s, p) => s + (p.strategy === "sol_usd" ? p.sizeUsd + p.unrealizedUsd : p.markUsd * p.qty),
+        0,
+      )) *
+      100,
+  ) / 100;
 
   const lostToday = dayPnlUsd(state.paper.fills, state.paper.positions, now);
   if (lostToday <= -settings.dailyLossPct * state.paper.startingUsd && (state.paper.haltedUntil || 0) < now) {

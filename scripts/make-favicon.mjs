@@ -34,12 +34,13 @@ for (let y = 0; y < h; y++) {
     }
   }
 }
-const pad = Math.round((maxX - minX) * 0.06);
+const pad = Math.round((maxX - minX) * 0.08);
 minX = Math.max(0, minX - pad);
 maxX = Math.min(w - 1, maxX + pad);
-minY = Math.max(0, minY - pad);
+minY = Math.max(0, minY - Math.round(pad * 0.6));
 const bw = maxX - minX + 1;
-const headH = Math.round(bw * 0.92);
+// Taller than wide so the chin stays in. 0.92 cut her at the mouth.
+const headH = Math.round(bw * 1.18);
 maxY = Math.min(h - 1, minY + headH - 1);
 const bh = maxY - minY + 1;
 const side = Math.max(bw, bh);

@@ -7,6 +7,7 @@ import { publicBook } from "@/lib/tick";
 import { solPriceUsd } from "@/lib/feeds";
 import { LIVE_TRADING } from "@/lib/config";
 import { publicMind } from "@/lib/mind/engine";
+import { closePosition } from "@/lib/paper/engine";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +31,7 @@ const Body = z.object({
   owner: z.string(),
   tradingPubkey: z.string().optional(),
   depositedSol: z.number().nonnegative().optional(),
+  sellMint: z.string().optional(),
   auto: z
     .object({
       armed: z.boolean().optional(),
@@ -39,6 +41,7 @@ const Body = z.object({
       migrate: z.boolean().optional(),
       scalp: z.boolean().optional(),
       picks: z.boolean().optional(),
+      solUsd: z.boolean().optional(),
       maxSolPerTrade: z.number().positive().max(50).optional(),
       minScore: z.number().min(50).max(95).optional(),
       takeProfitPct: z.number().min(0.1).max(4).optional(),
@@ -61,13 +64,34 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "bad_trading_wallet" }, { status: 400 });
   }
   const solUsd = await solPriceUsd();
+  if (parsed.data.sellMint && !isSolanaAddress(parsed.data.sellMint)) {
+    return NextResponse.json({ error: "bad_mint" }, { status: 400 });
+  }
   const trader = await mutateState((s) => {
     const t = s.traders[parsed.data.owner] || emptyTrader(parsed.data.owner);
+    const wasArmed = Boolean(t.auto?.armed);
     t.auto = { ...DEFAULT_AUTO, ...t.auto, ...(parsed.data.auto || {}) };
+    if (t.auto.armed && !wasArmed) t.auto.armedAt = Date.now();
+    if (!t.auto.armed) t.auto.armedAt = undefined;
     if (t.auto.mode === "live" && !LIVE_TRADING) t.auto.mode = "paper";
     if (parsed.data.tradingPubkey) t.tradingPubkey = parsed.data.tradingPubkey;
     if (parsed.data.depositedSol != null) t.depositedSol = parsed.data.depositedSol;
     t.book = maybeResizeBook(t.book, bankrollUsd(t.depositedSol, solUsd));
+    if (parsed.data.sellMint) {
+      const pos = t.book.positions.find((p) => p.mint === parsed.data.sellMint);
+      if (pos) {
+        const prev = s.paper;
+        s.paper = t.book;
+        try {
+          closePosition({ state: s, pos, price: pos.markUsd, reason: "operator sell" });
+        } finally {
+          t.book = s.paper;
+          s.paper = prev;
+        }
+        t.book.equityUsd =
+          Math.round((t.book.cashUsd + t.book.positions.reduce((sum, p) => sum + p.markUsd * p.qty, 0)) * 100) / 100;
+      }
+    }
     t.updatedAt = Date.now();
     s.traders[parsed.data.owner] = t;
     return t;

@@ -265,6 +265,8 @@ export function slippageBps(strategy: Strategy, settings: EngineSettings): numbe
       return settings.slippageBpsCopy;
     case "solphia_pick":
       return settings.slippageBpsPick ?? 50;
+    case "sol_usd":
+      return 4;
     default:
       return settings.slippageBpsScalp;
   }

@@ -9,6 +9,7 @@ export const DEFAULT_AUTO: AutoSettings = {
   migrate: true,
   scalp: false,
   picks: false,
+  solUsd: false,
   maxSolPerTrade: 0.25,
   minScore: 70,
   takeProfitPct: 0.32,

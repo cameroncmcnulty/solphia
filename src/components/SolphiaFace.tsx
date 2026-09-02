@@ -461,7 +461,7 @@ export function SolphiaFace({ mode = "panel" }: { mode?: "hero" | "panel" }) {
       ref={wrap}
       className={`relative overflow-hidden touch-none select-none outline-none ${
         hero
-          ? "h-[42vh] min-h-[260px] w-full sm:h-[56vh] lg:h-full lg:min-h-[560px]"
+          ? "mx-auto h-[260px] w-full max-w-[260px] sm:h-[320px] sm:max-w-[320px] lg:h-[min(68vh,580px)] lg:max-w-none"
           : "h-[240px] w-full md:h-[300px]"
       }`}
       style={{

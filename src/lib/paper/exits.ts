@@ -16,6 +16,7 @@ export function exitPlan(
   book?: LeaderBook,
   watch?: CurveTick,
 ): { reason: string; fraction: number } | null {
+  if (pos.strategy === "sol_usd") return null;
   const m = multiple(pos);
   const scaled = pos.scaledOut || 0;
 
