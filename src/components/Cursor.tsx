@@ -23,7 +23,7 @@ export function Cursor() {
   return (
     <>
       <div
-        className="cursor-dot pointer-events-none fixed z-[80] mix-blend-screen"
+        className="cursor-dot pointer-events-none fixed z-[80]"
         style={{
           left: pos.x,
           top: pos.y,
@@ -33,7 +33,7 @@ export function Cursor() {
         <div className="h-1.5 w-1.5 rounded-full bg-acid" />
       </div>
       <div
-        className="cursor-ring pointer-events-none fixed z-[79] border border-violet/60 rounded-full mix-blend-screen transition-transform duration-200"
+        className="cursor-ring pointer-events-none fixed z-[79] rounded-full border border-acid/40 transition-transform duration-200"
         style={{
           left: pos.x,
           top: pos.y,

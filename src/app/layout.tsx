@@ -38,7 +38,20 @@ export const metadata: Metadata = {
     description: "Deposit SOL. She copies the wallets that are already up.",
     images: ["/og.jpg"],
   },
-  icons: { icon: "/favicon.svg" },
+  icons: {
+    icon: [
+      { url: "/favicon.png", type: "image/png", sizes: "64x64" },
+      { url: "/icon-192.png", type: "image/png", sizes: "192x192" },
+    ],
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180" }],
+    shortcut: "/favicon.png",
+  },
+  appleWebApp: {
+    capable: true,
+    title: "SOLPHIA",
+    statusBarStyle: "black-translucent",
+  },
+  manifest: "/site.webmanifest",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

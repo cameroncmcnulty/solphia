@@ -296,11 +296,6 @@ export function SolphiaFace({ mode = "panel" }: { mode?: "hero" | "panel" }) {
         if (blinkT <= 0) blink = 1;
       }
 
-      const lookX = (mx - 0.5) * (hero ? 12 : 7);
-      const lookY = (my - 0.4) * (hero ? 7 : 4);
-      const breath = reduce ? 1 : 1 + Math.sin(t * 0.012) * 0.006;
-      host.style.transform = `translate3d(${lookX}px, ${lookY}px, 0) scale(${breath})`;
-
       if (!ready || !pic.naturalWidth) {
         raf = requestAnimationFrame(loop);
         return;
@@ -419,12 +414,15 @@ export function SolphiaFace({ mode = "panel" }: { mode?: "hero" | "panel" }) {
         }
       }
 
-      const wash = ctx.createRadialGradient(px, py, 6, px, py, Math.max(box.dw, box.dh) * 0.38);
-      wash.addColorStop(0, "rgba(20,241,149,0.09)");
-      wash.addColorStop(0.4, "rgba(153,69,255,0.05)");
+      const washR = Math.min(box.dw, box.dh) * 0.42;
+      const wash = ctx.createRadialGradient(px, py, 8, px, py, washR);
+      wash.addColorStop(0, "rgba(20,241,149,0.08)");
+      wash.addColorStop(0.45, "rgba(153,69,255,0.04)");
       wash.addColorStop(1, "rgba(0,0,0,0)");
       ctx.fillStyle = wash;
-      ctx.fillRect(box.dx, box.dy, box.dw, box.dh);
+      ctx.beginPath();
+      ctx.ellipse(px, py, washR, washR * 1.15, 0, 0, Math.PI * 2);
+      ctx.fill();
       ctx.globalCompositeOperation = "source-over";
 
       raf = requestAnimationFrame(loop);
@@ -455,28 +453,32 @@ export function SolphiaFace({ mode = "panel" }: { mode?: "hero" | "panel" }) {
       host.removeEventListener("pointermove", onMove);
       host.removeEventListener("pointerdown", onDown);
       host.removeEventListener("pointerleave", onLeave);
-      host.style.transform = "";
     };
   }, [hero]);
 
   return (
     <div
       ref={wrap}
-      className={`relative touch-none select-none ${
+      className={`relative overflow-hidden touch-none select-none outline-none ${
         hero
           ? "h-[42vh] min-h-[260px] w-full sm:h-[56vh] lg:h-full lg:min-h-[560px]"
           : "h-[240px] w-full md:h-[300px]"
       }`}
       style={{
-        willChange: "transform",
-        transformOrigin: "50% 48%",
         isolation: "isolate",
+        WebkitTapHighlightColor: "transparent",
+        WebkitUserSelect: "none",
+        userSelect: "none",
+        outline: "none",
         ...(hero
           ? {
-              WebkitMaskImage: "linear-gradient(to bottom, #000 68%, transparent 96%)",
-              maskImage: "linear-gradient(to bottom, #000 68%, transparent 96%)",
+              WebkitMaskImage: "radial-gradient(ellipse 72% 88% at 50% 46%, #000 62%, transparent 100%)",
+              maskImage: "radial-gradient(ellipse 72% 88% at 50% 46%, #000 62%, transparent 100%)",
             }
-          : {}),
+          : {
+              WebkitMaskImage: "radial-gradient(ellipse 80% 90% at 50% 48%, #000 70%, transparent 100%)",
+              maskImage: "radial-gradient(ellipse 80% 90% at 50% 48%, #000 70%, transparent 100%)",
+            }),
       }}
       aria-hidden="true"
     >
@@ -493,12 +495,20 @@ export function SolphiaFace({ mode = "panel" }: { mode?: "hero" | "panel" }) {
         src="/solphia-face.png"
         alt=""
         draggable={false}
-        className={`pointer-events-none absolute inset-0 h-full w-full ${
+        className={`pointer-events-none absolute inset-0 h-full w-full outline-none ${
           hero ? "object-contain" : "object-cover"
         }`}
-        style={{ filter: "brightness(1.12) saturate(1.08) contrast(1.06)" }}
+        style={{
+          filter: "brightness(1.18) saturate(1.12) contrast(1.08)",
+          outline: "none",
+          userSelect: "none",
+        }}
       />
-      <canvas ref={canvas} className="pointer-events-none absolute inset-0 h-full w-full" />
+      <canvas
+        ref={canvas}
+        className="pointer-events-none absolute inset-0 h-full w-full outline-none"
+        style={{ outline: "none" }}
+      />
     </div>
   );
 }
