@@ -11,6 +11,7 @@ export type GradRead = {
   telegram: boolean;
   twitter: boolean;
   ageMin: number;
+  unique: number;
   why: string;
 };
 
@@ -77,11 +78,11 @@ export function graduationRead(token: TokenSnapshot, now = Date.now()): GradRead
             ? `Telegram on the page · P(grad) ${(p * 100).toFixed(0)}%`
             : `P(grad) ${(p * 100).toFixed(0)}% · ${Math.round(solInCurve)} SOL in curve`;
 
-  return { p, solInCurve, solPerUnique, botShare, social, telegram, twitter, ageMin, why };
+  return { p, solInCurve, solPerUnique, botShare, social, telegram, twitter, ageMin, unique, why };
 }
 
-export function armLaunch(read: GradRead, minP = 0.42): boolean {
-  return read.p >= minP && read.ageMin >= 3 && read.botShare < 0.28;
+export function armLaunch(read: GradRead, minP = 0.48): boolean {
+  return read.p >= minP && read.ageMin >= 3 && read.botShare < 0.28 && (read.unique >= 35 || read.telegram);
 }
 
 export function armMigrate(read: GradRead, fill: number, minP = 0.55): boolean {

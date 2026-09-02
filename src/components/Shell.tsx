@@ -2,7 +2,6 @@
 
 import { Nav } from "./Nav";
 import { ParticleField } from "./ParticleField";
-import { ChatDock } from "./ChatDock";
 import { BottomNav } from "./BottomNav";
 
 export function Shell({ children }: { children: React.ReactNode }) {
@@ -14,7 +13,6 @@ export function Shell({ children }: { children: React.ReactNode }) {
         <Nav />
         {children}
       </div>
-      <ChatDock />
       <BottomNav />
     </div>
   );

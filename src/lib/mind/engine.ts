@@ -31,6 +31,7 @@ export function emptyMind(): Mind {
       bundleVeto: DEFAULT_SETTINGS.bundleVeto,
     },
     recentPickPnl: [],
+    streak: {},
     open: {},
     watch: {},
   };
@@ -45,6 +46,7 @@ export function mergeMind(raw?: Partial<Mind>): Mind {
     weights: { ...PRIORS, ...(raw.weights || {}) },
     bars: { ...base.bars, ...(raw.bars || {}) },
     recentPickPnl: Array.isArray(raw.recentPickPnl) ? raw.recentPickPnl.slice(-20) : [],
+    streak: raw.streak || {},
     open: raw.open || {},
     watch: raw.watch || {},
   };
@@ -118,31 +120,51 @@ export function noteOpen(mind: Mind, mint: string, x: FeatureVec, strategy: Stra
   mind.open[mint] = { x, strategy, at: Date.now() };
 }
 
-export function learnFromFill(mind: Mind, mint: string, pnlPct: number, strategy: string) {
+export function learnFromFill(
+  mind: Mind,
+  mint: string,
+  pnlPct: number,
+  strategy: string,
+  features?: number[],
+  complete = true,
+) {
   const open = mind.open[mint];
-  delete mind.open[mint];
-  if (!open) return;
-  const label: 0 | 1 = pnlPct > 0.01 ? 1 : 0;
-  learn(mind, open.x, label, 1);
+  const x = features && features.length ? features : open?.x;
+  const strat = strategy || open?.strategy || "copy_trade";
+  if (complete) delete mind.open[mint];
+  if (x && x.length) {
+    const label: 0 | 1 = pnlPct > 0.005 ? 1 : 0;
+    const weight = Math.min(2.2, 0.7 + Math.abs(pnlPct) * 5) * (complete ? 1 : 0.45);
+    learn(mind, x, label, weight);
+  }
+  if (!complete) return;
   mind.closed += 1;
-  if (strategy === "solphia_pick" || open.strategy === "solphia_pick") {
-    if (label) mind.pickWins += 1;
+  if (!mind.streak) mind.streak = {};
+  if (pnlPct <= 0) {
+    mind.streak[strat] = (mind.streak[strat] || 0) + 1;
+    tighten(mind, strat);
+    if (mind.streak[strat] >= 3) tighten(mind, strat);
+  } else {
+    mind.streak[strat] = 0;
+  }
+  if (strat === "solphia_pick" || open?.strategy === "solphia_pick") {
+    if (pnlPct > 0.005) mind.pickWins += 1;
     else mind.pickLosses += 1;
     mind.recentPickPnl = [...mind.recentPickPnl, pnlPct].slice(-20);
     retuneThreshold(mind);
   }
-  if (pnlPct < -0.12) tighten(mind, open.strategy);
 }
 
 function retuneThreshold(mind: Mind) {
   const recent = mind.recentPickPnl;
   if (recent.length < 6) return;
   const exp = recent.reduce((s, n) => s + n, 0) / recent.length;
+  // Only smarter. Losses raise the bar. Wins never lower it.
   if (exp < 0) mind.pickThreshold = Math.min(PICK_CEIL, mind.pickThreshold + 0.02);
-  else if (exp > 0.08 && recent.length >= 12) mind.pickThreshold = Math.max(PICK_FLOOR, mind.pickThreshold - 0.008);
 }
 
 function tighten(mind: Mind, strategy: string) {
+  if (strategy === "sol_usd" || strategy === "scalp") return;
   if (strategy === "copy_trade") mind.bars.minScoreCopy = Math.min(88, mind.bars.minScoreCopy + 1);
   if (strategy === "launch_snipe") mind.bars.minPGradLaunch = Math.min(0.65, +(mind.bars.minPGradLaunch + 0.01).toFixed(3));
   if (strategy === "migration_snipe") mind.bars.minPGradMigrate = Math.min(0.72, +(mind.bars.minPGradMigrate + 0.01).toFixed(3));
@@ -168,11 +190,13 @@ export function studyMarket(
     prev.graduated = prev.graduated || token.graduated;
     if (now - prev.at < 25 * 60 * 1000) continue;
     const ageMin = (now - (token.createdAt || now)) / 60000;
+    const dumped = (token.priceChange1h || 0) <= -0.35 || (token.priceChange5m || 0) <= -0.22;
     if (token.graduated || prev.graduated) {
       learn(mind, prev.x, 1, 0.22);
-      if (prev.p < 0.35) {
-        /* she under-called a grad — do not loosen bars; priors already like social/fill */
-      }
+      delete mind.watch[token.mint];
+    } else if (dumped) {
+      learn(mind, prev.x, 0, 0.35);
+      tighten(mind, "launch_snipe");
       delete mind.watch[token.mint];
     } else if (ageMin > 50 && (token.bondingProgress || 0) < 0.3) {
       learn(mind, prev.x, 0, 0.22);
@@ -207,6 +231,7 @@ export function publicMind(mind: Mind) {
     pickLosses: mind.pickLosses,
     pickThreshold: mind.pickThreshold,
     bars: mind.bars,
+    streak: mind.streak || {},
     deniedBias: "refuse-first",
   };
 }

@@ -1,6 +1,7 @@
-import type { PaperBook, PaperFill, PaperPosition } from "../types";
+import type { Mind, PaperBook, PaperFill, PaperPosition } from "../types";
 import { applyFee } from "../risk/engine";
 import { pushBounded } from "../store";
+import { learnFromFill, noteOpen } from "../mind/engine";
 import {
   SOL_CASH_CAP,
   SOL_DAILY_GOAL,
@@ -34,7 +35,17 @@ function markSol(pos: PaperPosition, price: number): PaperPosition {
   return { ...pos, markUsd: price, unrealizedUsd: u, trailPeakUsd: peak };
 }
 
-function openSol(book: PaperBook, signal: SolSignal, now: number): PaperFill | null {
+function solFeatures(signal: SolSignal): number[] {
+  return [
+    (signal.rsi15 || 50) / 100,
+    Math.min(1, (signal.atrPct || 0) * 20),
+    signal.dir === "long" ? 1 : 0,
+    Math.min(1, (signal.rrAfterCost || 0) / 3),
+    Math.min(1, (signal.stopPct || 0) * 40),
+  ];
+}
+
+function openSol(book: PaperBook, signal: SolSignal, now: number, mind?: Mind): PaperFill | null {
   if (!signal.ok || !signal.dir) return null;
   const price = signal.price;
   const stopDist = Math.abs(price - signal.stop);
@@ -93,16 +104,26 @@ function openSol(book: PaperBook, signal: SolSignal, now: number): PaperFill | n
     venue: "stable",
     scaledOut: 0,
     dir: signal.dir,
+    features: solFeatures(signal),
   };
   book.cashUsd -= sizeUsd + fee + slip;
   book.feesPaidUsd += fee;
   book.slippagePaidUsd += slip;
   book.positions.push(pos);
   pushBounded(book.fills, fill, 400);
+  if (mind) noteOpen(mind, SOL_MINT, pos.features || [], "sol_usd");
   return fill;
 }
 
-function closeSol(book: PaperBook, pos: PaperPosition, price: number, reason: string, now: number, fraction = 1): PaperFill {
+function closeSol(
+  book: PaperBook,
+  pos: PaperPosition,
+  price: number,
+  reason: string,
+  now: number,
+  fraction = 1,
+  mind?: Mind,
+): PaperFill {
   const frac = Math.min(1, Math.max(0, fraction));
   const qty = pos.qty * frac;
   const cost = pos.sizeUsd * frac;
@@ -150,6 +171,7 @@ function closeSol(book: PaperBook, pos: PaperPosition, price: number, reason: st
     }
   }
   pushBounded(book.fills, fill, 400);
+  if (mind) learnFromFill(mind, pos.mint, fill.pnlPct || 0, pos.strategy, pos.features, frac >= 0.99);
   return fill;
 }
 
@@ -184,25 +206,25 @@ function revalue(book: PaperBook) {
   book.equityUsd = Math.round((book.cashUsd + value) * 100) / 100;
 }
 
-export async function tickSolBook(book: PaperBook, now = Date.now()): Promise<SolDeskPublic> {
+export async function tickSolBook(book: PaperBook, now = Date.now(), mind?: Mind): Promise<SolDeskPublic> {
   const { m15, h1 } = await loadSolCandles();
-  return applySolTick(book, m15, h1, now);
+  return applySolTick(book, m15, h1, now, mind);
 }
 
-export function applySolTick(book: PaperBook, m15: Candle[], h1: Candle[], now = Date.now()): SolDeskPublic {
+export function applySolTick(book: PaperBook, m15: Candle[], h1: Candle[], now = Date.now(), mind?: Mind): SolDeskPublic {
   const price = m15.length ? m15[m15.length - 1].c : 0;
   book.positions = book.positions.map((p) => (p.strategy === "sol_usd" && price > 0 ? markSol(p, price) : p));
 
   for (const pos of [...book.positions]) {
     if (pos.strategy !== "sol_usd") continue;
     const plan = exitSol(pos, pos.markUsd, now);
-    if (plan) closeSol(book, pos, pos.markUsd, plan.reason, now, plan.fraction);
+    if (plan) closeSol(book, pos, pos.markUsd, plan.reason, now, plan.fraction, mind);
   }
 
   const signal = decideSol(m15, h1, book, now);
   const { pnl } = solDayPnl(book, now);
   const equity = book.equityUsd || book.startingUsd || 1;
-  if (signal.ok && pnl / equity < SOL_DAILY_GOAL) openSol(book, signal, now);
+  if (signal.ok && pnl / equity < SOL_DAILY_GOAL) openSol(book, signal, now, mind);
 
   book.positions = book.positions.map((p) => (p.strategy === "sol_usd" && price > 0 ? markSol(p, price) : p));
   revalue(book);

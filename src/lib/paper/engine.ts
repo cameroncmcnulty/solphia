@@ -95,6 +95,7 @@ export function openPaperBuy(opts: {
   reason: string;
   now?: number;
   sizeUsd?: number;
+  features?: number[];
 }): PaperFill | null {
   const { state, token, strategy, score, reason } = opts;
   const now = opts.now ?? Date.now();
@@ -161,6 +162,7 @@ export function openPaperBuy(opts: {
     copiedFrom: token.copiedBy?.[0],
     scaledOut: 0,
     entryBonding: token.bondingProgress || 0,
+    features: opts.features,
   };
 
   book.cashUsd -= spend;
@@ -310,8 +312,8 @@ function pushExit(
   exits.push(fill);
   if (!state.lab) state.lab = emptyLab();
   applyShadow(state.lab, fill, state.paper.startingUsd, now);
-  if (fraction >= 0.99 && state.mind) {
-    learnFromFill(state.mind, pos.mint, fill.pnlPct || 0, pos.strategy);
+  if (state.mind) {
+    learnFromFill(state.mind, pos.mint, fill.pnlPct || 0, pos.strategy, pos.features, fraction >= 0.99);
   }
   alerts.push({
     id: id("al"),
@@ -452,6 +454,7 @@ export function tickPaper(
     if (opened >= settings.maxNewEntriesPerTick) continue;
     if (state.paper.positions.length >= settings.maxPositions) continue;
     if (size < 8) continue;
+    const { x } = extractFeatures(s.token, now, s.report.score);
     const fill = openPaperBuy({
       state,
       token: s.token,
@@ -460,10 +463,10 @@ export function tickPaper(
       reason: d.intent.reason,
       now,
       sizeUsd: d.intent.sizeUsd,
+      features: x,
     });
     if (fill) {
       applyShadow(state.lab, fill, state.paper.startingUsd, now);
-      const { x } = extractFeatures(s.token, now, s.report.score);
       noteOpen(state.mind, s.token.mint, x, d.hit.strategy);
       opened += 1;
       entries.push(fill);

@@ -17,16 +17,16 @@ export function copyDecision(token: TokenSnapshot, now = Date.now()): CopyRead {
   const unique = token.uniqueTraders1h || 0;
   const curveFill = token.graduated ? 1 : token.bondingProgress || 0;
   const top10 = token.top10HolderPct ?? 0;
-  const visible = ageMin >= 2 || unique >= 25 || curveFill >= 0.2 || token.graduated;
+  const visible = ageMin >= 3 || unique >= 30 || curveFill >= 0.25 || token.graduated;
   const base = { ageMin, curveFill, top10, bundled, visible };
 
   if (!token.smartMoneyInflow) {
     return { ok: false, fade: false, reason: "No followed wallet is in this coin.", ...base };
   }
-  if (ageMin < 2 && bundled >= 0.2) {
+  if (ageMin < 3 && bundled >= 0.18) {
     return { ok: false, fade: true, reason: "First-block bundle. We do not have that access — fade.", ...base };
   }
-  if (ageMin < 2 && unique < 15) {
+  if (ageMin < 3 && unique < 22) {
     return { ok: false, fade: true, reason: "Too early to be a follower. Looks like sniper access.", ...base };
   }
   if (bundled >= 0.38) {

@@ -187,7 +187,8 @@ export function decideSol(m15: Candle[], h1: Candle[], book: PaperBook, now: num
 
   const vol = m15[i].v;
   const volAvg = volSma[i] || vol;
-  if (volAvg > 0 && vol < volAvg * 0.55) return empty("Volume is dead vs the last 20 bars.", meta);
+  if (volAvg > 0 && vol < volAvg * 0.7) return empty("Volume is dead vs the last 20 bars.", meta);
+  const impulse = (m15[i].c - m15[i].o) / Math.max(m15[i].o, 1e-9);
 
   const pullbackLong =
     ema9_15[i] > ema21_15[i] &&
@@ -204,6 +205,7 @@ export function decideSol(m15: Candle[], h1: Candle[], book: PaperBook, now: num
   const shortSetup = (bearishDivergence(m15, rsi15) || pullbackShort) && htf !== "up" && r1h <= 58;
 
   if (longSetup) {
+    if (impulse > 0.007) return empty("Don't chase a green 15m impulse. Wait for the next bar.", meta);
     const structure = Math.min(lastSwingLow(m15), price * (1 - SOL_MIN_STOP));
     const planned = planTrade("long", price, structure);
     if ("deny" in planned) return empty(planned.deny, meta);
@@ -213,6 +215,7 @@ export function decideSol(m15: Candle[], h1: Candle[], book: PaperBook, now: num
     return { ok: true, ...planned, reason: why, ...meta };
   }
   if (shortSetup) {
+    if (impulse < -0.007) return empty("Don't chase a red 15m impulse. Wait for the next bar.", meta);
     const structure = Math.max(lastSwingHigh(m15), price * (1 + SOL_MIN_STOP));
     const planned = planTrade("short", price, structure);
     if ("deny" in planned) return empty(planned.deny, meta);

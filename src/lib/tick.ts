@@ -90,7 +90,7 @@ export async function runMarketTick(): Promise<{
         copyBook,
       );
       if (trader.auto.solUsd || trader.book.positions.some((p) => p.strategy === "sol_usd")) {
-        await tickSolBook(trader.book, Date.now());
+        await tickSolBook(trader.book, Date.now(), state.mind);
       }
       state.settings = prev;
       trader.updatedAt = Date.now();

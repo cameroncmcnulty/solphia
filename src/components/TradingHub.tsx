@@ -261,19 +261,97 @@ export function TradingHub() {
         </div>
       )}
 
-      <div className="mt-5 flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] sm:grid sm:grid-cols-3 sm:overflow-visible lg:grid-cols-6 [&::-webkit-scrollbar]:hidden">
-        <Stat k="Status" v={status} sub={armed ? "scanning" : live ? "feeds ticking" : "waiting"} live={armed || live} />
-        <Stat k="Closed" v={String(closed)} sub={`${book?.winCount || 0}W / ${book?.lossCount || 0}L`} />
-        <Stat k="Volume" v={money(volume)} sub="filled notional" />
-        <Stat k="Uptime" v={uptime} sub={armed ? "this session" : "start to run"} />
-        <Stat
-          k="PnL"
-          v={`${pnlPct >= 0 ? "+" : ""}${(pnlPct * 100).toFixed(1)}%`}
-          sub={`${pnlUsd >= 0 ? "+" : "−"}$${Math.abs(pnlUsd).toFixed(0)} after fees`}
-          good={pnlPct >= 0}
-        />
-        <Stat k="Refused" v={String(refused)} sub={`${tokens.length} on tape`} />
-      </div>
+      <section className="panel mt-5 rounded-3xl p-5 md:p-8">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <div className="font-mono text-[11px] tracking-[0.22em] text-violet">YOUR BOOK</div>
+            <h2 className="mt-1 font-display text-3xl text-ghost md:text-4xl">Loaded · PnL · open</h2>
+          </div>
+          <div className="font-mono text-[12px] text-mute">
+            {status} {armed ? "· scanning" : live ? "· feeds ticking" : ""} · {uptime}
+          </div>
+        </div>
+        <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <Huge k="Loaded" v={`${bal.toFixed(3)} SOL`} sub="in the trading wallet" />
+          <Huge
+            k="PnL"
+            v={`${pnlPct >= 0 ? "+" : ""}${(pnlPct * 100).toFixed(1)}%`}
+            sub={`${pnlUsd >= 0 ? "+" : "−"}$${Math.abs(pnlUsd).toFixed(2)} after fees`}
+            good={pnlPct >= 0}
+          />
+          <Huge
+            k="Open"
+            v={String(book?.open ?? (book?.positions || []).length)}
+            sub={`${money((book?.positions || []).reduce((s: number, p: any) => s + (p.sizeUsd || 0) + (p.unrealizedUsd || 0), 0))} in names`}
+          />
+          <Huge k="Closed" v={String(closed)} sub={`${book?.winCount || 0}W / ${book?.lossCount || 0}L · ${money(volume)} vol`} />
+        </div>
+        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <Mini k="Cash" v={book ? money(book.cashUsd) : "—"} />
+          <Mini k="Equity" v={book ? money(book.equityUsd) : "—"} />
+          <Mini k="Unrealized" v={book ? money(book.unrealizedUsd || 0) : "—"} />
+          <Mini k="Refused" v={String(refused)} />
+        </div>
+        {(book?.positions || []).length > 0 && (
+          <div className="mt-5 space-y-2">
+            <div className="font-mono text-[10px] tracking-[0.2em] text-mute">OPEN POSITIONS</div>
+            {(book.positions as any[]).map((p) => (
+              <div key={p.id} className="flex items-center justify-between gap-3 rounded-xl border border-violet/20 px-4 py-3">
+                <div>
+                  <div className="font-display text-xl text-ghost">{p.symbol}</div>
+                  <div className="font-mono text-[11px] text-mute">
+                    {p.dir === "short" ? "short" : "long"} · {p.strategy === "sol_usd" ? "SOL/USDT" : p.strategy.replace("_", " ")}
+                  </div>
+                </div>
+                <div className={`font-display text-xl ${p.unrealizedUsd >= 0 ? "text-acid" : "text-blood"}`}>
+                  {p.unrealizedUsd >= 0 ? "+" : ""}${Number(p.unrealizedUsd || 0).toFixed(2)}
+                </div>
+                {owner && (
+                  <button type="button" onClick={() => sell(p.mint)} className="btn-ghost min-h-[44px] rounded-full px-4 font-mono text-[11px]">
+                    Sell
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="mt-6 border-t border-violet/20 pt-5">
+          <div className="font-mono text-[10px] tracking-[0.2em] text-mute">WALLET · {tradePk ? `${tradePk.slice(0, 4)}…${tradePk.slice(-4)}` : "connect first"}</div>
+          <div className="mt-3 grid grid-cols-4 gap-2">
+            {[0.1, 0.5, 1, 2].map((n) => (
+              <button
+                key={n}
+                type="button"
+                onClick={() => setSolAmt(n)}
+                className={`min-h-[40px] rounded-full py-2 font-mono text-[12px] ${solAmt === n ? "btn-on" : "btn-ghost"}`}
+              >
+                {n} SOL
+              </button>
+            ))}
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <button
+              disabled={busy || !owner}
+              onClick={deposit}
+              className="btn-acid min-h-[48px] rounded-full py-3 font-mono text-[12px] disabled:opacity-40"
+            >
+              Deposit {solAmt} SOL
+            </button>
+            <button
+              disabled={busy || bal < 0.01 || armed}
+              onClick={withdraw}
+              className="btn-ghost min-h-[48px] rounded-full py-3 font-mono text-[12px] disabled:opacity-40"
+            >
+              {armed ? "Stop to withdraw" : "Withdraw"}
+            </button>
+          </div>
+          <p className="mt-3 text-sm text-mute">
+            {armed
+              ? "Bot is running. Stop her before you pull SOL back to your wallet."
+              : "Keys stay on this device. Withdraw is on once she is stopped."}
+          </p>
+        </div>
+      </section>
 
       {halted && <p className="mt-3 font-mono text-sm text-blood">{book.haltReason}</p>}
       {armed && !liveTrading && (
@@ -283,50 +361,6 @@ export function TradingHub() {
       <div className="mt-6 grid gap-4 xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.18fr)]">
         <div className="space-y-4">
           <ConfigDesk value={cfgFrom(auto)} onChange={patchSoon} layout="stack" />
-
-          <div className="panel rounded-2xl p-5">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="font-mono text-[10px] tracking-[0.22em] text-mute">TRADING WALLET</div>
-                <div className="mt-1 break-all font-mono text-xs text-acid">{tradePk || "Connect to mint a key on this device."}</div>
-              </div>
-              <div className="text-right">
-                <div className="font-mono text-[10px] text-mute">BALANCE</div>
-                <div className="font-display text-2xl text-ghost">{bal.toFixed(3)} SOL</div>
-              </div>
-            </div>
-            <p className="mt-3 text-sm text-mute">
-              Keys stay in this browser. She never sees a seed. Deposit only what you can lose.
-            </p>
-            <div className="mt-4 grid grid-cols-4 gap-2">
-              {[0.1, 0.5, 1, 2].map((n) => (
-                <button
-                  key={n}
-                  type="button"
-                  onClick={() => setSolAmt(n)}
-                  className={`min-h-[40px] rounded-full py-2 font-mono text-[12px] ${solAmt === n ? "btn-on" : "btn-ghost"}`}
-                >
-                  {n} SOL
-                </button>
-              ))}
-            </div>
-            <div className="mt-3 grid grid-cols-2 gap-2">
-              <button
-                disabled={busy || !owner}
-                onClick={deposit}
-                className="btn-acid rounded-full py-3 font-mono text-[12px] disabled:opacity-40"
-              >
-                Deposit
-              </button>
-              <button
-                disabled={busy || bal < 0.01}
-                onClick={withdraw}
-                className="btn-ghost rounded-full py-3 font-mono text-[12px] disabled:opacity-40"
-              >
-                Withdraw
-              </button>
-            </div>
-          </div>
 
           {sol && (
             <div className="panel rounded-2xl p-5">
@@ -367,8 +401,8 @@ export function TradingHub() {
             <div className="panel rounded-2xl p-5">
               <div className="font-mono text-[10px] tracking-[0.22em] text-violet">SOLPHIA MIND</div>
               <p className="mt-2 text-base text-mute">
-                Bars only move up after losses. Picks need Telegram, P(grad) ≥ 62%, and learned P(pay) ≥{" "}
-                {((mindData.pickThreshold || 0) * 100).toFixed(0)}%.
+                Every close trains her — paper included. Bars only move up after losses. Picks need Telegram, P(grad) ≥
+                62%, and learned P(pay) ≥ {((mindData.pickThreshold || 0) * 100).toFixed(0)}%.
               </p>
               <div className="mt-3 grid grid-cols-3 gap-2">
                 <Mini k="Studied" v={String(mindData.studied || 0)} />
@@ -477,29 +511,22 @@ export function TradingHub() {
   );
 }
 
-function Stat({
+function Huge({
   k,
   v,
   sub,
-  live,
   good,
 }: {
   k: string;
   v: string;
   sub: string;
-  live?: boolean;
   good?: boolean;
 }) {
   return (
-    <div className="panel min-w-[46%] shrink-0 rounded-2xl p-4 sm:min-w-0">
-      <div className="flex items-center gap-2 font-mono text-[10px] tracking-[0.16em] text-mute">
-        {live != null && (
-          <span className={`h-1.5 w-1.5 rounded-full ${live ? "bg-acid shadow-[0_0_10px_#14F195]" : "bg-mute"}`} />
-        )}
-        {k}
-      </div>
-      <div className={`mt-1 truncate font-display text-2xl ${good === false ? "text-blood" : "text-acid"}`}>{v}</div>
-      <div className="truncate font-mono text-[11px] text-mute">{sub}</div>
+    <div className="rounded-2xl border border-violet/20 bg-void/40 p-4">
+      <div className="font-mono text-[11px] tracking-[0.16em] text-mute">{k}</div>
+      <div className={`mt-1 font-display text-3xl md:text-4xl ${good === false ? "text-blood" : "text-acid"}`}>{v}</div>
+      <div className="mt-1 font-mono text-[11px] text-mute">{sub}</div>
     </div>
   );
 }

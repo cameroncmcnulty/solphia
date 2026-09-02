@@ -19,5 +19,8 @@ export function toxicFlow(token: TokenSnapshot): { toxic: boolean; reason: strin
   if (txns5 >= 40 && unique > 0 && unique <= 12 && flow >= 30 && Math.abs(buys - sells) / Math.max(flow, 1) < 0.18) {
     return { toxic: true, reason: "Sub-second round-trips. You would be the LP." };
   }
+  if (!token.graduated && sells > buys * 1.7 && unique < 50 && flow >= 20) {
+    return { toxic: true, reason: "Sellers already own the tape. Don't be the bid." };
+  }
   return { toxic: false, reason: "" };
 }

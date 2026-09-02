@@ -160,6 +160,7 @@ export interface PaperPosition {
   scaledOut: number;
   entryBonding?: number;
   dir?: "long" | "short";
+  features?: number[];
 }
 
 export interface PaperFill {
@@ -325,6 +326,7 @@ export interface Mind {
     bundleVeto: number;
   };
   recentPickPnl: number[];
+  streak: Record<string, number>;
   open: Record<string, { x: number[]; strategy: Strategy; at: number }>;
   watch: Record<string, MindWatch>;
 }

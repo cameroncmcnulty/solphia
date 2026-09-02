@@ -85,7 +85,7 @@ export function riskVeto(opts: {
     const dec = copyDecision(token, now);
     if (!dec.ok) return { ok: false, reason: dec.reason };
   }
-  if (hit.strategy === "launch_snipe" && hit.pGrad < (settings.minPGradLaunch ?? 0.42)) {
+  if (hit.strategy === "launch_snipe" && hit.pGrad < (settings.minPGradLaunch ?? 0.48)) {
     return { ok: false, reason: `P(grad) ${(hit.pGrad * 100).toFixed(0)}% under the bar.` };
   }
   if (hit.strategy === "migration_snipe" && hit.pGrad < (settings.minPGradMigrate ?? 0.55) && token.bondingProgress < 0.88) {

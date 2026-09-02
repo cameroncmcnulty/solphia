@@ -12,46 +12,52 @@ for (let i = 0; i < data.length; i += 4) {
   const g = data[i + 1];
   const b = data[i + 2];
   const lum = r * 0.21 + g * 0.72 + b * 0.07;
-  if (lum < 22) {
-    data[i + 3] = 0;
-  } else if (lum < 48) {
-    data[i + 3] = Math.round(((lum - 22) / 26) * 255);
-  }
+  if (lum < 22) data[i + 3] = 0;
+  else if (lum < 48) data[i + 3] = Math.round(((lum - 22) / 26) * 255);
 }
 
-let minX = w,
-  minY = h,
-  maxX = 0,
-  maxY = 0;
+let top = h;
 for (let y = 0; y < h; y++) {
   for (let x = 0; x < w; x++) {
-    const a = data[(y * w + x) * 4 + 3];
-    if (a > 24) {
-      if (x < minX) minX = x;
-      if (y < minY) minY = y;
-      if (x > maxX) maxX = x;
-      if (y > maxY) maxY = y;
+    if (data[(y * w + x) * 4 + 3] > 24) {
+      top = y;
+      y = h;
+      break;
     }
   }
 }
-const pad = Math.round((maxX - minX) * 0.08);
-minX = Math.max(0, minX - pad);
-maxX = Math.min(w - 1, maxX + pad);
-minY = Math.max(0, minY - Math.round(pad * 0.6));
-const bw = maxX - minX + 1;
-// Taller than wide so the chin stays in. 0.92 cut her at the mouth.
-const headH = Math.round(bw * 1.18);
-maxY = Math.min(h - 1, minY + headH - 1);
-const bh = maxY - minY + 1;
-const side = Math.max(bw, bh);
+
+// Head width from the top 38% of the figure — not the shoulders.
+const headBand = Math.max(40, Math.round(h * 0.22));
+let hx0 = w;
+let hx1 = 0;
+for (let y = top; y < Math.min(h, top + headBand); y++) {
+  for (let x = 0; x < w; x++) {
+    if (data[(y * w + x) * 4 + 3] > 24) {
+      if (x < hx0) hx0 = x;
+      if (x > hx1) hx1 = x;
+    }
+  }
+}
+const headW = Math.max(1, hx1 - hx0 + 1);
+const cx = Math.round((hx0 + hx1) / 2);
+// Crown → chin. Head width at the temples × 1.42 is a face square, not shoulders.
+const side = Math.round(headW * 1.42);
+let x0 = Math.round(cx - side / 2);
+let y0 = Math.max(0, top - Math.round(side * 0.04));
+if (x0 < 0) x0 = 0;
+if (x0 + side > w) x0 = Math.max(0, w - side);
+if (y0 + side > h) y0 = Math.max(0, h - side);
+
 const square = new PNG({ width: side, height: side, colorType: 6 });
 square.data.fill(0);
-const ox = Math.floor((side - bw) / 2);
-const oy = Math.floor((side - bh) / 2);
-for (let y = 0; y < bh; y++) {
-  for (let x = 0; x < bw; x++) {
-    const si = ((minY + y) * w + (minX + x)) * 4;
-    const di = ((oy + y) * side + (ox + x)) * 4;
+for (let y = 0; y < side; y++) {
+  for (let x = 0; x < side; x++) {
+    const sx = x0 + x;
+    const sy = y0 + y;
+    if (sx < 0 || sy < 0 || sx >= w || sy >= h) continue;
+    const si = (sy * w + sx) * 4;
+    const di = (y * side + x) * 4;
     square.data[di] = data[si];
     square.data[di + 1] = data[si + 1];
     square.data[di + 2] = data[si + 2];
@@ -84,4 +90,4 @@ fs.writeFileSync(path.join(outDir, "apple-touch-icon.png"), PNG.sync.write(resiz
 fs.writeFileSync(path.join(outDir, "icon-192.png"), PNG.sync.write(resize(square, 192)));
 fs.writeFileSync(path.join(outDir, "icon-512.png"), PNG.sync.write(resize(square, 512)));
 fs.writeFileSync(path.join(outDir, "solphia-head.png"), PNG.sync.write(resize(square, 512)));
-console.log("wrote favicon + apple-touch + icons", { bw, bh, side, minX, minY, maxX, maxY });
+console.log("wrote face-square favicon", { headW, side, x0, y0, top });
