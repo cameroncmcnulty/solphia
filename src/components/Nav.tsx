@@ -7,9 +7,9 @@ import { WalletConnect } from "./WalletConnect";
 const LINKS = [
   ["/", "Home"],
   ["/terminal", "Trade"],
-  ["/copy", "Copy"],
   ["/auto", "Auto"],
   ["/pricing", "Pricing"],
+  ["/faq", "FAQ"],
 ];
 
 export function Nav() {

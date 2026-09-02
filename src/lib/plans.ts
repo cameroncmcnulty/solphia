@@ -83,3 +83,47 @@ export function lamportsForPlan(id: PlanId): number {
   const p = planById(id);
   return Math.round((p?.sol || 0.15) * 1_000_000_000);
 }
+
+export const COMPARE_ROWS: { label: string; hint?: string; values: [string, string, string, string, string] }[] = [
+  { label: "Paper book, live marks, 0.35% fee", values: ["Yes", "Yes", "Yes", "Yes", "Yes"] },
+  { label: "Kill switch · daily loss cap", hint: "Turns her off. Not optional.", values: ["Yes", "Yes", "Yes", "Yes", "Yes"] },
+  { label: "Email + in-app alerts", values: ["—", "Yes", "—", "—", "Yes"] },
+  { label: "Copy bot (decision + exit)", values: ["—", "—", "Yes", "—", "Yes"] },
+  { label: "Launch · P(grad) bar", values: ["—", "—", "—", "Yes", "Yes"] },
+  { label: "Graduation fills", values: ["—", "—", "—", "Yes", "Yes"] },
+  { label: "Solphia Picks (self-learning)", values: ["—", "—", "—", "—", "Yes"] },
+  { label: "You place the trade", values: ["If you want", "Always", "She does", "She does", "She does"] },
+  { label: "Keys in the model", values: ["Never", "Never", "Never", "Never", "Never"] },
+  { label: "Price / 30 days", values: ["Free", "0.15 SOL", "0.25 SOL", "0.30 SOL", "0.50 SOL"] },
+];
+
+export const FAQS: { q: string; a: string }[] = [
+  {
+    q: "Does she spend my SOL?",
+    a: "Only if you turn her on and deposit into a trading wallet on your phone. Keys stay on the device. Solphia never holds a hot wallet. Paper trading is the default until live is flipped on.",
+  },
+  {
+    q: "Why does she skip so many coins?",
+    a: "That is the product. Most Pump.fun names die on day one. Scout has to like a setup, Risk has to agree, and policy caps size and daily loss. Solphia Picks also needs Telegram, P(grad) ≥ 62%, and a learned P(pay) bar.",
+  },
+  {
+    q: "What are live stats?",
+    a: "The tape, the $1,000 paper book, names she refused, P(grad) on each coin, and the mind’s study count. Those numbers come from the engine, not a marketing counter.",
+  },
+  {
+    q: "Copy vs Picks vs Launch?",
+    a: "Copy follows wallets that are still good this week, and only when the setup is visible from here. Launch waits for P(grad). Picks is her own book — the pickiest desk, trained on after-fee outcomes.",
+  },
+  {
+    q: "Can I change size, stop, and take-profit?",
+    a: "Yes. Auto has a configuration desk: max SOL per trade, min safety, first take-profit, stop-loss, max creator bag. The kill switch and daily loss cap cannot be turned off.",
+  },
+  {
+    q: "How do I pay?",
+    a: "SOL from the wallet you trade with, 30-day access. Everything is 0.50 SOL. Buying Alerts + Copy + Launch separate is 0.70. No card. No USDC required.",
+  },
+  {
+    q: "Is this a sniper?",
+    a: "No. Sub-5-minute coins are a hard no on Picks. First-block bundles are faded. Faster paste-CA is how accounts die.",
+  },
+];

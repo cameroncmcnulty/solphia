@@ -65,6 +65,9 @@ export async function runMarketTick(): Promise<{
       state.settings.minScoreLaunch = Math.max(prev.minScoreLaunch, min);
       state.settings.minScoreMigration = Math.max(prev.minScoreMigration, min);
       state.settings.minScoreScalp = Math.max(prev.minScoreScalp, min);
+      if (trader.auto.takeProfitPct) state.settings.takeProfitPct = trader.auto.takeProfitPct;
+      if (trader.auto.stopLossPct) state.settings.stopLossPct = trader.auto.stopLossPct;
+      if (trader.auto.maxDevHoldPct) state.settings.leaderSupplyVeto = trader.auto.maxDevHoldPct / 100;
       if (trader.book.equityUsd > 0) {
         const cap = (trader.auto.maxSolPerTrade * solUsd) / trader.book.equityUsd;
         if (Number.isFinite(cap) && cap > 0) state.settings.maxPositionPct = Math.min(prev.maxPositionPct, cap);

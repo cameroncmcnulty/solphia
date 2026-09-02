@@ -41,6 +41,10 @@ const Body = z.object({
       picks: z.boolean().optional(),
       maxSolPerTrade: z.number().positive().max(50).optional(),
       minScore: z.number().min(50).max(95).optional(),
+      takeProfitPct: z.number().min(0.1).max(4).optional(),
+      stopLossPct: z.number().min(0.05).max(0.5).optional(),
+      maxDevHoldPct: z.number().min(5).max(40).optional(),
+      autoSell: z.boolean().optional(),
     })
     .optional(),
 });

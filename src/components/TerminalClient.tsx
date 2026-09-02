@@ -7,6 +7,7 @@ import { TokenTable } from "./TokenTable";
 import { SolphiaFace } from "./SolphiaFace";
 import { WalletDesk } from "./WalletDesk";
 import { AutoPilot } from "./AutoPilot";
+import { LiveStats } from "./LiveStats";
 import type { Strategy } from "@/lib/types";
 
 const DESKS: { id: string; label: string; strategy?: Strategy }[] = [
@@ -55,7 +56,9 @@ export function TerminalClient({
   }
 
   return (
-    <main className="px-3 pb-6 md:px-8">
+    <main className="pb-6">
+      <LiveStats compact />
+      <div className="px-3 pt-4 md:px-8">
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="font-mono text-[10px] tracking-[0.28em] text-violet">LIVE MARKET · PAPER UNTIL YOU GO LIVE</p>
@@ -135,6 +138,7 @@ export function TerminalClient({
             </p>
           </div>
         </aside>
+      </div>
       </div>
     </main>
   );

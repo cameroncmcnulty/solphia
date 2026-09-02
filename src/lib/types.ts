@@ -239,6 +239,10 @@ export interface AutoSettings {
   picks: boolean;
   maxSolPerTrade: number;
   minScore: number;
+  takeProfitPct: number;
+  stopLossPct: number;
+  maxDevHoldPct: number;
+  autoSell: boolean;
   tradingPubkey?: string;
 }
 

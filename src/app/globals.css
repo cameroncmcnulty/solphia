@@ -110,6 +110,15 @@ body {
   color: #fff;
 }
 
+input[type="range"] {
+  height: 18px;
+  cursor: pointer;
+}
+input[type="range"]::-webkit-slider-thumb {
+  width: 18px;
+  height: 18px;
+}
+
 .sol-grid {
   background-image:
     linear-gradient(rgba(153, 69, 255, 0.06) 1px, transparent 1px),

@@ -11,6 +11,10 @@ export const DEFAULT_AUTO: AutoSettings = {
   picks: false,
   maxSolPerTrade: 0.25,
   minScore: 70,
+  takeProfitPct: 0.32,
+  stopLossPct: 0.16,
+  maxDevHoldPct: 15,
+  autoSell: true,
 };
 
 export function emptyBook(startingUsd = PAPER_STARTING_USD): PaperBook {

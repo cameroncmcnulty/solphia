@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { loadOwner, saveOwner, tradingPubkey, buildTransfer, withdrawToOwner } from "@/lib/wallet/trading";
+import { ConfigDesk, type ConfigShape } from "./ConfigDesk";
 
 function pickProvider() {
   if (typeof window === "undefined") return null;
@@ -19,6 +20,22 @@ export function AutoPilot({ owner }: { owner: string | null }) {
   const [solAmt, setSolAmt] = useState(0.5);
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
+  const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function cfgFrom(a: any): ConfigShape {
+    return {
+      maxSolPerTrade: a?.maxSolPerTrade ?? 0.25,
+      minScore: a?.minScore ?? 70,
+      takeProfitPct: a?.takeProfitPct ?? 0.32,
+      stopLossPct: a?.stopLossPct ?? 0.16,
+      maxDevHoldPct: a?.maxDevHoldPct ?? 15,
+      autoSell: a?.autoSell !== false,
+      copy: a?.copy !== false,
+      picks: Boolean(a?.picks),
+      launch: Boolean(a?.launch),
+      migrate: a?.migrate !== false,
+    };
+  }
 
   async function refresh(pk = owner) {
     if (!pk) return;
@@ -70,6 +87,12 @@ export function AutoPilot({ owner }: { owner: string | null }) {
     setPaper(j.paper);
     if (j.lab) setLab(j.lab);
     if (j.mind) setMind(j.mind);
+  }
+
+  function patchSoon(partial: Record<string, unknown>) {
+    setAuto((prev: any) => ({ ...(prev || {}), ...partial }));
+    if (debounce.current) clearTimeout(debounce.current);
+    debounce.current = setTimeout(() => patch(partial), 350);
   }
 
   async function deposit() {
@@ -189,34 +212,14 @@ export function AutoPilot({ owner }: { owner: string | null }) {
       )}
 
       <div className="panel rounded-2xl p-5 space-y-3">
-        <div className="font-mono text-[10px] tracking-[0.22em] text-mute">WHAT SHE'S ALLOWED TO DO</div>
+        <div className="font-mono text-[10px] tracking-[0.22em] text-mute">DESKS</div>
         <Toggle label="Copy the decision, not the bag" on={auto?.copy} onChange={(v) => patch({ copy: v })} />
         <Toggle label="Solphia Picks — extremely picky, self-learning" on={auto?.picks} onChange={(v) => patch({ picks: v })} />
         <Toggle label="Launch only if P(grad) clears" on={auto?.launch} onChange={(v) => patch({ launch: v })} />
         <Toggle label="Graduation fills only" on={auto?.migrate} onChange={(v) => patch({ migrate: v })} />
-        <label className="flex items-center justify-between gap-3 font-mono text-xs text-mute">
-          Max SOL / trade
-          <input
-            type="number"
-            step="0.05"
-            min="0.05"
-            className="w-24 rounded-full border border-violet/30 bg-void px-3 py-2 text-right text-ghost outline-none"
-            defaultValue={auto?.maxSolPerTrade ?? 0.25}
-            onBlur={(e) => patch({ maxSolPerTrade: Number(e.target.value) || 0.25 })}
-          />
-        </label>
-        <label className="flex items-center justify-between gap-3 font-mono text-xs text-mute">
-          Min safety
-          <input
-            type="number"
-            min="50"
-            max="95"
-            className="w-24 rounded-full border border-violet/30 bg-void px-3 py-2 text-right text-ghost outline-none"
-            defaultValue={auto?.minScore ?? 70}
-            onBlur={(e) => patch({ minScore: Number(e.target.value) || 70 })}
-          />
-        </label>
       </div>
+
+      <ConfigDesk value={cfgFrom(auto)} onChange={patchSoon} />
       {msg && <p className="font-mono text-xs text-acid">{msg}</p>}
       {!owner && <p className="text-xs text-mute">On iPhone, open solphia.io inside the Phantom app, then tap Connect.</p>}
     </div>
