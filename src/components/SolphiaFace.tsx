@@ -479,17 +479,10 @@ export function SolphiaFace({ mode = "panel" }: { mode?: "hero" | "panel" }) {
       }}
       aria-hidden="true"
     >
-      <div
-        className="pointer-events-none absolute inset-0"
-        style={{
-          background:
-            "radial-gradient(ellipse 55% 60% at 50% 42%, rgba(20,241,149,0.10), rgba(153,69,255,0.06) 42%, transparent 70%)",
-        }}
-      />
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         ref={photo}
-        src="/solphia-face.png"
+        src="/solphia-face-alpha.png"
         alt=""
         draggable={false}
         className={`pointer-events-none absolute inset-0 h-full w-full outline-none ${
@@ -499,24 +492,27 @@ export function SolphiaFace({ mode = "panel" }: { mode?: "hero" | "panel" }) {
           filter: "brightness(1.18) saturate(1.12) contrast(1.08)",
           outline: "none",
           userSelect: "none",
+          ...(hero
+            ? {
+                WebkitMaskImage: "linear-gradient(to bottom, #000 0%, #000 82%, transparent 100%)",
+                maskImage: "linear-gradient(to bottom, #000 0%, #000 82%, transparent 100%)",
+              }
+            : {}),
         }}
       />
       <canvas
         ref={canvas}
         className="pointer-events-none absolute inset-0 h-full w-full outline-none"
-        style={{ outline: "none" }}
+        style={{
+          outline: "none",
+          ...(hero
+            ? {
+                WebkitMaskImage: "linear-gradient(to bottom, #000 0%, #000 82%, transparent 100%)",
+                maskImage: "linear-gradient(to bottom, #000 0%, #000 82%, transparent 100%)",
+              }
+            : {}),
+        }}
       />
-      {hero && (
-        <div
-          className="pointer-events-none absolute inset-0"
-          style={{
-            background: [
-              "linear-gradient(to bottom, transparent 0%, transparent 78%, rgba(4,0,10,0.35) 88%, rgba(4,0,10,0.82) 95%, #04000a 100%)",
-              "linear-gradient(to right, #04000a 0%, transparent 10%, transparent 90%, #04000a 100%)",
-            ].join(", "),
-          }}
-        />
-      )}
     </div>
   );
 }
