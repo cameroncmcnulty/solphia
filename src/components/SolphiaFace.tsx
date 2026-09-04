@@ -177,6 +177,10 @@ function clusterEyes(pts: { x: number; y: number }[]): Eye[] {
   }));
 }
 
+/** Bowl fade: keep head + both shoulders solid, dissolve through the chest — never a hard line across the deltoid. */
+const HERO_MASK =
+  "radial-gradient(ellipse 140% 120% at 50% 8%, #000 46%, #000 62%, rgba(0,0,0,0.55) 76%, transparent 90%)";
+
 export function SolphiaFace({ mode = "panel" }: { mode?: "hero" | "panel" }) {
   const wrap = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -461,7 +465,7 @@ export function SolphiaFace({ mode = "panel" }: { mode?: "hero" | "panel" }) {
       ref={wrap}
       className={`relative touch-none select-none outline-none ${
         hero
-          ? "mx-auto aspect-[3/4] w-full"
+          ? "mx-auto aspect-[3/4] w-full overflow-visible sm:aspect-[4/5]"
           : "h-[240px] w-full overflow-hidden md:h-[300px]"
       }`}
       style={{
@@ -489,11 +493,11 @@ export function SolphiaFace({ mode = "panel" }: { mode?: "hero" | "panel" }) {
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         ref={photo}
-        src="/solphia-face.png"
+        src="/solphia-face.png?v=4"
         alt=""
         draggable={false}
         className={`pointer-events-none absolute inset-0 h-full w-full outline-none ${
-          hero ? "object-cover object-top" : "object-cover"
+          hero ? "object-contain object-center" : "object-cover"
         }`}
         style={{
           filter: "brightness(1.18) saturate(1.12) contrast(1.08)",
@@ -501,8 +505,8 @@ export function SolphiaFace({ mode = "panel" }: { mode?: "hero" | "panel" }) {
           userSelect: "none",
           ...(hero
             ? {
-                WebkitMaskImage: "linear-gradient(to bottom, #000 0%, #000 70%, rgba(0,0,0,0.5) 86%, transparent 100%)",
-                maskImage: "linear-gradient(to bottom, #000 0%, #000 70%, rgba(0,0,0,0.5) 86%, transparent 100%)",
+                WebkitMaskImage: HERO_MASK,
+                maskImage: HERO_MASK,
               }
             : {}),
         }}
@@ -514,8 +518,8 @@ export function SolphiaFace({ mode = "panel" }: { mode?: "hero" | "panel" }) {
           outline: "none",
           ...(hero
             ? {
-                WebkitMaskImage: "linear-gradient(to bottom, #000 0%, #000 70%, rgba(0,0,0,0.5) 86%, transparent 100%)",
-                maskImage: "linear-gradient(to bottom, #000 0%, #000 70%, rgba(0,0,0,0.5) 86%, transparent 100%)",
+                WebkitMaskImage: HERO_MASK,
+                maskImage: HERO_MASK,
               }
             : {}),
         }}
