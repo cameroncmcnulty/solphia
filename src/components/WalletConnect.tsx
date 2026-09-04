@@ -8,6 +8,8 @@ type Provider = {
   publicKey?: { toString(): string };
   connect: (opts?: { onlyIfTrusted?: boolean }) => Promise<{ publicKey: { toString(): string } }>;
   disconnect?: () => Promise<void>;
+  on?: (event: string, handler: (pk?: { toString(): string } | null) => void) => void;
+  off?: (event: string, handler: (pk?: { toString(): string } | null) => void) => void;
   signMessage?: (msg: Uint8Array, enc?: string) => Promise<{ signature: Uint8Array } | Uint8Array>;
 };
 
@@ -26,7 +28,13 @@ function phantom(): Provider | null {
   return null;
 }
 
-export function WalletConnect({ compact = false }: { compact?: boolean }) {
+function setOwner(pubkey: string | null) {
+  if (pubkey) localStorage.setItem("solphia_owner", pubkey);
+  else localStorage.removeItem("solphia_owner");
+  window.dispatchEvent(new CustomEvent("solphia-owner", { detail: pubkey }));
+}
+
+export function WalletConnect({ compact: _compact = false }: { compact?: boolean }) {
   const [addr, setAddr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -35,9 +43,19 @@ export function WalletConnect({ compact = false }: { compact?: boolean }) {
     if (found?.publicKey) {
       const pubkey = found.publicKey.toString();
       setAddr(pubkey);
-      localStorage.setItem("solphia_owner", pubkey);
-      window.dispatchEvent(new CustomEvent("solphia-owner", { detail: pubkey }));
+      setOwner(pubkey);
     }
+    const onAccount = (pk?: { toString(): string } | null) => {
+      const next = pk ? pk.toString() : null;
+      setAddr(next);
+      setOwner(next);
+    };
+    found?.on?.("accountChanged", onAccount);
+    found?.on?.("disconnect", onAccount);
+    return () => {
+      found?.off?.("accountChanged", onAccount);
+      found?.off?.("disconnect", onAccount);
+    };
   }, []);
 
   async function connect() {
@@ -48,12 +66,15 @@ export function WalletConnect({ compact = false }: { compact?: boolean }) {
       return;
     }
     setBusy(true);
+    const prev = addr;
     try {
+      if (addr && found.disconnect) {
+        await found.disconnect();
+      }
       const res = await found.connect();
       const pubkey = res.publicKey.toString();
       setAddr(pubkey);
-      localStorage.setItem("solphia_owner", pubkey);
-      window.dispatchEvent(new CustomEvent("solphia-owner", { detail: pubkey }));
+      setOwner(pubkey);
       const nonceRes = await fetch("/api/session");
       const nonceJson = await nonceRes.json();
       if (found.signMessage && nonceJson.message) {
@@ -69,19 +90,13 @@ export function WalletConnect({ compact = false }: { compact?: boolean }) {
         });
       }
     } catch {
-      setAddr(null);
+      if (prev) {
+        setAddr(prev);
+        setOwner(prev);
+      }
     } finally {
       setBusy(false);
     }
-  }
-
-  if (addr) {
-    return (
-      <div className="inline-flex items-center gap-2 font-mono text-[11px] tracking-widest text-ghost">
-        <PhantomMark className="h-5 w-5 shrink-0 text-white" />
-        {`${addr.slice(0, 4)}…${addr.slice(-4)}`}
-      </div>
-    );
   }
 
   return (
@@ -89,10 +104,11 @@ export function WalletConnect({ compact = false }: { compact?: boolean }) {
       type="button"
       disabled={busy}
       onClick={connect}
+      title={addr ? "Switch Phantom wallet" : "Connect Phantom"}
       className="btn-ghost inline-flex min-h-[40px] items-center gap-2 rounded-full px-3 py-2 font-mono text-[11px] tracking-widest sm:min-h-[44px] sm:px-4"
     >
       <PhantomMark className="h-5 w-5 shrink-0 text-white" />
-      {busy ? "SIGNING…" : "CONNECT"}
+      {busy ? "SIGNING…" : addr ? `${addr.slice(0, 4)}…${addr.slice(-4)}` : "CONNECT"}
     </button>
   );
 }
