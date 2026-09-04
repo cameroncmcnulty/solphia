@@ -77,9 +77,9 @@ export function WalletConnect({ compact = false }: { compact?: boolean }) {
 
   if (addr) {
     return (
-      <div className="inline-flex items-center gap-2 font-mono text-[11px] tracking-widest text-cyan">
-        <PhantomMark className="h-4 w-4 shrink-0" />
-        {compact ? `${addr.slice(0, 4)}…${addr.slice(-4)}` : `PHANTOM ${addr.slice(0, 4)}…${addr.slice(-4)}`}
+      <div className="inline-flex items-center gap-2 font-mono text-[11px] tracking-widest text-ghost">
+        <PhantomMark className="h-5 w-5 shrink-0 text-white" />
+        {`${addr.slice(0, 4)}…${addr.slice(-4)}`}
       </div>
     );
   }
@@ -89,10 +89,10 @@ export function WalletConnect({ compact = false }: { compact?: boolean }) {
       type="button"
       disabled={busy}
       onClick={connect}
-      className="btn-ghost inline-flex min-h-[40px] items-center gap-2 rounded-full px-3 py-2 font-mono text-[11px] sm:min-h-[44px] sm:px-4"
+      className="btn-ghost inline-flex min-h-[40px] items-center gap-2 rounded-full px-3 py-2 font-mono text-[11px] tracking-widest sm:min-h-[44px] sm:px-4"
     >
-      <PhantomMark className="h-4 w-4 shrink-0" />
-      {busy ? "Signing…" : compact ? "Phantom" : "Connect Phantom"}
+      <PhantomMark className="h-5 w-5 shrink-0 text-white" />
+      {busy ? "SIGNING…" : "CONNECT"}
     </button>
   );
 }
