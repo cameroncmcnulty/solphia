@@ -47,6 +47,7 @@ describe("official mint rails", () => {
     assert.equal(isAllowedMint(SPYX_MINT_OFFICIAL), true);
     assert.equal(isAllowedMint("DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263"), false);
     assert.equal(routeMintsOk([SOL_MINT, USDC_MINT, SPYX_MINT_OFFICIAL]), true);
+    assert.equal(routeMintsOk([SOL_MINT, "7vfCXTUXx5WJV5JADk17DUJ4ksgau7utNKj4b963voxs", SPYX_MINT_OFFICIAL]), true);
     assert.equal(routeMintsOk([SOL_MINT, "JunkMint11111111111111111111111111111111111"]), false);
   });
 });
@@ -117,7 +118,8 @@ describe("ratio band engine", () => {
     const base = { auto: auto(), book, samples: hist(), study: DEFAULT_STUDY, now: CASH };
     assert.equal(decidePair({ ...base, prices: px(100, 770, 500_000, true) }).action, "skip");
     assert.match(decidePair({ ...base, prices: px(100, 770, 1_000) }).reason, /liquidity/i);
-    assert.match(decidePair({ ...base, prices: px(), quoteOk: false }).reason, /Jupiter/i);
+    assert.match(decidePair({ ...base, prices: px(), quoteOk: false, live: true }).reason, /Jupiter/i);
+    assert.notEqual(decidePair({ ...base, prices: px(), quoteOk: false }).action, "skip");
     assert.match(decidePair({ ...base, prices: px(), impactPct: 0.05 }).reason, /impact/i);
   });
 

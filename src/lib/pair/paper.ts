@@ -296,6 +296,7 @@ export function tickPairBook(opts: {
   depositedSol?: number;
   impactPct?: number;
   quoteOk?: boolean;
+  live?: boolean;
 }): { decision: PairDecision; fills: PaperFill[] } {
   const losses = opts.book.lossCount || 0;
   const decision = decidePair({
@@ -309,8 +310,9 @@ export function tickPairBook(opts: {
     depositedSol: opts.depositedSol,
     impactPct: opts.impactPct,
     quoteOk: opts.quoteOk,
+    live: opts.live || (opts.auto.mode === "live" && LIVE_TRADING),
   });
-  const live = opts.auto.mode === "live" && LIVE_TRADING;
+  const live = opts.live || (opts.auto.mode === "live" && LIVE_TRADING);
   const actionable =
     decision.action === "sell_sol" ||
     decision.action === "sell_spyx" ||

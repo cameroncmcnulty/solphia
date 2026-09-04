@@ -2,7 +2,7 @@ import type { EngineSettings } from "./types";
 
 export const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://solphia.io";
 export const NETWORK = process.env.NEXT_PUBLIC_NETWORK || "mainnet-beta";
-export const LIVE_TRADING = process.env.LIVE_TRADING === "true";
+export const LIVE_TRADING = process.env.LIVE_TRADING === "true" || process.env.NEXT_PUBLIC_LIVE_TRADING === "true";
 export const PAPER_STARTING_USD = Number(process.env.PAPER_STARTING_USD || 1000);
 export const SUBSCRIPTION_SOL = 0.15;
 export { PLANS } from "./plans";

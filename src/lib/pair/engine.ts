@@ -122,6 +122,7 @@ export function decidePair(opts: {
   depositedSol?: number;
   impactPct?: number;
   quoteOk?: boolean;
+  live?: boolean;
 }): PairDecision {
   const { auto, book, prices, samples, study, now } = opts;
   const session = usEquitySession(now);
@@ -153,7 +154,7 @@ export function decidePair(opts: {
     return empty("skip", `SPYx liquidity $${Math.round(prices.liquidityUsd)} under $${MIN_SPYX_LIQUIDITY_USD}. Skip.`);
   }
   if (cashOpenAuction(now)) return empty("skip", "US cash open auction. Sit 15 minutes.");
-  if (opts.quoteOk === false) return empty("skip", "Jupiter quote failed. Skip.");
+  if (opts.live && opts.quoteOk === false) return empty("skip", "Jupiter quote failed. Skip.");
   if ((opts.impactPct || 0) > (auto.maxImpactPct || PAIR_MAX_IMPACT)) {
     return empty("skip", `Price impact ${((opts.impactPct || 0) * 100).toFixed(2)}% over cap. Skip.`);
   }

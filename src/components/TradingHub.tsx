@@ -9,7 +9,7 @@ import { SOL_MINT, USDC_MINT, spyxMint } from "@/lib/pair/mints";
 function pickProvider() {
   if (typeof window === "undefined") return null;
   const w = window as any;
-  return w.phantom?.solana || w.solflare || w.solana || null;
+  return w.phantom?.solana?.isPhantom ? w.phantom.solana : w.solana?.isPhantom ? w.solana : null;
 }
 
 type Auto = {
@@ -127,7 +127,7 @@ export function TradingHub() {
       try {
         const tpk = tradingPubkey();
         const slip = auto?.slippageBps || 50;
-        async function swap(inputMint: string, outputMint: string, amount: number) {
+        async function swapOne(inputMint: string, outputMint: string, amount: number) {
           const r = await fetch("/api/pair/swap", {
             method: "POST",
             headers: { "content-type": "application/json" },
@@ -137,6 +137,17 @@ export function TradingHub() {
           if (!r.ok) throw new Error(j.error || "swap build failed");
           return signAndSendSwap(j.transaction);
         }
+        async function swap(inputMint: string, outputMint: string, amount: number) {
+          const from = inputMint === SOL_MINT ? "SOL" : inputMint === USDC_MINT ? "USDC" : "SPYx";
+          const to = outputMint === SOL_MINT ? "SOL" : outputMint === USDC_MINT ? "USDC" : "SPYx";
+          const q = await fetch(`/api/pair/quote?from=${from}&to=${to}&amount=${amount}&slippageBps=${slip}`).then((r) => r.json());
+          if (!q.ok) throw new Error(q.reason || "quote failed");
+          if (q.viaUsdc && q.midAmount > 0) {
+            await swapOne(inputMint, USDC_MINT, amount);
+            return swapOne(USDC_MINT, outputMint, q.midAmount);
+          }
+          return swapOne(inputMint, outputMint, amount);
+        }
         let sig = "";
         if (intent.action === "sell_sol" || (intent.action === "rebalance" && intent.from === "SOL")) {
           sig = await swap(SOL_MINT, outMint, intent.clipUsd / solPx);
@@ -144,14 +155,12 @@ export function TradingHub() {
           sig = await swap(outMint, SOL_MINT, intent.clipUsd / spyPx);
         } else if (intent.action === "deploy") {
           const solPct = intent.solPct ?? 0.5;
-          const usdcSol = intent.clipUsd * solPct;
-          const usdcSpy = intent.clipUsd - usdcSol;
-          sig = await swap(USDC_MINT, SOL_MINT, usdcSol);
-          if (usdcSpy > 1) await swap(USDC_MINT, outMint, usdcSpy);
+          const spyUsd = intent.clipUsd * (1 - solPct);
+          const solIn = spyUsd / solPx;
+          if (solIn > 0.002) sig = await swap(SOL_MINT, outMint, solIn);
         } else if (intent.action === "flatten") {
           const h = paper?.pair;
-          if (h?.solQty > 0.001) sig = await swap(SOL_MINT, USDC_MINT, h.solQty);
-          if (h?.spyxQty > 0.0001) sig = await swap(outMint, USDC_MINT, h.spyxQty);
+          if (h?.spyxQty > 0.0001) sig = await swap(outMint, SOL_MINT, h.spyxQty);
         }
         if (sig) {
           const r = await fetch("/api/auto", {
@@ -172,7 +181,7 @@ export function TradingHub() {
   }, [liveTrading, auto?.mode, auto?.slippageBps, armed, owner, paper?.pendingIntent, pair?.solUsd, pair?.spyxUsd, data?.solUsd, data?.spyxUsd]);
 
   async function patch(partial: Record<string, unknown>) {
-    if (!owner) return setMsg("Connect Phantom or Solflare first.");
+    if (!owner) return setMsg("Connect Phantom first.");
     const r = await fetch("/api/auto", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -194,9 +203,26 @@ export function TradingHub() {
   }
 
   async function kill() {
-    if (!owner) return setMsg("Connect first.");
+    if (!owner) return setMsg("Connect Phantom first.");
     setBusy(true);
     try {
+      if (liveTrading && auto?.mode === "live" && (paper?.pair?.spyxQty || 0) > 0.0001) {
+        const tpk = tradingPubkey();
+        const r0 = await fetch("/api/pair/swap", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            owner,
+            tradingPubkey: tpk,
+            inputMint: spyxMint(),
+            outputMint: SOL_MINT,
+            amount: paper.pair.spyxQty,
+            slippageBps: auto?.slippageBps || 50,
+          }),
+        });
+        const j0 = await r0.json();
+        if (r0.ok && j0.transaction) await signAndSendSwap(j0.transaction);
+      }
       const r = await fetch("/api/auto", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -205,8 +231,10 @@ export function TradingHub() {
       const j = await r.json();
       setAuto(j.auto);
       setPaper(j.paper);
-      setMsg("Kill switch. Flattened to USDC. Halted.");
+      setMsg("Kill switch. Flattened to SOL. Halted.");
       refresh();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "kill failed");
     } finally {
       setBusy(false);
     }
@@ -214,7 +242,7 @@ export function TradingHub() {
 
   async function deposit() {
     const provider = pickProvider();
-    if (!provider || !owner) return setMsg("Open this page inside Phantom or Solflare.");
+    if (!provider || !owner) return setMsg("Open this page in Phantom (browser or in-app).");
     setBusy(true);
     try {
       const tpk = tradingPubkey();
@@ -265,7 +293,7 @@ export function TradingHub() {
           <p className="font-mono text-[11px] tracking-[0.28em] text-violet">SOL ↔ SPYx · PAPER FIRST · SPOT ONLY</p>
           <h1 className="mt-1 font-display text-3xl leading-none text-ghost sm:text-4xl md:text-6xl">Operate</h1>
           <p className="mt-3 max-w-xl text-base text-mute sm:text-lg">
-            Connect. Fund SOL. Set a few knobs. She trades official tokenized S&P 500 against SOL — or she sits.
+            Connect Phantom. Fund SOL. Set a few knobs. She trades official tokenized S&P 500 against SOL — or she sits.
           </p>
         </div>
         <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center">
@@ -299,7 +327,7 @@ export function TradingHub() {
         <div className="panel mt-5 rounded-2xl border-cyan/30 p-4">
           <div className="font-mono text-[11px] tracking-[0.2em] text-cyan">PREVIEW MODE</div>
           <p className="mt-1 text-base text-mute">
-            Connect Phantom or Solflare. Optional dedicated trading wallet you own. Deposit SOL. Paper is the default.
+            Connect Phantom. Deposit SOL into the trading wallet on this device. Paper first, then flip Live when you want real swaps.
           </p>
         </div>
       )}
@@ -347,6 +375,13 @@ export function TradingHub() {
             · liq ${Math.round(pair.liquidityUsd || 0).toLocaleString()} · band ±{Number(pair.bandK || 0).toFixed(2)}σ
           </p>
         )}
+        {(data?.health || []).length > 0 && (
+          <p className="mt-1 font-mono text-[11px] text-mute">
+            {(data.health as { source: string; ok: boolean; error?: string }[])
+              .map((h) => `${h.source} ${h.ok ? "ok" : h.error || "down"}`)
+              .join(" · ")}
+          </p>
+        )}
 
         <div className="mt-6 border-t border-violet/20 pt-5">
           <div className="font-mono text-[10px] tracking-[0.2em] text-mute">
@@ -382,7 +417,7 @@ export function TradingHub() {
             </button>
           </div>
           <p className="mt-3 text-sm text-mute">
-            Keep gas in SOL. Working capital marks in USDC. On stop or kill she flattens both sleeves to USDC.
+            Deposit SOL. She keeps gas, then trades SOL ↔ official SPYx. Live kill sells SPYx back to SOL.
           </p>
         </div>
       </section>
@@ -517,7 +552,7 @@ export function TradingHub() {
             <div className="flex items-center justify-between gap-3">
               <div>
                 <div className="font-mono text-[11px] text-mute">Paper / Live</div>
-                <p className="text-sm text-mute">Live stays off until the flag is on. You sign every live swap.</p>
+                <p className="text-sm text-mute">Paper is the default. Flip Live after you fund SOL. Phantom signs each swap from the trading wallet.</p>
               </div>
               <button
                 type="button"

@@ -29,7 +29,15 @@ export function spyxMint(): string {
   return SPYX_MINT_OFFICIAL;
 }
 
+export const USDT_MINT = "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB";
+/** Wormhole ETH — Jupiter may hop this on tokenized-equity routes. Not a position we hold. */
+export const WETH_MINT = "7vfCXTUXx5WJV5JADk17DUJ4ksgau7utNKj4b963voxs";
+
 export const ALLOWED_MINTS = () => new Set([SOL_MINT, USDC_MINT, spyxMint()]);
+
+/** Hops Jupiter may use with restrictIntermediateTokens. Endpoints stay SOL / USDC / official SPYx. */
+export const LIQUID_HOPS = () =>
+  new Set([SOL_MINT, USDC_MINT, USDT_MINT, WETH_MINT, spyxMint()]);
 
 const LOOKALIKE = /^(spy|spx|sp500|s&p|s&p500|spyx|spyxstock|us500)$/i;
 
@@ -46,6 +54,6 @@ export function isAllowedMint(mint: string): boolean {
 }
 
 export function routeMintsOk(mints: string[]): boolean {
-  const allow = ALLOWED_MINTS();
-  return mints.every((m) => allow.has(m));
+  const hops = LIQUID_HOPS();
+  return mints.every((m) => hops.has(m));
 }

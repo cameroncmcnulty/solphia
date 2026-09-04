@@ -126,7 +126,7 @@ export async function runMarketTick(): Promise<{
     let quoteOk: boolean | undefined;
     try {
       const q = await quoteSolSpyx(0.1, 50);
-      quoteOk = q.ok;
+      quoteOk = q.ok ? true : undefined;
       if (q.ok) impactPct = q.impactPct;
       health.push({
         source: "jupiter",
@@ -137,7 +137,7 @@ export async function runMarketTick(): Promise<{
         at: now,
       });
     } catch (e) {
-      quoteOk = false;
+      quoteOk = undefined;
       health.push({
         source: "jupiter",
         ok: false,
@@ -157,7 +157,6 @@ export async function runMarketTick(): Promise<{
       study: history.study,
       now,
       mind: state.mind,
-      quoteOk,
       impactPct,
     });
 
@@ -176,6 +175,7 @@ export async function runMarketTick(): Promise<{
         trader.updatedAt = now;
         continue;
       }
+      const live = trader.auto.mode === "live";
       const t = tickPairBook({
         book: trader.book,
         auto: trader.auto,
@@ -185,8 +185,9 @@ export async function runMarketTick(): Promise<{
         now,
         mind: state.mind,
         depositedSol: trader.depositedSol,
-        quoteOk,
+        quoteOk: live ? quoteOk : undefined,
         impactPct,
+        live,
       });
       entries += t.fills.filter((f) => f.side === "buy").length;
       exits += t.fills.filter((f) => f.side === "sell").length;
