@@ -17,8 +17,11 @@ export async function GET(req: NextRequest) {
   if (!isSolanaAddress(owner)) return NextResponse.json({ error: "bad_owner" }, { status: 400 });
   const state = loadState();
   const trader = state.traders[owner] || emptyTrader(owner);
+  const auto = { ...DEFAULT_AUTO, ...trader.auto, leverage: 1 as const };
+  if (trader.book.killed) auto.armed = false;
+  else if (auto.mode !== "live") auto.armed = true;
   return NextResponse.json({
-    auto: { ...DEFAULT_AUTO, ...trader.auto, leverage: 1 },
+    auto,
     tradingPubkey: trader.tradingPubkey || null,
     depositedSol: trader.depositedSol,
     paper: publicBook(trader.book),
@@ -78,11 +81,13 @@ export async function POST(req: NextRequest) {
     const t = s.traders[parsed.data.owner] || emptyTrader(parsed.data.owner);
     const wasArmed = Boolean(t.auto?.armed);
     t.auto = { ...DEFAULT_AUTO, ...t.auto, ...(parsed.data.auto || {}), leverage: 1 };
+    if (t.auto.mode !== "live" && !t.book.killed) t.auto.armed = true;
     if (t.auto.armed && !wasArmed) {
       t.auto.armedAt = Date.now();
       if (t.book.killed) unkilled(t.book);
     }
-    if (!t.auto.armed) t.auto.armedAt = undefined;
+    if (parsed.data.auto?.armed === true && t.book.killed) unkilled(t.book);
+    if (!t.auto.armedAt) t.auto.armedAt = Date.now();
     if (t.auto.mode === "live" && !LIVE_TRADING) t.auto.mode = "paper";
     if (parsed.data.tradingPubkey) t.tradingPubkey = parsed.data.tradingPubkey;
     if (parsed.data.depositedSol != null) t.depositedSol = parsed.data.depositedSol;
@@ -131,9 +136,12 @@ export async function POST(req: NextRequest) {
     s.traders[parsed.data.owner] = t;
     return t;
   });
+  const autoOut = { ...DEFAULT_AUTO, ...trader.auto, leverage: 1 as const };
+  if (trader.book.killed) autoOut.armed = false;
+  else if (autoOut.mode !== "live") autoOut.armed = true;
   return NextResponse.json({
     ok: true,
-    auto: { ...DEFAULT_AUTO, ...trader.auto, leverage: 1 },
+    auto: autoOut,
     tradingPubkey: trader.tradingPubkey || null,
     depositedSol: trader.depositedSol,
     paper: publicBook(trader.book),

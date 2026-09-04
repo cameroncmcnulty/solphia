@@ -9,11 +9,11 @@ import { spyxMint } from "@/lib/pair/mints";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
-  if (!rateLimit(clientIp(req) + ":feed", 30, 60_000)) {
+  if (!rateLimit(clientIp(req) + ":feed", 90, 60_000)) {
     return NextResponse.json({ error: "rate_limited" }, { status: 429 });
   }
   const state = loadState();
-  const stale = Date.now() - (state.lastTickAt || 0) > 15_000;
+  const stale = Date.now() - (state.lastTickAt || 0) > 8_000;
   if (stale) {
     const tick = await runMarketTick();
     return NextResponse.json({

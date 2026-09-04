@@ -146,7 +146,7 @@ export function decidePair(opts: {
 
   if (book.killed) return empty("skip", "Kill switch is on. Flattened. Sitting.");
   if ((book.haltedUntil || 0) > now) return empty("skip", book.haltReason || "Halted.");
-  if (!auto.armed) return empty("hold", "Bot is idle. Launch her to paper-trade the ratio.");
+  if (!auto.armed && auto.mode === "live") return empty("hold", "Live is off. Paper still marks the book.");
   if (prices.stale || prices.sol.usd <= 0 || prices.spyx.usd <= 0) {
     return empty("skip", prices.reason || "Stale oracle. Skip.");
   }

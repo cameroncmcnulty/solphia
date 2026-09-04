@@ -7,7 +7,7 @@ import { FaqList } from "@/components/FaqList";
 import { useMarket } from "@/lib/hooks";
 
 export default function Home() {
-  const { data } = useMarket(15000);
+  const { data } = useMarket(8000);
   const pair = data?.pair;
   const tape = (data?.paper?.tape || []).slice(0, 8);
 

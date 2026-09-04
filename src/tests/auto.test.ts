@@ -34,7 +34,7 @@ describe("auto bankroll", () => {
     });
     const same = maybeResizeBook(t.book, 500);
     assert.equal(same.fills.length, 1);
-    assert.equal(DEFAULT_AUTO.armed, false);
+    assert.equal(DEFAULT_AUTO.armed, true);
     assert.equal(DEFAULT_AUTO.mode, "paper");
     assert.equal(DEFAULT_AUTO.armedAt, undefined);
     assert.equal(DEFAULT_AUTO.style, "mean_revert");

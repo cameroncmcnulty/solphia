@@ -2,7 +2,7 @@ import type { AutoSettings, PaperBook, TraderAccount } from "./types";
 import { PAPER_STARTING_USD } from "./config";
 
 export const DEFAULT_AUTO: AutoSettings = {
-  armed: false,
+  armed: true,
   mode: "paper",
   allocationPct: 0.5,
   style: "mean_revert",
@@ -43,7 +43,7 @@ export function emptyTrader(owner: string): TraderAccount {
   return {
     owner,
     depositedSol: 0,
-    auto: { ...DEFAULT_AUTO },
+    auto: { ...DEFAULT_AUTO, armed: true, armedAt: Date.now() },
     book: emptyBook(),
     updatedAt: Date.now(),
   };

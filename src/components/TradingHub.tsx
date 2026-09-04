@@ -61,6 +61,7 @@ export function TradingHub() {
   const [now, setNow] = useState(Date.now());
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
   const liveLock = useRef(false);
+  const lastDep = useRef<number | null>(null);
 
   const demoPaper = data?.paper;
   const book = paper || demoPaper;
@@ -76,13 +77,16 @@ export function TradingHub() {
     const tpk = a.tradingPubkey || tradingPubkey();
     setTradePk(tpk);
     const b = await fetch(`/api/sol/balance?pubkey=${tpk}`).then((r) => r.json());
-    setBal(b.sol || 0);
     if (typeof b.sol === "number") {
-      await fetch("/api/auto", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ owner: pk, tradingPubkey: tpk, depositedSol: b.sol }),
-      });
+      setBal(b.sol);
+      if (lastDep.current == null || Math.abs(lastDep.current - b.sol) > 0.0005) {
+        lastDep.current = b.sol;
+        await fetch("/api/auto", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ owner: pk, tradingPubkey: tpk, depositedSol: b.sol }),
+        });
+      }
     }
   }
 
@@ -276,8 +280,8 @@ export function TradingHub() {
   const tape = book?.tape || [];
   const pnlPct = book ? book.pnlPct : 0;
   const pnlUsd = book ? book.equityUsd - book.startingUsd : 0;
-  const uptime = armed && auto?.armedAt ? fmtDur(now - auto.armedAt) : "—";
-  const status = !owner ? "PREVIEW" : book?.killed ? "KILLED" : armed ? (live ? "RUNNING" : "ARMED") : "IDLE";
+  const uptime = auto?.armedAt ? fmtDur(now - auto.armedAt) : "on";
+  const status = book?.killed ? "KILLED" : "PAPER RUNNING";
   const halted = book?.haltReason && (book.haltedUntil || 0) > Date.now();
   const solQty = book?.pair?.solQty ?? pair?.solQty ?? 0;
   const spyxQty = book?.pair?.spyxQty ?? pair?.spyxQty ?? 0;
@@ -298,15 +302,19 @@ export function TradingHub() {
         </div>
         <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center">
           <WalletConnect />
-          <button
-            type="button"
-            onClick={() => patch({ armed: !armed })}
-            className={`inline-flex min-h-[52px] w-full items-center justify-center rounded-full px-8 py-3 text-base sm:min-h-[56px] sm:w-auto sm:text-lg ${
-              armed ? "btn-ghost" : "btn-acid"
-            }`}
-          >
-            {armed ? "STOP" : "RUN"}
-          </button>
+          {book?.killed ? (
+            <button
+              type="button"
+              onClick={() => patch({ armed: true })}
+              className="btn-acid inline-flex min-h-[52px] w-full items-center justify-center rounded-full px-8 py-3 text-base sm:min-h-[56px] sm:w-auto sm:text-lg"
+            >
+              RESUME
+            </button>
+          ) : (
+            <div className="btn-on inline-flex min-h-[52px] w-full items-center justify-center rounded-full px-8 py-3 text-base sm:min-h-[56px] sm:w-auto sm:text-lg">
+              PAPER ON
+            </div>
+          )}
           <button
             type="button"
             onClick={kill}

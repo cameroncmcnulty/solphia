@@ -171,14 +171,14 @@ export async function runMarketTick(): Promise<{
       if (!trader.book.pair) {
         trader.book.pair = { solQty: 0, spyxQty: 0, usdcQty: trader.book.cashUsd };
       }
-      if (!trader.auto.armed && !trader.book.killed) {
+      if (trader.book.killed) {
         trader.updatedAt = now;
         continue;
       }
-      const live = trader.auto.mode === "live";
+      const live = trader.auto.mode === "live" && Boolean(trader.auto.armed);
       const t = tickPairBook({
         book: trader.book,
-        auto: trader.auto,
+        auto: { ...trader.auto, armed: true, mode: live ? "live" : "paper" },
         prices,
         samples,
         study: history.study,
