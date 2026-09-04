@@ -489,7 +489,7 @@ export function SolphiaFace({ mode = "panel" }: { mode?: "hero" | "panel" }) {
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         ref={photo}
-        src={hero ? "/solphia-hero.png?v=1" : "/solphia-face.png?v=5"}
+        src={hero ? "/solphia-hero.png?v=2" : "/solphia-face.png?v=5"}
         alt=""
         draggable={false}
         className={`pointer-events-none absolute inset-0 h-full w-full outline-none ${
@@ -509,9 +509,9 @@ export function SolphiaFace({ mode = "panel" }: { mode?: "hero" | "panel" }) {
           ...(hero
             ? {
                 WebkitMaskImage:
-                  "linear-gradient(to bottom, #000 0%, #000 56%, rgba(0,0,0,0.55) 72%, transparent 90%)",
+                  "linear-gradient(to bottom, #000 0%, #000 70%, rgba(0,0,0,0.6) 84%, transparent 96%)",
                 maskImage:
-                  "linear-gradient(to bottom, #000 0%, #000 56%, rgba(0,0,0,0.55) 72%, transparent 90%)",
+                  "linear-gradient(to bottom, #000 0%, #000 70%, rgba(0,0,0,0.6) 84%, transparent 96%)",
               }
             : {}),
         }}
