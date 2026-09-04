@@ -177,9 +177,16 @@ function clusterEyes(pts: { x: number; y: number }[]): Eye[] {
   }));
 }
 
-/** Bowl fade: keep head + both shoulders solid, dissolve through the chest — never a hard line across the deltoid. */
-const HERO_MASK =
-  "radial-gradient(ellipse 140% 120% at 50% 8%, #000 46%, #000 62%, rgba(0,0,0,0.55) 76%, transparent 90%)";
+/** Soft dissolve into the page void on chest + outer shoulders — no hard crop. */
+const VOID = "#04000a";
+const HERO_FADE = [
+  `linear-gradient(to bottom, transparent 0%, transparent 58%, rgba(4,0,10,0.12) 70%, rgba(4,0,10,0.48) 82%, rgba(4,0,10,0.88) 93%, ${VOID} 100%)`,
+  `linear-gradient(to right, ${VOID} 0%, transparent 8%, transparent 92%, ${VOID} 100%)`,
+].join(", ");
+const PANEL_FADE = [
+  `linear-gradient(to bottom, transparent 0%, transparent 55%, rgba(4,0,10,0.4) 75%, ${VOID} 100%)`,
+  `radial-gradient(ellipse 80% 85% at 50% 42%, transparent 50%, ${VOID} 100%)`,
+].join(", ");
 
 export function SolphiaFace({ mode = "panel" }: { mode?: "hero" | "panel" }) {
   const wrap = useRef<HTMLDivElement>(null);
@@ -465,7 +472,7 @@ export function SolphiaFace({ mode = "panel" }: { mode?: "hero" | "panel" }) {
       ref={wrap}
       className={`relative touch-none select-none outline-none ${
         hero
-          ? "mx-auto aspect-[3/4] w-full overflow-visible sm:aspect-[4/5]"
+          ? "mx-auto aspect-[3/4] w-full overflow-visible"
           : "h-[240px] w-full overflow-hidden md:h-[300px]"
       }`}
       style={{
@@ -474,12 +481,6 @@ export function SolphiaFace({ mode = "panel" }: { mode?: "hero" | "panel" }) {
         WebkitUserSelect: "none",
         userSelect: "none",
         outline: "none",
-        ...(hero
-          ? {}
-          : {
-              WebkitMaskImage: "radial-gradient(ellipse 80% 90% at 50% 48%, #000 70%, transparent 100%)",
-              maskImage: "radial-gradient(ellipse 80% 90% at 50% 48%, #000 70%, transparent 100%)",
-            }),
       }}
       aria-hidden="true"
     >
@@ -493,36 +494,26 @@ export function SolphiaFace({ mode = "panel" }: { mode?: "hero" | "panel" }) {
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         ref={photo}
-        src="/solphia-face.png?v=4"
+        src="/solphia-face.png?v=5"
         alt=""
         draggable={false}
-        className={`pointer-events-none absolute inset-0 h-full w-full outline-none ${
-          hero ? "object-contain object-center" : "object-cover"
+        className={`pointer-events-none absolute outline-none ${
+          hero ? "inset-x-0 top-0 h-[90%] w-full object-contain object-top" : "inset-0 h-full w-full object-cover"
         }`}
         style={{
           filter: "brightness(1.18) saturate(1.12) contrast(1.08)",
           outline: "none",
           userSelect: "none",
-          ...(hero
-            ? {
-                WebkitMaskImage: HERO_MASK,
-                maskImage: HERO_MASK,
-              }
-            : {}),
         }}
       />
       <canvas
         ref={canvas}
         className="pointer-events-none absolute inset-0 h-full w-full outline-none"
-        style={{
-          outline: "none",
-          ...(hero
-            ? {
-                WebkitMaskImage: HERO_MASK,
-                maskImage: HERO_MASK,
-              }
-            : {}),
-        }}
+        style={{ outline: "none" }}
+      />
+      <div
+        className="pointer-events-none absolute inset-0"
+        style={{ background: hero ? HERO_FADE : PANEL_FADE }}
       />
     </div>
   );
