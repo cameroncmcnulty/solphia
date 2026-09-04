@@ -18,15 +18,15 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   metadataBase: new URL("https://solphia.io"),
   title: {
-    default: "SOLPHIA — Solana memecoin terminal",
+    default: "SOLPHIA — SOL vs tokenized S&P 500",
     template: "%s · SOLPHIA",
   },
   description:
-    "Solana copy bot. Deposit SOL into a wallet you own. Solphia copies profitable traders and skips coins that look like rugs.",
+    "Non-custodial SOL ↔ official SPYx bot on Solana. Paper first. Kill switch on. Keys stay on your device.",
   applicationName: "SOLPHIA",
   openGraph: {
     title: "SOLPHIA",
-    description: "Deposit SOL. She copies the wallets that are already up.",
+    description: "Deposit SOL. She trades official tokenized S&P 500 — or she sits.",
     url: "https://solphia.io",
     siteName: "SOLPHIA",
     images: [{ url: "/og.jpg", width: 1376, height: 768 }],
@@ -35,7 +35,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "SOLPHIA",
-    description: "Deposit SOL. She copies the wallets that are already up.",
+    description: "Deposit SOL. She trades official tokenized S&P 500 — or she sits.",
     images: ["/og.jpg"],
   },
   icons: {

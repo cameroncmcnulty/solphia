@@ -37,5 +37,7 @@ describe("auto bankroll", () => {
     assert.equal(DEFAULT_AUTO.armed, false);
     assert.equal(DEFAULT_AUTO.mode, "paper");
     assert.equal(DEFAULT_AUTO.armedAt, undefined);
+    assert.equal(DEFAULT_AUTO.style, "mean_revert");
+    assert.equal(DEFAULT_AUTO.leverage, 1);
   });
 });

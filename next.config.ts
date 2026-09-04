@@ -32,6 +32,11 @@ const nextConfig: NextConfig = {
     return [
       { source: "/subscribe", destination: "/pricing", permanent: false },
       { source: "/auto", destination: "/trading", permanent: false },
+      { source: "/copy", destination: "/trading", permanent: false },
+      { source: "/alerts", destination: "/trading", permanent: false },
+      { source: "/sniper", destination: "/trading", permanent: false },
+      { source: "/migrate", destination: "/trading", permanent: false },
+      { source: "/terminal", destination: "/trading", permanent: false },
     ];
   },
   images: {

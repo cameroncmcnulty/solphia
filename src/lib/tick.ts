@@ -1,15 +1,26 @@
-import { ingestMarket } from "./feeds";
-import { DEMO_DESKS, tickBook, tickPaper } from "./paper/engine";
-import { scoreToken } from "./risk/engine";
-import { loadState, saveState } from "./store";
-import { bankrollUsd, maybeResizeBook } from "./auto";
-import { tagFundingDumps } from "./helius/watch";
+import { DEFAULT_AUTO, bankrollUsd, maybeResizeBook } from "./auto";
+import { LIVE_TRADING } from "./config";
 import { publicMind } from "./mind/engine";
-import { tickSolBook, readSolDesk } from "./sol/paper";
-import type { SolDeskPublic } from "./sol/engine";
-import type { FeedHealth, PaperBook, RiskReport, TokenSnapshot } from "./types";
+import { tickPairBook } from "./pair/paper";
+import { loadPairHistory, pushLiveSample } from "./pair/history";
+import { loadPairPrices } from "./pair/prices";
+import { publicPair, type PairDeskPublic } from "./pair/public";
+import { quoteSolSpyx } from "./pair/jupiter";
+import { DEFAULT_STUDY } from "./pair/knowledge";
+import { loadState, saveState } from "./store";
+import type { FeedHealth, PaperBook } from "./types";
 
 let lock: Promise<unknown> = Promise.resolve();
+let lastPairPublic: PairDeskPublic | null = null;
+let lastPrices: { solUsd: number; spyxUsd: number } = { solUsd: 0, spyxUsd: 0 };
+
+export function lastPairDesk() {
+  return lastPairPublic;
+}
+
+export function lastPairPrices() {
+  return lastPrices;
+}
 
 export function publicBook(book: PaperBook) {
   return {
@@ -31,6 +42,13 @@ export function publicBook(book: PaperBook) {
     positions: book.positions,
     fills: book.fills.slice(-80).reverse(),
     curve: book.curve.slice(-400),
+    skipped: book.skipped || 0,
+    lastAction: book.lastAction,
+    lastSkipReason: book.lastSkipReason,
+    killed: Boolean(book.killed),
+    pair: book.pair,
+    tape: (book.tape || []).slice(-80).reverse(),
+    pendingIntent: book.pendingIntent || null,
   };
 }
 
@@ -40,82 +58,158 @@ function round2(n: number) {
 
 export async function runMarketTick(): Promise<{
   paper: ReturnType<typeof publicBook>;
-  tokens: { token: TokenSnapshot; report: RiskReport }[];
   health: FeedHealth[];
   solUsd: number;
+  spyxUsd: number;
   entries: number;
   exits: number;
   mind: ReturnType<typeof publicMind>;
-  sol: SolDeskPublic | null;
+  pair: PairDeskPublic | null;
+  liveTrading: boolean;
 }> {
   const run = lock.then(async () => {
     const state = loadState();
-    const openMints = [
-      ...state.paper.positions.map((p) => p.mint),
-      ...Object.values(state.traders || {}).flatMap((t) => t.book.positions.map((p) => p.mint)),
-    ];
-    const { tokens, health, solUsd, copyBook } = await ingestMarket(state.creators, openMints);
-    const copyMints = tokens.filter((t) => t.smartMoneyInflow).slice(0, 4).map((t) => t.mint);
-    await tagFundingDumps(tokens, [...openMints, ...copyMints]);
-    const result = tickPaper(state, tokens, Date.now(), DEMO_DESKS, copyBook);
-    for (const trader of Object.values(state.traders || {})) {
-      if (!trader.auto?.armed) continue;
-      const target = bankrollUsd(trader.depositedSol, solUsd);
-      trader.book = maybeResizeBook(trader.book, target);
-      const min = trader.auto.minScore;
-      const prev = { ...state.settings };
-      state.settings.minScoreCopy = Math.max(prev.minScoreCopy, min);
-      state.settings.minScoreLaunch = Math.max(prev.minScoreLaunch, min);
-      state.settings.minScoreMigration = Math.max(prev.minScoreMigration, min);
-      state.settings.minScoreScalp = Math.max(prev.minScoreScalp, min);
-      if (trader.auto.takeProfitPct) state.settings.takeProfitPct = trader.auto.takeProfitPct;
-      if (trader.auto.stopLossPct) state.settings.stopLossPct = trader.auto.stopLossPct;
-      if (trader.auto.maxDevHoldPct) state.settings.leaderSupplyVeto = trader.auto.maxDevHoldPct / 100;
-      if (trader.book.equityUsd > 0) {
-        const cap = (trader.auto.maxSolPerTrade * solUsd) / trader.book.equityUsd;
-        if (Number.isFinite(cap) && cap > 0) state.settings.maxPositionPct = Math.min(prev.maxPositionPct, cap);
-      }
-      tickBook(
-        state,
-        tokens,
-        trader.book,
-        Date.now(),
-        {
-          copy: trader.auto.copy,
-          launch: trader.auto.launch,
-          migrate: trader.auto.migrate,
-          scalp: trader.auto.scalp,
-          picks: trader.auto.picks,
-        },
-        copyBook,
-      );
-      if (trader.auto.solUsd || trader.book.positions.some((p) => p.strategy === "sol_usd")) {
-        await tickSolBook(trader.book, Date.now(), state.mind);
-      }
-      state.settings = prev;
-      trader.updatedAt = Date.now();
-    }
-    state.feedHealth = health;
-    const solBook = Object.values(state.traders || {}).find((t) => t.auto?.solUsd)?.book || state.paper;
-    let sol: SolDeskPublic | null = null;
+    const now = Date.now();
+    const health: FeedHealth[] = [];
+    const t0 = Date.now();
+    let prices;
+    let history;
     try {
-      sol = await readSolDesk(solBook, Date.now());
-    } catch {
-      sol = null;
+      prices = await loadPairPrices();
+      health.push({
+        source: `oracle:${prices.sol.source}+${prices.spyx.source}`,
+        ok: !prices.stale,
+        ms: Date.now() - t0,
+        count: 2,
+        error: prices.reason,
+        at: now,
+      });
+    } catch (e) {
+      health.push({
+        source: "oracle",
+        ok: false,
+        ms: Date.now() - t0,
+        count: 0,
+        error: e instanceof Error ? e.message : "oracle failed",
+        at: now,
+      });
     }
+    try {
+      history = await loadPairHistory();
+    } catch {
+      history = { samples: state.pairSamples || [], study: DEFAULT_STUDY };
+    }
+
+    if (!prices || prices.sol.usd <= 0) {
+      state.feedHealth = health;
+      state.lastTickAt = now;
+      await saveState(state);
+      return {
+        paper: publicBook(state.paper),
+        health,
+        solUsd: 0,
+        spyxUsd: 0,
+        entries: 0,
+        exits: 0,
+        mind: publicMind(state.mind),
+        pair: null,
+        liveTrading: LIVE_TRADING,
+      };
+    }
+
+    let samples = history.samples;
+    if (samples.length < 12 && (state.pairSamples || []).length >= 12) samples = state.pairSamples || samples;
+    samples = pushLiveSample(samples, prices.sol.usd, prices.spyx.usd, now);
+    state.pairSamples = samples;
+
+    let impactPct = 0;
+    let quoteOk: boolean | undefined;
+    try {
+      const q = await quoteSolSpyx(0.1, 50);
+      quoteOk = q.ok;
+      if (q.ok) impactPct = q.impactPct;
+      health.push({
+        source: "jupiter",
+        ok: q.ok,
+        ms: 0,
+        count: q.ok ? 1 : 0,
+        error: q.ok ? undefined : q.reason,
+        at: now,
+      });
+    } catch (e) {
+      quoteOk = false;
+      health.push({
+        source: "jupiter",
+        ok: false,
+        ms: 0,
+        count: 0,
+        error: e instanceof Error ? e.message : "quote failed",
+        at: now,
+      });
+    }
+
+    const demoAuto = { ...DEFAULT_AUTO, armed: true, mode: "paper" as const };
+    const demo = tickPairBook({
+      book: state.paper,
+      auto: demoAuto,
+      prices,
+      samples,
+      study: history.study,
+      now,
+      mind: state.mind,
+      quoteOk,
+      impactPct,
+    });
+
+    let entries = demo.fills.filter((f) => f.side === "buy").length;
+    let exits = demo.fills.filter((f) => f.side === "sell").length;
+
+    for (const trader of Object.values(state.traders || {})) {
+      trader.auto = { ...DEFAULT_AUTO, ...trader.auto, leverage: 1 };
+      if (trader.auto.mode === "live" && !LIVE_TRADING) trader.auto.mode = "paper";
+      const target = bankrollUsd(trader.depositedSol, prices.sol.usd);
+      trader.book = maybeResizeBook(trader.book, target);
+      if (!trader.book.pair) {
+        trader.book.pair = { solQty: 0, spyxQty: 0, usdcQty: trader.book.cashUsd };
+      }
+      if (!trader.auto.armed && !trader.book.killed) {
+        trader.updatedAt = now;
+        continue;
+      }
+      const t = tickPairBook({
+        book: trader.book,
+        auto: trader.auto,
+        prices,
+        samples,
+        study: history.study,
+        now,
+        mind: state.mind,
+        depositedSol: trader.depositedSol,
+        quoteOk,
+        impactPct,
+      });
+      entries += t.fills.filter((f) => f.side === "buy").length;
+      exits += t.fills.filter((f) => f.side === "sell").length;
+      trader.updatedAt = now;
+    }
+
+    state.feedHealth = health;
+    state.lastTickAt = now;
+    lastPairPublic = publicPair(state.paper, prices, demo.decision, history.study);
+    lastPrices = { solUsd: prices.sol.usd, spyxUsd: prices.spyx.usd };
+    state.lastPair = lastPairPublic;
     await saveState(state);
-    const scored = tokens
-      .map((token) => ({ token, report: scoreToken(token, Date.now(), state.settings) }))
-      .sort((a, b) => b.report.score - a.report.score);
+
     return {
       paper: publicBook(state.paper),
-      tokens: scored.slice(0, 80),
       health,
-      solUsd,
-      entries: result.entries.length,
-      exits: result.exits.length,
+      solUsd: prices.sol.usd,
+      spyxUsd: prices.spyx.usd,
+      entries,
+      exits,
       mind: publicMind(state.mind),
-      sol,
+      pair: lastPairPublic,
+      liveTrading: LIVE_TRADING,
     };
   });
   lock = run.then(

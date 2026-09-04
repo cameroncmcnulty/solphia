@@ -52,6 +52,31 @@ export async function buildTransfer(from: string, to: string, sol: number): Prom
   return tx;
 }
 
+export async function signAndSendSwap(transactionB64: string): Promise<string> {
+  const kp = tradingKeypair();
+  const raw = Uint8Array.from(atob(transactionB64), (c) => c.charCodeAt(0));
+  let signed: Uint8Array;
+  try {
+    const { VersionedTransaction } = await import("@solana/web3.js");
+    const tx = VersionedTransaction.deserialize(raw);
+    tx.sign([kp]);
+    signed = tx.serialize();
+  } catch {
+    const tx = Transaction.from(raw);
+    tx.partialSign(kp);
+    signed = tx.serialize();
+  }
+  const b64 = toB64(signed);
+  const r = await fetch("/api/sol/send", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ transaction: b64 }),
+  });
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.error || "swap send failed");
+  return j.signature as string;
+}
+
 export async function withdrawToOwner(owner: string, sol: number): Promise<string> {
   const kp = tradingKeypair();
   const tx = await buildTransfer(kp.publicKey.toBase58(), owner, sol);

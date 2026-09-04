@@ -8,7 +8,17 @@ export type Venue =
   | "stable"
   | "unknown";
 
-export type Strategy = "launch_snipe" | "migration_snipe" | "copy_trade" | "scalp" | "solphia_pick" | "sol_usd";
+export type Strategy =
+  | "sol_spyx"
+  | "launch_snipe"
+  | "migration_snipe"
+  | "copy_trade"
+  | "scalp"
+  | "solphia_pick"
+  | "sol_usd";
+
+export type PairStyle = "mean_revert" | "hold_mix";
+export type PairBand = "tight" | "normal" | "wide";
 
 export type Side = "buy" | "sell";
 
@@ -188,6 +198,36 @@ export interface EquityPoint {
   equity: number;
 }
 
+export interface PairHoldings {
+  solQty: number;
+  spyxQty: number;
+  usdcQty: number;
+  solCostUsd?: number;
+  spyxCostUsd?: number;
+}
+
+export interface PairIntent {
+  action: "sell_sol" | "sell_spyx" | "flatten" | "deploy" | "rebalance";
+  from: string;
+  to: string;
+  clipUsd: number;
+  reason: string;
+  at: number;
+  solPct?: number;
+}
+
+export interface PairTape {
+  id: string;
+  at: number;
+  action: "trade" | "skip" | "hold" | "flatten" | "kill" | "deploy";
+  reason: string;
+  z?: number;
+  ratio?: number;
+  sizeUsd?: number;
+  from?: string;
+  to?: string;
+}
+
 export interface PaperBook {
   startingUsd: number;
   startedAt: number;
@@ -203,6 +243,14 @@ export interface PaperBook {
   curve: EquityPoint[];
   haltedUntil?: number;
   haltReason?: string;
+  skipped?: number;
+  lastAction?: string;
+  lastSkipReason?: string;
+  lastTradeAt?: number;
+  killed?: boolean;
+  pair?: PairHoldings;
+  tape?: PairTape[];
+  pendingIntent?: PairIntent | null;
 }
 
 export interface CreatorStat {
@@ -236,19 +284,31 @@ export interface AutoSettings {
   armed: boolean;
   armedAt?: number;
   mode: "paper" | "live";
-  copy: boolean;
-  launch: boolean;
-  migrate: boolean;
-  scalp: boolean;
-  picks: boolean;
-  solUsd: boolean;
-  maxSolPerTrade: number;
-  minScore: number;
+  allocationPct: number;
+  style: PairStyle;
+  band: PairBand;
+  clipPct: number;
+  cooldownMin: number;
+  stopPct: number;
   takeProfitPct: number;
-  stopLossPct: number;
-  maxDevHoldPct: number;
-  autoSell: boolean;
+  targetSolPct: number;
+  slippageBps: number;
+  maxImpactPct: number;
+  /** v1 is always 1. Slider stays disabled. */
+  leverage: 1;
   tradingPubkey?: string;
+  /** @deprecated memecoin desks — ignored */
+  copy?: boolean;
+  launch?: boolean;
+  migrate?: boolean;
+  scalp?: boolean;
+  picks?: boolean;
+  solUsd?: boolean;
+  maxSolPerTrade?: number;
+  minScore?: number;
+  stopLossPct?: number;
+  maxDevHoldPct?: number;
+  autoSell?: boolean;
 }
 
 export interface TraderAccount {
@@ -360,4 +420,6 @@ export interface AppState {
   curveWatch: Record<string, CurveTick>;
   lastTickAt: number;
   lastSnapshots: TokenSnapshot[];
+  pairSamples?: { t: number; sol: number; spyx: number }[];
+  lastPair?: unknown;
 }

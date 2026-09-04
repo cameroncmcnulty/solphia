@@ -3,15 +3,9 @@
 import Link from "next/link";
 import { COMPARE_ROWS } from "@/lib/plans";
 
-const HEADS = ["Paper", "Alerts", "Copy", "Launch", "Everything"];
-const PRICES = ["Free", "0.15", "0.25", "0.30", "0.50"];
-const ICONS = [
-  "/icons/plan-paper.jpg",
-  "/icons/plan-alerts.jpg",
-  "/icons/plan-copy.jpg",
-  "/icons/plan-launch.jpg",
-  "/icons/plan-full.jpg",
-];
+const HEADS = ["Paper", "Live"];
+const PRICES = ["Free", "0.15 SOL / 30d"];
+const ICONS = ["/icons/plan-paper.jpg", "/icons/plan-full.jpg"];
 
 export function PlanCompare() {
   return (
@@ -21,15 +15,13 @@ export function PlanCompare() {
           <div
             key={h}
             className={`w-[min(78vw,320px)] shrink-0 snap-center rounded-2xl border p-4 ${
-              i === 4 ? "border-acid/40 bg-acid/5" : "border-violet/20 bg-void/40"
+              i === 1 ? "border-acid/40 bg-acid/5" : "border-violet/20 bg-void/40"
             }`}
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={ICONS[i]} alt="" className="mb-3 h-12 w-12 rounded-xl" />
-            <div className={`font-display text-2xl ${i === 4 ? "text-acid" : "text-ghost"}`}>{h}</div>
-            <div className="mt-1 font-mono text-sm text-mute">
-              {PRICES[i]} {i ? "SOL / 30d" : ""}
-            </div>
+            <div className={`font-display text-2xl ${i === 1 ? "text-acid" : "text-ghost"}`}>{h}</div>
+            <div className="mt-1 font-mono text-sm text-mute">{PRICES[i]}</div>
             <ul className="mt-4 space-y-3">
               {COMPARE_ROWS.map((row) => (
                 <li key={row.label} className="flex items-center justify-between gap-3">
@@ -41,20 +33,15 @@ export function PlanCompare() {
           </div>
         ))}
       </div>
-
       <div className="hidden overflow-x-auto md:block">
-        <table className="w-full min-w-[720px] text-left">
+        <table className="w-full min-w-[520px] text-left">
           <thead>
-            <tr className="border-b border-violet/25 font-mono text-[10px] tracking-[0.18em] text-mute">
-              <th className="px-4 py-3">What you get</th>
+            <tr className="border-b border-violet/20">
+              <th className="p-4 text-sm text-mute"> </th>
               {HEADS.map((h, i) => (
-                <th key={h} className={`px-3 py-3 ${i === 4 ? "text-acid" : "text-ghost"}`}>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={ICONS[i]} alt="" className="mb-2 h-8 w-8 rounded-lg" />
+                <th key={h} className={`p-4 font-display text-xl ${i === 1 ? "text-acid" : "text-ghost"}`}>
                   {h}
-                  <div className="mt-1 tracking-normal text-mute">
-                    {PRICES[i]} {i ? "SOL" : ""}
-                  </div>
+                  <div className="font-mono text-xs font-normal text-mute">{PRICES[i]}</div>
                 </th>
               ))}
             </tr>
@@ -62,12 +49,9 @@ export function PlanCompare() {
           <tbody>
             {COMPARE_ROWS.map((row) => (
               <tr key={row.label} className="border-b border-violet/10">
-                <td className="px-4 py-3 text-sm text-ghost">
-                  {row.label}
-                  {row.hint && <div className="mt-1 font-mono text-[10px] text-mute">{row.hint}</div>}
-                </td>
+                <td className="p-4 text-sm text-mute">{row.label}</td>
                 {row.values.map((v, i) => (
-                  <td key={i} className="px-3 py-3">
+                  <td key={i} className="p-4">
                     <Cell v={v} />
                   </td>
                 ))}
@@ -76,13 +60,9 @@ export function PlanCompare() {
           </tbody>
         </table>
       </div>
-
-      <div className="flex flex-col gap-2 border-t border-violet/20 p-4 sm:flex-row sm:justify-end">
-        <Link href="/trading" className="btn-ghost inline-flex min-h-[44px] items-center justify-center rounded-full px-5 py-2 text-center font-mono text-[12px]">
-          Paper is free
-        </Link>
-        <Link href="/trading" className="btn-acid inline-flex min-h-[44px] items-center justify-center rounded-full px-5 py-2 text-center font-mono text-[12px]">
-          LAUNCH BOT
+      <div className="border-t border-violet/20 p-4 text-right">
+        <Link href="/trading" className="text-sm text-acid">
+          Paper is free →
         </Link>
       </div>
     </div>
@@ -90,29 +70,8 @@ export function PlanCompare() {
 }
 
 function Cell({ v }: { v: string }) {
-  if (v === "Yes" || v === "She does") return <YesMark label={v} />;
-  if (v === "—") {
-    return <span className="inline-block h-0.5 w-3 rounded-full bg-violet/35" aria-label="No" />;
-  }
-  return <span className="font-mono text-[12px] text-mute">{v}</span>;
-}
-
-function YesMark({ label }: { label: string }) {
-  return (
-    <span
-      className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-[#14F195] text-[#04000a] shadow-[0_0_14px_rgba(20,241,149,0.4)]"
-      aria-label={label}
-      title={label}
-    >
-      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-        <path
-          d="M3.2 8.4l3.1 3.1 6.5-7"
-          stroke="currentColor"
-          strokeWidth="2.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-    </span>
-  );
+  if (v === "Yes") return <span className="text-acid">Yes</span>;
+  if (v === "Never" || v === "None") return <span className="text-ghost">{v}</span>;
+  if (v === "—") return <span className="text-mute">—</span>;
+  return <span className="text-ghost">{v}</span>;
 }

@@ -4,18 +4,17 @@ import { PAPER_STARTING_USD } from "./config";
 export const DEFAULT_AUTO: AutoSettings = {
   armed: false,
   mode: "paper",
-  copy: true,
-  launch: false,
-  migrate: true,
-  scalp: false,
-  picks: false,
-  solUsd: false,
-  maxSolPerTrade: 0.25,
-  minScore: 70,
-  takeProfitPct: 0.32,
-  stopLossPct: 0.16,
-  maxDevHoldPct: 15,
-  autoSell: true,
+  allocationPct: 0.5,
+  style: "mean_revert",
+  band: "normal",
+  clipPct: 0.15,
+  cooldownMin: 15,
+  stopPct: 0.08,
+  takeProfitPct: 0.12,
+  targetSolPct: 0.5,
+  slippageBps: 50,
+  maxImpactPct: 0.004,
+  leverage: 1,
 };
 
 export function emptyBook(startingUsd = PAPER_STARTING_USD): PaperBook {
@@ -33,6 +32,10 @@ export function emptyBook(startingUsd = PAPER_STARTING_USD): PaperBook {
     positions: [],
     fills: [],
     curve: [{ t: now, equity: startingUsd }],
+    skipped: 0,
+    killed: false,
+    pair: { solQty: 0, spyxQty: 0, usdcQty: startingUsd },
+    tape: [],
   };
 }
 

@@ -3,7 +3,7 @@ import { TradingHub } from "@/components/TradingHub";
 
 export const metadata: Metadata = {
   title: "Trading",
-  description: "Operate Solphia. Connect a wallet, set size and safety, start the paper bot.",
+  description: "Operate Solphia. Connect Phantom or Solflare, fund SOL, paper-trade SOL vs official SPYx.",
 };
 
 export default function TradingPage() {

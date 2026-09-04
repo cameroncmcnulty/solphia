@@ -2,16 +2,14 @@
 
 import Link from "next/link";
 import { SolphiaFace } from "@/components/SolphiaFace";
-import { WalletDesk } from "@/components/WalletDesk";
 import { LiveStats } from "@/components/LiveStats";
 import { FaqList } from "@/components/FaqList";
-import { PlanCompare } from "@/components/PlanCompare";
-import { PLANS } from "@/lib/plans";
 import { useMarket } from "@/lib/hooks";
 
 export default function Home() {
   const { data } = useMarket(15000);
-  const tape = (data?.tokens || []).slice(0, 8);
+  const pair = data?.pair;
+  const tape = (data?.paper?.tape || []).slice(0, 8);
 
   return (
     <main className="relative">
@@ -26,10 +24,10 @@ export default function Home() {
               SOLPHIA
             </h1>
             <p className="mt-5 max-w-xl text-xl leading-snug text-ghost sm:text-3xl sm:leading-tight">
-              She refuses more than she fires.
+              SOL vs tokenized S&P 500. She sits more than she trades.
             </p>
             <p className="mt-3 max-w-lg text-base leading-relaxed text-mute sm:text-xl">
-              Solana copy bot. Kill switch on. You keep the keys.
+              Connect Phantom or Solflare. Fund SOL. Set a few knobs. Paper first. Keys stay on your device.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <Link
@@ -39,10 +37,10 @@ export default function Home() {
                 LAUNCH BOT
               </Link>
               <Link
-                href="/terminal"
+                href="/faq"
                 className="btn-ghost inline-flex min-h-[52px] items-center justify-center rounded-full px-8 py-3 text-center text-base sm:min-h-[56px] sm:text-lg"
               >
-                Open the tape
+                How she trades
               </Link>
             </div>
           </div>
@@ -52,93 +50,51 @@ export default function Home() {
       <LiveStats />
 
       <section className="px-4 py-6 md:px-12">
-        <div className="mb-3 text-sm text-mute">Live tape</div>
+        <div className="mb-3 text-sm text-mute">Last decisions</div>
         <div className="flex gap-3 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {tape.map((row: any) => (
             <Link
-              key={row.token.mint}
+              key={row.id}
               href="/trading"
               className="btn-ghost flex shrink-0 items-center gap-3 rounded-full px-5 py-3 text-base"
             >
-              <span className="font-display text-xl text-ghost">{row.token.symbol}</span>
-              <span className={row.report.verdict === "trade" ? "text-acid" : "text-mute"}>
-                {row.report.verdict === "trade" ? "take" : row.report.verdict}
+              <span className="font-display text-xl text-ghost">{String(row.action || "hold")}</span>
+              <span className={row.action === "trade" ? "text-acid" : "text-mute"}>
+                {row.z != null ? `z ${Number(row.z).toFixed(1)}` : "sit"}
               </span>
             </Link>
           ))}
-          {!tape.length && <span className="text-base text-mute">Waiting on the market…</span>}
+          {!tape.length && (
+            <span className="text-base text-mute">
+              {pair?.reason || "Waiting on SOL / SPYx oracles…"}
+            </span>
+          )}
         </div>
       </section>
 
       <section className="px-4 py-12 md:px-12 md:py-16">
         <p className="text-base text-acid sm:text-lg">How it works</p>
         <h2 className="mt-2 max-w-3xl font-display text-3xl leading-tight text-ghost sm:text-4xl md:text-6xl">
-          Connect. Set size. Launch.
+          Connect. Fund. Set knobs. Run.
         </h2>
         <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <Step n="01" t="Connect" d="Phantom or Solflare. You sign." href="/trading" c="Connect" />
-          <Step n="02" t="Set size" d="Max SOL, stop, take-profit." href="/trading" c="Configure" />
-          <Step n="03" t="Paper first" d="Live tape. Fake fills. No risk." href="/trading" c="Open hub" />
-          <Step n="04" t="Launch" d="Scout + Risk agree. Kill switch on." href="/trading" c="LAUNCH BOT" />
+          <Step n="02" t="Fund" d="Deposit SOL into a wallet you own. She never holds keys." href="/trading" c="Fund" />
+          <Step n="03" t="Paper" d="Mean-revert the SOL/SPYx ratio. Fake fills. Skip reasons on the tape." href="/trading" c="Open hub" />
+          <Step n="04" t="Kill" d="Flatten to USDC and halt. Always on." href="/trading" c="LAUNCH BOT" />
         </div>
       </section>
 
       <section className="px-4 py-8 md:px-12">
         <p className="text-base text-acid sm:text-lg">Why she’s different</p>
-        <h2 className="mt-2 font-display text-3xl text-ghost sm:text-4xl md:text-6xl">Picky on purpose.</h2>
+        <h2 className="mt-2 font-display text-3xl text-ghost sm:text-4xl md:text-6xl">One job.</h2>
         <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <Feature t="Real stats" d="Paper book and refused count. No fake trader counters." href="/trading" />
-          <Feature t="Simple rails" d="Size, safety, stop, take-profit. Drag to set." href="/trading" />
-          <Feature t="P(grad)" d="Under 5 minutes is a no on Picks." href="/trading" />
-          <Feature t="Copy" d="Visible setups only. She always copies the sell." href="/copy" />
-          <Feature t="Picks" d="Learns from every close. Bars only move up." href="/trading" />
-          <Feature t="0.35% fees" d="Other desks take ~1% a side." href="/pricing" />
-        </div>
-      </section>
-
-      <section className="px-4 py-12 md:px-12 md:py-16">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <h2 className="font-display text-3xl text-ghost sm:text-4xl md:text-5xl">Who she copies</h2>
-            <p className="mt-2 text-base text-mute sm:text-lg">Quality this week, not a 30-day highlight reel.</p>
-          </div>
-          <Link href="/copy" className="btn-ghost inline-flex min-h-[44px] items-center justify-center rounded-full px-6 py-3 text-base">
-            Full list
-          </Link>
-        </div>
-        <div className="mt-6">
-          <WalletDesk compact />
-        </div>
-      </section>
-
-      <section className="px-4 py-12 md:px-12 md:py-16">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <p className="text-base text-acid">Plans</p>
-            <h2 className="mt-1 font-display text-3xl text-ghost sm:text-4xl md:text-6xl">Pick a desk</h2>
-          </div>
-          <Link href="/pricing" className="btn-ghost min-h-[44px] rounded-full px-6 text-base">
-            See pricing
-          </Link>
-        </div>
-        <div className="mt-8 grid grid-cols-2 gap-3 lg:grid-cols-4">
-          {PLANS.map((p) => (
-            <Link key={p.id} href="/pricing" className="panel rounded-3xl p-5">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={p.icon} alt="" className="h-14 w-14 rounded-2xl" />
-              <div className="mt-4 font-display text-2xl text-ghost">{p.name}</div>
-              <div className="mt-1 text-acid">{p.sol} SOL</div>
-              <p className="mt-2 text-sm text-mute">{p.tagline}</p>
-            </Link>
-          ))}
-        </div>
-      </section>
-
-      <section className="px-4 py-12 md:px-12 md:py-16">
-        <h2 className="font-display text-3xl text-ghost sm:text-4xl md:text-6xl">Compare</h2>
-        <p className="mt-3 max-w-2xl text-base text-mute sm:text-xl">Paper is free. Everything is 0.50 SOL / 30 days.</p>
-        <div className="mt-8">
-          <PlanCompare />
+          <Feature t="Official SPYx" d="Pinned Backed/xStocks mint. Lookalike tickers are refused." href="/trading" />
+          <Feature t="Ratio band" d="R = P_SOL / P_SPYx. Extended high → sell SOL. Extended low → sell SPYx. Else hold." href="/trading" />
+          <Feature t="SOL + S&P history" d="She sizes from SOL’s 5–8% days and SPY’s ~1% range — not 15m noise." href="/trading" />
+          <Feature t="USDC marks" d="Working capital and stops in USDC so a SOL candle doesn’t fake the book." href="/trading" />
+          <Feature t="Skip tape" d="Stale oracle, thin book, junk route, cooldown — she increments skipped." href="/trading" />
+          <Feature t="Spot only" d="No leverage in v1. Perps later if a real venue exists." href="/trading" />
         </div>
       </section>
 

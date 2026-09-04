@@ -6,7 +6,7 @@ export const LIVE_TRADING = process.env.LIVE_TRADING === "true";
 export const PAPER_STARTING_USD = Number(process.env.PAPER_STARTING_USD || 1000);
 export const SUBSCRIPTION_SOL = 0.15;
 export { PLANS } from "./plans";
-export const FEE_BPS = 35;
+export const FEE_BPS = 9;
 export const TREASURY = process.env.SOLPHIA_TREASURY || "";
 export const ADMIN_SECRET = process.env.ADMIN_SECRET || "";
 export const CRON_SECRET = process.env.CRON_SECRET || "";
@@ -73,6 +73,8 @@ export const RESEARCH = {
   medianTraderProfitUsd: 0.02,
   industryFeeBps: 100,
   solphiaFeeBps: FEE_BPS,
+  pair: "SOL / official SPYx",
+  spyxMint: "XsoCS1TfEyfFhfvj8EtZ528L3CaKBDBRqRapnBbDF2W",
   firstHourSurvivorVolumeMultiple: 19,
   firstHourSurvivorTradeMultiple: 13,
 } as const;

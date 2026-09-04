@@ -1,11 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
-import { loadOwner, saveOwner, tradingPubkey, buildTransfer, withdrawToOwner } from "@/lib/wallet/trading";
-import { ConfigDesk, type ConfigShape } from "./ConfigDesk";
+import { useEffect, useRef, useState } from "react";
+import { loadOwner, saveOwner, tradingPubkey, buildTransfer, withdrawToOwner, signAndSendSwap } from "@/lib/wallet/trading";
 import { WalletConnect } from "./WalletConnect";
 import { useMarket, useOwner } from "@/lib/hooks";
+import { SOL_MINT, USDC_MINT, spyxMint } from "@/lib/pair/mints";
 
 function pickProvider() {
   if (typeof window === "undefined") return null;
@@ -13,27 +12,28 @@ function pickProvider() {
   return w.phantom?.solana || w.solflare || w.solana || null;
 }
 
-function cfgFrom(a: any): ConfigShape {
-  return {
-    maxSolPerTrade: a?.maxSolPerTrade ?? 0.25,
-    minScore: a?.minScore ?? 70,
-    takeProfitPct: a?.takeProfitPct ?? 0.32,
-    stopLossPct: a?.stopLossPct ?? 0.16,
-    maxDevHoldPct: a?.maxDevHoldPct ?? 15,
-    autoSell: a?.autoSell !== false,
-    copy: a?.copy !== false,
-    picks: Boolean(a?.picks),
-    launch: Boolean(a?.launch),
-    migrate: a?.migrate !== false,
-    solUsd: Boolean(a?.solUsd),
-  };
-}
+type Auto = {
+  armed?: boolean;
+  armedAt?: number;
+  mode?: "paper" | "live";
+  allocationPct?: number;
+  style?: "mean_revert" | "hold_mix";
+  band?: "tight" | "normal" | "wide";
+  clipPct?: number;
+  cooldownMin?: number;
+  stopPct?: number;
+  takeProfitPct?: number;
+  targetSolPct?: number;
+  slippageBps?: number;
+  maxImpactPct?: number;
+  leverage?: number;
+};
 
 function money(n: number) {
   const sign = n < 0 ? "−" : "";
   const abs = Math.abs(n);
   if (abs >= 1000) return `${sign}$${(abs / 1000).toFixed(1)}k`;
-  return `${sign}$${abs.toFixed(0)}`;
+  return `${sign}$${abs.toFixed(2)}`;
 }
 
 function fmtDur(ms: number) {
@@ -46,43 +46,25 @@ function fmtDur(ms: number) {
   return `${sec}s`;
 }
 
-function age(createdAt: number) {
-  const s = Math.max(0, (Date.now() - createdAt) / 1000);
-  if (s < 60) return `${Math.floor(s)}s`;
-  if (s < 3600) return `${Math.floor(s / 60)}m`;
-  return `${Math.floor(s / 3600)}h`;
-}
-
-function mcap(n: number) {
-  if (!n) return "—";
-  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}m`;
-  if (n >= 1000) return `$${(n / 1000).toFixed(0)}k`;
-  return `$${n.toFixed(0)}`;
-}
-
 export function TradingHub() {
   const connected = useOwner();
   const owner = connected || loadOwner();
-  const { data, err, loading, refresh } = useMarket(8000);
-  const [auto, setAuto] = useState<any>(null);
+  const { data, loading, refresh } = useMarket(8000);
+  const [auto, setAuto] = useState<Auto | null>(null);
   const [paper, setPaper] = useState<any>(null);
-  const [lab, setLab] = useState<any>(null);
-  const [mind, setMind] = useState<any>(null);
   const [liveTrading, setLiveTrading] = useState(false);
   const [tradePk, setTradePk] = useState("");
   const [bal, setBal] = useState(0);
   const [solAmt, setSolAmt] = useState(0.5);
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
-  const [filter, setFilter] = useState<"all" | "likes" | "book">("all");
   const [now, setNow] = useState(Date.now());
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const liveLock = useRef(false);
 
   const demoPaper = data?.paper;
   const book = paper || demoPaper;
-  const labData = lab || data?.lab;
-  const mindData = mind || data?.mind;
-  const sol = data?.sol;
+  const pair = data?.pair;
   const armed = Boolean(auto?.armed);
 
   async function refreshAuto(pk = owner) {
@@ -90,8 +72,6 @@ export function TradingHub() {
     const a = await fetch(`/api/auto?owner=${pk}`).then((r) => r.json());
     setAuto(a.auto);
     setPaper(a.paper);
-    setLab(a.lab);
-    setMind(a.mind);
     setLiveTrading(Boolean(a.liveTrading));
     const tpk = a.tradingPubkey || tradingPubkey();
     setTradePk(tpk);
@@ -134,6 +114,63 @@ export function TradingHub() {
     return () => clearInterval(id);
   }, [armed]);
 
+  useEffect(() => {
+    if (!liveTrading || auto?.mode !== "live" || !armed || !owner) return;
+    const intent = paper?.pendingIntent;
+    if (!intent || liveLock.current) return;
+    const solPx = Number(pair?.solUsd || data?.solUsd || 0);
+    const spyPx = Number(pair?.spyxUsd || data?.spyxUsd || 0);
+    if (!(solPx > 0 && spyPx > 0)) return;
+    liveLock.current = true;
+    const outMint = spyxMint();
+    (async () => {
+      try {
+        const tpk = tradingPubkey();
+        const slip = auto?.slippageBps || 50;
+        async function swap(inputMint: string, outputMint: string, amount: number) {
+          const r = await fetch("/api/pair/swap", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ owner, tradingPubkey: tpk, inputMint, outputMint, amount, slippageBps: slip }),
+          });
+          const j = await r.json();
+          if (!r.ok) throw new Error(j.error || "swap build failed");
+          return signAndSendSwap(j.transaction);
+        }
+        let sig = "";
+        if (intent.action === "sell_sol" || (intent.action === "rebalance" && intent.from === "SOL")) {
+          sig = await swap(SOL_MINT, outMint, intent.clipUsd / solPx);
+        } else if (intent.action === "sell_spyx" || (intent.action === "rebalance" && intent.from === "SPYx")) {
+          sig = await swap(outMint, SOL_MINT, intent.clipUsd / spyPx);
+        } else if (intent.action === "deploy") {
+          const solPct = intent.solPct ?? 0.5;
+          const usdcSol = intent.clipUsd * solPct;
+          const usdcSpy = intent.clipUsd - usdcSol;
+          sig = await swap(USDC_MINT, SOL_MINT, usdcSol);
+          if (usdcSpy > 1) await swap(USDC_MINT, outMint, usdcSpy);
+        } else if (intent.action === "flatten") {
+          const h = paper?.pair;
+          if (h?.solQty > 0.001) sig = await swap(SOL_MINT, USDC_MINT, h.solQty);
+          if (h?.spyxQty > 0.0001) sig = await swap(outMint, USDC_MINT, h.spyxQty);
+        }
+        if (sig) {
+          const r = await fetch("/api/auto", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ owner, liveFill: { signature: sig } }),
+          });
+          const j = await r.json();
+          setPaper(j.paper);
+          setMsg(`Live fill · ${sig.slice(0, 16)}…`);
+        }
+      } catch (e) {
+        setMsg(e instanceof Error ? e.message : "live swap failed");
+      } finally {
+        liveLock.current = false;
+      }
+    })();
+  }, [liveTrading, auto?.mode, auto?.slippageBps, armed, owner, paper?.pendingIntent, pair?.solUsd, pair?.spyxUsd, data?.solUsd, data?.spyxUsd]);
+
   async function patch(partial: Record<string, unknown>) {
     if (!owner) return setMsg("Connect Phantom or Solflare first.");
     const r = await fetch("/api/auto", {
@@ -144,12 +181,10 @@ export function TradingHub() {
     const j = await r.json();
     setAuto(j.auto);
     setPaper(j.paper);
-    if (j.lab) setLab(j.lab);
-    if (j.mind) setMind(j.mind);
   }
 
   function patchSoon(partial: Record<string, unknown>) {
-    setAuto((prev: any) => ({ ...(prev || cfgFrom(null)), ...partial }));
+    setAuto((prev) => ({ ...(prev || {}), ...partial }));
     if (!owner) {
       setMsg("Connect a wallet to save this.");
       return;
@@ -158,9 +193,28 @@ export function TradingHub() {
     debounce.current = setTimeout(() => patch(partial), 350);
   }
 
+  async function kill() {
+    if (!owner) return setMsg("Connect first.");
+    setBusy(true);
+    try {
+      const r = await fetch("/api/auto", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ owner, kill: true }),
+      });
+      const j = await r.json();
+      setAuto(j.auto);
+      setPaper(j.paper);
+      setMsg("Kill switch. Flattened to USDC. Halted.");
+      refresh();
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function deposit() {
     const provider = pickProvider();
-    if (!provider || !owner) return setMsg("Open this page inside Phantom.");
+    if (!provider || !owner) return setMsg("Open this page inside Phantom or Solflare.");
     setBusy(true);
     try {
       const tpk = tradingPubkey();
@@ -189,51 +243,30 @@ export function TradingHub() {
     }
   }
 
-  async function sell(mint: string) {
-    if (!owner) return;
-    const r = await fetch("/api/auto", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ owner, sellMint: mint }),
-    });
-    const j = await r.json();
-    setPaper(j.paper);
-    setAuto(j.auto);
-    setMsg("Sold (paper).");
-    refresh();
-  }
-
-  const tokens = data?.tokens || [];
-  const openMints = new Set((book?.positions || []).map((p: any) => p.mint));
-  const rows = useMemo(() => {
-    if (filter === "book") return [];
-    if (filter === "likes") return tokens.filter((r: any) => r.report?.verdict === "trade");
-    return tokens;
-  }, [tokens, filter]);
-
-  const refused = labData
-    ? (labData.copy?.denied || 0) +
-      (labData.launch?.denied || 0) +
-      (labData.migrate?.denied || 0) +
-      (labData.pick?.denied || 0)
-    : 0;
   const live = Boolean(data?.lastTickAt) && Date.now() - data.lastTickAt < 45_000;
   const fills = book?.fills || [];
-  const volume = fills.reduce((s: number, f: any) => s + (Number(f.sizeUsd) || 0), 0);
-  const closed = book?.trades ?? (book?.winCount || 0) + (book?.lossCount || 0);
+  const tape = book?.tape || [];
   const pnlPct = book ? book.pnlPct : 0;
   const pnlUsd = book ? book.equityUsd - book.startingUsd : 0;
   const uptime = armed && auto?.armedAt ? fmtDur(now - auto.armedAt) : "—";
-  const status = !owner ? "PREVIEW" : armed ? (live ? "LIVE" : "ARMED") : "IDLE";
+  const status = !owner ? "PREVIEW" : book?.killed ? "KILLED" : armed ? (live ? "RUNNING" : "ARMED") : "IDLE";
   const halted = book?.haltReason && (book.haltedUntil || 0) > Date.now();
+  const solQty = book?.pair?.solQty ?? pair?.solQty ?? 0;
+  const spyxQty = book?.pair?.spyxQty ?? pair?.spyxQty ?? 0;
+  const usdcQty = book?.pair?.usdcQty ?? pair?.usdcQty ?? book?.cashUsd ?? 0;
+  const solUsd = pair?.solUsd || 0;
+  const spyxUsd = pair?.spyxUsd || 0;
+  const ratio = pair?.ratio || (spyxUsd ? solUsd / spyxUsd : 0);
 
   return (
     <main className="mx-auto max-w-7xl px-4 pb-10 pt-2 md:px-8">
       <header className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <p className="font-mono text-[11px] tracking-[0.28em] text-violet">TRADING HUB · PAPER FIRST</p>
-          <h1 className="mt-1 font-display text-3xl leading-none text-ghost sm:text-4xl md:text-6xl">Launch</h1>
-          <p className="mt-3 max-w-xl text-base text-mute sm:text-lg">Connect. Set size. Launch. She still skips more than she buys.</p>
+          <p className="font-mono text-[11px] tracking-[0.28em] text-violet">SOL ↔ SPYx · PAPER FIRST · SPOT ONLY</p>
+          <h1 className="mt-1 font-display text-3xl leading-none text-ghost sm:text-4xl md:text-6xl">Operate</h1>
+          <p className="mt-3 max-w-xl text-base text-mute sm:text-lg">
+            Connect. Fund SOL. Set a few knobs. She trades official tokenized S&P 500 against SOL — or she sits.
+          </p>
         </div>
         <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center">
           <WalletConnect />
@@ -244,17 +277,29 @@ export function TradingHub() {
               armed ? "btn-ghost" : "btn-acid"
             }`}
           >
-            {armed ? "STOP BOT" : "LAUNCH BOT"}
+            {armed ? "STOP" : "RUN"}
+          </button>
+          <button
+            type="button"
+            onClick={kill}
+            disabled={busy}
+            className="inline-flex min-h-[52px] items-center justify-center rounded-full border-2 border-blood px-6 py-3 text-base text-blood sm:min-h-[56px]"
+          >
+            KILL
           </button>
         </div>
       </header>
+
+      <div className="mt-5 rounded-2xl border border-blood/40 bg-blood/10 p-4 text-sm leading-relaxed text-ghost">
+        Tokenized SPY (xStocks / Backed). Issuer and custody risk. Not 1:1 with the NYSE print after hours or on
+        weekends. You can lose SOL. Spot only — no leverage. Keys stay on this device.
+      </div>
 
       {!owner && (
         <div className="panel mt-5 rounded-2xl border-cyan/30 p-4">
           <div className="font-mono text-[11px] tracking-[0.2em] text-cyan">PREVIEW MODE</div>
           <p className="mt-1 text-base text-mute">
-            Connect Phantom or Solflare to save config, fund the trading wallet, and start paper fills. The tape below
-            is live either way.
+            Connect Phantom or Solflare. Optional dedicated trading wallet you own. Deposit SOL. Paper is the default.
           </p>
         </div>
       )}
@@ -262,59 +307,52 @@ export function TradingHub() {
       <section className="panel mt-5 rounded-3xl p-5 md:p-8">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <div className="font-mono text-[11px] tracking-[0.22em] text-violet">YOUR BOOK</div>
-            <h2 className="mt-1 font-display text-3xl text-ghost md:text-4xl">Loaded · PnL · open</h2>
+            <div className="font-mono text-[11px] tracking-[0.22em] text-violet">DASHBOARD</div>
+            <h2 className="mt-1 font-display text-3xl text-ghost md:text-4xl">Balances · ratio · PnL</h2>
           </div>
           <div className="font-mono text-[12px] text-mute">
-            {status} {armed ? "· scanning" : live ? "· feeds ticking" : ""} · {uptime}
+            {status} {armed ? "· scanning" : live ? "· oracles ticking" : ""} · {uptime}
           </div>
         </div>
         <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <Huge k="Loaded" v={`${bal.toFixed(3)} SOL`} sub="in the trading wallet" />
+          <Huge k="SOL" v={solQty ? solQty.toFixed(4) : "0"} sub={solUsd ? money(solQty * solUsd) : "sleeve"} />
+          <Huge k="SPYx" v={spyxQty ? spyxQty.toFixed(4) : "0"} sub={spyxUsd ? money(spyxQty * spyxUsd) : "official mint"} />
+          <Huge
+            k="Ratio"
+            v={ratio ? ratio.toFixed(4) : "—"}
+            sub={pair ? `z7 ${Number(pair.z7 || 0).toFixed(2)} · ${pair.session}` : "P_SOL / P_SPYx"}
+          />
           <Huge
             k="PnL"
             v={`${pnlPct >= 0 ? "+" : ""}${(pnlPct * 100).toFixed(1)}%`}
-            sub={`${pnlUsd >= 0 ? "+" : "−"}$${Math.abs(pnlUsd).toFixed(2)} after fees`}
-            good={pnlPct >= 0}
+            sub={`${pnlUsd >= 0 ? "+" : "−"}$${Math.abs(pnlUsd).toFixed(2)} in USDC`}
+            good={Math.abs(pnlPct) < 0.0005 ? undefined : pnlPct >= 0}
           />
-          <Huge
-            k="Open"
-            v={String(book?.open ?? (book?.positions || []).length)}
-            sub={`${money((book?.positions || []).reduce((s: number, p: any) => s + (p.sizeUsd || 0) + (p.unrealizedUsd || 0), 0))} in names`}
-          />
-          <Huge k="Closed" v={String(closed)} sub={`${book?.winCount || 0}W / ${book?.lossCount || 0}L · ${money(volume)} vol`} />
         </div>
         <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Mini k="Cash" v={book ? money(book.cashUsd) : "—"} />
+          <Mini k="USDC cash" v={money(usdcQty)} />
           <Mini k="Equity" v={book ? money(book.equityUsd) : "—"} />
-          <Mini k="Unrealized" v={book ? money(book.unrealizedUsd || 0) : "—"} />
-          <Mini k="Refused" v={String(refused)} />
+          <Mini k="Skipped" v={String(book?.skipped ?? pair?.skipped ?? 0)} />
+          <Mini k="Wallet SOL" v={`${bal.toFixed(3)}`} />
         </div>
-        {(book?.positions || []).length > 0 && (
-          <div className="mt-5 space-y-2">
-            <div className="font-mono text-[10px] tracking-[0.2em] text-mute">OPEN POSITIONS</div>
-            {(book.positions as any[]).map((p) => (
-              <div key={p.id} className="flex items-center justify-between gap-3 rounded-xl border border-violet/20 px-4 py-3">
-                <div>
-                  <div className="font-display text-xl text-ghost">{p.symbol}</div>
-                  <div className="font-mono text-[11px] text-mute">
-                    {p.dir === "short" ? "short" : "long"} · {p.strategy === "sol_usd" ? "SOL/USDT" : p.strategy.replace("_", " ")}
-                  </div>
-                </div>
-                <div className={`font-display text-xl ${p.unrealizedUsd >= 0 ? "text-acid" : "text-blood"}`}>
-                  {p.unrealizedUsd >= 0 ? "+" : ""}${Number(p.unrealizedUsd || 0).toFixed(2)}
-                </div>
-                {owner && (
-                  <button type="button" onClick={() => sell(p.mint)} className="btn-ghost min-h-[44px] rounded-full px-4 font-mono text-[11px]">
-                    Sell
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
+        <p className="mt-4 text-sm leading-relaxed text-mute">
+          {(owner && book?.lastAction) || pair?.reason || book?.lastAction || "Waiting on oracles…"}
+        </p>
+        {book?.pendingIntent && (
+          <p className="mt-2 font-mono text-sm text-acid">Live intent waiting for your trading wallet to sign.</p>
         )}
+        {pair && (
+          <p className="mt-1 font-mono text-[11px] text-mute">
+            SOL ${Number(solUsd).toFixed(2)} ({pair.oracle?.sol}) · SPYx ${Number(spyxUsd).toFixed(2)} ({pair.oracle?.spyx})
+            · liq ${Math.round(pair.liquidityUsd || 0).toLocaleString()} · band ±{Number(pair.bandK || 0).toFixed(2)}σ
+          </p>
+        )}
+
         <div className="mt-6 border-t border-violet/20 pt-5">
-          <div className="font-mono text-[10px] tracking-[0.2em] text-mute">WALLET · {tradePk ? `${tradePk.slice(0, 4)}…${tradePk.slice(-4)}` : "connect first"}</div>
+          <div className="font-mono text-[10px] tracking-[0.2em] text-mute">
+            TRADING WALLET · {tradePk ? `${tradePk.slice(0, 4)}…${tradePk.slice(-4)}` : "connect first"} · keys never with
+            us
+          </div>
           <div className="mt-3 grid grid-cols-4 gap-2">
             {[0.1, 0.5, 1, 2].map((n) => (
               <button
@@ -344,68 +382,168 @@ export function TradingHub() {
             </button>
           </div>
           <p className="mt-3 text-sm text-mute">
-            {armed
-              ? "Bot is running. Stop her before you pull SOL back to your wallet."
-              : "Keys stay on this device. Withdraw is on once she is stopped."}
+            Keep gas in SOL. Working capital marks in USDC. On stop or kill she flattens both sleeves to USDC.
           </p>
         </div>
       </section>
 
       {halted && <p className="mt-3 font-mono text-sm text-blood">{book.haltReason}</p>}
-      {armed && !liveTrading && (
-        <p className="mt-3 font-mono text-sm text-acid">Paper running. Live trading is off until a desk stays green.</p>
-      )}
+      {msg && <p className="mt-3 font-mono text-sm text-acid">{msg}</p>}
 
-      <div className="mt-6 grid gap-4 xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.18fr)]">
+      <div className="mt-6 grid gap-4 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.15fr)]">
         <div className="space-y-4">
-          <ConfigDesk value={cfgFrom(auto)} onChange={patchSoon} layout="stack" />
-
-          {sol && (
-            <div className="panel rounded-2xl p-5">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="font-mono text-[10px] tracking-[0.22em] text-violet">SOL / USDT · SPOT</div>
-                  <div className="mt-1 font-display text-3xl text-ghost">${Number(sol.price || 0).toFixed(2)}</div>
-                </div>
-                <div
-                  className={`rounded-full px-3 py-1 font-mono text-[11px] ${
-                    sol.signal === "wait" ? "btn-ghost" : "btn-on"
-                  }`}
-                >
-                  {String(sol.signal || "wait").toUpperCase()}
-                </div>
-              </div>
-              <p className="mt-3 text-sm leading-relaxed text-mute">{sol.reason}</p>
-              <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                <Mini k="15m RSI" v={sol.rsi15 != null ? Number(sol.rsi15).toFixed(0) : "—"} />
-                <Mini k="15m ATR" v={sol.atrPct != null ? `${(Number(sol.atrPct) * 100).toFixed(2)}%` : "—"} />
-                <Mini k="1h bias" v={sol.emaBias1h || "—"} />
-                <Mini k="Today" v={`${((sol.dailyPnlPct || 0) * 100).toFixed(2)}%`} />
-              </div>
-              {sol.stopPct != null && sol.tpPct != null && (
-                <p className="mt-3 font-mono text-[11px] text-acid">
-                  Stop {(Number(sol.stopPct) * 100).toFixed(2)}% · TP {(Number(sol.tpPct) * 100).toFixed(2)}% · R:R{" "}
-                  {Number(sol.rrAfterCost || 0).toFixed(1)} after fees
-                </p>
-              )}
-              <p className="mt-2 font-mono text-[11px] text-mute">
-                Turn the SOL / USDT desk on to let her paper-trade. Stop ≥ 0.5%. First target 2R after 9 bps a side. Daily
-                goal 0.5%. Spot only — no leverage.
-              </p>
+          <div className="panel space-y-5 rounded-2xl p-5">
+            <div>
+              <div className="font-mono text-[10px] tracking-[0.22em] text-violet">PARAMETERS</div>
+              <h3 className="mt-1 font-display text-2xl text-ghost">Few knobs. Spot only.</h3>
             </div>
-          )}
+            <Slider
+              label="Allocation"
+              hint="Max share of the trading wallet she may use. Rest sits as gas / reserve."
+              min={0.2}
+              max={0.8}
+              step={0.05}
+              value={auto?.allocationPct ?? 0.5}
+              format={(n) => `${Math.round(n * 100)}%`}
+              onChange={(n) => patchSoon({ allocationPct: n })}
+            />
+            <div>
+              <div className="mb-2 font-mono text-[11px] text-mute">Style</div>
+              <div className="grid grid-cols-2 gap-2">
+                {(
+                  [
+                    ["mean_revert", "Mean-revert"],
+                    ["hold_mix", "Hold mix"],
+                  ] as const
+                ).map(([id, label]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => patchSoon({ style: id })}
+                    className={`min-h-[44px] rounded-full font-mono text-[12px] ${(auto?.style || "mean_revert") === id ? "btn-on" : "btn-ghost"}`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <div className="mb-2 font-mono text-[11px] text-mute">Band</div>
+              <div className="grid grid-cols-3 gap-2">
+                {(["tight", "normal", "wide"] as const).map((id) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => patchSoon({ band: id })}
+                    className={`min-h-[44px] rounded-full font-mono text-[12px] ${(auto?.band || "normal") === id ? "btn-on" : "btn-ghost"}`}
+                  >
+                    {id}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {(auto?.style || "mean_revert") === "hold_mix" && (
+              <Slider
+                label="Target SOL mix"
+                hint="The rest is SPYx. She clips back when drift exceeds the band."
+                min={0.2}
+                max={0.8}
+                step={0.05}
+                value={auto?.targetSolPct ?? 0.5}
+                format={(n) => `${Math.round(n * 100)}% SOL`}
+                onChange={(n) => patchSoon({ targetSolPct: n })}
+              />
+            )}
+            <Slider
+              label="Clip size"
+              hint="Percent of allocated stack per trade."
+              min={0.05}
+              max={0.3}
+              step={0.01}
+              value={auto?.clipPct ?? 0.15}
+              format={(n) => `${Math.round(n * 100)}%`}
+              onChange={(n) => patchSoon({ clipPct: n })}
+            />
+            <Slider
+              label="Cooldown"
+              hint="Minimum minutes between live clips. Paper respects it too."
+              min={0}
+              max={120}
+              step={5}
+              value={auto?.cooldownMin ?? 15}
+              format={(n) => `${Math.round(n)}m`}
+              onChange={(n) => patchSoon({ cooldownMin: n })}
+            />
+            <Slider
+              label="Stop"
+              hint="Max drawdown on allocated stack. Then flatten to USDC."
+              min={0.03}
+              max={0.2}
+              step={0.01}
+              value={auto?.stopPct ?? 0.08}
+              format={(n) => `−${Math.round(n * 100)}%`}
+              onChange={(n) => patchSoon({ stopPct: n })}
+            />
+            <Slider
+              label="Take-profit / rebalance"
+              hint="Lock gains back toward a 50/50 mix."
+              min={0.04}
+              max={0.3}
+              step={0.01}
+              value={auto?.takeProfitPct ?? 0.12}
+              format={(n) => `+${Math.round(n * 100)}%`}
+              onChange={(n) => patchSoon({ takeProfitPct: n })}
+            />
+            <Slider
+              label="Slippage cap"
+              hint="Jupiter quote over this is skipped."
+              min={10}
+              max={100}
+              step={5}
+              value={auto?.slippageBps ?? 50}
+              format={(n) => `${n} bps`}
+              onChange={(n) => patchSoon({ slippageBps: n })}
+            />
+            <Slider
+              label="Max price impact"
+              hint="If the route moves the book more than this, she skips."
+              min={0.001}
+              max={0.015}
+              step={0.001}
+              value={auto?.maxImpactPct ?? 0.004}
+              format={(n) => `${(n * 100).toFixed(2)}%`}
+              onChange={(n) => patchSoon({ maxImpactPct: n })}
+            />
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="font-mono text-[11px] text-mute">Paper / Live</div>
+                <p className="text-sm text-mute">Live stays off until the flag is on. You sign every live swap.</p>
+              </div>
+              <button
+                type="button"
+                disabled={!liveTrading}
+                onClick={() => patchSoon({ mode: auto?.mode === "live" ? "paper" : "live" })}
+                className={`min-h-[44px] rounded-full px-5 font-mono text-[12px] ${
+                  auto?.mode === "live" ? "btn-on" : "btn-ghost"
+                } disabled:opacity-40`}
+              >
+                {liveTrading ? (auto?.mode === "live" ? "LIVE" : "PAPER") : "PAPER"}
+              </button>
+            </div>
+            <div className="flex items-center justify-between font-mono text-xs">
+              <span className="text-mute">Leverage</span>
+              <span className="text-mute">spot only — perps later</span>
+            </div>
+          </div>
 
-          {mindData && (
+          {pair?.knowledge && (
             <div className="panel rounded-2xl p-5">
-              <div className="font-mono text-[10px] tracking-[0.22em] text-violet">SOLPHIA MIND</div>
-              <p className="mt-2 text-base text-mute">
-                Every close trains her — paper included. Bars only move up after losses. Picks need Telegram, P(grad) ≥
-                62%, and learned P(pay) ≥ {((mindData.pickThreshold || 0) * 100).toFixed(0)}%.
-              </p>
+              <div className="font-mono text-[10px] tracking-[0.22em] text-violet">WHAT SHE STUDIED</div>
+              <p className="mt-2 text-sm leading-relaxed text-mute">{pair.knowledge.note}</p>
               <div className="mt-3 grid grid-cols-3 gap-2">
-                <Mini k="Studied" v={String(mindData.studied || 0)} />
-                <Mini k="Closed" v={String(mindData.closed || 0)} />
-                <Mini k="Pick bar" v={`${Math.round((mindData.pickThreshold || 0) * 100)}%`} />
+                <Mini k="SOL range" v={`${(pair.knowledge.solMedianDailyRangePct * 100).toFixed(1)}%`} />
+                <Mini k="SPY range" v={`${(pair.knowledge.spyMedianDailyRangePct * 100).toFixed(1)}%`} />
+                <Mini k="15m ATR" v={`${(pair.knowledge.solAtr15mPct * 100).toFixed(2)}%`} />
               </div>
             </div>
           )}
@@ -413,117 +551,64 @@ export function TradingHub() {
 
         <div className="space-y-4">
           <div className="panel rounded-2xl p-5">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-              <div>
-                <div className="font-mono text-[10px] tracking-[0.22em] text-violet">LIVE MONITORING</div>
-                <h2 className="mt-1 font-display text-2xl text-ghost md:text-3xl">
-                  {armed ? "Scanning the tape" : "Waiting to launch"}
-                </h2>
-                <p className="mt-1 text-base text-mute">
-                  {loading
-                    ? "Loading the tape…"
-                    : armed
-                      ? "Scout finds a setup. Risk has to agree. Most names she skips."
-                      : "Preview of what she sees. Launch the bot to let her paper-trade takes."}
-                </p>
-              </div>
-              <Link href="/terminal" className="font-mono text-[12px] text-violet">
-                Full tape →
-              </Link>
-            </div>
-            <div className="mt-4 flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              {(
-                [
-                  ["all", "All"],
-                  ["likes", "She likes"],
-                  ["book", "Positions"],
-                ] as const
-              ).map(([id, label]) => (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => setFilter(id)}
-                  className={`shrink-0 rounded-full px-4 py-2 font-mono text-[12px] ${
-                    filter === id ? "btn-on" : "btn-ghost"
-                  }`}
-                >
-                  {label}
-                </button>
+            <div className="font-mono text-[10px] tracking-[0.22em] text-violet">TAPE · TRADE / SKIP / REASON</div>
+            <h2 className="mt-1 font-display text-2xl text-ghost">{armed ? "Watching the ratio" : "Preview tape"}</h2>
+            <div className="mt-4 max-h-[28rem] space-y-2 overflow-y-auto">
+              {tape.length === 0 &&
+                fills.slice(0, 12).map((f: any) => (
+                  <TapeRow
+                    key={f.id}
+                    action={f.side}
+                    reason={f.reason}
+                    at={f.at}
+                    extra={money(f.sizeUsd)}
+                  />
+                ))}
+              {tape.map((row: any) => (
+                <TapeRow
+                  key={row.id}
+                  action={row.action}
+                  reason={row.reason}
+                  at={row.at}
+                  extra={row.sizeUsd ? money(row.sizeUsd) : row.z != null ? `z ${Number(row.z).toFixed(2)}` : ""}
+                />
               ))}
-            </div>
-
-            <div className="mt-4">
-              {filter === "book" ? (
-                <Book positions={book?.positions || []} onSell={owner ? sell : undefined} />
-              ) : rows.length === 0 ? (
-                <div className="rounded-xl border border-violet/20 px-4 py-10 text-center">
-                  <p className="font-display text-xl text-ghost">
-                    {armed ? "Searching for names…" : "Waiting on the market"}
-                  </p>
-                  <p className="mt-2 text-base text-mute">
-                    {filter === "likes" ? "Empty likes is the point. She is picky." : "Pump.fun / LaunchLab / copy flow."}
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {rows.slice(0, 24).map((row: any) => (
-                    <MonitorRow key={row.token?.mint || row.mint} row={row} held={openMints.has(row.token?.mint)} armed={armed} />
-                  ))}
-                </div>
+              {!tape.length && !fills.length && (
+                <p className="text-sm text-mute">{loading ? "Loading…" : "No decisions yet. Run her in paper."}</p>
               )}
             </div>
           </div>
-
-          {filter !== "book" && (book?.positions || []).length > 0 && (
-            <div className="panel rounded-2xl p-5">
-              <div className="mb-3 font-mono text-[10px] tracking-[0.2em] text-mute">OPEN POSITIONS</div>
-              <Book positions={book.positions} onSell={owner ? sell : undefined} />
-            </div>
-          )}
-
-          {(book?.fills || []).length > 0 && (
-            <div className="panel rounded-2xl p-5">
-              <div className="mb-3 font-mono text-[10px] tracking-[0.2em] text-mute">RECENT FILLS</div>
-              <div className="space-y-2">
-                {fills.slice(0, 14).map((f: any) => (
-                  <div key={f.id} className="flex items-center justify-between gap-2 text-base">
-                    <span className={f.side === "buy" ? "text-acid" : "text-blood"}>
-                      {f.side === "buy" ? "Buy" : "Sell"}
-                    </span>
-                    <span className="min-w-0 truncate text-ghost">{f.symbol}</span>
-                    <span className="font-mono text-[12px] text-mute">{age(f.at)}</span>
-                    <span className={f.pnlUsd == null ? "text-mute" : f.pnlUsd >= 0 ? "text-acid" : "text-blood"}>
-                      {f.pnlUsd == null ? money(f.sizeUsd) : `${f.pnlUsd >= 0 ? "+" : ""}${Number(f.pnlUsd).toFixed(2)}`}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       </div>
-
-      {err && <p className="mt-4 text-base text-blood">Couldn’t load the tape. Pull to refresh.</p>}
-      {msg && <p className="mt-4 font-mono text-sm text-acid">{msg}</p>}
     </main>
   );
 }
 
-function Huge({
-  k,
-  v,
-  sub,
-  good,
-}: {
-  k: string;
-  v: string;
-  sub: string;
-  good?: boolean;
-}) {
+function TapeRow({ action, reason, at, extra }: { action: string; reason: string; at: number; extra?: string }) {
+  const tone =
+    action === "skip" || action === "kill" || action === "flatten"
+      ? "text-blood"
+      : action === "trade" || action === "deploy" || action === "buy" || action === "sell"
+        ? "text-acid"
+        : "text-mute";
+  return (
+    <div className="rounded-xl border border-violet/20 px-4 py-3">
+      <div className="flex items-center justify-between gap-3">
+        <span className={`font-mono text-[11px] uppercase tracking-[0.16em] ${tone}`}>{action}</span>
+        <span className="font-mono text-[11px] text-mute">
+          {new Date(at).toLocaleTimeString()} {extra}
+        </span>
+      </div>
+      <p className="mt-1 text-sm leading-relaxed text-ghost">{reason}</p>
+    </div>
+  );
+}
+
+function Huge({ k, v, sub, good }: { k: string; v: string; sub: string; good?: boolean }) {
   return (
     <div className="rounded-2xl border border-violet/20 bg-void/40 p-4">
-      <div className="font-mono text-[11px] tracking-[0.16em] text-mute">{k}</div>
-      <div className={`mt-1 font-display text-3xl md:text-4xl ${good === false ? "text-blood" : "text-acid"}`}>{v}</div>
+      <div className="font-mono text-[10px] tracking-[0.18em] text-mute">{k}</div>
+      <div className={`mt-1 font-display text-2xl md:text-3xl ${good === false ? "text-blood" : "text-ghost"}`}>{v}</div>
       <div className="mt-1 font-mono text-[11px] text-mute">{sub}</div>
     </div>
   );
@@ -531,81 +616,48 @@ function Huge({
 
 function Mini({ k, v }: { k: string; v: string }) {
   return (
-    <div className="rounded-xl border border-violet/15 p-3">
-      <div className="font-mono text-[9px] tracking-[0.18em] text-mute">{k}</div>
-      <div className="font-display text-xl text-acid">{v}</div>
+    <div className="rounded-xl border border-violet/15 px-3 py-2">
+      <div className="font-mono text-[10px] tracking-[0.16em] text-mute">{k}</div>
+      <div className="font-display text-lg text-ghost">{v}</div>
     </div>
   );
 }
 
-function MonitorRow({ row, held, armed }: { row: any; held: boolean; armed: boolean }) {
-  const t = row.token || row;
-  const r = row.report || { score: 0, verdict: "skip", why: "" };
-  const take = r.verdict === "trade" && !r.vetoed;
-  const why = String(r.why || r.summary || "").replace(/^Skip — |^Wait — |^Take it — /, "");
+function Slider({
+  label,
+  hint,
+  min,
+  max,
+  step,
+  value,
+  format,
+  onChange,
+}: {
+  label: string;
+  hint: string;
+  min: number;
+  max: number;
+  step: number;
+  value: number;
+  format: (n: number) => string;
+  onChange: (n: number) => void;
+}) {
   return (
-    <div className="rounded-xl border border-violet/15 p-3">
-      <div className="flex items-start gap-3">
-        {t.image ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={t.image} alt="" className="h-10 w-10 shrink-0 rounded-full object-cover" />
-        ) : (
-          <div className="h-10 w-10 shrink-0 rounded-full bg-line" />
-        )}
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="font-display text-lg text-ghost">{t.symbol}</span>
-            <span
-              className={`rounded-full px-2 py-0.5 font-mono text-[10px] tracking-[0.14em] ${
-                take ? "bg-acid/15 text-acid" : r.verdict === "wait" ? "text-cyan" : "text-blood"
-              }`}
-            >
-              {take ? "TAKE" : r.verdict === "wait" ? "WAIT" : "SKIP"}
-            </span>
-            <span className="font-mono text-[11px] text-mute">
-              {age(t.createdAt)} · {mcap(t.marketCapUsd)}
-            </span>
-          </div>
-          <p className="mt-1 line-clamp-2 text-sm leading-relaxed text-mute">{why || "No read yet."}</p>
-        </div>
-        <div className="shrink-0 text-right">
-          <div className="font-display text-lg text-ghost">{r.score}</div>
-          {r.pGrad != null && <div className="font-mono text-[11px] text-mute">{Math.round(r.pGrad * 100)}%</div>}
-        </div>
+    <label className="block">
+      <div className="flex items-end justify-between gap-3">
+        <span className="font-mono text-[11px] text-mute">{label}</span>
+        <span className="font-display text-xl text-acid">{format(value)}</span>
       </div>
-      <div className="mt-2 font-mono text-[11px] text-mute">
-        {held ? "In the book" : take && armed ? "Queued if Scout + Risk agree" : take ? "Launch the bot to take this" : "She passed"}
-      </div>
-    </div>
-  );
-}
-
-function Book({ positions, onSell }: { positions: any[]; onSell?: (mint: string) => void }) {
-  if (!positions.length) {
-    return <p className="py-6 text-center text-base text-mute">No open coins. That’s fine.</p>;
-  }
-  return (
-    <div className="space-y-2">
-      {positions.map((p: any) => (
-        <div key={p.id} className="flex items-center justify-between gap-3 rounded-xl border border-violet/15 p-3">
-          <div>
-            <div className="font-display text-lg text-ghost">{p.symbol}</div>
-            <div className={`font-mono text-[12px] ${p.unrealizedUsd >= 0 ? "text-acid" : "text-blood"}`}>
-              {p.unrealizedUsd >= 0 ? "+" : ""}
-              ${Number(p.unrealizedUsd || 0).toFixed(2)}
-            </div>
-          </div>
-          {onSell && (
-            <button
-              type="button"
-              onClick={() => onSell(p.mint)}
-              className="btn-ghost min-h-[44px] rounded-full px-4 font-mono text-[11px]"
-            >
-              Sell
-            </button>
-          )}
-        </div>
-      ))}
-    </div>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="mt-2 w-full accent-[#14f195]"
+      />
+      <p className="mt-1 text-sm text-mute">{hint}</p>
+    </label>
   );
 }

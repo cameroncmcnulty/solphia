@@ -30,6 +30,7 @@ export function emptyState(): AppState {
     curveWatch: {},
     lastTickAt: 0,
     lastSnapshots: [],
+    pairSamples: [],
   };
 }
 
@@ -37,14 +38,15 @@ function ensureDir() {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
-function isScalpDemo(book: { fills?: { strategy: string }[] }) {
+function isLegacyBook(book: { fills?: { strategy: string }[] }) {
   const fills = book.fills || [];
-  return fills.length > 0 && fills.every((f) => f.strategy === "scalp");
+  if (!fills.length) return false;
+  return fills.some((f) => f.strategy !== "sol_spyx");
 }
 
 export function loadState(): AppState {
   if (mem) {
-    if (isScalpDemo(mem.paper)) mem.paper = emptyBook();
+    if (isLegacyBook(mem.paper)) mem.paper = emptyBook();
     return mem;
   }
   try {
@@ -56,7 +58,15 @@ export function loadState(): AppState {
         ...emptyState(),
         ...raw,
         settings: { ...DEFAULT_SETTINGS, ...(raw.settings || {}) },
-        paper: isScalpDemo(rawPaper) ? emptyBook() : { ...emptyBook(), ...rawPaper },
+        paper: isLegacyBook(rawPaper)
+          ? emptyBook()
+          : {
+              ...emptyBook(),
+              ...rawPaper,
+              pair: rawPaper.pair || { solQty: 0, spyxQty: 0, usdcQty: (rawPaper.cashUsd ?? emptyBook().cashUsd) },
+              tape: rawPaper.tape || [],
+              skipped: rawPaper.skipped || 0,
+            },
         lab: mergeLab(raw.lab),
         mind: mergeMind(raw.mind),
         curveWatch: raw.curveWatch || {},

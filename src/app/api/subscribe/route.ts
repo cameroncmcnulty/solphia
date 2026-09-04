@@ -17,7 +17,7 @@ const Body = z.object({
   email: z.string().optional(),
   signature: z.string().optional(),
   paper: z.boolean().optional(),
-  plan: z.enum(["pulse", "copy", "snipers", "full"]).optional(),
+  plan: z.enum(["paper", "live", "pulse", "copy", "snipers", "full"]).optional(),
 });
 
 export async function GET() {
@@ -38,8 +38,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "bad_request" }, { status: 400 });
   }
   const email = parsed.data.email && isEmail(parsed.data.email) ? sanitizeText(parsed.data.email, 120) : undefined;
-  const planId = (parsed.data.plan || "full") as PlanId;
-  const plan = planById(planId) || PLANS[3];
+  const planId = (parsed.data.plan === "live" || parsed.data.plan === "paper" ? parsed.data.plan : "live") as PlanId;
+  const plan = planById(planId) || PLANS[0];
   const until = Date.now() + 30 * 24 * 60 * 60 * 1000;
   const lamports = lamportsForPlan(plan.id);
   if (isFounder(loadState(), parsed.data.pubkey)) {
@@ -70,7 +70,7 @@ export async function POST(req: NextRequest) {
       user.plan = plan.id;
       if (email) {
         user.email = email;
-        user.alertsEnabled = plan.id === "pulse" || plan.id === "full";
+        user.alertsEnabled = Boolean(email);
         await queueEmail(s, email, `${plan.name} is live`, welcomeEmailHtml(parsed.data.pubkey, new Date(until).toISOString()));
       }
     });

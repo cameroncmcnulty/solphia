@@ -1,5 +1,5 @@
-import { TerminalView } from "@/components/TerminalView";
+import { redirect } from "next/navigation";
 
 export default function MigratePage() {
-  return <TerminalView forcedDesk="migrate" />;
+  redirect("/trading");
 }

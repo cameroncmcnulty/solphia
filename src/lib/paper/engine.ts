@@ -1,7 +1,6 @@
 import type {
   AlertEvent,
   AppState,
-  AutoSettings,
   CreatorStat,
   EngineSettings,
   PaperBook,
@@ -22,7 +21,13 @@ import { nextCurveTick } from "../desk/rugClock";
 import { applyBars, emptyMind, learnFromFill, noteOpen, studyMarket } from "../mind/engine";
 import { extractFeatures } from "../mind/features";
 
-export type DeskFlags = Pick<AutoSettings, "copy" | "launch" | "migrate" | "scalp"> & { picks?: boolean };
+export type DeskFlags = {
+  copy: boolean;
+  launch: boolean;
+  migrate: boolean;
+  scalp: boolean;
+  picks?: boolean;
+};
 
 export const DEMO_DESKS: DeskFlags = { copy: true, launch: false, migrate: false, scalp: false, picks: false };
 

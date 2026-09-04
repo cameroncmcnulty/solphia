@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { clientIp, rateLimit } from "@/lib/security";
 import { loadState } from "@/lib/store";
-import { runMarketTick, publicBook } from "@/lib/tick";
-import { scoreToken } from "@/lib/risk/engine";
+import { runMarketTick, publicBook, lastPairDesk, lastPairPrices } from "@/lib/tick";
 import { publicMind } from "@/lib/mind/engine";
+import { LIVE_TRADING } from "@/lib/config";
+import { spyxMint } from "@/lib/pair/mints";
 
 export const dynamic = "force-dynamic";
 
@@ -12,38 +13,32 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "rate_limited" }, { status: 429 });
   }
   const state = loadState();
-  const stale = Date.now() - (state.lastTickAt || 0) > 20_000;
+  const stale = Date.now() - (state.lastTickAt || 0) > 15_000;
   if (stale) {
     const tick = await runMarketTick();
     return NextResponse.json({
       paper: tick.paper,
-      tokens: tick.tokens,
       health: tick.health,
       solUsd: tick.solUsd,
-      lab: loadState().lab,
+      spyxUsd: tick.spyxUsd,
+      spyxMint: spyxMint(),
       mind: publicMind(loadState().mind),
       lastTickAt: Date.now(),
-      sol: tick.sol,
+      pair: tick.pair,
+      liveTrading: tick.liveTrading,
     });
   }
-  const tokens = state.lastSnapshots.map((token) => ({
-    token,
-    report: scoreToken(token, Date.now(), state.settings),
-  }));
-  const { readSolDesk } = await import("@/lib/sol/paper");
-  let sol = null;
-  try {
-    sol = await readSolDesk(state.paper);
-  } catch {
-    sol = null;
-  }
+  const cached = lastPairDesk() || state.lastPair || null;
+  const px = lastPairPrices();
   return NextResponse.json({
     paper: publicBook(state.paper),
-    tokens,
     health: state.feedHealth,
-    lab: state.lab,
     mind: publicMind(state.mind),
     lastTickAt: state.lastTickAt,
-    sol,
+    pair: cached,
+    solUsd: px.solUsd || (cached as { solUsd?: number } | null)?.solUsd || 0,
+    spyxUsd: px.spyxUsd || (cached as { spyxUsd?: number } | null)?.spyxUsd || 0,
+    spyxMint: spyxMint(),
+    liveTrading: LIVE_TRADING,
   });
 }
