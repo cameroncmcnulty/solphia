@@ -63,7 +63,20 @@ export function loadState(): AppState {
           : {
               ...emptyBook(),
               ...rawPaper,
-              pair: rawPaper.pair || { solQty: 0, spyxQty: 0, usdcQty: (rawPaper.cashUsd ?? emptyBook().cashUsd) },
+              pair: rawPaper.pair
+                ? {
+                    solQty: rawPaper.pair.solQty || 0,
+                    spyxQty: rawPaper.pair.spyxQty || 0,
+                    qqqxQty: rawPaper.pair.qqqxQty || 0,
+                    gldxQty: rawPaper.pair.gldxQty || 0,
+                    usdcQty: rawPaper.pair.usdcQty ?? rawPaper.cashUsd ?? emptyBook().cashUsd,
+                    solCostUsd: rawPaper.pair.solCostUsd,
+                    spyxCostUsd: rawPaper.pair.spyxCostUsd,
+                    qqqxCostUsd: rawPaper.pair.qqqxCostUsd,
+                    gldxCostUsd: rawPaper.pair.gldxCostUsd,
+                    lastClipAt: rawPaper.pair.lastClipAt,
+                  }
+                : { solQty: 0, spyxQty: 0, qqqxQty: 0, gldxQty: 0, usdcQty: rawPaper.cashUsd ?? emptyBook().cashUsd },
               tape: rawPaper.tape || [],
               skipped: rawPaper.skipped || 0,
             },

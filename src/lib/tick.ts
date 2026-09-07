@@ -1,4 +1,4 @@
-import { DEFAULT_AUTO, bankrollUsd, maybeResizeBook } from "./auto";
+import { DEFAULT_AUTO, lockedAuto, bankrollUsd, maybeResizeBook } from "./auto";
 import { LIVE_TRADING } from "./config";
 import { publicMind } from "./mind/engine";
 import { tickPairBook } from "./pair/paper";
@@ -12,7 +12,12 @@ import type { FeedHealth, PaperBook } from "./types";
 
 let lock: Promise<unknown> = Promise.resolve();
 let lastPairPublic: PairDeskPublic | null = null;
-let lastPrices: { solUsd: number; spyxUsd: number } = { solUsd: 0, spyxUsd: 0 };
+let lastPrices: { solUsd: number; spyxUsd: number; qqqxUsd: number; gldxUsd: number } = {
+  solUsd: 0,
+  spyxUsd: 0,
+  qqqxUsd: 0,
+  gldxUsd: 0,
+};
 
 export function lastPairDesk() {
   return lastPairPublic;
@@ -61,6 +66,8 @@ export async function runMarketTick(): Promise<{
   health: FeedHealth[];
   solUsd: number;
   spyxUsd: number;
+  qqqxUsd: number;
+  gldxUsd: number;
   entries: number;
   exits: number;
   mind: ReturnType<typeof publicMind>;
@@ -77,10 +84,10 @@ export async function runMarketTick(): Promise<{
     try {
       prices = await loadPairPrices();
       health.push({
-        source: `oracle:${prices.sol.source}+${prices.spyx.source}`,
+        source: `prices:${prices.sol.source}`,
         ok: !prices.stale,
         ms: Date.now() - t0,
-        count: 2,
+        count: [prices.spyx, prices.qqqx, prices.gldx].filter((p) => p.usd > 0).length + 1,
         error: prices.reason,
         at: now,
       });
@@ -109,6 +116,8 @@ export async function runMarketTick(): Promise<{
         health,
         solUsd: 0,
         spyxUsd: 0,
+        qqqxUsd: 0,
+        gldxUsd: 0,
         entries: 0,
         exits: 0,
         mind: publicMind(state.mind),
@@ -119,7 +128,12 @@ export async function runMarketTick(): Promise<{
 
     let samples = history.samples;
     if (samples.length < 12 && (state.pairSamples || []).length >= 12) samples = state.pairSamples || samples;
-    samples = pushLiveSample(samples, prices.sol.usd, prices.spyx.usd, now);
+    samples = pushLiveSample(
+      samples,
+      prices.sol.usd,
+      { spyx: prices.spyx.usd, qqqx: prices.qqqx.usd, gldx: prices.gldx.usd },
+      now,
+    );
     state.pairSamples = samples;
 
     let impactPct = 0;
@@ -164,12 +178,19 @@ export async function runMarketTick(): Promise<{
     let exits = demo.fills.filter((f) => f.side === "sell").length;
 
     for (const trader of Object.values(state.traders || {})) {
-      trader.auto = { ...DEFAULT_AUTO, ...trader.auto, leverage: 1 };
+      const liveWanted = trader.auto?.mode === "live" && LIVE_TRADING;
+      trader.auto = lockedAuto({
+        ...trader.auto,
+        mode: liveWanted ? "live" : "paper",
+        armed: !trader.book.killed,
+        tradingPubkey: trader.auto?.tradingPubkey,
+        armedAt: trader.auto?.armedAt,
+      });
       if (trader.auto.mode === "live" && !LIVE_TRADING) trader.auto.mode = "paper";
       const target = bankrollUsd(trader.depositedSol, prices.sol.usd);
       trader.book = maybeResizeBook(trader.book, target);
       if (!trader.book.pair) {
-        trader.book.pair = { solQty: 0, spyxQty: 0, usdcQty: trader.book.cashUsd };
+        trader.book.pair = { solQty: 0, spyxQty: 0, qqqxQty: 0, gldxQty: 0, usdcQty: trader.book.cashUsd };
       }
       if (trader.book.killed) {
         trader.updatedAt = now;
@@ -197,7 +218,12 @@ export async function runMarketTick(): Promise<{
     state.feedHealth = health;
     state.lastTickAt = now;
     lastPairPublic = publicPair(state.paper, prices, demo.decision, history.study);
-    lastPrices = { solUsd: prices.sol.usd, spyxUsd: prices.spyx.usd };
+    lastPrices = {
+      solUsd: prices.sol.usd,
+      spyxUsd: prices.spyx.usd,
+      qqqxUsd: prices.qqqx.usd,
+      gldxUsd: prices.gldx.usd,
+    };
     state.lastPair = lastPairPublic;
     await saveState(state);
 
@@ -206,6 +232,8 @@ export async function runMarketTick(): Promise<{
       health,
       solUsd: prices.sol.usd,
       spyxUsd: prices.spyx.usd,
+      qqqxUsd: prices.qqqx.usd,
+      gldxUsd: prices.gldx.usd,
       entries,
       exits,
       mind: publicMind(state.mind),

@@ -3,13 +3,12 @@ import { z } from "zod";
 import { XAI_API_KEY, XAI_BASE, XAI_MODEL } from "@/lib/config";
 import { clientIp, rateLimit, sanitizeText } from "@/lib/security";
 import { loadState } from "@/lib/store";
-import { RESEARCH } from "@/lib/config";
 
 export const dynamic = "force-dynamic";
 
 const Body = z.object({ message: z.string().min(1).max(500) });
 
-const PERSONA = `You are Solphia. You help people make money on Solana memecoins by refusing more trades than you fire. Scout proposes, Risk vetoes, policy caps size and daily loss, then a fill. Keys never sit in the model. Solphia Picks is your own book: a self-learning model on after-fee outcomes, not an LLM picking coins. Hard gates: Telegram on the page, P(grad) ≥ 62%, low bot-share, ≥5 minutes old. You copy the decision (visible setup + the exit), not first-block bags. Launch only when P(grad) clears the bar. Calm, clear. Never ask for a seed. Not financial advice. ${RESEARCH.pumpfunLaunchDayDeathPct}% of Pump.fun coins die day one. Fee 0.35%. Paper until live.`;
+const PERSONA = `You are Solphia. You trade SOL against three official Solana tokens: SPYx (S&P 500), QQQx (Nasdaq-100), and GLDx (gold). Phantom only. Practice first. Keys never sit in the model. No memecoins, no copy list, no sniper. When SOL looks expensive vs a market you sell SOL for that token; when it looks cheap you buy SOL back. You sit when nothing has moved. Spot only. Calm, plain language. Never ask for a seed. Not financial advice. Paper until live.`;
 
 export async function POST(req: NextRequest) {
   if (!rateLimit(clientIp(req) + ":chat", 20, 60_000)) {
@@ -53,7 +52,7 @@ export async function POST(req: NextRequest) {
 function localVoice(message: string, context: string): string {
   const m = message.toLowerCase();
   if (m.includes("key") || m.includes("seed") || m.includes("phrase")) {
-    return "I will never take your keys. Connect Phantom or Solflare. You sign. I watch.";
+    return "I will never take your keys. Connect Phantom. You sign. I watch.";
   }
   if (m.includes("fee")) {
     return "Industry terminals take about 1%. I take 0.35% on fills, plus 0.15 SOL a month if you want the alert wire. The $1,000 book already subtracts those costs so the PnL is not a fairy tale.";
@@ -64,5 +63,5 @@ function localVoice(message: string, context: string): string {
   if (m.includes("grad") || m.includes("launch")) {
     return "Launch is not a sniper. I estimate P(grad) from curve fill, SOL per unique buyer, bot-share, creator history, and whether a social link is actually there. Under the bar, she stays off.";
   }
-  return `Demo book: ${context}. Connect, deposit, turn me on. Scout and Risk both have to agree. I copy the exit, not just the buy. Alerts are 0.15 SOL if you still want to tap buy yourself.`;
+  return `Demo book: ${context}. Connect Phantom, add SOL, watch me trade S&P 500, Nasdaq, and gold. Practice first. Hit KILL to stop.`;
 }

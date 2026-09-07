@@ -1,5 +1,12 @@
 import { getJson, num } from "../feeds/http";
-import { PYTH_SOL_USD, PYTH_SPYX_USD, spyxMint, SOL_MINT, MIN_SPYX_LIQUIDITY_USD } from "./mints";
+import {
+  PYTH_SOL_USD,
+  PYTH_SPYX_USD,
+  MIN_XSTOCK_LIQUIDITY_USD,
+  XSTOCKS,
+  type XStockId,
+  xstockMint,
+} from "./mints";
 
 const STALE_MS = 90_000;
 
@@ -13,11 +20,18 @@ export type OraclePrint = {
 export type PairPrices = {
   sol: OraclePrint;
   spyx: OraclePrint;
+  qqqx: OraclePrint;
+  gldx: OraclePrint;
   liquidityUsd: number;
+  liquidities: Record<XStockId, number>;
   stale: boolean;
   ageMs: number;
   reason?: string;
 };
+
+export function assetPrint(prices: PairPrices, id: XStockId): OraclePrint {
+  return prices[id];
+}
 
 function pythHeaders(): Record<string, string> {
   const key = process.env.PYTH_API_KEY || "";
@@ -74,8 +88,7 @@ type DexPair = {
   liquidity?: { usd?: number };
 };
 
-async function dexSpyx(): Promise<{ print: OraclePrint; liquidityUsd: number } | null> {
-  const mint = spyxMint();
+async function dexToken(mint: string): Promise<{ print: OraclePrint; liquidityUsd: number } | null> {
   const r = await getJson<{ pairs?: DexPair[] }>(`https://api.dexscreener.com/latest/dex/tokens/${mint}`, 8000);
   if (!r.ok || !r.data?.pairs) return null;
   const pairs = r.data.pairs.filter((p) => p.chainId === "solana" && p.baseToken?.address === mint);
@@ -92,37 +105,57 @@ async function dexSpyx(): Promise<{ print: OraclePrint; liquidityUsd: number } |
   return { print: { usd: best.usd, source: "dexscreener", at: Date.now() }, liquidityUsd: liq };
 }
 
+const NONE: OraclePrint = { usd: 0, source: "none", at: 0 };
+
 export async function loadPairPrices(): Promise<PairPrices> {
-  const [pythSol, pythSpyx, binance, dex] = await Promise.all([
+  const [pythSol, pythSpyx, binance, ...dexes] = await Promise.all([
     pythUsd(PYTH_SOL_USD),
     PYTH_SPYX_USD ? pythUsd(PYTH_SPYX_USD) : Promise.resolve(null),
     binanceSol(),
-    dexSpyx(),
+    ...XSTOCKS.map((x) => dexToken(xstockMint(x.id))),
   ]);
   const sol = pythSol || binance;
-  const spyx = pythSpyx || dex?.print;
-  const liquidityUsd = dex?.liquidityUsd || 0;
-  if (!sol || !spyx) {
+  const spyx = pythSpyx || dexes[0]?.print;
+  const qqqx = dexes[1]?.print;
+  const gldx = dexes[2]?.print;
+  const liquidities: Record<XStockId, number> = {
+    spyx: dexes[0]?.liquidityUsd || 0,
+    qqqx: dexes[1]?.liquidityUsd || 0,
+    gldx: dexes[2]?.liquidityUsd || 0,
+  };
+  const liquidityUsd = liquidities.spyx;
+  const liveAssets = [spyx, qqqx, gldx].filter((p) => p && p.usd > 0).length;
+  if (!sol || liveAssets === 0) {
     return {
-      sol: sol || { usd: 0, source: "none", at: 0 },
-      spyx: spyx || { usd: 0, source: "none", at: 0 },
+      sol: sol || NONE,
+      spyx: spyx || NONE,
+      qqqx: qqqx || NONE,
+      gldx: gldx || NONE,
       liquidityUsd,
+      liquidities,
       stale: true,
       ageMs: STALE_MS + 1,
-      reason: "Oracle missing SOL or SPYx print.",
+      reason: "Price feed missing SOL or every market.",
     };
   }
   const now = Date.now();
-  const ageMs = Math.max(now - sol.at, now - spyx.at);
-  const stale = ageMs > STALE_MS || sol.usd <= 0 || spyx.usd <= 0;
+  const ages = [sol.at, spyx?.at, qqqx?.at, gldx?.at].filter((t): t is number => Boolean(t && t > 0));
+  const ageMs = ages.length ? now - Math.min(...ages.map((t) => t || now)) : STALE_MS + 1;
+  const solStale = now - sol.at > STALE_MS || sol.usd <= 0;
+  const anyLive = [spyx, qqqx, gldx].some((p) => p && p.usd > 0 && now - p.at <= STALE_MS);
+  const stale = solStale || !anyLive;
+  const thin = XSTOCKS.every((x) => liquidities[x.id] < MIN_XSTOCK_LIQUIDITY_USD);
   return {
     sol,
-    spyx,
+    spyx: spyx || NONE,
+    qqqx: qqqx || NONE,
+    gldx: gldx || NONE,
     liquidityUsd,
+    liquidities,
     stale,
     ageMs,
-    reason: stale ? "Stale oracle. Skip." : liquidityUsd < MIN_SPYX_LIQUIDITY_USD ? "SPYx liquidity under threshold." : undefined,
+    reason: stale ? "Prices are stale. Sitting." : thin ? "Markets too thin to trade." : undefined,
   };
 }
 
-export { STALE_MS, SOL_MINT };
+export { STALE_MS };

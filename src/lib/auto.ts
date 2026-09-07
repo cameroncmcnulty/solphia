@@ -1,21 +1,34 @@
 import type { AutoSettings, PaperBook, TraderAccount } from "./types";
 import { PAPER_STARTING_USD } from "./config";
 
+/** Locked knobs. The hub does not expose these — mean-revert, normal band, 5m cooldown. */
 export const DEFAULT_AUTO: AutoSettings = {
   armed: true,
   mode: "paper",
-  allocationPct: 0.5,
+  allocationPct: 0.6,
   style: "mean_revert",
   band: "normal",
-  clipPct: 0.15,
-  cooldownMin: 15,
+  clipPct: 0.12,
+  cooldownMin: 5,
   stopPct: 0.08,
   takeProfitPct: 0.12,
-  targetSolPct: 0.5,
+  targetSolPct: 0.4,
   slippageBps: 50,
   maxImpactPct: 0.004,
   leverage: 1,
 };
+
+/** Production settings: user may only flip paper/live. Everything else is the better default. */
+export function lockedAuto(partial?: Partial<AutoSettings>): AutoSettings {
+  return {
+    ...DEFAULT_AUTO,
+    mode: partial?.mode === "live" ? "live" : "paper",
+    armed: partial?.armed !== false,
+    armedAt: partial?.armedAt,
+    tradingPubkey: partial?.tradingPubkey,
+    leverage: 1,
+  };
+}
 
 export function emptyBook(startingUsd = PAPER_STARTING_USD): PaperBook {
   const now = Date.now();
@@ -34,7 +47,7 @@ export function emptyBook(startingUsd = PAPER_STARTING_USD): PaperBook {
     curve: [{ t: now, equity: startingUsd }],
     skipped: 0,
     killed: false,
-    pair: { solQty: 0, spyxQty: 0, usdcQty: startingUsd },
+    pair: { solQty: 0, spyxQty: 0, qqqxQty: 0, gldxQty: 0, usdcQty: startingUsd },
     tape: [],
   };
 }
@@ -43,7 +56,7 @@ export function emptyTrader(owner: string): TraderAccount {
   return {
     owner,
     depositedSol: 0,
-    auto: { ...DEFAULT_AUTO, armed: true, armedAt: Date.now() },
+    auto: lockedAuto({ armed: true, armedAt: Date.now() }),
     book: emptyBook(),
     updatedAt: Date.now(),
   };

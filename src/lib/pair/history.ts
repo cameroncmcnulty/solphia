@@ -32,36 +32,51 @@ async function yahoo(symbol: string, interval: string, range: string): Promise<C
   return parseYahoo(r.data);
 }
 
-function alignSamples(solH: Candle[], spyH: Candle[]): RatioSample[] {
-  if (!solH.length || !spyH.length) return [];
-  const spyByHour = new Map<number, number>();
-  for (const c of spyH) spyByHour.set(Math.floor(c.t / 3_600_000), c.c);
+function hourMap(cs: Candle[]): Map<number, number> {
+  const m = new Map<number, number>();
+  for (const c of cs) m.set(Math.floor(c.t / 3_600_000), c.c);
+  return m;
+}
+
+function alignSamples(solH: Candle[], spyH: Candle[], qqqH: Candle[], gldH: Candle[]): RatioSample[] {
+  if (!solH.length) return [];
+  const spyByHour = hourMap(spyH);
+  const qqqByHour = hourMap(qqqH);
+  const gldByHour = hourMap(gldH);
   const out: RatioSample[] = [];
-  let lastSpy = spyH[0].c;
+  let lastSpy = spyH[0]?.c || 0;
+  let lastQqq = qqqH[0]?.c || 0;
+  let lastGld = gldH[0]?.c || 0;
   for (const s of solH) {
     const key = Math.floor(s.t / 3_600_000);
     const spy = spyByHour.get(key);
+    const qqq = qqqByHour.get(key);
+    const gld = gldByHour.get(key);
     if (spy && spy > 0) lastSpy = spy;
-    if (s.c > 0 && lastSpy > 0) out.push({ t: s.t, sol: s.c, spyx: lastSpy });
+    if (qqq && qqq > 0) lastQqq = qqq;
+    if (gld && gld > 0) lastGld = gld;
+    if (s.c > 0 && lastSpy > 0) out.push({ t: s.t, sol: s.c, spyx: lastSpy, qqqx: lastQqq || undefined, gldx: lastGld || undefined });
   }
   return out;
 }
 
 export async function loadPairHistory(): Promise<{ samples: RatioSample[]; study: HistoryStudy }> {
   if (cache && Date.now() - cache.at < TTL) return { samples: cache.samples, study: cache.study };
-  const [sol, spyH, spyD, gspc] = await Promise.all([
+  const [sol, spyH, spyD, gspc, qqqH, gldH] = await Promise.all([
     loadSolCandles().catch(() => ({ m15: [] as Candle[], h1: [] as Candle[] })),
     yahoo("SPY", "1h", "7d"),
     yahoo("SPY", "1d", "2y"),
     yahoo("^GSPC", "1d", "10y"),
+    yahoo("QQQ", "1h", "7d"),
+    yahoo("GLD", "1h", "7d"),
   ]);
   const spyDaily = gspc.length > spyD.length ? gspc : spyD;
-  let samples = alignSamples(sol.h1, spyH.length ? spyH : spyDaily);
-  // If cash SPY history is blocked, SOL hourly vs a flat SPYx print is still the right model:
-  // S&P barely moves vs SOL's 5–8% days.
+  let samples = alignSamples(sol.h1, spyH.length ? spyH : spyDaily, qqqH, gldH);
   if (samples.length < 24 && sol.h1.length) {
     const spyx = spyDaily.length ? spyDaily[spyDaily.length - 1].c : spyH.length ? spyH[spyH.length - 1].c : 0;
-    if (spyx > 0) samples = sol.h1.map((c) => ({ t: c.t, sol: c.c, spyx }));
+    const qqqx = qqqH.length ? qqqH[qqqH.length - 1].c : 0;
+    const gldx = gldH.length ? gldH[gldH.length - 1].c : 0;
+    if (spyx > 0) samples = sol.h1.map((c) => ({ t: c.t, sol: c.c, spyx, qqqx: qqqx || undefined, gldx: gldx || undefined }));
   }
   // Pack 1h highs/lows into UTC days for a true daily range.
   const solByDay = new Map<string, { h: number; l: number; c: number }>();
@@ -81,15 +96,23 @@ export async function loadPairHistory(): Promise<{ samples: RatioSample[]; study
   return { samples, study };
 }
 
-export function pushLiveSample(samples: RatioSample[], sol: number, spyx: number, now: number, max = 400): RatioSample[] {
+export function pushLiveSample(
+  samples: RatioSample[],
+  sol: number,
+  assets: { spyx: number; qqqx?: number; gldx?: number },
+  now: number,
+  max = 400,
+): RatioSample[] {
   const next = samples[samples.length - 1];
   if (next && now - next.t < 50_000) {
     next.sol = sol;
-    next.spyx = spyx;
+    next.spyx = assets.spyx;
+    if (assets.qqqx) next.qqqx = assets.qqqx;
+    if (assets.gldx) next.gldx = assets.gldx;
     next.t = now;
     return samples;
   }
-  samples.push({ t: now, sol, spyx });
+  samples.push({ t: now, sol, spyx: assets.spyx, qqqx: assets.qqqx, gldx: assets.gldx });
   if (samples.length > max) samples.splice(0, samples.length - max);
   return samples;
 }

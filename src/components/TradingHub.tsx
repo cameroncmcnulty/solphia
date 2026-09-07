@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { loadOwner, saveOwner, tradingPubkey, buildTransfer, withdrawToOwner, signAndSendSwap } from "@/lib/wallet/trading";
 import { WalletConnect } from "./WalletConnect";
 import { useMarket, useOwner } from "@/lib/hooks";
-import { SOL_MINT, USDC_MINT, spyxMint } from "@/lib/pair/mints";
+import { SOL_MINT, USDC_MINT, XSTOCKS, xstockBySymbol, xstockMint } from "@/lib/pair/mints";
 
 function pickProvider() {
   if (typeof window === "undefined") return null;
@@ -16,17 +16,6 @@ type Auto = {
   armed?: boolean;
   armedAt?: number;
   mode?: "paper" | "live";
-  allocationPct?: number;
-  style?: "mean_revert" | "hold_mix";
-  band?: "tight" | "normal" | "wide";
-  clipPct?: number;
-  cooldownMin?: number;
-  stopPct?: number;
-  takeProfitPct?: number;
-  targetSolPct?: number;
-  slippageBps?: number;
-  maxImpactPct?: number;
-  leverage?: number;
 };
 
 function money(n: number) {
@@ -46,6 +35,27 @@ function fmtDur(ms: number) {
   return `${sec}s`;
 }
 
+function mintFor(label: string): string {
+  if (label === "SOL") return SOL_MINT;
+  if (label === "USDC") return USDC_MINT;
+  const row = xstockBySymbol(label);
+  return row ? xstockMint(row.id) : xstockMint("spyx");
+}
+
+function qtyKey(id: string): "spyxQty" | "qqqxQty" | "gldxQty" {
+  if (id === "qqqx") return "qqqxQty";
+  if (id === "gldx") return "gldxQty";
+  return "spyxQty";
+}
+
+function tapeLabel(action: string) {
+  if (action === "trade" || action === "buy" || action === "sell") return "TRADED";
+  if (action === "deploy") return "BOUGHT";
+  if (action === "flatten" || action === "kill") return "STOPPED";
+  if (action === "skip") return "WAITING";
+  return "WATCHING";
+}
+
 export function TradingHub() {
   const connected = useOwner();
   const owner = connected || loadOwner();
@@ -59,7 +69,6 @@ export function TradingHub() {
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
   const [now, setNow] = useState(Date.now());
-  const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
   const liveLock = useRef(false);
   const lastDep = useRef<number | null>(null);
 
@@ -123,14 +132,12 @@ export function TradingHub() {
     const intent = paper?.pendingIntent;
     if (!intent || liveLock.current) return;
     const solPx = Number(pair?.solUsd || data?.solUsd || 0);
-    const spyPx = Number(pair?.spyxUsd || data?.spyxUsd || 0);
-    if (!(solPx > 0 && spyPx > 0)) return;
+    if (!(solPx > 0)) return;
     liveLock.current = true;
-    const outMint = spyxMint();
     (async () => {
       try {
         const tpk = tradingPubkey();
-        const slip = auto?.slippageBps || 50;
+        const slip = 50;
         async function swapOne(inputMint: string, outputMint: string, amount: number) {
           const r = await fetch("/api/pair/swap", {
             method: "POST",
@@ -142,8 +149,8 @@ export function TradingHub() {
           return signAndSendSwap(j.transaction);
         }
         async function swap(inputMint: string, outputMint: string, amount: number) {
-          const from = inputMint === SOL_MINT ? "SOL" : inputMint === USDC_MINT ? "USDC" : "SPYx";
-          const to = outputMint === SOL_MINT ? "SOL" : outputMint === USDC_MINT ? "USDC" : "SPYx";
+          const from = inputMint === SOL_MINT ? "SOL" : inputMint === USDC_MINT ? "USDC" : xstockBySymbolLabel(inputMint);
+          const to = outputMint === SOL_MINT ? "SOL" : outputMint === USDC_MINT ? "USDC" : xstockBySymbolLabel(outputMint);
           const q = await fetch(`/api/pair/quote?from=${from}&to=${to}&amount=${amount}&slippageBps=${slip}`).then((r) => r.json());
           if (!q.ok) throw new Error(q.reason || "quote failed");
           if (q.viaUsdc && q.midAmount > 0) {
@@ -152,19 +159,42 @@ export function TradingHub() {
           }
           return swapOne(inputMint, outputMint, amount);
         }
+        function pxOf(label: string) {
+          if (label === "SOL") return solPx;
+          if (label === "QQQx") return Number(pair?.qqqxUsd || 0);
+          if (label === "GLDx") return Number(pair?.gldxUsd || 0);
+          return Number(pair?.spyxUsd || 0);
+        }
         let sig = "";
         if (intent.action === "sell_sol" || (intent.action === "rebalance" && intent.from === "SOL")) {
-          sig = await swap(SOL_MINT, outMint, intent.clipUsd / solPx);
-        } else if (intent.action === "sell_spyx" || (intent.action === "rebalance" && intent.from === "SPYx")) {
-          sig = await swap(outMint, SOL_MINT, intent.clipUsd / spyPx);
+          const out = mintFor(intent.to);
+          const amt = intent.clipUsd / solPx;
+          if (amt > 0.002) sig = await swap(SOL_MINT, out, amt);
+        } else if (
+          intent.action === "sell_xstock" ||
+          intent.action === "sell_spyx" ||
+          (intent.action === "rebalance" && intent.from !== "SOL")
+        ) {
+          const inn = mintFor(intent.from);
+          const px = pxOf(intent.from);
+          const amt = px > 0 ? intent.clipUsd / px : 0;
+          if (amt > 0) sig = await swap(inn, SOL_MINT, amt);
         } else if (intent.action === "deploy") {
-          const solPct = intent.solPct ?? 0.5;
-          const spyUsd = intent.clipUsd * (1 - solPct);
-          const solIn = spyUsd / solPx;
-          if (solIn > 0.002) sig = await swap(SOL_MINT, outMint, solIn);
+          if (intent.to && intent.to !== "SOL" && intent.to !== "USDC") {
+            const amt = intent.clipUsd / solPx;
+            if (amt > 0.002) sig = await swap(SOL_MINT, mintFor(intent.to), amt);
+          } else {
+            const each = (intent.clipUsd * (1 - (intent.solPct ?? 0.4))) / 3 / solPx;
+            for (const x of XSTOCKS) {
+              if (each > 0.002) sig = await swap(SOL_MINT, xstockMint(x.id), each);
+            }
+          }
         } else if (intent.action === "flatten") {
           const h = paper?.pair;
-          if (h?.spyxQty > 0.0001) sig = await swap(outMint, SOL_MINT, h.spyxQty);
+          for (const x of XSTOCKS) {
+            const qty = Number(h?.[qtyKey(x.id)] || 0);
+            if (qty > 0.0001) sig = await swap(xstockMint(x.id), SOL_MINT, qty);
+          }
         }
         if (sig) {
           const r = await fetch("/api/auto", {
@@ -174,7 +204,7 @@ export function TradingHub() {
           });
           const j = await r.json();
           setPaper(j.paper);
-          setMsg(`Live fill · ${sig.slice(0, 16)}…`);
+          setMsg(`Trade sent · ${sig.slice(0, 16)}…`);
         }
       } catch (e) {
         setMsg(e instanceof Error ? e.message : "live swap failed");
@@ -182,7 +212,7 @@ export function TradingHub() {
         liveLock.current = false;
       }
     })();
-  }, [liveTrading, auto?.mode, auto?.slippageBps, armed, owner, paper?.pendingIntent, pair?.solUsd, pair?.spyxUsd, data?.solUsd, data?.spyxUsd]);
+  }, [liveTrading, auto?.mode, armed, owner, paper?.pendingIntent, pair?.solUsd, pair?.spyxUsd, pair?.qqqxUsd, pair?.gldxUsd, data?.solUsd]);
 
   async function patch(partial: Record<string, unknown>) {
     if (!owner) return setMsg("Connect Phantom first.");
@@ -196,36 +226,31 @@ export function TradingHub() {
     setPaper(j.paper);
   }
 
-  function patchSoon(partial: Record<string, unknown>) {
-    setAuto((prev) => ({ ...(prev || {}), ...partial }));
-    if (!owner) {
-      setMsg("Connect a wallet to save this.");
-      return;
-    }
-    if (debounce.current) clearTimeout(debounce.current);
-    debounce.current = setTimeout(() => patch(partial), 350);
-  }
-
   async function kill() {
     if (!owner) return setMsg("Connect Phantom first.");
     setBusy(true);
     try {
-      if (liveTrading && auto?.mode === "live" && (paper?.pair?.spyxQty || 0) > 0.0001) {
+      if (liveTrading && auto?.mode === "live") {
         const tpk = tradingPubkey();
-        const r0 = await fetch("/api/pair/swap", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            owner,
-            tradingPubkey: tpk,
-            inputMint: spyxMint(),
-            outputMint: SOL_MINT,
-            amount: paper.pair.spyxQty,
-            slippageBps: auto?.slippageBps || 50,
-          }),
-        });
-        const j0 = await r0.json();
-        if (r0.ok && j0.transaction) await signAndSendSwap(j0.transaction);
+        const h = paper?.pair;
+        for (const x of XSTOCKS) {
+          const qty = Number(h?.[qtyKey(x.id)] || 0);
+          if (qty <= 0.0001) continue;
+          const r0 = await fetch("/api/pair/swap", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              owner,
+              tradingPubkey: tpk,
+              inputMint: xstockMint(x.id),
+              outputMint: SOL_MINT,
+              amount: qty,
+              slippageBps: 50,
+            }),
+          });
+          const j0 = await r0.json();
+          if (r0.ok && j0.transaction) await signAndSendSwap(j0.transaction);
+        }
       }
       const r = await fetch("/api/auto", {
         method: "POST",
@@ -235,7 +260,7 @@ export function TradingHub() {
       const j = await r.json();
       setAuto(j.auto);
       setPaper(j.paper);
-      setMsg("Kill switch. Flattened to SOL. Halted.");
+      setMsg("Stopped. Holdings sold back. You can withdraw.");
       refresh();
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "kill failed");
@@ -252,7 +277,7 @@ export function TradingHub() {
       const tpk = tradingPubkey();
       const tx = await buildTransfer(owner, tpk, solAmt);
       const sent = await provider.signAndSendTransaction(tx);
-      setMsg(`Deposited ${solAmt} SOL · ${String(sent.signature || sent).slice(0, 16)}…`);
+      setMsg(`Added ${solAmt} SOL · ${String(sent.signature || sent).slice(0, 16)}…`);
       setTimeout(() => refreshAuto(owner), 2500);
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "deposit rejected");
@@ -276,28 +301,31 @@ export function TradingHub() {
   }
 
   const live = Boolean(data?.lastTickAt) && Date.now() - data.lastTickAt < 45_000;
-  const fills = book?.fills || [];
   const tape = book?.tape || [];
+  const fills = book?.fills || [];
   const pnlPct = book ? book.pnlPct : 0;
   const pnlUsd = book ? book.equityUsd - book.startingUsd : 0;
   const uptime = auto?.armedAt ? fmtDur(now - auto.armedAt) : "on";
-  const status = book?.killed ? "KILLED" : "PAPER RUNNING";
+  const status = book?.killed ? "STOPPED" : "RUNNING";
   const halted = book?.haltReason && (book.haltedUntil || 0) > Date.now();
   const solQty = book?.pair?.solQty ?? pair?.solQty ?? 0;
   const spyxQty = book?.pair?.spyxQty ?? pair?.spyxQty ?? 0;
+  const qqqxQty = book?.pair?.qqqxQty ?? pair?.qqqxQty ?? 0;
+  const gldxQty = book?.pair?.gldxQty ?? pair?.gldxQty ?? 0;
   const usdcQty = book?.pair?.usdcQty ?? pair?.usdcQty ?? book?.cashUsd ?? 0;
   const solUsd = pair?.solUsd || 0;
   const spyxUsd = pair?.spyxUsd || 0;
-  const ratio = pair?.ratio || (spyxUsd ? solUsd / spyxUsd : 0);
+  const qqqxUsd = pair?.qqqxUsd || 0;
+  const gldxUsd = pair?.gldxUsd || 0;
 
   return (
     <main className="mx-auto max-w-7xl px-4 pb-10 pt-2 md:px-8">
       <header className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <p className="font-mono text-[11px] tracking-[0.28em] text-violet">SOL ↔ SPYx · PAPER FIRST · SPOT ONLY</p>
+          <p className="font-mono text-[11px] tracking-[0.28em] text-violet">SOL · S&P 500 · NASDAQ · GOLD</p>
           <h1 className="mt-1 font-display text-3xl leading-none text-ghost sm:text-4xl md:text-6xl">Operate</h1>
           <p className="mt-3 max-w-xl text-base text-mute sm:text-lg">
-            Connect Phantom. Fund SOL. Set a few knobs. She trades official tokenized S&P 500 against SOL — or she sits.
+            Connect Phantom. Add SOL. She buys and sells SOL against official S&P 500, Nasdaq-100, and gold tokens.
           </p>
         </div>
         <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center">
@@ -326,16 +354,22 @@ export function TradingHub() {
         </div>
       </header>
 
+      <ol className="mt-5 grid gap-3 sm:grid-cols-3">
+        <How n="1" t="Connect Phantom" d="Your keys stay in the wallet. We never see them." />
+        <How n="2" t="Add SOL" d="Move SOL into the trading wallet on this device." />
+        <How n="3" t="Let her work" d="She trades when SOL looks expensive or cheap vs those three markets. Hit KILL to stop." />
+      </ol>
+
       <div className="mt-5 rounded-2xl border border-blood/40 bg-blood/10 p-4 text-sm leading-relaxed text-ghost">
-        Tokenized SPY (xStocks / Backed). Issuer and custody risk. Not 1:1 with the NYSE print after hours or on
-        weekends. You can lose SOL. Spot only — no leverage. Keys stay on this device.
+        These are official tokenized S&P 500, Nasdaq-100, and gold (xStocks). They are not the same as the New York
+        market after hours. You can lose SOL. Spot only — no borrowed money. Keys stay on this device.
       </div>
 
       {!owner && (
         <div className="panel mt-5 rounded-2xl border-cyan/30 p-4">
-          <div className="font-mono text-[11px] tracking-[0.2em] text-cyan">PREVIEW MODE</div>
+          <div className="font-mono text-[11px] tracking-[0.2em] text-cyan">START HERE</div>
           <p className="mt-1 text-base text-mute">
-            Connect Phantom. Deposit SOL into the trading wallet on this device. Paper first, then flip Live when you want real swaps.
+            Connect Phantom to preview her paper book, then add SOL when you want her trading with real size.
           </p>
         </div>
       )}
@@ -343,58 +377,41 @@ export function TradingHub() {
       <section className="panel mt-5 rounded-3xl p-5 md:p-8">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <div className="font-mono text-[11px] tracking-[0.22em] text-violet">DASHBOARD</div>
-            <h2 className="mt-1 font-display text-3xl text-ghost md:text-4xl">Balances · ratio · PnL</h2>
+            <div className="font-mono text-[11px] tracking-[0.22em] text-violet">YOUR BOOK</div>
+            <h2 className="mt-1 font-display text-3xl text-ghost md:text-4xl">What she holds</h2>
           </div>
           <div className="font-mono text-[12px] text-mute">
-            {status} {armed ? "· scanning" : live ? "· oracles ticking" : ""} · {uptime}
+            {status} {armed ? "· watching" : live ? "· prices live" : ""} · {uptime}
           </div>
         </div>
-        <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <Huge k="SOL" v={solQty ? solQty.toFixed(4) : "0"} sub={solUsd ? money(solQty * solUsd) : "sleeve"} />
-          <Huge k="SPYx" v={spyxQty ? spyxQty.toFixed(4) : "0"} sub={spyxUsd ? money(spyxQty * spyxUsd) : "official mint"} />
-          <Huge
-            k="Ratio"
-            v={ratio ? ratio.toFixed(4) : "—"}
-            sub={pair ? `z7 ${Number(pair.z7 || 0).toFixed(2)} · ${pair.session}` : "P_SOL / P_SPYx"}
-          />
+        <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-5">
+          <Huge k="SOL" v={solQty ? solQty.toFixed(4) : "0"} sub={solUsd ? money(solQty * solUsd) : "her home bag"} />
+          <Huge k="S&P 500" v={spyxQty ? spyxQty.toFixed(4) : "0"} sub={spyxUsd ? money(spyxQty * spyxUsd) : "SPYx"} />
+          <Huge k="Nasdaq" v={qqqxQty ? qqqxQty.toFixed(4) : "0"} sub={qqqxUsd ? money(qqqxQty * qqqxUsd) : "QQQx"} />
+          <Huge k="Gold" v={gldxQty ? gldxQty.toFixed(4) : "0"} sub={gldxUsd ? money(gldxQty * gldxUsd) : "GLDx"} />
           <Huge
             k="PnL"
             v={`${pnlPct >= 0 ? "+" : ""}${(pnlPct * 100).toFixed(1)}%`}
-            sub={`${pnlUsd >= 0 ? "+" : "−"}$${Math.abs(pnlUsd).toFixed(2)} in USDC`}
+            sub={`${pnlUsd >= 0 ? "+" : "−"}$${Math.abs(pnlUsd).toFixed(2)}`}
             good={Math.abs(pnlPct) < 0.0005 ? undefined : pnlPct >= 0}
           />
         </div>
-        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Mini k="USDC cash" v={money(usdcQty)} />
-          <Mini k="Equity" v={book ? money(book.equityUsd) : "—"} />
-          <Mini k="Skipped" v={String(book?.skipped ?? pair?.skipped ?? 0)} />
+        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <Mini k="Cash" v={money(usdcQty)} />
+          <Mini k="Book value" v={book ? money(book.equityUsd) : "—"} />
           <Mini k="Wallet SOL" v={`${bal.toFixed(3)}`} />
         </div>
         <p className="mt-4 text-sm leading-relaxed text-mute">
-          {(owner && book?.lastAction) || pair?.reason || book?.lastAction || "Waiting on oracles…"}
+          {(owner && book?.lastAction) || pair?.reason || book?.lastAction || "Waiting on prices…"}
         </p>
         {book?.pendingIntent && (
-          <p className="mt-2 font-mono text-sm text-acid">Live intent waiting for your trading wallet to sign.</p>
-        )}
-        {pair && (
-          <p className="mt-1 font-mono text-[11px] text-mute">
-            SOL ${Number(solUsd).toFixed(2)} ({pair.oracle?.sol}) · SPYx ${Number(spyxUsd).toFixed(2)} ({pair.oracle?.spyx})
-            · liq ${Math.round(pair.liquidityUsd || 0).toLocaleString()} · band ±{Number(pair.bandK || 0).toFixed(2)}σ
-          </p>
-        )}
-        {(data?.health || []).length > 0 && (
-          <p className="mt-1 font-mono text-[11px] text-mute">
-            {(data.health as { source: string; ok: boolean; error?: string }[])
-              .map((h) => `${h.source} ${h.ok ? "ok" : h.error || "down"}`)
-              .join(" · ")}
-          </p>
+          <p className="mt-2 font-mono text-sm text-acid">Approve the swap in Phantom to complete this live trade.</p>
         )}
 
         <div className="mt-6 border-t border-violet/20 pt-5">
           <div className="font-mono text-[10px] tracking-[0.2em] text-mute">
-            TRADING WALLET · {tradePk ? `${tradePk.slice(0, 4)}…${tradePk.slice(-4)}` : "connect first"} · keys never with
-            us
+            TRADING WALLET · {tradePk ? `${tradePk.slice(0, 4)}…${tradePk.slice(-4)}` : "connect first"} · keys never leave
+            this device
           </div>
           <div className="mt-3 grid grid-cols-4 gap-2">
             {[0.1, 0.5, 1, 2].map((n) => (
@@ -414,216 +431,100 @@ export function TradingHub() {
               onClick={deposit}
               className="btn-acid min-h-[48px] rounded-full py-3 font-mono text-[12px] disabled:opacity-40"
             >
-              Deposit {solAmt} SOL
+              Add {solAmt} SOL
             </button>
             <button
-              disabled={busy || bal < 0.01 || armed}
+              disabled={busy || bal < 0.01 || !book?.killed}
               onClick={withdraw}
               className="btn-ghost min-h-[48px] rounded-full py-3 font-mono text-[12px] disabled:opacity-40"
             >
-              {armed ? "Stop to withdraw" : "Withdraw"}
+              {book?.killed ? "Withdraw" : "KILL to withdraw"}
             </button>
           </div>
-          <p className="mt-3 text-sm text-mute">
-            Deposit SOL. She keeps gas, then trades SOL ↔ official SPYx. Live kill sells SPYx back to SOL.
-          </p>
+        </div>
+
+        <div className="mt-6 flex items-center justify-between gap-3 rounded-2xl border border-violet/20 p-4">
+          <div>
+            <div className="font-display text-xl text-ghost">{auto?.mode === "live" ? "Real trades" : "Practice mode"}</div>
+            <p className="mt-1 text-sm text-mute">
+              {liveTrading
+                ? auto?.mode === "live"
+                  ? "Uses the SOL you added. Phantom asks you to approve each swap."
+                  : "Fake fills on live prices. Flip to real trades after you add SOL."
+                : "Practice only right now. Real swaps are not turned on for this site yet."}
+            </p>
+          </div>
+          <button
+            type="button"
+            disabled={!liveTrading}
+            onClick={() => patch({ mode: auto?.mode === "live" ? "paper" : "live" })}
+            className={`min-h-[44px] shrink-0 rounded-full px-5 font-mono text-[12px] ${
+              auto?.mode === "live" ? "btn-on" : "btn-ghost"
+            } disabled:opacity-40`}
+          >
+            {liveTrading ? (auto?.mode === "live" ? "REAL" : "PRACTICE") : "PRACTICE"}
+          </button>
         </div>
       </section>
 
       {halted && <p className="mt-3 font-mono text-sm text-blood">{book.haltReason}</p>}
       {msg && <p className="mt-3 font-mono text-sm text-acid">{msg}</p>}
 
-      <div className="mt-6 grid gap-4 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.15fr)]">
-        <div className="space-y-4">
-          <div className="panel space-y-5 rounded-2xl p-5">
-            <div>
-              <div className="font-mono text-[10px] tracking-[0.22em] text-violet">PARAMETERS</div>
-              <h3 className="mt-1 font-display text-2xl text-ghost">Few knobs. Spot only.</h3>
-            </div>
-            <Slider
-              label="Allocation"
-              hint="Max share of the trading wallet she may use. Rest sits as gas / reserve."
-              min={0.2}
-              max={0.8}
-              step={0.05}
-              value={auto?.allocationPct ?? 0.5}
-              format={(n) => `${Math.round(n * 100)}%`}
-              onChange={(n) => patchSoon({ allocationPct: n })}
-            />
-            <div>
-              <div className="mb-2 font-mono text-[11px] text-mute">Style</div>
-              <div className="grid grid-cols-2 gap-2">
-                {(
-                  [
-                    ["mean_revert", "Mean-revert"],
-                    ["hold_mix", "Hold mix"],
-                  ] as const
-                ).map(([id, label]) => (
-                  <button
-                    key={id}
-                    type="button"
-                    onClick={() => patchSoon({ style: id })}
-                    className={`min-h-[44px] rounded-full font-mono text-[12px] ${(auto?.style || "mean_revert") === id ? "btn-on" : "btn-ghost"}`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div>
-              <div className="mb-2 font-mono text-[11px] text-mute">Band</div>
-              <div className="grid grid-cols-3 gap-2">
-                {(["tight", "normal", "wide"] as const).map((id) => (
-                  <button
-                    key={id}
-                    type="button"
-                    onClick={() => patchSoon({ band: id })}
-                    className={`min-h-[44px] rounded-full font-mono text-[12px] ${(auto?.band || "normal") === id ? "btn-on" : "btn-ghost"}`}
-                  >
-                    {id}
-                  </button>
-                ))}
-              </div>
-            </div>
-            {(auto?.style || "mean_revert") === "hold_mix" && (
-              <Slider
-                label="Target SOL mix"
-                hint="The rest is SPYx. She clips back when drift exceeds the band."
-                min={0.2}
-                max={0.8}
-                step={0.05}
-                value={auto?.targetSolPct ?? 0.5}
-                format={(n) => `${Math.round(n * 100)}% SOL`}
-                onChange={(n) => patchSoon({ targetSolPct: n })}
-              />
-            )}
-            <Slider
-              label="Clip size"
-              hint="Percent of allocated stack per trade."
-              min={0.05}
-              max={0.3}
-              step={0.01}
-              value={auto?.clipPct ?? 0.15}
-              format={(n) => `${Math.round(n * 100)}%`}
-              onChange={(n) => patchSoon({ clipPct: n })}
-            />
-            <Slider
-              label="Cooldown"
-              hint="Minimum minutes between live clips. Paper respects it too."
-              min={0}
-              max={120}
-              step={5}
-              value={auto?.cooldownMin ?? 15}
-              format={(n) => `${Math.round(n)}m`}
-              onChange={(n) => patchSoon({ cooldownMin: n })}
-            />
-            <Slider
-              label="Stop"
-              hint="Max drawdown on allocated stack. Then flatten to USDC."
-              min={0.03}
-              max={0.2}
-              step={0.01}
-              value={auto?.stopPct ?? 0.08}
-              format={(n) => `−${Math.round(n * 100)}%`}
-              onChange={(n) => patchSoon({ stopPct: n })}
-            />
-            <Slider
-              label="Take-profit / rebalance"
-              hint="Lock gains back toward a 50/50 mix."
-              min={0.04}
-              max={0.3}
-              step={0.01}
-              value={auto?.takeProfitPct ?? 0.12}
-              format={(n) => `+${Math.round(n * 100)}%`}
-              onChange={(n) => patchSoon({ takeProfitPct: n })}
-            />
-            <Slider
-              label="Slippage cap"
-              hint="Jupiter quote over this is skipped."
-              min={10}
-              max={100}
-              step={5}
-              value={auto?.slippageBps ?? 50}
-              format={(n) => `${n} bps`}
-              onChange={(n) => patchSoon({ slippageBps: n })}
-            />
-            <Slider
-              label="Max price impact"
-              hint="If the route moves the book more than this, she skips."
-              min={0.001}
-              max={0.015}
-              step={0.001}
-              value={auto?.maxImpactPct ?? 0.004}
-              format={(n) => `${(n * 100).toFixed(2)}%`}
-              onChange={(n) => patchSoon({ maxImpactPct: n })}
-            />
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <div className="font-mono text-[11px] text-mute">Paper / Live</div>
-                <p className="text-sm text-mute">Paper is the default. Flip Live after you fund SOL. Phantom signs each swap from the trading wallet.</p>
-              </div>
-              <button
-                type="button"
-                disabled={!liveTrading}
-                onClick={() => patchSoon({ mode: auto?.mode === "live" ? "paper" : "live" })}
-                className={`min-h-[44px] rounded-full px-5 font-mono text-[12px] ${
-                  auto?.mode === "live" ? "btn-on" : "btn-ghost"
-                } disabled:opacity-40`}
-              >
-                {liveTrading ? (auto?.mode === "live" ? "LIVE" : "PAPER") : "PAPER"}
-              </button>
-            </div>
-            <div className="flex items-center justify-between font-mono text-xs">
-              <span className="text-mute">Leverage</span>
-              <span className="text-mute">spot only — perps later</span>
-            </div>
+      <div className="mt-6 grid gap-4 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.2fr)]">
+        <div className="panel space-y-4 rounded-2xl p-5">
+          <div className="font-mono text-[10px] tracking-[0.22em] text-violet">HOW SHE TRADES</div>
+          <h3 className="font-display text-2xl text-ghost">No knobs. One job.</h3>
+          <p className="text-sm leading-relaxed text-mute">
+            When SOL looks expensive versus S&P 500, Nasdaq, or gold, she sells a slice of SOL for that token. When SOL
+            looks cheap, she sells the token back for SOL. If nothing has moved enough, she sits. A 8% drop on the book
+            sells everything and pauses.
+          </p>
+          <div className="grid grid-cols-3 gap-2">
+            <Mini k="S&P 500" v={spyxUsd ? `$${Number(spyxUsd).toFixed(0)}` : "—"} />
+            <Mini k="Nasdaq" v={qqqxUsd ? `$${Number(qqqxUsd).toFixed(0)}` : "—"} />
+            <Mini k="Gold" v={gldxUsd ? `$${Number(gldxUsd).toFixed(0)}` : "—"} />
           </div>
-
-          {pair?.knowledge && (
-            <div className="panel rounded-2xl p-5">
-              <div className="font-mono text-[10px] tracking-[0.22em] text-violet">WHAT SHE STUDIED</div>
-              <p className="mt-2 text-sm leading-relaxed text-mute">{pair.knowledge.note}</p>
-              <div className="mt-3 grid grid-cols-3 gap-2">
-                <Mini k="SOL range" v={`${(pair.knowledge.solMedianDailyRangePct * 100).toFixed(1)}%`} />
-                <Mini k="SPY range" v={`${(pair.knowledge.spyMedianDailyRangePct * 100).toFixed(1)}%`} />
-                <Mini k="15m ATR" v={`${(pair.knowledge.solAtr15mPct * 100).toFixed(2)}%`} />
-              </div>
-            </div>
-          )}
         </div>
 
-        <div className="space-y-4">
-          <div className="panel rounded-2xl p-5">
-            <div className="font-mono text-[10px] tracking-[0.22em] text-violet">TAPE · TRADE / SKIP / REASON</div>
-            <h2 className="mt-1 font-display text-2xl text-ghost">{armed ? "Watching the ratio" : "Preview tape"}</h2>
-            <div className="mt-4 max-h-[28rem] space-y-2 overflow-y-auto">
-              {tape.length === 0 &&
-                fills.slice(0, 12).map((f: any) => (
-                  <TapeRow
-                    key={f.id}
-                    action={f.side}
-                    reason={f.reason}
-                    at={f.at}
-                    extra={money(f.sizeUsd)}
-                  />
-                ))}
-              {tape.map((row: any) => (
-                <TapeRow
-                  key={row.id}
-                  action={row.action}
-                  reason={row.reason}
-                  at={row.at}
-                  extra={row.sizeUsd ? money(row.sizeUsd) : row.z != null ? `z ${Number(row.z).toFixed(2)}` : ""}
-                />
+        <div className="panel rounded-2xl p-5">
+          <div className="font-mono text-[10px] tracking-[0.22em] text-violet">ACTIVITY</div>
+          <h2 className="mt-1 font-display text-2xl text-ghost">{armed ? "What she’s doing" : "Preview"}</h2>
+          <div className="mt-4 max-h-[28rem] space-y-2 overflow-y-auto">
+            {tape.length === 0 &&
+              fills.slice(0, 12).map((f: any) => (
+                <TapeRow key={f.id} action={f.side} reason={f.reason} at={f.at} extra={money(f.sizeUsd)} />
               ))}
-              {!tape.length && !fills.length && (
-                <p className="text-sm text-mute">{loading ? "Loading…" : "No decisions yet. Run her in paper."}</p>
-              )}
-            </div>
+            {tape.map((row: any) => (
+              <TapeRow
+                key={row.id}
+                action={row.action}
+                reason={row.reason}
+                at={row.at}
+                extra={row.sizeUsd ? money(row.sizeUsd) : row.from && row.to && row.from !== "none" ? `${row.from} → ${row.to}` : ""}
+              />
+            ))}
+            {!tape.length && !fills.length && (
+              <p className="text-sm text-mute">{loading ? "Loading…" : "No decisions yet. Paper is already on."}</p>
+            )}
           </div>
         </div>
       </div>
     </main>
+  );
+}
+
+function xstockBySymbolLabel(mint: string): string {
+  const row = XSTOCKS.find((x) => xstockMint(x.id) === mint);
+  return row?.symbol || "SPYx";
+}
+
+function How({ n, t, d }: { n: string; t: string; d: string }) {
+  return (
+    <li className="panel rounded-2xl p-4">
+      <div className="font-mono text-[11px] text-acid">{n}</div>
+      <div className="mt-1 font-display text-xl text-ghost">{t}</div>
+      <p className="mt-1 text-sm text-mute">{d}</p>
+    </li>
   );
 }
 
@@ -637,7 +538,7 @@ function TapeRow({ action, reason, at, extra }: { action: string; reason: string
   return (
     <div className="rounded-xl border border-violet/20 px-4 py-3">
       <div className="flex items-center justify-between gap-3">
-        <span className={`font-mono text-[11px] uppercase tracking-[0.16em] ${tone}`}>{action}</span>
+        <span className={`font-mono text-[11px] uppercase tracking-[0.16em] ${tone}`}>{tapeLabel(action)}</span>
         <span className="font-mono text-[11px] text-mute">
           {new Date(at).toLocaleTimeString()} {extra}
         </span>
@@ -663,44 +564,5 @@ function Mini({ k, v }: { k: string; v: string }) {
       <div className="font-mono text-[10px] tracking-[0.16em] text-mute">{k}</div>
       <div className="font-display text-lg text-ghost">{v}</div>
     </div>
-  );
-}
-
-function Slider({
-  label,
-  hint,
-  min,
-  max,
-  step,
-  value,
-  format,
-  onChange,
-}: {
-  label: string;
-  hint: string;
-  min: number;
-  max: number;
-  step: number;
-  value: number;
-  format: (n: number) => string;
-  onChange: (n: number) => void;
-}) {
-  return (
-    <label className="block">
-      <div className="flex items-end justify-between gap-3">
-        <span className="font-mono text-[11px] text-mute">{label}</span>
-        <span className="font-display text-xl text-acid">{format(value)}</span>
-      </div>
-      <input
-        type="range"
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-        className="mt-2 w-full accent-[#14f195]"
-      />
-      <p className="mt-1 text-sm text-mute">{hint}</p>
-    </label>
   );
 }

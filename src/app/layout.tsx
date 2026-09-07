@@ -18,15 +18,15 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   metadataBase: new URL("https://solphia.io"),
   title: {
-    default: "SOLPHIA — SOL vs tokenized S&P 500",
+    default: "SOLPHIA — SOL vs S&P 500, Nasdaq, and gold",
     template: "%s · SOLPHIA",
   },
   description:
-    "Non-custodial SOL ↔ official SPYx bot on Solana. Paper first. Kill switch on. Keys stay on your device.",
+    "Non-custodial bot that trades SOL against official SPYx, QQQx, and GLDx. Practice first. Kill switch on. Keys stay in Phantom.",
   applicationName: "SOLPHIA",
   openGraph: {
     title: "SOLPHIA",
-    description: "Deposit SOL. She trades official tokenized S&P 500 — or she sits.",
+    description: "Add SOL. She trades official S&P 500, Nasdaq-100, and gold — or she sits.",
     url: "https://solphia.io",
     siteName: "SOLPHIA",
     images: [{ url: "/og.jpg", width: 1376, height: 768 }],
@@ -35,7 +35,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "SOLPHIA",
-    description: "Deposit SOL. She trades official tokenized S&P 500 — or she sits.",
+    description: "Add SOL. She trades official S&P 500, Nasdaq-100, and gold — or she sits.",
     images: ["/og.jpg"],
   },
   icons: {

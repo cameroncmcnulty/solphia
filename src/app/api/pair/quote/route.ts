@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { clientIp, isSolanaAddress, rateLimit } from "@/lib/security";
-import { quoteFromUsdc, quoteSolSpyx, quoteSpyxSol, quoteToUsdc } from "@/lib/pair/jupiter";
-import { SOL_MINT, spyxMint, USDC_MINT } from "@/lib/pair/mints";
+import { quoteFromUsdc, quoteSwap, quoteToUsdc } from "@/lib/pair/jupiter";
+import { SOL_MINT, USDC_MINT, XSTOCKS, xstockMint } from "@/lib/pair/mints";
 
 export const dynamic = "force-dynamic";
+
+function mintMap(): Record<string, string> {
+  const map: Record<string, string> = { SOL: SOL_MINT, USDC: USDC_MINT };
+  for (const x of XSTOCKS) map[x.symbol] = xstockMint(x.id);
+  return map;
+}
 
 export async function GET(req: NextRequest) {
   if (!rateLimit(clientIp(req) + ":pairq", 20, 60_000)) {
@@ -14,16 +20,20 @@ export async function GET(req: NextRequest) {
   const amount = Number(req.nextUrl.searchParams.get("amount") || "0.1");
   const slip = Number(req.nextUrl.searchParams.get("slippageBps") || "50");
   if (!(amount > 0) || amount > 1000) return NextResponse.json({ error: "bad_amount" }, { status: 400 });
-  const map: Record<string, string> = { SOL: SOL_MINT, SPYx: spyxMint(), USDC: USDC_MINT };
+  const map = mintMap();
   const input = map[from];
   const output = map[to];
   if (!input || !output) return NextResponse.json({ error: "bad_pair" }, { status: 400 });
   let q;
-  if (from === "SOL" && to === "SPYx") q = await quoteSolSpyx(amount, slip);
-  else if (from === "SPYx" && to === "SOL") q = await quoteSpyxSol(amount, slip);
-  else if (to === "USDC") q = await quoteToUsdc(input, amount, slip);
-  else q = await quoteFromUsdc(output, amount, slip);
-  return NextResponse.json({ ...q, spyxMint: spyxMint() });
+  if (to === "USDC") q = await quoteToUsdc(input, amount, slip);
+  else if (from === "USDC") q = await quoteFromUsdc(output, amount, slip);
+  else q = await quoteSwap({ inputMint: input, outputMint: output, amount, slippageBps: slip });
+  return NextResponse.json({
+    ...q,
+    spyxMint: xstockMint("spyx"),
+    qqqxMint: xstockMint("qqqx"),
+    gldxMint: xstockMint("gldx"),
+  });
 }
 
 export async function POST(req: NextRequest) {

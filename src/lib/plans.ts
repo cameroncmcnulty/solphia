@@ -18,8 +18,8 @@ export const PLANS: Plan[] = [
     name: "Live",
     sol: 0.15,
     tagline: "Paper is free. Live later, flat SOL / 30d.",
-    story: "Connect, fund, run the SOL ↔ official SPYx bot. Paid gate stays simple.",
-    points: ["Paper book included", "Kill switch always on", "Official SPYx mint only", "Keys never with us"],
+    story: "Connect Phantom, add SOL, let her trade S&P 500, Nasdaq-100, and gold. Paid gate stays simple.",
+    points: ["Paper book included", "Kill switch always on", "Official SPYx, QQQx, GLDx only", "Keys never with us"],
     includes: ["live"],
     icon: "/icons/plan-paper.jpg",
     featured: true,
@@ -38,7 +38,7 @@ export function lamportsForPlan(id: PlanId): number {
 export const COMPARE_ROWS: { label: string; hint?: string; values: [string, string] }[] = [
   { label: "Paper book", values: ["Yes", "Yes"] },
   { label: "Kill switch", hint: "Always on.", values: ["Yes", "Yes"] },
-  { label: "SOL ↔ official SPYx", values: ["Paper", "When live is on"] },
+  { label: "SOL vs SPYx, QQQx, GLDx", values: ["Paper", "When live is on"] },
   { label: "Leverage", values: ["None", "Spot only"] },
   { label: "Keys with us", values: ["Never", "Never"] },
   { label: "30 days", values: ["Free", "0.15 SOL"] },
@@ -47,30 +47,34 @@ export const COMPARE_ROWS: { label: string; hint?: string; values: [string, stri
 export const FAQS: { q: string; a: string }[] = [
   {
     q: "Does she spend my SOL?",
-    a: "Only if you turn her on and deposit into a trading wallet on your phone. Keys stay on the device. Solphia never holds a hot wallet. Paper is the default until live is flipped on.",
+    a: "Only after you connect Phantom and add SOL to the trading wallet on this device. Keys stay in Phantom. Practice mode is on until you flip to real trades.",
   },
   {
     q: "What does she trade?",
-    a: "One pair: SOL against official tokenized S&P 500 (SPYx / xStocks) on Solana. Official mint only. No memecoins, no copy list, no launch sniper.",
+    a: "SOL against three official tokens on Solana: SPYx (S&P 500), QQQx (Nasdaq-100), and GLDx (gold). Nothing else. No memecoins, no copy trading, no sniping new coins.",
   },
   {
-    q: "How does the ratio bot work?",
-    a: "She computes R = P_SOL / P_SPYx from Pyth (or Jupiter / DexScreener if the oracle is down). If SOL stretches rich vs SPYx she sells a SOL clip for SPYx. If it stretches cheap she sells SPYx for SOL. Inside the band she sits. Clip size, cooldown, slippage, and stop always win.",
+    q: "How does she decide?",
+    a: "She watches whether SOL looks expensive or cheap versus each of those three markets. Expensive → she sells some SOL for that token. Cheap → she sells the token back for SOL. If nothing has moved enough, she waits. Three markets means more chances to trade in a day than S&P 500 alone.",
   },
   {
-    q: "Is tokenized SPY the same as the NYSE print?",
-    a: "No. SPYx is an issuer product with custody risk. After 16:00 ET and on weekends the token can trade while cash SPY is closed. You can lose SOL.",
+    q: "Are these the same as the New York market?",
+    a: "No. They are issuer tokens with extra risk. After the US market closes and on weekends they can still move. You can lose SOL.",
+  },
+  {
+    q: "Can I change her settings?",
+    a: "No. Size, wait time, and the 8% stop are locked to the safer defaults. The only switch is practice vs real trades.",
   },
   {
     q: "Where is leverage?",
-    a: "Not in v1. Spot SOL ↔ SPYx only. The slider stays disabled: spot only — perps later. She will not fake leverage with recursive looping.",
+    a: "There isn’t any. Spot only. She will not borrow or loop your SOL.",
   },
   {
-    q: "What happens on stop or kill?",
-    a: "She flattens both sleeves to USDC through Jupiter (paper: marked fills) and halts. Working capital and PnL are in USDC so a random SOL candle does not lie about the book.",
+    q: "What happens when I hit KILL?",
+    a: "She sells everything back and pauses. Then you can withdraw SOL to Phantom.",
   },
   {
     q: "How do I pay?",
-    a: "Paper is free. A simple 0.15 SOL / 30 days live seat comes later. No four-desk menu.",
+    a: "Paper is free. A simple 0.15 SOL / 30 days live seat comes later.",
   },
 ];

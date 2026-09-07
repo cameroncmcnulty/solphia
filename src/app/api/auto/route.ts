@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { clientIp, isSolanaAddress, rateLimit } from "@/lib/security";
 import { loadState, mutateState } from "@/lib/store";
-import { DEFAULT_AUTO, emptyTrader, bankrollUsd, maybeResizeBook } from "@/lib/auto";
+import { emptyTrader, bankrollUsd, maybeResizeBook, lockedAuto } from "@/lib/auto";
 import { publicBook } from "@/lib/tick";
 import { LIVE_TRADING } from "@/lib/config";
 import { publicMind } from "@/lib/mind/engine";
@@ -17,7 +17,13 @@ export async function GET(req: NextRequest) {
   if (!isSolanaAddress(owner)) return NextResponse.json({ error: "bad_owner" }, { status: 400 });
   const state = loadState();
   const trader = state.traders[owner] || emptyTrader(owner);
-  const auto = { ...DEFAULT_AUTO, ...trader.auto, leverage: 1 as const };
+  const auto = lockedAuto({
+    ...trader.auto,
+    mode: trader.auto.mode,
+    armed: trader.book.killed ? false : trader.auto.mode === "live" ? Boolean(trader.auto.armed) : true,
+    tradingPubkey: trader.auto.tradingPubkey,
+    armedAt: trader.auto.armedAt,
+  });
   if (trader.book.killed) auto.armed = false;
   else if (auto.mode !== "live") auto.armed = true;
   return NextResponse.json({
@@ -45,16 +51,6 @@ const Body = z.object({
     .object({
       armed: z.boolean().optional(),
       mode: z.enum(["paper", "live"]).optional(),
-      allocationPct: z.number().min(0.2).max(0.8).optional(),
-      style: z.enum(["mean_revert", "hold_mix"]).optional(),
-      band: z.enum(["tight", "normal", "wide"]).optional(),
-      clipPct: z.number().min(0.05).max(0.35).optional(),
-      cooldownMin: z.number().min(0).max(240).optional(),
-      stopPct: z.number().min(0.03).max(0.25).optional(),
-      takeProfitPct: z.number().min(0.04).max(0.5).optional(),
-      targetSolPct: z.number().min(0.2).max(0.8).optional(),
-      slippageBps: z.number().min(10).max(150).optional(),
-      maxImpactPct: z.number().min(0.001).max(0.02).optional(),
     })
     .optional(),
 });
@@ -80,7 +76,15 @@ export async function POST(req: NextRequest) {
   const trader = await mutateState((s) => {
     const t = s.traders[parsed.data.owner] || emptyTrader(parsed.data.owner);
     const wasArmed = Boolean(t.auto?.armed);
-    t.auto = { ...DEFAULT_AUTO, ...t.auto, ...(parsed.data.auto || {}), leverage: 1 };
+    const nextMode = parsed.data.auto?.mode ?? t.auto.mode;
+    const nextArmed = parsed.data.auto?.armed ?? t.auto.armed;
+    t.auto = lockedAuto({
+      ...t.auto,
+      mode: nextMode,
+      armed: nextArmed,
+      tradingPubkey: t.auto.tradingPubkey,
+      armedAt: t.auto.armedAt,
+    });
     if (t.auto.mode !== "live" && !t.book.killed) t.auto.armed = true;
     if (t.auto.armed && !wasArmed) {
       t.auto.armedAt = Date.now();
@@ -92,7 +96,11 @@ export async function POST(req: NextRequest) {
     if (parsed.data.tradingPubkey) t.tradingPubkey = parsed.data.tradingPubkey;
     if (parsed.data.depositedSol != null) t.depositedSol = parsed.data.depositedSol;
     t.book = maybeResizeBook(t.book, bankrollUsd(t.depositedSol, solUsd || 100));
-    if (!t.book.pair) t.book.pair = { solQty: 0, spyxQty: 0, usdcQty: t.book.cashUsd };
+    if (!t.book.pair) t.book.pair = { solQty: 0, spyxQty: 0, qqqxQty: 0, gldxQty: 0, usdcQty: t.book.cashUsd };
+    else {
+      t.book.pair.qqqxQty = t.book.pair.qqqxQty || 0;
+      t.book.pair.gldxQty = t.book.pair.gldxQty || 0;
+    }
     if (prices && parsed.data.liveFill && t.book.pendingIntent) {
       const intent = t.book.pendingIntent;
       const stub = {
@@ -106,6 +114,7 @@ export async function POST(req: NextRequest) {
         z7: 0,
         n24: 0,
         n7: 0,
+        asset: intent.asset || "spyx",
       };
       const decision: PairDecision = {
         action: intent.action,
@@ -136,7 +145,13 @@ export async function POST(req: NextRequest) {
     s.traders[parsed.data.owner] = t;
     return t;
   });
-  const autoOut = { ...DEFAULT_AUTO, ...trader.auto, leverage: 1 as const };
+  const autoOut = lockedAuto({
+    ...trader.auto,
+    mode: trader.auto.mode,
+    armed: trader.auto.armed,
+    tradingPubkey: trader.auto.tradingPubkey,
+    armedAt: trader.auto.armedAt,
+  });
   if (trader.book.killed) autoOut.armed = false;
   else if (autoOut.mode !== "live") autoOut.armed = true;
   return NextResponse.json({

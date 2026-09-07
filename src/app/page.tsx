@@ -24,10 +24,10 @@ export default function Home() {
               SOLPHIA
             </h1>
             <p className="mt-5 max-w-xl text-xl leading-snug text-ghost sm:text-3xl sm:leading-tight">
-              SOL vs tokenized S&P 500. She sits more than she trades.
+              She trades your SOL against S&P 500, Nasdaq-100, and gold.
             </p>
             <p className="mt-3 max-w-lg text-base leading-relaxed text-mute sm:text-xl">
-              Connect Phantom or Solflare. Fund SOL. Set a few knobs. Paper first. Keys stay on your device.
+              Connect Phantom. Add SOL. She handles the rest. Practice first. Your keys stay in your wallet.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <Link
@@ -50,7 +50,7 @@ export default function Home() {
       <LiveStats />
 
       <section className="px-4 py-6 md:px-12">
-        <div className="mb-3 text-sm text-mute">Last decisions</div>
+        <div className="mb-3 text-sm text-mute">Last moves</div>
         <div className="flex gap-3 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {tape.map((row: any) => (
             <Link
@@ -58,16 +58,20 @@ export default function Home() {
               href="/trading"
               className="btn-ghost flex shrink-0 items-center gap-3 rounded-full px-5 py-3 text-base"
             >
-              <span className="font-display text-xl text-ghost">{String(row.action || "hold")}</span>
-              <span className={row.action === "trade" ? "text-acid" : "text-mute"}>
-                {row.z != null ? `z ${Number(row.z).toFixed(1)}` : "sit"}
+              <span className="font-display text-xl text-ghost">
+                {row.action === "trade" || row.action === "deploy"
+                  ? "traded"
+                  : row.action === "skip" || row.action === "hold"
+                    ? "waiting"
+                    : String(row.action || "waiting")}
+              </span>
+              <span className={row.action === "trade" || row.action === "deploy" ? "text-acid" : "text-mute"}>
+                {row.from && row.to && row.from !== "none" ? `${row.from} → ${row.to}` : "sitting"}
               </span>
             </Link>
           ))}
           {!tape.length && (
-            <span className="text-base text-mute">
-              {pair?.reason || "Waiting on SOL / SPYx oracles…"}
-            </span>
+            <span className="text-base text-mute">{pair?.reason || "Waiting on prices…"}</span>
           )}
         </div>
       </section>
@@ -75,26 +79,30 @@ export default function Home() {
       <section className="px-4 py-12 md:px-12 md:py-16">
         <p className="text-base text-acid sm:text-lg">How it works</p>
         <h2 className="mt-2 max-w-3xl font-display text-3xl leading-tight text-ghost sm:text-4xl md:text-6xl">
-          Connect. Fund. Set knobs. Run.
+          Connect. Add SOL. She trades.
         </h2>
         <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Step n="01" t="Connect" d="Phantom or Solflare. You sign." href="/trading" c="Connect" />
-          <Step n="02" t="Fund" d="Deposit SOL into a wallet you own. She never holds keys." href="/trading" c="Fund" />
-          <Step n="03" t="Paper" d="Mean-revert the SOL/SPYx ratio. Fake fills. Skip reasons on the tape." href="/trading" c="Open hub" />
-          <Step n="04" t="Kill" d="Flatten to USDC and halt. Always on." href="/trading" c="LAUNCH BOT" />
+          <Step n="01" t="Connect" d="Phantom only. You approve. We never hold your keys." href="/trading" c="Connect" />
+          <Step n="02" t="Add SOL" d="Move SOL into a trading wallet on this device." href="/trading" c="Add SOL" />
+          <Step n="03" t="Practice" d="She trades on live prices with fake money first, so you can watch." href="/trading" c="Open hub" />
+          <Step n="04" t="Stop" d="Hit KILL any time. She sells back and you can withdraw." href="/trading" c="LAUNCH BOT" />
         </div>
       </section>
 
       <section className="px-4 py-8 md:px-12">
-        <p className="text-base text-acid sm:text-lg">Why she’s different</p>
-        <h2 className="mt-2 font-display text-3xl text-ghost sm:text-4xl md:text-6xl">One job.</h2>
+        <p className="text-base text-acid sm:text-lg">What she actually does</p>
+        <h2 className="mt-2 font-display text-3xl text-ghost sm:text-4xl md:text-6xl">Three markets. One job.</h2>
         <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <Feature t="Official SPYx" d="Pinned Backed/xStocks mint. Lookalike tickers are refused." href="/trading" />
-          <Feature t="Ratio band" d="R = P_SOL / P_SPYx. Extended high → sell SOL. Extended low → sell SPYx. Else hold." href="/trading" />
-          <Feature t="SOL + S&P history" d="She sizes from SOL’s 5–8% days and SPY’s ~1% range — not 15m noise." href="/trading" />
-          <Feature t="USDC marks" d="Working capital and stops in USDC so a SOL candle doesn’t fake the book." href="/trading" />
-          <Feature t="Skip tape" d="Stale oracle, thin book, junk route, cooldown — she increments skipped." href="/trading" />
-          <Feature t="Spot only" d="No leverage in v1. Perps later if a real venue exists." href="/trading" />
+          <Feature t="S&P 500, Nasdaq, gold" d="Official SPYx, QQQx, and GLDx only. Fake tickers are refused." href="/trading" />
+          <Feature
+            t="Buy low, sell high — versus SOL"
+            d="When SOL looks expensive vs a market, she sells SOL for that token. When SOL looks cheap, she buys SOL back."
+            href="/trading"
+          />
+          <Feature t="More than one shot a day" d="Three markets means more chances to trade than S&P 500 alone. She still sits when nothing has moved." href="/trading" />
+          <Feature t="Practice first" d="Paper is always on so you can see PnL before you risk SOL." href="/trading" />
+          <Feature t="Your wallet, your keys" d="Phantom stays in charge. She never asks for a seed phrase." href="/trading" />
+          <Feature t="Spot only" d="No borrowed money. An 8% drop sells everything and pauses." href="/trading" />
         </div>
       </section>
 
@@ -115,7 +123,7 @@ export default function Home() {
           <div>
             <p className="text-base text-mute sm:text-lg">Ready</p>
             <h2 className="mt-2 font-display text-3xl text-ghost sm:text-4xl md:text-6xl">Turn her on.</h2>
-            <p className="mt-3 text-base text-mute sm:text-xl">Paper first. Keys on your device. Kill switch on.</p>
+            <p className="mt-3 text-base text-mute sm:text-xl">Practice first. Keys in Phantom. KILL always works.</p>
           </div>
           <div className="mt-6 flex flex-col gap-3 sm:flex-row md:mt-0">
             <Link

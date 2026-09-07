@@ -201,19 +201,25 @@ export interface EquityPoint {
 export interface PairHoldings {
   solQty: number;
   spyxQty: number;
+  qqqxQty?: number;
+  gldxQty?: number;
   usdcQty: number;
   solCostUsd?: number;
   spyxCostUsd?: number;
+  qqqxCostUsd?: number;
+  gldxCostUsd?: number;
+  lastClipAt?: { spyx?: number; qqqx?: number; gldx?: number };
 }
 
 export interface PairIntent {
-  action: "sell_sol" | "sell_spyx" | "flatten" | "deploy" | "rebalance";
+  action: "sell_sol" | "sell_spyx" | "sell_xstock" | "flatten" | "deploy" | "rebalance";
   from: string;
   to: string;
   clipUsd: number;
   reason: string;
   at: number;
   solPct?: number;
+  asset?: "spyx" | "qqqx" | "gldx";
 }
 
 export interface PairTape {
@@ -420,6 +426,6 @@ export interface AppState {
   curveWatch: Record<string, CurveTick>;
   lastTickAt: number;
   lastSnapshots: TokenSnapshot[];
-  pairSamples?: { t: number; sol: number; spyx: number }[];
+  pairSamples?: { t: number; sol: number; spyx: number; qqqx?: number; gldx?: number }[];
   lastPair?: unknown;
 }

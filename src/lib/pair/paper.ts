@@ -5,16 +5,22 @@ import { applyFee } from "../risk/engine";
 import {
   PAIR_FEE_BPS,
   PAIR_SLIP_BPS,
+  SOL_WEIGHT,
+  X_WEIGHT,
+  costOf,
   decidePair,
   fillOf,
   id,
   markPair,
   pairOf,
+  qtyOf,
+  setSleeve,
   type PairDecision,
+  type Sleeve,
 } from "./engine";
 import { LIVE_TRADING } from "../config";
 import type { HistoryStudy } from "./knowledge";
-import { SOL_MINT, spyxMint } from "./mints";
+import { SOL_MINT, USDC_MINT, XSTOCKS, type XStockId, type XStockSymbol, xstockBySymbol, xstockMint } from "./mints";
 import type { PairPrices } from "./prices";
 import type { RatioSample } from "./ratio";
 import type { PairIntent } from "../types";
@@ -77,13 +83,33 @@ function bumpCurve(book: PaperBook, now: number) {
   pushBounded(book.curve, { t: now, equity: book.equityUsd }, 800);
 }
 
+function pxOf(prices: PairPrices, id: XStockId): number {
+  return prices[id]?.usd || 0;
+}
+
+function asXId(from: string | undefined): XStockId | null {
+  const row = xstockBySymbol(from || "");
+  return row ? row.id : null;
+}
+
+function mintOfSleeve(sleeve: string): string {
+  if (sleeve === "SOL") return SOL_MINT;
+  if (sleeve === "USDC") return USDC_MINT;
+  const row = xstockBySymbol(sleeve);
+  return row ? xstockMint(row.id) : SOL_MINT;
+}
+
+function touchClip(h: ReturnType<typeof pairOf>, asset: XStockId | undefined, now: number) {
+  if (!h.lastClipAt) h.lastClipAt = {};
+  if (asset) h.lastClipAt[asset] = now;
+}
+
 export function flattenToUsdc(book: PaperBook, prices: PairPrices, now: number, reason: string, mind?: Mind): PaperFill[] {
   const h = pairOf(book);
   const fills: PaperFill[] = [];
-  const impact = 0;
-  if (h.solQty > 0) {
+  if (h.solQty > 0 && prices.sol.usd > 0) {
     const size = h.solQty * prices.sol.usd;
-    const { fee, slip, drag } = costs(size, impact);
+    const { fee, slip, drag } = costs(size);
     const net = Math.max(0, size - drag);
     const fill = fillOf(now, "sell", "SOL", SOL_MINT, prices.sol.usd, h.solQty, size, fee, slip, reason);
     fill.pnlUsd = net - (h.solCostUsd || size);
@@ -93,18 +119,23 @@ export function flattenToUsdc(book: PaperBook, prices: PairPrices, now: number, 
     h.solQty = 0;
     h.solCostUsd = 0;
   }
-  if (h.spyxQty > 0) {
-    const size = h.spyxQty * prices.spyx.usd;
-    const { fee, slip, drag } = costs(size, impact);
+  for (const x of XSTOCKS) {
+    const qty = qtyOf(h, x.id);
+    const px = pxOf(prices, x.id);
+    if (qty <= 0 || !(px > 0)) {
+      setSleeve(h, x.id, 0, 0);
+      continue;
+    }
+    const size = qty * px;
+    const { fee, slip, drag } = costs(size);
     const net = Math.max(0, size - drag);
-    const fill = fillOf(now, "sell", "SPYx", spyxMint(), prices.spyx.usd, h.spyxQty, size, fee, slip, reason);
-    fill.pnlUsd = net - (h.spyxCostUsd || size);
+    const fill = fillOf(now, "sell", x.symbol, xstockMint(x.id), px, qty, size, fee, slip, reason);
+    fill.pnlUsd = net - (costOf(h, x.id) || size);
     fills.push(fill);
     pushFill(book, fill);
     h.usdcQty += net;
-    h.spyxQty = 0;
-    h.spyxCostUsd = 0;
-    if (mind) learnFromFill(mind, spyxMint(), 0, "sol_spyx", undefined, true);
+    setSleeve(h, x.id, 0, 0);
+    if (mind) learnFromFill(mind, xstockMint(x.id), 0, "sol_spyx", undefined, true);
   }
   book.pair = h;
   book.lastTradeAt = now;
@@ -114,51 +145,89 @@ export function flattenToUsdc(book: PaperBook, prices: PairPrices, now: number, 
   return fills;
 }
 
+function buyFromUsd(
+  h: ReturnType<typeof pairOf>,
+  book: PaperBook,
+  prices: PairPrices,
+  now: number,
+  symbol: "SOL" | XStockSymbol,
+  usd: number,
+  reason: string,
+  mind?: Mind,
+): PaperFill | null {
+  if (usd < 8) return null;
+  if (symbol === "SOL") {
+    if (!(prices.sol.usd > 0)) return null;
+    const { fee, slip, drag } = costs(usd);
+    const qty = (usd - drag) / prices.sol.usd;
+    const fill = fillOf(now, "buy", "SOL", SOL_MINT, prices.sol.usd, qty, usd, fee, slip, reason);
+    pushFill(book, fill);
+    h.solQty += qty;
+    h.solCostUsd = (h.solCostUsd || 0) + usd;
+    h.usdcQty -= usd;
+    return fill;
+  }
+  const row = xstockBySymbol(symbol);
+  if (!row) return null;
+  const px = pxOf(prices, row.id);
+  if (!(px > 0)) return null;
+  const { fee, slip, drag } = costs(usd);
+  const qty = (usd - drag) / px;
+  const fill = fillOf(now, "buy", row.symbol, xstockMint(row.id), px, qty, usd, fee, slip, reason);
+  pushFill(book, fill);
+  setSleeve(h, row.id, qtyOf(h, row.id) + qty, costOf(h, row.id) + usd);
+  h.usdcQty -= usd;
+  if (mind) noteOpen(mind, xstockMint(row.id), [0.5, 0.5, 0, 0.5, 0.5], "sol_spyx");
+  return fill;
+}
+
 function swapSleeves(
   book: PaperBook,
   prices: PairPrices,
   now: number,
-  from: "SOL" | "SPYx",
-  to: "SOL" | "SPYx",
+  from: Sleeve,
+  to: Sleeve,
   clipUsd: number,
   reason: string,
   impactPct: number,
   mind?: Mind,
+  asset?: XStockId,
 ): PaperFill[] {
   const h = pairOf(book);
-  const fromPx = from === "SOL" ? prices.sol.usd : prices.spyx.usd;
-  const toPx = to === "SOL" ? prices.sol.usd : prices.spyx.usd;
-  const fromQtyAvail = from === "SOL" ? h.solQty : h.spyxQty;
+  const fromId = asXId(from);
+  const toId = asXId(to);
+  const fromPx = from === "SOL" ? prices.sol.usd : fromId ? pxOf(prices, fromId) : 0;
+  const toPx = to === "SOL" ? prices.sol.usd : toId ? pxOf(prices, toId) : 0;
+  const fromQtyAvail = from === "SOL" ? h.solQty : fromId ? qtyOf(h, fromId) : 0;
   const maxUsd = fromQtyAvail * fromPx;
   const size = Math.min(clipUsd, maxUsd);
   if (size < 8 || fromPx <= 0 || toPx <= 0) return [];
   const { fee, slip, drag } = costs(size, impactPct);
   const sellQty = size / fromPx;
   const buyQty = Math.max(0, size - drag) / toPx;
-  const fromMint = from === "SOL" ? SOL_MINT : spyxMint();
-  const toMint = to === "SOL" ? SOL_MINT : spyxMint();
-  const fromCost = from === "SOL" ? h.solCostUsd || 0 : h.spyxCostUsd || 0;
-  const fromQtyBefore = fromQtyAvail;
-  const costSold = fromQtyBefore > 0 ? fromCost * (sellQty / fromQtyBefore) : size;
+  const fromMint = mintOfSleeve(from);
+  const toMint = mintOfSleeve(to);
+  const fromCost = from === "SOL" ? h.solCostUsd || 0 : fromId ? costOf(h, fromId) : 0;
+  const costSold = fromQtyAvail > 0 ? fromCost * (sellQty / fromQtyAvail) : size;
   const sell = fillOf(now, "sell", from, fromMint, fromPx, sellQty, size, fee / 2, slip / 2, reason);
   sell.pnlUsd = size - drag - costSold;
   const buy = fillOf(now, "buy", to, toMint, toPx, buyQty, size - drag, fee / 2, slip / 2, reason);
   if (from === "SOL") {
     h.solQty = Math.max(0, h.solQty - sellQty);
     h.solCostUsd = Math.max(0, fromCost - costSold);
-  } else {
-    h.spyxQty = Math.max(0, h.spyxQty - sellQty);
-    h.spyxCostUsd = Math.max(0, fromCost - costSold);
+  } else if (fromId) {
+    setSleeve(h, fromId, Math.max(0, qtyOf(h, fromId) - sellQty), Math.max(0, fromCost - costSold));
   }
   if (to === "SOL") {
     h.solQty += buyQty;
     h.solCostUsd = (h.solCostUsd || 0) + (size - drag);
-  } else {
-    h.spyxQty += buyQty;
-    h.spyxCostUsd = (h.spyxCostUsd || 0) + (size - drag);
+  } else if (toId) {
+    setSleeve(h, toId, qtyOf(h, toId) + buyQty, costOf(h, toId) + (size - drag));
   }
   pushFill(book, sell);
   pushFill(book, buy);
+  const clipAsset = asset ?? toId ?? fromId ?? undefined;
+  touchClip(h, clipAsset, now);
   book.pair = h;
   book.lastTradeAt = now;
   if (mind) {
@@ -172,36 +241,32 @@ function deployMix(
   prices: PairPrices,
   now: number,
   usd: number,
-  solPct: number,
   reason: string,
   mind?: Mind,
+  only?: XStockId | "SOL",
 ): PaperFill[] {
   const h = pairOf(book);
   const spend = Math.min(usd, h.usdcQty);
-  if (spend < 20) return [];
-  const solUsd = spend * solPct;
-  const spyxUsd = spend - solUsd;
+  if (spend < 20 && !only) return [];
   const fills: PaperFill[] = [];
-  if (solUsd > 8 && prices.sol.usd > 0) {
-    const { fee, slip, drag } = costs(solUsd);
-    const qty = (solUsd - drag) / prices.sol.usd;
-    const fill = fillOf(now, "buy", "SOL", SOL_MINT, prices.sol.usd, qty, solUsd, fee, slip, reason);
-    pushFill(book, fill);
-    fills.push(fill);
-    h.solQty += qty;
-    h.solCostUsd = (h.solCostUsd || 0) + solUsd;
-    h.usdcQty -= solUsd;
-  }
-  if (spyxUsd > 8 && prices.spyx.usd > 0) {
-    const { fee, slip, drag } = costs(spyxUsd);
-    const qty = (spyxUsd - drag) / prices.spyx.usd;
-    const fill = fillOf(now, "buy", "SPYx", spyxMint(), prices.spyx.usd, qty, spyxUsd, fee, slip, reason);
-    pushFill(book, fill);
-    fills.push(fill);
-    h.spyxQty += qty;
-    h.spyxCostUsd = (h.spyxCostUsd || 0) + spyxUsd;
-    h.usdcQty -= spyxUsd;
-    if (mind) noteOpen(mind, spyxMint(), [0.5, 0.5, 0, 0.5, 0.5], "sol_spyx");
+  if (only && only !== "SOL") {
+    const row = XSTOCKS.find((x) => x.id === only);
+    if (row) {
+      const take = Math.min(spend, Math.max(20, spend));
+      const fill = buyFromUsd(h, book, prices, now, row.symbol, take, reason, mind);
+      if (fill) fills.push(fill);
+      touchClip(h, only, now);
+    }
+  } else {
+    const solUsd = spend * SOL_WEIGHT;
+    const perX = spend * X_WEIGHT;
+    const solFill = buyFromUsd(h, book, prices, now, "SOL", solUsd, reason, mind);
+    if (solFill) fills.push(solFill);
+    for (const x of XSTOCKS) {
+      const fill = buyFromUsd(h, book, prices, now, x.symbol, perX, reason, mind);
+      if (fill) fills.push(fill);
+      touchClip(h, x.id, now);
+    }
   }
   book.pair = h;
   book.lastTradeAt = now;
@@ -218,7 +283,10 @@ export function applyPairDecision(
 ): { fills: PaperFill[]; skipped: boolean } {
   markPair(book, prices);
   const tapeAction =
-    decision.action === "sell_sol" || decision.action === "sell_spyx" || decision.action === "rebalance"
+    decision.action === "sell_sol" ||
+    decision.action === "sell_xstock" ||
+    decision.action === "sell_spyx" ||
+    decision.action === "rebalance"
       ? "trade"
       : decision.action === "deploy"
         ? "deploy"
@@ -251,16 +319,16 @@ export function applyPairDecision(
     book.haltedUntil = now + 12 * 60 * 60 * 1000;
     book.haltReason = decision.reason;
   } else if (decision.action === "deploy") {
-    const solPct = decision.solPct ?? 0.5;
-    fills = deployMix(book, prices, now, decision.clipUsd, solPct, decision.reason, mind);
-  } else if (decision.action === "sell_sol" || decision.action === "rebalance") {
-    if (decision.from === "SOL" && decision.to === "SPYx") {
-      fills = swapSleeves(book, prices, now, "SOL", "SPYx", decision.clipUsd, decision.reason, impactPct, mind);
-    } else if (decision.from === "SPYx" && decision.to === "SOL") {
-      fills = swapSleeves(book, prices, now, "SPYx", "SOL", decision.clipUsd, decision.reason, impactPct, mind);
-    }
-  } else if (decision.action === "sell_spyx") {
-    fills = swapSleeves(book, prices, now, "SPYx", "SOL", decision.clipUsd, decision.reason, impactPct, mind);
+    fills = deployMix(book, prices, now, decision.clipUsd, decision.reason, mind, decision.asset);
+  } else if (
+    decision.action === "sell_sol" ||
+    decision.action === "sell_xstock" ||
+    decision.action === "sell_spyx" ||
+    decision.action === "rebalance"
+  ) {
+    const from = (decision.from === "both" || decision.from === "none" ? "SOL" : decision.from) as Sleeve;
+    const to = (decision.to === "none" ? "SOL" : decision.to) as Sleeve;
+    fills = swapSleeves(book, prices, now, from, to, decision.clipUsd, decision.reason, impactPct, mind, decision.asset);
   }
 
   book.pendingIntent = null;
@@ -270,11 +338,11 @@ export function applyPairDecision(
 }
 
 export function killBook(book: PaperBook, prices: PairPrices, now: number, mind?: Mind): PaperBook {
-  flattenToUsdc(book, prices, now, "Kill switch. Flatten to USDC and halt.", mind);
+  flattenToUsdc(book, prices, now, "Kill switch. Flatten to cash and halt.", mind);
   book.killed = true;
   book.haltedUntil = now + 10 * 365 * 24 * 60 * 60 * 1000;
-  book.haltReason = "Kill switch. Flattened to USDC.";
-  pushTape(book, tapeOf(now, "kill", "Kill switch. Flatten to USDC and halt."));
+  book.haltReason = "Kill switch. Flattened to cash.";
+  pushTape(book, tapeOf(now, "kill", "Kill switch. Flatten to cash and halt."));
   return book;
 }
 
@@ -315,13 +383,14 @@ export function tickPairBook(opts: {
   const live = opts.live || (opts.auto.mode === "live" && LIVE_TRADING);
   const actionable =
     decision.action === "sell_sol" ||
+    decision.action === "sell_xstock" ||
     decision.action === "sell_spyx" ||
     decision.action === "flatten" ||
     decision.action === "deploy" ||
     decision.action === "rebalance";
   if (live && actionable) {
     const prev = opts.book.pendingIntent;
-    const liveAction = decision.action as PairIntent["action"];
+    const liveAction = (decision.action === "sell_xstock" ? "sell_xstock" : decision.action) as PairIntent["action"];
     const same = prev && prev.action === liveAction && prev.reason === decision.reason && opts.now - prev.at < 90_000;
     if (!same) {
       const intent: PairIntent = {
@@ -332,6 +401,7 @@ export function tickPairBook(opts: {
         reason: decision.reason,
         at: opts.now,
         solPct: decision.solPct,
+        asset: decision.asset,
       };
       opts.book.pendingIntent = intent;
       pushTape(
@@ -352,5 +422,3 @@ export function tickPairBook(opts: {
   const { fills } = applyPairDecision(opts.book, decision, opts.prices, opts.now, opts.mind, opts.impactPct || 0);
   return { decision, fills };
 }
-
-

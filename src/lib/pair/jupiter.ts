@@ -1,4 +1,15 @@
-import { SOL_MINT, USDC_MINT, spyxMint, isAllowedMint, routeMintsOk, SPYX_DECIMALS, SOL_DECIMALS, USDC_DECIMALS } from "./mints";
+import {
+  SOL_MINT,
+  USDC_MINT,
+  isAllowedMint,
+  routeMintsOk,
+  XSTOCK_DECIMALS,
+  SOL_DECIMALS,
+  USDC_DECIMALS,
+  officialMints,
+  xstockByMint,
+  spyxMint,
+} from "./mints";
 
 const QUOTE_URLS = ["https://lite-api.jup.ag/swap/v1/quote", "https://api.jup.ag/swap/v1/quote"];
 const SWAP_URLS = ["https://lite-api.jup.ag/swap/v1/swap", "https://api.jup.ag/swap/v1/swap"];
@@ -64,7 +75,7 @@ function fromUnits(raw: string, decimals: number): number {
 function decimals(mint: string): number {
   if (mint === SOL_MINT) return SOL_DECIMALS;
   if (mint === USDC_MINT) return USDC_DECIMALS;
-  if (mint === spyxMint()) return SPYX_DECIMALS;
+  if (xstockByMint(mint) || officialMints().includes(mint)) return XSTOCK_DECIMALS;
   return 9;
 }
 
@@ -98,6 +109,10 @@ function routeMints(quote: JupiterQuote): string[] {
   return [...mints];
 }
 
+function endpointOk(mint: string): boolean {
+  return mint === SOL_MINT || mint === USDC_MINT || officialMints().includes(mint);
+}
+
 async function quoteOnce(opts: {
   inputMint: string;
   outputMint: string;
@@ -106,17 +121,17 @@ async function quoteOnce(opts: {
   extra?: string;
 }): Promise<QuoteResult> {
   if (!isAllowedMint(opts.inputMint) || !isAllowedMint(opts.outputMint)) {
-    return { ok: false, reason: "Mint not on the SOL / USDC / official SPYx allowlist." };
+    return { ok: false, reason: "Mint not on the SOL / USDC / official xStock allowlist." };
   }
-  if (opts.outputMint !== spyxMint() && opts.outputMint !== SOL_MINT && opts.outputMint !== USDC_MINT) {
-    return { ok: false, reason: "Refusing lookalike ticker. Official SPYx mint only." };
+  if (!endpointOk(opts.outputMint) || !endpointOk(opts.inputMint)) {
+    return { ok: false, reason: "Refusing lookalike ticker. Official SPYx, QQQx, and GLDx only." };
   }
   const amount = toUnits(opts.amount, decimals(opts.inputMint));
   const qs =
     `inputMint=${opts.inputMint}&outputMint=${opts.outputMint}&amount=${amount}` +
     `&slippageBps=${opts.slippageBps}&restrictIntermediateTokens=true` +
     (opts.extra ? `&${opts.extra}` : "");
-  let last = "Jupiter quote failed.";
+  let last = "Swap quote failed.";
   for (const base of QUOTE_URLS) {
     const r = await jupFetch(`${base}?${qs}`);
     if (!r.ok || !r.data) {
@@ -125,16 +140,16 @@ async function quoteOnce(opts: {
     }
     const quote = parseQuote(r.data as Record<string, unknown>);
     if (!quote) {
-      last = String((r.data as any).error || (r.data as any).message || "Jupiter returned no route.");
+      last = String((r.data as any).error || (r.data as any).message || "No swap route.");
       continue;
     }
     if (quote.outputMint !== opts.outputMint) {
-      last = "Jupiter returned a different output mint. Skip.";
+      last = "Quote returned a different token. Skip.";
       continue;
     }
     const hops = routeMints(quote);
     if (!routeMintsOk(hops)) {
-      last = `Jupiter route hops a non-allowlisted mint (${hops.filter((m) => !isAllowedMint(m)).join(",") || "unknown"}).`;
+      last = `Swap hops a token she does not trade (${hops.filter((m) => !isAllowedMint(m)).join(",") || "unknown"}).`;
       continue;
     }
     const impactPct = Math.abs(quote.priceImpactPct) > 1 ? Math.abs(quote.priceImpactPct) / 100 : Math.abs(quote.priceImpactPct);
@@ -194,6 +209,14 @@ export async function quoteSpyxSol(spyxAmount: number, slippageBps: number): Pro
   return quoteSwap({ inputMint: spyxMint(), outputMint: SOL_MINT, amount: spyxAmount, slippageBps });
 }
 
+export async function quoteSolAsset(outputMint: string, solAmount: number, slippageBps: number): Promise<QuoteResult> {
+  return quoteSwap({ inputMint: SOL_MINT, outputMint, amount: solAmount, slippageBps });
+}
+
+export async function quoteAssetSol(inputMint: string, amount: number, slippageBps: number): Promise<QuoteResult> {
+  return quoteSwap({ inputMint, outputMint: SOL_MINT, amount, slippageBps });
+}
+
 export async function quoteToUsdc(inputMint: string, amount: number, slippageBps: number): Promise<QuoteResult> {
   return quoteSwap({ inputMint, outputMint: USDC_MINT, amount, slippageBps });
 }
@@ -218,9 +241,6 @@ export async function buildSwapTx(quote: JupiterQuote, userPublicKey: string): P
       }),
     });
     if (r.ok && r.data?.swapTransaction) return { ok: true, transaction: r.data.swapTransaction };
-    if (r.error) {
-      /* try next */
-    }
   }
-  return { ok: false, reason: "Jupiter swap build failed." };
+  return { ok: false, reason: "Could not build the swap." };
 }

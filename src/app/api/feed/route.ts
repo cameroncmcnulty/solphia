@@ -4,7 +4,7 @@ import { loadState } from "@/lib/store";
 import { runMarketTick, publicBook, lastPairDesk, lastPairPrices } from "@/lib/tick";
 import { publicMind } from "@/lib/mind/engine";
 import { LIVE_TRADING } from "@/lib/config";
-import { spyxMint } from "@/lib/pair/mints";
+import { gldxMint, qqqxMint, spyxMint } from "@/lib/pair/mints";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +21,11 @@ export async function GET(req: NextRequest) {
       health: tick.health,
       solUsd: tick.solUsd,
       spyxUsd: tick.spyxUsd,
+      qqqxUsd: tick.qqqxUsd,
+      gldxUsd: tick.gldxUsd,
       spyxMint: spyxMint(),
+      qqqxMint: qqqxMint(),
+      gldxMint: gldxMint(),
       mind: publicMind(loadState().mind),
       lastTickAt: Date.now(),
       pair: tick.pair,
@@ -38,7 +42,11 @@ export async function GET(req: NextRequest) {
     pair: cached,
     solUsd: px.solUsd || (cached as { solUsd?: number } | null)?.solUsd || 0,
     spyxUsd: px.spyxUsd || (cached as { spyxUsd?: number } | null)?.spyxUsd || 0,
+    qqqxUsd: px.qqqxUsd || (cached as { qqqxUsd?: number } | null)?.qqqxUsd || 0,
+    gldxUsd: px.gldxUsd || (cached as { gldxUsd?: number } | null)?.gldxUsd || 0,
     spyxMint: spyxMint(),
+    qqqxMint: qqqxMint(),
+    gldxMint: gldxMint(),
     liveTrading: LIVE_TRADING,
   });
 }

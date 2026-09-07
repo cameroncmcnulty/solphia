@@ -1,18 +1,18 @@
 # SOLPHIA
 
-Non-custodial SOL ↔ official tokenized S&P 500 (SPYx / xStocks) bot on Solana. Paper first. Kill switch on. Keys stay on the user’s device.
+Non-custodial bot that trades SOL against official SPYx (S&P 500), QQQx (Nasdaq-100), and GLDx (gold) on Solana. Practice first. Kill switch on. Keys stay in Phantom.
 
 **Site:** [solphia.io](https://solphia.io)  
 **GitHub:** `cameroncmcnulty/solphia`
 
 ## What she does
 
-- One job: trade SOL against official SPYx (`XsoCS1TfEyfFhfvj8EtZ528L3CaKBDBRqRapnBbDF2W`)
-- Mean-revert the SOL/SPYx ratio (or hold a target mix)
-- Pyth oracles, Jupiter quotes, skip on stale/thin/junk routes
-- Paper book with USDC marks, skip tape, flatten-to-USDC on stop or kill
-- Phantom / Solflare. She never holds keys.
-- Spot only in v1. Leverage slider stays disabled.
+- One job: trade SOL against official SPYx, QQQx, and GLDx
+- Sells SOL when it looks expensive vs those markets, buys SOL back when it looks cheap
+- Jupiter quotes, skip on stale/thin/junk routes
+- Paper book, activity tape, flatten on stop or kill
+- Phantom only. She never holds keys.
+- Spot only. Settings are locked to the safer defaults.
 
 ## Testing vs live
 
