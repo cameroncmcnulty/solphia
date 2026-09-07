@@ -160,41 +160,39 @@ export function TradingHub() {
           return swapOne(inputMint, outputMint, amount);
         }
         function pxOf(label: string) {
+          if (label === "USDC") return 1;
           if (label === "SOL") return solPx;
           if (label === "QQQx") return Number(pair?.qqqxUsd || 0);
           if (label === "GLDx") return Number(pair?.gldxUsd || 0);
           return Number(pair?.spyxUsd || 0);
         }
+        function amtOf(label: string, usd: number) {
+          const p = pxOf(label);
+          return p > 0 ? usd / p : 0;
+        }
         let sig = "";
-        if (intent.action === "sell_sol" || (intent.action === "rebalance" && intent.from === "SOL")) {
-          const out = mintFor(intent.to);
-          const amt = intent.clipUsd / solPx;
-          if (amt > 0.002) sig = await swap(SOL_MINT, out, amt);
-        } else if (
-          intent.action === "sell_xstock" ||
-          intent.action === "sell_spyx" ||
-          (intent.action === "rebalance" && intent.from !== "SOL")
-        ) {
-          const inn = mintFor(intent.from);
-          const px = pxOf(intent.from);
-          const amt = px > 0 ? intent.clipUsd / px : 0;
-          if (amt > 0) sig = await swap(inn, SOL_MINT, amt);
-        } else if (intent.action === "deploy") {
-          if (intent.to && intent.to !== "SOL" && intent.to !== "USDC") {
-            const amt = intent.clipUsd / solPx;
-            if (amt > 0.002) sig = await swap(SOL_MINT, mintFor(intent.to), amt);
-          } else {
-            const each = (intent.clipUsd * (1 - (intent.solPct ?? 0.4))) / 3 / solPx;
-            for (const x of XSTOCKS) {
-              if (each > 0.002) sig = await swap(SOL_MINT, xstockMint(x.id), each);
-            }
-          }
-        } else if (intent.action === "flatten") {
+        if (intent.action === "flatten") {
           const h = paper?.pair;
           for (const x of XSTOCKS) {
             const qty = Number(h?.[qtyKey(x.id)] || 0);
             if (qty > 0.0001) sig = await swap(xstockMint(x.id), SOL_MINT, qty);
           }
+          const usdc = Number(h?.usdcQty || 0);
+          if (usdc > 1) sig = await swap(USDC_MINT, SOL_MINT, usdc);
+        } else if (intent.action === "deploy") {
+          if (intent.to && intent.to !== "SOL") {
+            const amt = intent.clipUsd / solPx;
+            if (amt > 0.002) sig = await swap(SOL_MINT, mintFor(intent.to), amt);
+          } else {
+            const slice = (intent.clipUsd * 0.2) / solPx;
+            if (slice > 0.002) sig = await swap(SOL_MINT, USDC_MINT, slice);
+            for (const x of XSTOCKS) {
+              if (slice > 0.002) sig = await swap(SOL_MINT, xstockMint(x.id), slice);
+            }
+          }
+        } else if (intent.from && intent.to && intent.from !== "none" && intent.to !== "none") {
+          const amt = amtOf(intent.from, intent.clipUsd);
+          if (amt > 0) sig = await swap(mintFor(intent.from), mintFor(intent.to), amt);
         }
         if (sig) {
           const r = await fetch("/api/auto", {
@@ -250,6 +248,23 @@ export function TradingHub() {
           });
           const j0 = await r0.json();
           if (r0.ok && j0.transaction) await signAndSendSwap(j0.transaction);
+        }
+        const usdc = Number(h?.usdcQty || 0);
+        if (usdc > 1) {
+          const r1 = await fetch("/api/pair/swap", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              owner,
+              tradingPubkey: tpk,
+              inputMint: USDC_MINT,
+              outputMint: SOL_MINT,
+              amount: usdc,
+              slippageBps: 50,
+            }),
+          });
+          const j1 = await r1.json();
+          if (r1.ok && j1.transaction) await signAndSendSwap(j1.transaction);
         }
       }
       const r = await fetch("/api/auto", {
@@ -325,7 +340,7 @@ export function TradingHub() {
           <p className="font-mono text-[11px] tracking-[0.28em] text-violet">SOL · S&P 500 · NASDAQ · GOLD</p>
           <h1 className="mt-1 font-display text-3xl leading-none text-ghost sm:text-4xl md:text-6xl">Operate</h1>
           <p className="mt-3 max-w-xl text-base text-mute sm:text-lg">
-            Connect Phantom. Add SOL. She buys and sells SOL against official S&P 500, Nasdaq-100, and gold tokens.
+            Connect Phantom. Add SOL. She splits across SOL, USDC, S&P 500, Nasdaq-100, and gold — and trades whichever pair looks stretched. PnL is in USDC.
           </p>
         </div>
         <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center">
@@ -357,7 +372,7 @@ export function TradingHub() {
       <ol className="mt-5 grid gap-3 sm:grid-cols-3">
         <How n="1" t="Connect Phantom" d="Your keys stay in the wallet. We never see them." />
         <How n="2" t="Add SOL" d="Move SOL into the trading wallet on this device." />
-        <How n="3" t="Let her work" d="She trades when SOL looks expensive or cheap vs those three markets. Hit KILL to stop." />
+        <How n="3" t="Let her work" d="She trades any pair that’s stretched — even USDC vs gold. Hit KILL to stop." />
       </ol>
 
       <div className="mt-5 rounded-2xl border border-blood/40 bg-blood/10 p-4 text-sm leading-relaxed text-ghost">
@@ -384,22 +399,23 @@ export function TradingHub() {
             {status} {armed ? "· watching" : live ? "· prices live" : ""} · {uptime}
           </div>
         </div>
-        <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-5">
-          <Huge k="SOL" v={solQty ? solQty.toFixed(4) : "0"} sub={solUsd ? money(solQty * solUsd) : "her home bag"} />
-          <Huge k="S&P 500" v={spyxQty ? spyxQty.toFixed(4) : "0"} sub={spyxUsd ? money(spyxQty * spyxUsd) : "SPYx"} />
-          <Huge k="Nasdaq" v={qqqxQty ? qqqxQty.toFixed(4) : "0"} sub={qqqxUsd ? money(qqqxQty * qqqxUsd) : "QQQx"} />
-          <Huge k="Gold" v={gldxQty ? gldxQty.toFixed(4) : "0"} sub={gldxUsd ? money(gldxQty * gldxUsd) : "GLDx"} />
+        <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-3">
+          <Huge k="USDC" v={money(usdcQty)} sub="PnL home · dry powder" />
+          <Huge k="SOL" v={solQty ? solQty.toFixed(4) : "0"} sub={solUsd ? money(solQty * solUsd) : "sleeve"} />
           <Huge
-            k="PnL"
+            k="PnL (USDC)"
             v={`${pnlPct >= 0 ? "+" : ""}${(pnlPct * 100).toFixed(1)}%`}
             sub={`${pnlUsd >= 0 ? "+" : "−"}$${Math.abs(pnlUsd).toFixed(2)}`}
             good={Math.abs(pnlPct) < 0.0005 ? undefined : pnlPct >= 0}
           />
+          <Huge k="S&P 500" v={spyxQty ? spyxQty.toFixed(4) : "0"} sub={spyxUsd ? money(spyxQty * spyxUsd) : "SPYx"} />
+          <Huge k="Nasdaq" v={qqqxQty ? qqqxQty.toFixed(4) : "0"} sub={qqqxUsd ? money(qqqxQty * qqqxUsd) : "QQQx"} />
+          <Huge k="Gold" v={gldxQty ? gldxQty.toFixed(4) : "0"} sub={gldxUsd ? money(gldxQty * gldxUsd) : "GLDx"} />
         </div>
         <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
-          <Mini k="Cash" v={money(usdcQty)} />
-          <Mini k="Book value" v={book ? money(book.equityUsd) : "—"} />
+          <Mini k="Book (USDC)" v={book ? money(book.equityUsd) : "—"} />
           <Mini k="Wallet SOL" v={`${bal.toFixed(3)}`} />
+          <Mini k="Trades" v={String(book?.trades ?? 0)} />
         </div>
         <p className="mt-4 text-sm leading-relaxed text-mute">
           {(owner && book?.lastAction) || pair?.reason || book?.lastAction || "Waiting on prices…"}
@@ -473,11 +489,11 @@ export function TradingHub() {
       <div className="mt-6 grid gap-4 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.2fr)]">
         <div className="panel space-y-4 rounded-2xl p-5">
           <div className="font-mono text-[10px] tracking-[0.22em] text-violet">HOW SHE TRADES</div>
-          <h3 className="font-display text-2xl text-ghost">No knobs. One job.</h3>
+          <h3 className="font-display text-2xl text-ghost">Every pair. USDC PnL.</h3>
           <p className="text-sm leading-relaxed text-mute">
-            When SOL looks expensive versus S&P 500, Nasdaq, or gold, she sells a slice of SOL for that token. When SOL
-            looks cheap, she sells the token back for SOL. If nothing has moved enough, she sits. A 8% drop on the book
-            sells everything and pauses.
+            She keeps SOL, USDC, S&P 500, Nasdaq, and gold so she can trade any of those pairs — including USDC vs gold —
+            when one side looks expensive. Profit and loss are marked in USDC. If nothing has moved enough, she sits. An
+            8% drop sells everything back to USDC and pauses.
           </p>
           <div className="grid grid-cols-3 gap-2">
             <Mini k="S&P 500" v={spyxUsd ? `$${Number(spyxUsd).toFixed(0)}` : "—"} />

@@ -7,8 +7,8 @@ Non-custodial bot that trades SOL against official SPYx (S&P 500), QQQx (Nasdaq-
 
 ## What she does
 
-- One job: trade SOL against official SPYx, QQQx, and GLDx
-- Sells SOL when it looks expensive vs those markets, buys SOL back when it looks cheap
+- Holds SOL, USDC, official SPYx, QQQx, and GLDx and trades whichever pair is stretched
+- PnL, stops, and the book are marked in USDC
 - Jupiter quotes, skip on stale/thin/junk routes
 - Paper book, activity tape, flatten on stop or kill
 - Phantom only. She never holds keys.

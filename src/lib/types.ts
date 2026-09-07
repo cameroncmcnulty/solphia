@@ -208,11 +208,12 @@ export interface PairHoldings {
   spyxCostUsd?: number;
   qqqxCostUsd?: number;
   gldxCostUsd?: number;
-  lastClipAt?: { spyx?: number; qqqx?: number; gldx?: number };
+  lastClipAt?: Record<string, number>;
 }
 
 export interface PairIntent {
-  action: "sell_sol" | "sell_spyx" | "sell_xstock" | "flatten" | "deploy" | "rebalance";
+  action: "sell_sol" | "sell_spyx" | "sell_xstock" | "swap" | "flatten" | "deploy" | "rebalance";
+  pairId?: string;
   from: string;
   to: string;
   clipUsd: number;

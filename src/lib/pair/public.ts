@@ -63,7 +63,7 @@ export function publicPair(
     mint: xstockMint(x.id),
     usd: prices[x.id]?.usd || 0,
     qty: qtyOf(h, x.id),
-    z7: decision.reads?.[x.id]?.z7 ?? (x.id === decision.read.asset ? decision.z7 : 0),
+    z7: decision.reads?.[`sol-${x.id}`]?.z7 ?? (decision.read.pairId === `sol-${x.id}` ? decision.z7 : 0),
     liquidityUsd: prices.liquidities?.[x.id] || 0,
   }));
   return {

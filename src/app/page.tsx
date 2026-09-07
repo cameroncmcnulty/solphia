@@ -24,7 +24,7 @@ export default function Home() {
               SOLPHIA
             </h1>
             <p className="mt-5 max-w-xl text-xl leading-snug text-ghost sm:text-3xl sm:leading-tight">
-              She trades your SOL against S&P 500, Nasdaq-100, and gold.
+              She splits SOL across USDC, S&P 500, Nasdaq-100, and gold — and trades whichever pair is stretched.
             </p>
             <p className="mt-3 max-w-lg text-base leading-relaxed text-mute sm:text-xl">
               Connect Phantom. Add SOL. She handles the rest. Practice first. Your keys stay in your wallet.
@@ -91,15 +91,15 @@ export default function Home() {
 
       <section className="px-4 py-8 md:px-12">
         <p className="text-base text-acid sm:text-lg">What she actually does</p>
-        <h2 className="mt-2 font-display text-3xl text-ghost sm:text-4xl md:text-6xl">Three markets. One job.</h2>
+        <h2 className="mt-2 font-display text-3xl text-ghost sm:text-4xl md:text-6xl">Every pair. One job.</h2>
         <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <Feature t="S&P 500, Nasdaq, gold" d="Official SPYx, QQQx, and GLDx only. Fake tickers are refused." href="/trading" />
           <Feature
-            t="Buy low, sell high — versus SOL"
-            d="When SOL looks expensive vs a market, she sells SOL for that token. When SOL looks cheap, she buys SOL back."
+            t="Any pair that’s stretched"
+            d="USDC vs gold, SOL vs Nasdaq, S&P vs gold — if a pair meets her bar, she trades it. She stays split so she’s ready."
             href="/trading"
           />
-          <Feature t="More than one shot a day" d="Three markets means more chances to trade than S&P 500 alone. She still sits when nothing has moved." href="/trading" />
+          <Feature t="PnL in USDC" d="The book, stops, and profit are marked in USDC so a SOL candle doesn’t fake the score." href="/trading" />
           <Feature t="Practice first" d="Paper is always on so you can see PnL before you risk SOL." href="/trading" />
           <Feature t="Your wallet, your keys" d="Phantom stays in charge. She never asks for a seed phrase." href="/trading" />
           <Feature t="Spot only" d="No borrowed money. An 8% drop sells everything and pauses." href="/trading" />

@@ -19,7 +19,7 @@ export function LiveStats({ compact = false }: { compact?: boolean }) {
     {
       k: "Paper book",
       v: paper ? `$${paper.equityUsd.toFixed(0)}` : "—",
-      sub: paper ? `${paper.trades || 0} trades` : "SOL vs three markets",
+      sub: paper ? `${paper.trades || 0} trades` : "PnL in USDC",
     },
     { k: "SOL", v: pair?.solUsd ? `$${Number(pair.solUsd).toFixed(0)}` : "—", sub: "her home bag" },
     { k: "S&P 500", v: pair?.spyxUsd ? `$${Number(pair.spyxUsd).toFixed(0)}` : "—", sub: "SPYx" },

@@ -51,11 +51,11 @@ export const FAQS: { q: string; a: string }[] = [
   },
   {
     q: "What does she trade?",
-    a: "SOL against three official tokens on Solana: SPYx (S&P 500), QQQx (Nasdaq-100), and GLDx (gold). Nothing else. No memecoins, no copy trading, no sniping new coins.",
+    a: "She holds SOL, USDC, and three official tokens: SPYx (S&P 500), QQQx (Nasdaq-100), and GLDx (gold). She trades whichever of those pairs is stretched — including USDC vs gold. Nothing else. No memecoins, no copy trading, no sniping new coins.",
   },
   {
     q: "How does she decide?",
-    a: "She watches whether SOL looks expensive or cheap versus each of those three markets. Expensive → she sells some SOL for that token. Cheap → she sells the token back for SOL. If nothing has moved enough, she waits. Three markets means more chances to trade in a day than S&P 500 alone.",
+    a: "She stays split across SOL, USDC, S&P 500, Nasdaq, and gold. If USDC/GLDx (or any other pair) looks stretched, she trades it. Expensive side gets sold for the cheap side. If nothing has moved enough, she waits. Profit and loss stay in USDC.",
   },
   {
     q: "Are these the same as the New York market?",
@@ -71,7 +71,7 @@ export const FAQS: { q: string; a: string }[] = [
   },
   {
     q: "What happens when I hit KILL?",
-    a: "She sells everything back and pauses. Then you can withdraw SOL to Phantom.",
+    a: "She sells everything back to USDC (paper) or SOL (live) and pauses. Then you can withdraw to Phantom.",
   },
   {
     q: "How do I pay?",

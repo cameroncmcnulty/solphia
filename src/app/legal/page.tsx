@@ -5,8 +5,9 @@ export default function LegalPage() {
       <div className="mt-6 space-y-4 text-base leading-relaxed text-mute">
         <p>Solphia never asks for your seed phrase. Your trading key stays on your phone or computer.</p>
         <p>
-          Right now the bot paper-trades SOL against official SPYx (S&P 500), QQQx (Nasdaq-100), and GLDx (gold) so you
-          can watch her work. Real swaps stay off until you flip to real trades. You sign every live transaction.
+          Right now the bot paper-trades SOL, USDC, official SPYx, QQQx, and GLDx against each other so you can watch her
+          work. Profit is marked in USDC. Real swaps stay off until you flip to real trades. You sign every live
+          transaction.
         </p>
         <p>
           These tokens are not the New York print. Issuer and custody risk. After hours and weekends they can move

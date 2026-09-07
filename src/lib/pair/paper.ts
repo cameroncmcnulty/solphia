@@ -5,8 +5,7 @@ import { applyFee } from "../risk/engine";
 import {
   PAIR_FEE_BPS,
   PAIR_SLIP_BPS,
-  SOL_WEIGHT,
-  X_WEIGHT,
+  SLEEVE_WEIGHT,
   costOf,
   decidePair,
   fillOf,
@@ -99,9 +98,9 @@ function mintOfSleeve(sleeve: string): string {
   return row ? xstockMint(row.id) : SOL_MINT;
 }
 
-function touchClip(h: ReturnType<typeof pairOf>, asset: XStockId | undefined, now: number) {
+function touchClip(h: ReturnType<typeof pairOf>, pairId: string | undefined, now: number) {
   if (!h.lastClipAt) h.lastClipAt = {};
-  if (asset) h.lastClipAt[asset] = now;
+  if (pairId) h.lastClipAt[pairId] = now;
 }
 
 export function flattenToUsdc(book: PaperBook, prices: PairPrices, now: number, reason: string, mind?: Mind): PaperFill[] {
@@ -181,6 +180,55 @@ function buyFromUsd(
   return fill;
 }
 
+function sleevePx(prices: PairPrices, sleeve: Sleeve): number {
+  if (sleeve === "USDC") return 1;
+  if (sleeve === "SOL") return prices.sol.usd || 0;
+  const id = asXId(sleeve);
+  return id ? pxOf(prices, id) : 0;
+}
+
+function sleeveQty(h: ReturnType<typeof pairOf>, sleeve: Sleeve): number {
+  if (sleeve === "USDC") return h.usdcQty || 0;
+  if (sleeve === "SOL") return h.solQty || 0;
+  const id = asXId(sleeve);
+  return id ? qtyOf(h, id) : 0;
+}
+
+function sleeveCost(h: ReturnType<typeof pairOf>, sleeve: Sleeve): number {
+  if (sleeve === "USDC") return h.usdcQty || 0;
+  if (sleeve === "SOL") return h.solCostUsd || 0;
+  const id = asXId(sleeve);
+  return id ? costOf(h, id) : 0;
+}
+
+function applySell(h: ReturnType<typeof pairOf>, sleeve: Sleeve, qty: number, costSold: number) {
+  if (sleeve === "USDC") {
+    h.usdcQty = Math.max(0, (h.usdcQty || 0) - qty);
+    return;
+  }
+  if (sleeve === "SOL") {
+    h.solQty = Math.max(0, h.solQty - qty);
+    h.solCostUsd = Math.max(0, (h.solCostUsd || 0) - costSold);
+    return;
+  }
+  const id = asXId(sleeve);
+  if (id) setSleeve(h, id, Math.max(0, qtyOf(h, id) - qty), Math.max(0, costOf(h, id) - costSold));
+}
+
+function applyBuy(h: ReturnType<typeof pairOf>, sleeve: Sleeve, qty: number, costUsd: number) {
+  if (sleeve === "USDC") {
+    h.usdcQty = (h.usdcQty || 0) + qty;
+    return;
+  }
+  if (sleeve === "SOL") {
+    h.solQty += qty;
+    h.solCostUsd = (h.solCostUsd || 0) + costUsd;
+    return;
+  }
+  const id = asXId(sleeve);
+  if (id) setSleeve(h, id, qtyOf(h, id) + qty, costOf(h, id) + costUsd);
+}
+
 function swapSleeves(
   book: PaperBook,
   prices: PairPrices,
@@ -191,14 +239,12 @@ function swapSleeves(
   reason: string,
   impactPct: number,
   mind?: Mind,
-  asset?: XStockId,
+  pairId?: string,
 ): PaperFill[] {
   const h = pairOf(book);
-  const fromId = asXId(from);
-  const toId = asXId(to);
-  const fromPx = from === "SOL" ? prices.sol.usd : fromId ? pxOf(prices, fromId) : 0;
-  const toPx = to === "SOL" ? prices.sol.usd : toId ? pxOf(prices, toId) : 0;
-  const fromQtyAvail = from === "SOL" ? h.solQty : fromId ? qtyOf(h, fromId) : 0;
+  const fromPx = sleevePx(prices, from);
+  const toPx = sleevePx(prices, to);
+  const fromQtyAvail = sleeveQty(h, from);
   const maxUsd = fromQtyAvail * fromPx;
   const size = Math.min(clipUsd, maxUsd);
   if (size < 8 || fromPx <= 0 || toPx <= 0) return [];
@@ -207,27 +253,16 @@ function swapSleeves(
   const buyQty = Math.max(0, size - drag) / toPx;
   const fromMint = mintOfSleeve(from);
   const toMint = mintOfSleeve(to);
-  const fromCost = from === "SOL" ? h.solCostUsd || 0 : fromId ? costOf(h, fromId) : 0;
+  const fromCost = sleeveCost(h, from);
   const costSold = fromQtyAvail > 0 ? fromCost * (sellQty / fromQtyAvail) : size;
   const sell = fillOf(now, "sell", from, fromMint, fromPx, sellQty, size, fee / 2, slip / 2, reason);
-  sell.pnlUsd = size - drag - costSold;
+  sell.pnlUsd = from === "USDC" ? -drag : size - drag - costSold;
   const buy = fillOf(now, "buy", to, toMint, toPx, buyQty, size - drag, fee / 2, slip / 2, reason);
-  if (from === "SOL") {
-    h.solQty = Math.max(0, h.solQty - sellQty);
-    h.solCostUsd = Math.max(0, fromCost - costSold);
-  } else if (fromId) {
-    setSleeve(h, fromId, Math.max(0, qtyOf(h, fromId) - sellQty), Math.max(0, fromCost - costSold));
-  }
-  if (to === "SOL") {
-    h.solQty += buyQty;
-    h.solCostUsd = (h.solCostUsd || 0) + (size - drag);
-  } else if (toId) {
-    setSleeve(h, toId, qtyOf(h, toId) + buyQty, costOf(h, toId) + (size - drag));
-  }
+  applySell(h, from, sellQty, costSold);
+  applyBuy(h, to, buyQty, size - drag);
   pushFill(book, sell);
   pushFill(book, buy);
-  const clipAsset = asset ?? toId ?? fromId ?? undefined;
-  touchClip(h, clipAsset, now);
+  touchClip(h, pairId, now);
   book.pair = h;
   book.lastTradeAt = now;
   if (mind) {
@@ -258,8 +293,8 @@ function deployMix(
       touchClip(h, only, now);
     }
   } else {
-    const solUsd = spend * SOL_WEIGHT;
-    const perX = spend * X_WEIGHT;
+    const solUsd = spend * SLEEVE_WEIGHT;
+    const perX = spend * SLEEVE_WEIGHT;
     const solFill = buyFromUsd(h, book, prices, now, "SOL", solUsd, reason, mind);
     if (solFill) fills.push(solFill);
     for (const x of XSTOCKS) {
@@ -286,6 +321,7 @@ export function applyPairDecision(
     decision.action === "sell_sol" ||
     decision.action === "sell_xstock" ||
     decision.action === "sell_spyx" ||
+    decision.action === "swap" ||
     decision.action === "rebalance"
       ? "trade"
       : decision.action === "deploy"
@@ -319,16 +355,25 @@ export function applyPairDecision(
     book.haltedUntil = now + 12 * 60 * 60 * 1000;
     book.haltReason = decision.reason;
   } else if (decision.action === "deploy") {
-    fills = deployMix(book, prices, now, decision.clipUsd, decision.reason, mind, decision.asset);
+    fills = deployMix(
+      book,
+      prices,
+      now,
+      decision.clipUsd,
+      decision.reason,
+      mind,
+      decision.asset || (decision.solPct === 1 ? "SOL" : undefined),
+    );
   } else if (
     decision.action === "sell_sol" ||
     decision.action === "sell_xstock" ||
     decision.action === "sell_spyx" ||
+    decision.action === "swap" ||
     decision.action === "rebalance"
   ) {
     const from = (decision.from === "both" || decision.from === "none" ? "SOL" : decision.from) as Sleeve;
     const to = (decision.to === "none" ? "SOL" : decision.to) as Sleeve;
-    fills = swapSleeves(book, prices, now, from, to, decision.clipUsd, decision.reason, impactPct, mind, decision.asset);
+    fills = swapSleeves(book, prices, now, from, to, decision.clipUsd, decision.reason, impactPct, mind, decision.pairId);
   }
 
   book.pendingIntent = null;
@@ -385,12 +430,13 @@ export function tickPairBook(opts: {
     decision.action === "sell_sol" ||
     decision.action === "sell_xstock" ||
     decision.action === "sell_spyx" ||
+    decision.action === "swap" ||
     decision.action === "flatten" ||
     decision.action === "deploy" ||
     decision.action === "rebalance";
   if (live && actionable) {
     const prev = opts.book.pendingIntent;
-    const liveAction = (decision.action === "sell_xstock" ? "sell_xstock" : decision.action) as PairIntent["action"];
+    const liveAction = decision.action as PairIntent["action"];
     const same = prev && prev.action === liveAction && prev.reason === decision.reason && opts.now - prev.at < 90_000;
     if (!same) {
       const intent: PairIntent = {
@@ -402,6 +448,7 @@ export function tickPairBook(opts: {
         at: opts.now,
         solPct: decision.solPct,
         asset: decision.asset,
+        pairId: decision.pairId,
       };
       opts.book.pendingIntent = intent;
       pushTape(

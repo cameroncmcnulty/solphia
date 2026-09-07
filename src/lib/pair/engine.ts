@@ -2,29 +2,50 @@ import type { AutoSettings, PaperBook, PaperFill, PaperPosition, PairHoldings as
 
 import { SOL_HISTORY } from "./knowledge";
 import { cashOpenAuction, sessionBandMult, usEquitySession, type HistoryStudy } from "./knowledge";
-import { BAND_K, bumpBand, readRatio, type BandName, type RatioRead } from "./ratio";
+import { BAND_K, bumpBand, livePx, readPair, type BandName, type RatioRead } from "./ratio";
 import {
   GAS_RESERVE_SOL,
   MIN_XSTOCK_LIQUIDITY_USD,
   SOL_MINT,
   XSTOCKS,
   type XStockId,
-  type XStockSymbol,
   xstockById,
   xstockMint,
 } from "./mints";
 import type { PairPrices } from "./prices";
 import type { RatioSample } from "./ratio";
+import {
+  SLEEVE_WEIGHT,
+  SLEEVES,
+  TRADE_PAIRS,
+  involvesEquity,
+  involvesSol,
+  sleeveName,
+  xstockIdOf,
+  type Sleeve,
+  type TradePair,
+} from "./catalog";
+
+export type { Sleeve, TradePair } from "./catalog";
+export { SLEEVE_WEIGHT, TRADE_PAIRS };
 
 export const PAIR_FEE_BPS = 5;
 export const PAIR_SLIP_BPS = 4;
 export const PAIR_MIN_CLIP_USD = 15;
 export const PAIR_MAX_IMPACT = 0.004;
-export const SOL_WEIGHT = 0.4;
-export const X_WEIGHT = 0.2;
+export const SOL_WEIGHT = SLEEVE_WEIGHT;
+export const X_WEIGHT = SLEEVE_WEIGHT;
 
-export type Sleeve = "SOL" | XStockSymbol | "USDC";
-export type PairAction = "hold" | "skip" | "sell_sol" | "sell_xstock" | "sell_spyx" | "flatten" | "deploy" | "rebalance";
+export type PairAction =
+  | "hold"
+  | "skip"
+  | "sell_sol"
+  | "sell_xstock"
+  | "sell_spyx"
+  | "swap"
+  | "flatten"
+  | "deploy"
+  | "rebalance";
 
 export type PairDecision = {
   action: PairAction;
@@ -40,7 +61,8 @@ export type PairDecision = {
   session: ReturnType<typeof usEquitySession>;
   read: RatioRead;
   solPct?: number;
-  reads?: Record<XStockId, RatioRead>;
+  reads?: Record<string, RatioRead>;
+  pairId?: string;
 };
 
 export type PairHoldings = BookHoldings;
@@ -102,6 +124,12 @@ export function setSleeve(h: PairHoldings, id: XStockId, qty: number, costUsd: n
 
 function pxOf(prices: PairPrices, id: XStockId): number {
   return prices[id]?.usd || 0;
+}
+
+export function sleeveUsd(h: PairHoldings, sleeve: Sleeve, prices: PairPrices): number {
+  if (sleeve === "USDC") return h.usdcQty || 0;
+  if (sleeve === "SOL") return (h.solQty || 0) * (prices.sol.usd || 0);
+  return qtyOf(h, xstockIdOf(sleeve) || "spyx") * livePx(prices, sleeve);
 }
 
 export function equityOf(h: PairHoldings, prices: PairPrices): number {
@@ -185,7 +213,7 @@ function clamp(n: number, lo: number, hi: number) {
   return Math.max(lo, Math.min(hi, n));
 }
 
-function emptyRead(asset: XStockId = "spyx"): RatioRead {
+function emptyRead(asset = "sol-spyx"): RatioRead {
   return {
     ratio: 0,
     logR: 0,
@@ -198,7 +226,16 @@ function emptyRead(asset: XStockId = "spyx"): RatioRead {
     n24: 0,
     n7: 0,
     asset,
+    pairId: asset,
   };
+}
+
+function actionFor(from: Sleeve, to: Sleeve): PairAction {
+  const fromX = xstockIdOf(from);
+  const toX = xstockIdOf(to);
+  if (from === "SOL" && toX) return "sell_sol";
+  if (fromX && to === "SOL") return "sell_xstock";
+  return "swap";
 }
 
 export function decidePair(opts: {
@@ -219,12 +256,14 @@ export function decidePair(opts: {
   const userBand = (auto.band || "normal") as BandName;
   const band = bumpBand(userBand, opts.losses || 0);
   const bandK = BAND_K[band] * sessionBandMult(session);
-  const reads = {} as Record<XStockId, RatioRead>;
-  for (const x of XSTOCKS) {
-    const px = pxOf(prices, x.id);
-    reads[x.id] = px > 0 ? readRatio(samples, prices.sol.usd, px, now, x.id) : emptyRead(x.id);
+  const auction = cashOpenAuction(now);
+  const reads = {} as Record<string, RatioRead>;
+  for (const pair of TRADE_PAIRS) {
+    const lp = livePx(prices, pair.left);
+    const rp = livePx(prices, pair.right);
+    reads[pair.id] = lp > 0 && rp > 0 ? readPair(samples, lp, rp, now, pair) : emptyRead(pair.id);
   }
-  const primary = reads.spyx.n7 >= reads.qqqx.n7 && reads.spyx.n7 >= reads.gldx.n7 ? reads.spyx : reads.qqqx.n7 >= reads.gldx.n7 ? reads.qqqx : reads.gldx;
+  const primary = reads["sol-spyx"] || reads[TRADE_PAIRS[0].id] || emptyRead();
 
   const empty = (action: PairAction, reason: string, read: RatioRead = primary): PairDecision => ({
     action,
@@ -239,6 +278,7 @@ export function decidePair(opts: {
     session,
     read,
     reads,
+    pairId: read.pairId,
   });
 
   if (book.killed) return empty("skip", "Stopped. Sitting.");
@@ -251,7 +291,6 @@ export function decidePair(opts: {
     (x) => pxOf(prices, x.id) > 0 && (prices.liquidities?.[x.id] ?? 0) >= MIN_XSTOCK_LIQUIDITY_USD,
   );
   if (!anyLiquid) return empty("skip", "Markets too thin to trade.");
-  if (cashOpenAuction(now)) return empty("skip", "US market just opened. Sitting 15 minutes.");
   if (opts.live && opts.quoteOk === false) return empty("skip", "Could not get a swap quote. Sitting.");
   if ((opts.impactPct || 0) > (auto.maxImpactPct || PAIR_MAX_IMPACT)) {
     return empty("skip", "This swap would move the price too much. Sitting.");
@@ -266,7 +305,7 @@ export function decidePair(opts: {
   if (dd >= stop && (h.solQty > 0 || anyX)) {
     return {
       action: "flatten",
-      reason: `Down ${(dd * 100).toFixed(1)}%. Selling everything back to cash and pausing.`,
+      reason: `Down ${(dd * 100).toFixed(1)}%. Selling everything back to USDC and pausing.`,
       clipUsd: equity,
       from: "both",
       to: "USDC",
@@ -284,16 +323,14 @@ export function decidePair(opts: {
   const allocated = allocatedUsd(book, auto, prices.sol.usd, opts.depositedSol || 0);
   const clipPct = clamp(auto.clipPct ?? 0.12, 0.05, 0.35);
   const clipUsd = Math.max(PAIR_MIN_CLIP_USD, Math.min(allocated * clipPct, allocated * 0.35));
+  const usdOf = (s: Sleeve) => sleeveUsd(h, s, prices);
+  const solUsd = usdOf("SOL");
+  const deployedRisk = SLEEVES.filter((s) => s !== "USDC").reduce((n, s) => n + usdOf(s), 0);
 
-  const solUsd = h.solQty * prices.sol.usd;
-  const xUsd = (id: XStockId) => qtyOf(h, id) * pxOf(prices, id);
-  const deployedX = XSTOCKS.reduce((s, x) => s + xUsd(x.id), 0);
-  const deployed = solUsd + deployedX;
-
-  if (deployed < PAIR_MIN_CLIP_USD && h.usdcQty >= PAIR_MIN_CLIP_USD * 2) {
+  if (deployedRisk < PAIR_MIN_CLIP_USD && h.usdcQty >= PAIR_MIN_CLIP_USD * 2) {
     return {
       action: "deploy",
-      reason: "Putting cash into SOL, S&P 500, Nasdaq-100, and gold — then waiting for a move.",
+      reason: "Splitting USDC across SOL, S&P 500, Nasdaq-100, and gold so she can trade any pair.",
       clipUsd: Math.min(h.usdcQty, allocated),
       from: "USDC",
       to: "SOL",
@@ -304,135 +341,103 @@ export function decidePair(opts: {
       session,
       read: primary,
       reads,
-      solPct: SOL_WEIGHT,
+      solPct: SLEEVE_WEIGHT,
     };
   }
 
-  const missing = XSTOCKS.filter((x) => {
-    const px = pxOf(prices, x.id);
-    const liq = prices.liquidities?.[x.id] ?? 0;
-    return px > 0 && liq >= MIN_XSTOCK_LIQUIDITY_USD && xUsd(x.id) < PAIR_MIN_CLIP_USD;
+  const missing = SLEEVES.filter((s) => {
+    if (s === "USDC") return usdOf(s) < PAIR_MIN_CLIP_USD;
+    if (s === "SOL") return usdOf(s) < PAIR_MIN_CLIP_USD && prices.sol.usd > 0;
+    const id = xstockIdOf(s);
+    if (!id) return false;
+    const liq = prices.liquidities?.[id] ?? 0;
+    return livePx(prices, s) > 0 && liq >= MIN_XSTOCK_LIQUIDITY_USD && usdOf(s) < PAIR_MIN_CLIP_USD;
   });
-  if (missing.length && deployed >= PAIR_MIN_CLIP_USD) {
+  if (missing.length && deployedRisk >= PAIR_MIN_CLIP_USD) {
     const target = missing[0];
-    if (h.usdcQty >= PAIR_MIN_CLIP_USD) {
+    const fat = SLEEVES.slice()
+      .filter((s) => s !== target)
+      .sort((a, b) => usdOf(b) - usdOf(a))[0];
+    if (target !== "USDC" && usdOf("USDC") >= PAIR_MIN_CLIP_USD) {
       return {
         action: "deploy",
-        reason: `Adding ${target.name} so she can trade more than one market.`,
+        reason: `Adding ${sleeveName(target)} so she can trade that pair too.`,
         clipUsd: Math.min(h.usdcQty, clipUsd),
         from: "USDC",
-        to: target.symbol,
-        asset: target.id,
-        z7: reads[target.id].z7,
-        z24: reads[target.id].z24,
-        ratio: reads[target.id].ratio,
+        to: target,
+        asset: xstockIdOf(target) || undefined,
+        z7: primary.z7,
+        z24: primary.z24,
+        ratio: primary.ratio,
         bandK,
         session,
-        read: reads[target.id],
+        read: primary,
         reads,
-        solPct: 0,
+        solPct: target === "SOL" ? 1 : 0,
       };
     }
-    if (solUsd >= PAIR_MIN_CLIP_USD * 2) {
+    if (fat && usdOf(fat) >= PAIR_MIN_CLIP_USD * 2) {
       return {
-        action: "sell_sol",
-        reason: `Buying a slice of ${target.name} so she can trade that market too.`,
-        clipUsd: Math.min(clipUsd, solUsd * 0.25),
-        from: "SOL",
-        to: target.symbol,
-        asset: target.id,
-        z7: reads[target.id].z7,
-        z24: reads[target.id].z24,
-        ratio: reads[target.id].ratio,
+        action: actionFor(fat, target),
+        reason: `Moving a slice into ${sleeveName(target)} so every pair is ready.`,
+        clipUsd: Math.min(clipUsd, usdOf(fat) * 0.25),
+        from: fat,
+        to: target,
+        asset: xstockIdOf(target) || xstockIdOf(fat) || undefined,
+        z7: primary.z7,
+        z24: primary.z24,
+        ratio: primary.ratio,
         bandK,
         session,
-        read: reads[target.id],
+        read: primary,
         reads,
       };
     }
   }
 
-  const minExt = Math.max(SOL_HISTORY.noiseFloorPct * 0.8, (study.solAtr15mPct || SOL_HISTORY.atr15mPct) * 0.8);
-  const tp = auto.takeProfitPct || 0.12;
-  const up = start > 0 ? (equity - start) / start : 0;
-  if (up >= tp && deployed > PAIR_MIN_CLIP_USD * 2) {
-    const mix = deployed > 0 ? solUsd / deployed : SOL_WEIGHT;
-    if (Math.abs(mix - SOL_WEIGHT) > 0.08) {
-      const sellSol = mix > SOL_WEIGHT;
-      const target = sellSol
-        ? XSTOCKS.slice().sort((a, b) => xUsd(a.id) - xUsd(b.id))[0]
-        : XSTOCKS.slice().sort((a, b) => xUsd(b.id) - xUsd(a.id))[0];
-      return {
-        action: "rebalance",
-        reason: `Up ${(up * 100).toFixed(1)}%. Trimming back toward a balanced mix.`,
-        clipUsd: Math.min(clipUsd, sellSol ? solUsd : xUsd(target.id)),
-        from: sellSol ? "SOL" : target.symbol,
-        to: sellSol ? target.symbol : "SOL",
-        asset: target.id,
-        z7: reads[target.id].z7,
-        z24: reads[target.id].z24,
-        ratio: reads[target.id].ratio,
-        bandK,
-        session,
-        read: reads[target.id],
-        reads,
-      };
-    }
-  }
+  const solExt = Math.max(SOL_HISTORY.noiseFloorPct * 0.8, (study.solAtr15mPct || SOL_HISTORY.atr15mPct) * 0.8);
+  const usdExt = 0.003;
 
   type Cand = PairDecision & { score: number };
   const cands: Cand[] = [];
-  for (const x of XSTOCKS) {
-    const px = pxOf(prices, x.id);
-    const liq = prices.liquidities?.[x.id] ?? prices.liquidityUsd;
-    const read = reads[x.id];
-    if (!(px > 0)) continue;
-    if (liq < MIN_XSTOCK_LIQUIDITY_USD) continue;
-    if (read.n7 < 12) continue;
-    const lastPair = h.lastClipAt?.[x.id] || 0;
+  for (const pair of TRADE_PAIRS) {
+    if (auction && involvesEquity(pair)) continue;
+    const read = reads[pair.id];
+    if (!read || read.n7 < 12) continue;
+    const lastPair = h.lastClipAt?.[pair.id] || 0;
     if (cooldownMs > 0 && lastPair && now - lastPair < cooldownMs) continue;
     if (cooldownMs > 0 && book.lastTradeAt && now - book.lastTradeAt < Math.min(90_000, cooldownMs)) continue;
+    const minExt = involvesSol(pair) ? solExt : usdExt;
     const ext7 = Math.abs(read.logR - read.mean7);
     if (ext7 < minExt) continue;
     const high = read.z7 > bandK && read.z24 > bandK * 0.45;
     const low = read.z7 < -bandK && read.z24 < -bandK * 0.45;
-    if (high) {
-      if (solUsd < PAIR_MIN_CLIP_USD) continue;
-      cands.push({
-        action: "sell_sol",
-        reason: `SOL looks expensive versus ${x.name}. Selling a slice of SOL for ${x.symbol}.`,
-        clipUsd: Math.min(clipUsd, solUsd),
-        from: "SOL",
-        to: x.symbol,
-        asset: x.id,
-        z7: read.z7,
-        z24: read.z24,
-        ratio: read.ratio,
-        bandK,
-        session,
-        read,
-        reads,
-        score: Math.abs(read.z7),
-      });
-    } else if (low) {
-      if (xUsd(x.id) < PAIR_MIN_CLIP_USD) continue;
-      cands.push({
-        action: "sell_xstock",
-        reason: `SOL looks cheap versus ${x.name}. Selling a slice of ${x.symbol} for SOL.`,
-        clipUsd: Math.min(clipUsd, xUsd(x.id)),
-        from: x.symbol,
-        to: "SOL",
-        asset: x.id,
-        z7: read.z7,
-        z24: read.z24,
-        ratio: read.ratio,
-        bandK,
-        session,
-        read,
-        reads,
-        score: Math.abs(read.z7),
-      });
-    }
+    if (!high && !low) continue;
+    const from = high ? pair.left : pair.right;
+    const to = high ? pair.right : pair.left;
+    const fromUsd = usdOf(from);
+    if (fromUsd < PAIR_MIN_CLIP_USD) continue;
+    const size = Math.min(clipUsd, fromUsd);
+    const why = high
+      ? `${sleeveName(pair.left)} looks expensive versus ${sleeveName(pair.right)}. Selling a slice of ${pair.left} for ${pair.right}.`
+      : `${sleeveName(pair.left)} looks cheap versus ${sleeveName(pair.right)}. Selling a slice of ${pair.right} for ${pair.left}.`;
+    cands.push({
+      action: actionFor(from, to),
+      reason: why,
+      clipUsd: size,
+      from,
+      to,
+      asset: xstockIdOf(from) || xstockIdOf(to) || undefined,
+      pairId: pair.id,
+      z7: read.z7,
+      z24: read.z24,
+      ratio: read.ratio,
+      bandK,
+      session,
+      read,
+      reads,
+      score: Math.abs(read.z7),
+    });
   }
   cands.sort((a, b) => b.score - a.score);
   if (cands[0]) {
@@ -440,12 +445,42 @@ export function decidePair(opts: {
     return best;
   }
 
+  const tp = auto.takeProfitPct || 0.12;
+  const up = start > 0 ? (equity - start) / start : 0;
+  const cooling = cooldownMs > 0 && book.lastTradeAt && now - book.lastTradeAt < cooldownMs;
+  if (!cooling && up >= tp && deployedRisk > PAIR_MIN_CLIP_USD * 2) {
+    const ranked = SLEEVES.slice().sort((a, b) => usdOf(b) / Math.max(1, equity) - usdOf(a) / Math.max(1, equity));
+    const fat = ranked[0];
+    const thin = ranked[ranked.length - 1];
+    const fatW = equity > 0 ? usdOf(fat) / equity : 0;
+    if (fat !== thin && fatW - SLEEVE_WEIGHT > 0.08 && usdOf(fat) >= PAIR_MIN_CLIP_USD) {
+      return {
+        action: "rebalance",
+        reason: `Up ${(up * 100).toFixed(1)}% in USDC. Trimming back toward an even mix.`,
+        clipUsd: Math.min(clipUsd, usdOf(fat)),
+        from: fat,
+        to: thin,
+        asset: xstockIdOf(thin) || xstockIdOf(fat) || undefined,
+        z7: primary.z7,
+        z24: primary.z24,
+        ratio: primary.ratio,
+        bandK,
+        session,
+        read: primary,
+        reads,
+      };
+    }
+  }
+
   if (cooldownMs > 0 && book.lastTradeAt && now - book.lastTradeAt < cooldownMs) {
     const left = Math.ceil((cooldownMs - (now - book.lastTradeAt)) / 60000);
     return empty("hold", `Waiting ${left}m before the next trade.`);
   }
 
-  const zParts = XSTOCKS.filter((x) => reads[x.id].n7 >= 12).map((x) => `${x.symbol} ${reads[x.id].z7.toFixed(1)}`);
+  const zParts = TRADE_PAIRS.filter((p) => (reads[p.id]?.n7 || 0) >= 12)
+    .sort((a, b) => Math.abs(reads[b.id].z7) - Math.abs(reads[a.id].z7))
+    .slice(0, 3)
+    .map((p) => `${p.left}/${p.right} ${reads[p.id].z7.toFixed(1)}`);
   if (!zParts.length) return empty("skip", "Need a bit more price history before she sizes a trade.");
   return empty("hold", `Nothing stretched enough yet. Sitting. ${zParts.join(" · ")}`);
 }

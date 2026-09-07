@@ -129,6 +129,8 @@ export async function POST(req: NextRequest) {
         session: "cash",
         read: stub,
         solPct: intent.solPct,
+        asset: intent.asset,
+        pairId: intent.pairId,
       };
       applyPairDecision(t.book, decision, prices, Date.now(), s.mind);
     }
