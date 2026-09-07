@@ -47,7 +47,7 @@ export function TickerCharts() {
         </div>
         <div className="flex shrink-0 items-center gap-2 font-mono text-[11px] tracking-[0.18em] text-violet">
           <span className={`h-2 w-2 rounded-full ${live ? "bg-acid shadow-[0_0_10px_#14F195]" : "bg-mute"}`} />
-          15m
+          LIVE 15m
         </div>
       </div>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">

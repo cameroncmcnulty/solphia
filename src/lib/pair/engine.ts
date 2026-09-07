@@ -25,7 +25,7 @@ import {
   type Sleeve,
   type TradePair,
 } from "./catalog";
-import { enrichStudy, reviewTrade } from "./policy";
+import { enrichStudy, reviewTrade, sampleCount, sleeveReturn } from "./policy";
 
 export type { Sleeve, TradePair } from "./catalog";
 export { SLEEVE_WEIGHT, TRADE_PAIRS };
@@ -435,6 +435,73 @@ export function decidePair(opts: {
       impactPct: opts.impactPct || 0,
       samples,
       now,
+    });
+    if (!verdict.ok) {
+      lastVeto = verdict.reason;
+      continue;
+    }
+    cands.push({
+      action: actionFor(from, to),
+      reason: verdict.reason,
+      clipUsd: Math.min(verdict.clipUsd, fromUsd),
+      from,
+      to,
+      asset: xstockIdOf(from) || xstockIdOf(to) || undefined,
+      pairId: pair.id,
+      z7: read.z7,
+      z24: read.z24,
+      ratio: read.ratio,
+      bandK,
+      session,
+      read,
+      reads,
+      score: verdict.score,
+    });
+  }
+
+  for (const pair of TRADE_PAIRS) {
+    if (auction && involvesEquity(pair)) continue;
+    const read = reads[pair.id];
+    if (!read) continue;
+    const lastPair = h.lastClipAt?.[pair.id] || 0;
+    if (cooldownMs > 0 && lastPair && now - lastPair < cooldownMs) continue;
+    if (cooldownMs > 0 && book.lastTradeAt && now - book.lastTradeAt < cooldownMs) continue;
+    const n15 = sampleCount(samples, now, 20 * 60 * 1000);
+    const left15 = sleeveReturn(samples, pair.left, now, 20 * 60 * 1000);
+    const right15 = sleeveReturn(samples, pair.right, now, 20 * 60 * 1000);
+    const left1h = sleeveReturn(samples, pair.left, now, 60 * 60 * 1000);
+    const right1h = sleeveReturn(samples, pair.right, now, 60 * 60 * 1000);
+    const rel15 = left15 - right15;
+    const rel1h = left1h - right1h;
+    const use15 = n15 >= 6 && Math.abs(rel15) >= Math.abs(rel1h);
+    const rel = use15 ? rel15 : rel1h;
+    let minPulse = involvesSol(pair) ? 0.007 : 0.008;
+    if (pair.id === "spyx-qqqx") minPulse = 0.012;
+    if (pair.id === "usdc-gldx") minPulse = 0.009;
+    if (Math.abs(rel) < minPulse) continue;
+    const high = rel > 0;
+    const from = high ? pair.left : pair.right;
+    const to = high ? pair.right : pair.left;
+    const fromUsd = usdOf(from);
+    if (fromUsd < PAIR_MIN_CLIP_USD) continue;
+    const verdict = reviewTrade({
+      pair,
+      from,
+      to,
+      high,
+      read,
+      ext7: Math.abs(rel),
+      session,
+      study,
+      equity,
+      fromUsd,
+      toUsd: usdOf(to),
+      clipUsd: Math.min(clipUsd, fromUsd),
+      impactPct: opts.impactPct || 0,
+      samples,
+      now,
+      mode: "pulse",
+      rel1h: rel,
     });
     if (!verdict.ok) {
       lastVeto = verdict.reason;

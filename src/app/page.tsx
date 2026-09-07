@@ -66,7 +66,7 @@ export default function Home() {
           <Feature t="S&P 500, Nasdaq, gold" d="Official SPYx, QQQx, and GLDx only. Fake tickers are refused." href="/trading" />
           <Feature
             t="Any pair that’s stretched"
-            d="USDC vs gold, SOL vs Nasdaq, S&P vs gold — if a pair meets her bar, she trades it. She stays split so she’s ready."
+            d="If SOL drops 0.7% while gold or the S&P holds, she can take that 1% gap on a short tape — not just the slow 7-day stretch."
             href="/trading"
           />
           <Feature t="PnL in USDC" d="The book, stops, and profit are marked in USDC so a SOL candle doesn’t fake the score." href="/trading" />

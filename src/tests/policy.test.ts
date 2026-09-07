@@ -113,6 +113,43 @@ describe("trade policy", () => {
     if (!v.ok) assert.match(v.reason, /safe-haven|Gold/i);
   });
 
+  it("takes a 1% short-tape gap (SOL dumped, gold held)", () => {
+    const tape: RatioSample[] = [];
+    const hour = 60_000;
+    for (let i = 40; i >= 0; i--) {
+      const drop = i <= 15 ? (15 - i) * 0.0008 : 0;
+      tape.push({
+        t: NOW - i * hour,
+        sol: 100 * (1 - drop),
+        spyx: 770,
+        qqqx: 480,
+        gldx: 310,
+      });
+    }
+    const gld = TRADE_PAIRS.find((p) => p.id === "sol-gldx")!;
+    const v = reviewTrade({
+      pair: gld,
+      from: "GLDx",
+      to: "SOL",
+      high: false,
+      read: read(-0.4, -0.2),
+      ext7: 0.012,
+      session: "cash",
+      study: DEFAULT_STUDY,
+      equity: 1000,
+      fromUsd: 200,
+      toUsd: 200,
+      clipUsd: 80,
+      impactPct: 0.002,
+      samples: tape,
+      now: NOW,
+      mode: "pulse",
+      rel1h: -0.012,
+    });
+    assert.equal(v.ok, true);
+    if (v.ok) assert.match(v.reason, /Short tape/i);
+  });
+
   it("skips a move that fees would eat", () => {
     const v = reviewTrade({
       pair,

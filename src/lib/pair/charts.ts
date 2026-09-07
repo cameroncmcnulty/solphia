@@ -84,8 +84,20 @@ async function yahoo(symbol: string): Promise<Candle[]> {
   return parseYahoo(r.data);
 }
 
-function pack(id: string, symbol: string, name: string, rows: Candle[]): TickerChart {
-  const candles = rows.slice(-64).map(trim);
+/** Keep the latest continuous session so overnight gaps don't look like two charts. */
+function latestSession(rows: Candle[], maxGapMs: number): Candle[] {
+  if (rows.length < 2) return rows;
+  const sorted = [...rows].sort((a, b) => a.t - b.t);
+  let end = sorted.length - 1;
+  let start = end;
+  while (start > 0 && sorted[start].t - sorted[start - 1].t <= maxGapMs) start -= 1;
+  const session = sorted.slice(start, end + 1);
+  return session.length >= 8 ? session : sorted.slice(-48);
+}
+
+function pack(id: string, symbol: string, name: string, rows: Candle[], sessionOnly: boolean): TickerChart {
+  const src = sessionOnly ? latestSession(rows, 45 * 60 * 1000) : rows.slice(-64);
+  const candles = src.slice(-64).map(trim);
   const last = candles.length ? candles[candles.length - 1].c : 0;
   return { id, symbol, name, candles, last, changePct: changePct(candles) };
 }
@@ -94,10 +106,10 @@ export async function loadTickerCharts(): Promise<TickerChart[]> {
   if (cache && Date.now() - cache.at < TTL) return cache.tickers;
   const [sol, spy, qqq, gld] = await Promise.all([binanceSol(), yahoo("SPY"), yahoo("QQQ"), yahoo("GLD")]);
   const tickers = [
-    pack("sol", "SOL", "Solana", sol),
-    pack("spyx", "SPYx", "S&P 500", spy),
-    pack("qqqx", "QQQx", "Nasdaq-100", qqq),
-    pack("gldx", "GLDx", "Gold", gld),
+    pack("sol", "SOL", "Solana", sol, false),
+    pack("spyx", "SPYx", "S&P 500", spy, true),
+    pack("qqqx", "QQQx", "Nasdaq-100", qqq, true),
+    pack("gldx", "GLDx", "Gold", gld, true),
   ];
   if (tickers.some((t) => t.candles.length > 8)) cache = { at: Date.now(), tickers };
   return tickers;
