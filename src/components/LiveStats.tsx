@@ -4,13 +4,18 @@ import { useMarket } from "@/lib/hooks";
 
 export function LiveStats({ compact = false }: { compact?: boolean }) {
   const { data, loading } = useMarket(8000);
-  const paper = data?.paper;
+  const paper = data?.paper || {
+    equityUsd: 1000,
+    startingUsd: 1000,
+    pnlPct: 0,
+    trades: 0,
+  };
   const pair = data?.pair;
   const ticking = Boolean(data?.lastTickAt) && Date.now() - data.lastTickAt < 60_000;
   const pnlUsd = paper ? paper.equityUsd - paper.startingUsd : 0;
   const pnlPct = paper?.pnlPct ?? (paper?.startingUsd ? pnlUsd / paper.startingUsd : 0);
   const items = [
-    { k: "Status", v: loading ? "…" : paper ? "PAPER" : "…", sub: ticking ? "running" : "warming up" },
+    { k: "Status", v: loading && !data?.paper ? "…" : "PAPER", sub: ticking || data?.paper ? "running" : "warming up" },
     {
       k: "PnL",
       v: paper ? `${pnlPct >= 0 ? "+" : ""}${(pnlPct * 100).toFixed(1)}%` : "—",

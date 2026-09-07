@@ -29,6 +29,7 @@ export type PolicyIn = {
   /** swing = 7d/24h band. pulse = 15m–1h relative move (the 1% tape). */
   mode?: "swing" | "pulse";
   rel1h?: number;
+  horizon?: string;
 };
 
 export type PolicyOut =
@@ -190,9 +191,10 @@ export function reviewTrade(p: PolicyIn): PolicyOut {
   if (pulse) {
     const leftN = pair.leftName;
     const rightN = pair.rightName;
-    const why = `Short tape: ${leftN} vs ${rightN} moved ${(ext7 * 100).toFixed(2)}% apart in the last hour. ${
+    const hz = p.horizon === "m1" ? "1m" : p.horizon === "m5" ? "5m" : p.horizon === "m15" ? "15m" : "1h";
+    const why = `Short tape (${hz}): ${leftN} vs ${rightN} moved ${(ext7 * 100).toFixed(2)}% apart. ${
       high ? `${leftN} ran ahead` : `${leftN} lagged`
-    }. Selling a slice of ${from} for ${to} — fees are ~${(rt * 100).toFixed(2)}%, so this can clear 1%.`;
+    }. Selling a slice of ${from} for ${to} — fees are ~${(rt * 100).toFixed(2)}%, so this can clear ~1%.`;
     return { ok: true, score, clipUsd: Math.max(15, clip), reason: why };
   }
 

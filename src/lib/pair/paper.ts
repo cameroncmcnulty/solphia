@@ -411,6 +411,7 @@ export function tickPairBook(opts: {
   impactPct?: number;
   quoteOk?: boolean;
   live?: boolean;
+  shortTape?: import("./shortTape").ShortTape;
 }): { decision: PairDecision; fills: PaperFill[] } {
   const losses = opts.book.lossCount || 0;
   const decision = decidePair({
@@ -425,6 +426,7 @@ export function tickPairBook(opts: {
     impactPct: opts.impactPct,
     quoteOk: opts.quoteOk,
     live: opts.live || (opts.auto.mode === "live" && LIVE_TRADING),
+    shortTape: opts.shortTape,
   });
   const live = opts.live || (opts.auto.mode === "live" && LIVE_TRADING);
   const actionable =

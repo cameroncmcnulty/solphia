@@ -7,6 +7,7 @@ import { loadPairPrices } from "./pair/prices";
 import { publicPair, type PairDeskPublic } from "./pair/public";
 import { quoteSolSpyx } from "./pair/jupiter";
 import { DEFAULT_STUDY } from "./pair/knowledge";
+import { loadShortTape } from "./pair/shortTape";
 import { loadState, saveState } from "./store";
 import type { FeedHealth, PaperBook } from "./types";
 
@@ -27,33 +28,60 @@ export function lastPairPrices() {
   return lastPrices;
 }
 
-export function publicBook(book: PaperBook) {
+export function publicBook(book: PaperBook | null | undefined) {
+  const b = book || emptyFallback();
+  const positions = Array.isArray(b.positions) ? b.positions : [];
+  const fills = Array.isArray(b.fills) ? b.fills : [];
+  const start = Number(b.startingUsd) || 1000;
+  const equity = Number.isFinite(b.equityUsd) ? b.equityUsd : start;
   return {
-    startingUsd: book.startingUsd,
-    startedAt: book.startedAt,
-    cashUsd: round2(book.cashUsd),
-    equityUsd: round2(book.equityUsd),
-    realizedPnlUsd: round2(book.realizedPnlUsd),
-    unrealizedUsd: round2(book.positions.reduce((s, p) => s + p.unrealizedUsd, 0)),
-    pnlPct: book.startingUsd ? (book.equityUsd - book.startingUsd) / book.startingUsd : 0,
-    haltedUntil: book.haltedUntil,
-    haltReason: book.haltReason,
-    feesPaidUsd: round2(book.feesPaidUsd),
-    slippagePaidUsd: round2(book.slippagePaidUsd),
-    winCount: book.winCount,
-    lossCount: book.lossCount,
-    open: book.positions.length,
-    trades: book.fills.filter((f) => f.side === "sell").length,
-    positions: book.positions,
-    fills: book.fills.slice(-80).reverse(),
-    curve: book.curve.slice(-400),
-    skipped: book.skipped || 0,
-    lastAction: book.lastAction,
-    lastSkipReason: book.lastSkipReason,
-    killed: Boolean(book.killed),
-    pair: book.pair,
-    tape: (book.tape || []).slice(-80).reverse(),
-    pendingIntent: book.pendingIntent || null,
+    startingUsd: start,
+    startedAt: b.startedAt || Date.now(),
+    cashUsd: round2(Number(b.cashUsd) || 0),
+    equityUsd: round2(equity),
+    realizedPnlUsd: round2(Number(b.realizedPnlUsd) || 0),
+    unrealizedUsd: round2(positions.reduce((s, p) => s + (Number(p.unrealizedUsd) || 0), 0)),
+    pnlPct: start ? (equity - start) / start : 0,
+    haltedUntil: b.haltedUntil,
+    haltReason: b.haltReason,
+    feesPaidUsd: round2(Number(b.feesPaidUsd) || 0),
+    slippagePaidUsd: round2(Number(b.slippagePaidUsd) || 0),
+    winCount: b.winCount || 0,
+    lossCount: b.lossCount || 0,
+    open: positions.length,
+    trades: fills.filter((f) => f.side === "sell").length,
+    positions,
+    fills: fills.slice(-80).reverse(),
+    curve: Array.isArray(b.curve) ? b.curve.slice(-400) : [],
+    skipped: b.skipped || 0,
+    lastAction: b.lastAction,
+    lastSkipReason: b.lastSkipReason,
+    killed: Boolean(b.killed),
+    pair: b.pair || { solQty: 0, spyxQty: 0, qqqxQty: 0, gldxQty: 0, usdcQty: start },
+    tape: (b.tape || []).slice(-80).reverse(),
+    pendingIntent: b.pendingIntent || null,
+  };
+}
+
+function emptyFallback(): PaperBook {
+  const now = Date.now();
+  return {
+    startingUsd: 1000,
+    startedAt: now,
+    cashUsd: 1000,
+    equityUsd: 1000,
+    realizedPnlUsd: 0,
+    feesPaidUsd: 0,
+    slippagePaidUsd: 0,
+    winCount: 0,
+    lossCount: 0,
+    positions: [],
+    fills: [],
+    curve: [{ t: now, equity: 1000 }],
+    skipped: 0,
+    killed: false,
+    pair: { solQty: 0, spyxQty: 0, qqqxQty: 0, gldxQty: 0, usdcQty: 1000 },
+    tape: [],
   };
 }
 
@@ -138,18 +166,28 @@ export async function runMarketTick(): Promise<{
 
     let impactPct = 0;
     let quoteOk: boolean | undefined;
+    let shortTape;
     try {
-      const q = await quoteSolSpyx(0.1, 50);
-      quoteOk = q.ok ? true : undefined;
-      if (q.ok) impactPct = q.impactPct;
-      health.push({
-        source: "jupiter",
-        ok: q.ok,
-        ms: 0,
-        count: q.ok ? 1 : 0,
-        error: q.ok ? undefined : q.reason,
-        at: now,
-      });
+      const [q, tape] = await Promise.all([
+        Promise.race([
+          quoteSolSpyx(0.1, 50),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), 2500)),
+        ]),
+        loadShortTape().catch(() => null),
+      ]);
+      shortTape = tape || undefined;
+      if (q && "ok" in q) {
+        quoteOk = q.ok ? true : undefined;
+        if (q.ok) impactPct = q.impactPct;
+        health.push({
+          source: "jupiter",
+          ok: q.ok,
+          ms: 0,
+          count: q.ok ? 1 : 0,
+          error: q.ok ? undefined : q.reason,
+          at: now,
+        });
+      }
     } catch (e) {
       quoteOk = undefined;
       health.push({
@@ -172,6 +210,7 @@ export async function runMarketTick(): Promise<{
       now,
       mind: state.mind,
       impactPct,
+      shortTape,
     });
 
     let entries = demo.fills.filter((f) => f.side === "buy").length;
@@ -209,6 +248,7 @@ export async function runMarketTick(): Promise<{
         quoteOk: live ? quoteOk : undefined,
         impactPct,
         live,
+        shortTape,
       });
       entries += t.fills.filter((f) => f.side === "buy").length;
       exits += t.fills.filter((f) => f.side === "sell").length;

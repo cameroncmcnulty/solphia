@@ -25,7 +25,8 @@ import {
   type Sleeve,
   type TradePair,
 } from "./catalog";
-import { enrichStudy, reviewTrade, sampleCount, sleeveReturn } from "./policy";
+import { enrichStudy, reviewTrade, sleeveReturn } from "./policy";
+import { relAt, type Horizon, type ShortTape } from "./shortTape";
 
 export type { Sleeve, TradePair } from "./catalog";
 export { SLEEVE_WEIGHT, TRADE_PAIRS };
@@ -250,6 +251,7 @@ export function decidePair(opts: {
   impactPct?: number;
   quoteOk?: boolean;
   live?: boolean;
+  shortTape?: ShortTape;
 }): PairDecision {
   const { auto, book, prices, samples, now } = opts;
   const study = enrichStudy(opts.study, opts.samples, opts.now);
@@ -466,18 +468,31 @@ export function decidePair(opts: {
     const lastPair = h.lastClipAt?.[pair.id] || 0;
     if (cooldownMs > 0 && lastPair && now - lastPair < cooldownMs) continue;
     if (cooldownMs > 0 && book.lastTradeAt && now - book.lastTradeAt < cooldownMs) continue;
-    const n15 = sampleCount(samples, now, 20 * 60 * 1000);
-    const left15 = sleeveReturn(samples, pair.left, now, 20 * 60 * 1000);
-    const right15 = sleeveReturn(samples, pair.right, now, 20 * 60 * 1000);
-    const left1h = sleeveReturn(samples, pair.left, now, 60 * 60 * 1000);
-    const right1h = sleeveReturn(samples, pair.right, now, 60 * 60 * 1000);
-    const rel15 = left15 - right15;
-    const rel1h = left1h - right1h;
-    const use15 = n15 >= 6 && Math.abs(rel15) >= Math.abs(rel1h);
-    const rel = use15 ? rel15 : rel1h;
-    let minPulse = involvesSol(pair) ? 0.007 : 0.008;
-    if (pair.id === "spyx-qqqx") minPulse = 0.012;
-    if (pair.id === "usdc-gldx") minPulse = 0.009;
+    const tape = opts.shortTape;
+    const windows: { h: Horizon; rel: number; min: number }[] = [
+      { h: "m1", rel: relAt(tape, pair.left, pair.right, "m1"), min: 0.006 },
+      { h: "m5", rel: relAt(tape, pair.left, pair.right, "m5"), min: 0.007 },
+      { h: "m15", rel: relAt(tape, pair.left, pair.right, "m15"), min: 0.007 },
+      {
+        h: "h1",
+        rel: sleeveReturn(samples, pair.left, now, 60 * 60 * 1000) - sleeveReturn(samples, pair.right, now, 60 * 60 * 1000),
+        min: 0.008,
+      },
+    ];
+    if (pair.id === "spyx-qqqx") {
+      for (const w of windows) w.min = 0.012;
+    }
+    if (pair.id === "usdc-gldx") {
+      for (const w of windows) w.min = Math.max(w.min, 0.009);
+    }
+    let bestWin = windows[0];
+    for (const w of windows) {
+      if (w.h === "m1" && Math.abs(w.rel) > 0.02) continue;
+      if (Math.abs(w.rel) < w.min) continue;
+      if (Math.abs(w.rel) > Math.abs(bestWin.rel)) bestWin = w;
+    }
+    const rel = bestWin.rel;
+    const minPulse = bestWin.min;
     if (Math.abs(rel) < minPulse) continue;
     const high = rel > 0;
     const from = high ? pair.left : pair.right;
@@ -502,6 +517,7 @@ export function decidePair(opts: {
       now,
       mode: "pulse",
       rel1h: rel,
+      horizon: bestWin.h,
     });
     if (!verdict.ok) {
       lastVeto = verdict.reason;

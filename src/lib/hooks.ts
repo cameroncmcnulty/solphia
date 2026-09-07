@@ -8,14 +8,20 @@ export function useMarket(pollMs = 15000) {
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 12_000);
     try {
-      const r = await fetch("/api/feed", { cache: "no-store" });
+      const r = await fetch("/api/feed", { cache: "no-store", signal: ctrl.signal });
       if (!r.ok) throw new Error("feed " + r.status);
-      setData(await r.json());
-      setErr(null);
+      const j = await r.json();
+      if (j && (j.paper || j.pair)) {
+        setData(j);
+        setErr(null);
+      }
     } catch (e) {
       setErr(e instanceof Error ? e.message : "feed failed");
     } finally {
+      clearTimeout(t);
       setLoading(false);
     }
   }, []);

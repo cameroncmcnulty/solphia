@@ -15,23 +15,32 @@ export async function GET(req: NextRequest) {
   const state = loadState();
   const stale = Date.now() - (state.lastTickAt || 0) > 8_000;
   if (stale) {
-    const tick = await runMarketTick();
-    return NextResponse.json({
-      paper: tick.paper,
-      health: tick.health,
-      solUsd: tick.solUsd,
-      spyxUsd: tick.spyxUsd,
-      qqqxUsd: tick.qqqxUsd,
-      gldxUsd: tick.gldxUsd,
-      spyxMint: spyxMint(),
-      qqqxMint: qqqxMint(),
-      gldxMint: gldxMint(),
-      mind: publicMind(loadState().mind),
-      lastTickAt: Date.now(),
-      pair: tick.pair,
-      liveTrading: tick.liveTrading,
-      treasury: TREASURY,
-    });
+    try {
+      const tick = await Promise.race([
+        runMarketTick(),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 14_000)),
+      ]);
+      if (tick) {
+        return NextResponse.json({
+          paper: tick.paper,
+          health: tick.health,
+          solUsd: tick.solUsd,
+          spyxUsd: tick.spyxUsd,
+          qqqxUsd: tick.qqqxUsd,
+          gldxUsd: tick.gldxUsd,
+          spyxMint: spyxMint(),
+          qqqxMint: qqqxMint(),
+          gldxMint: gldxMint(),
+          mind: publicMind(loadState().mind),
+          lastTickAt: Date.now(),
+          pair: tick.pair,
+          liveTrading: tick.liveTrading,
+          treasury: TREASURY,
+        });
+      }
+    } catch {
+      /* fall through to last saved book */
+    }
   }
   const cached = lastPairDesk() || state.lastPair || null;
   const px = lastPairPrices();

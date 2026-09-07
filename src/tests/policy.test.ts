@@ -145,6 +145,7 @@ describe("trade policy", () => {
       now: NOW,
       mode: "pulse",
       rel1h: -0.012,
+      horizon: "m5",
     });
     assert.equal(v.ok, true);
     if (v.ok) assert.match(v.reason, /Short tape/i);
