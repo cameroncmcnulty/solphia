@@ -18,7 +18,13 @@ export async function GET(req: NextRequest) {
   const owner = req.nextUrl.searchParams.get("owner") || "";
   if (!isSolanaAddress(owner)) return NextResponse.json({ error: "bad_owner" }, { status: 400 });
   const state = loadState();
-  const trader = state.traders[owner] || emptyTrader(owner);
+  let trader = state.traders[owner];
+  if (!trader) {
+    trader = emptyTrader(owner);
+    await mutateState((s) => {
+      if (!s.traders[owner]) s.traders[owner] = trader;
+    });
+  }
   const auto = lockedAuto({
     ...trader.auto,
     mode: trader.auto.mode,

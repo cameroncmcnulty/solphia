@@ -37,7 +37,7 @@ describe("auto bankroll", () => {
     assert.equal(DEFAULT_AUTO.armed, true);
     assert.equal(DEFAULT_AUTO.mode, "paper");
     assert.equal(DEFAULT_AUTO.armedAt, undefined);
-    assert.equal(DEFAULT_AUTO.style, "mean_revert");
+    assert.equal(DEFAULT_AUTO.style, "scalp");
     assert.equal(DEFAULT_AUTO.leverage, 1);
     assert.equal(DEFAULT_AUTO.cooldownMin, 2);
     assert.equal(DEFAULT_AUTO.band, "normal");

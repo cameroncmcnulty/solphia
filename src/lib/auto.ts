@@ -6,7 +6,7 @@ export const DEFAULT_AUTO: AutoSettings = {
   armed: true,
   mode: "paper",
   allocationPct: 0.8,
-  style: "mean_revert",
+  style: "scalp",
   band: "normal",
   clipPct: 0.12,
   cooldownMin: 2,
@@ -70,6 +70,11 @@ export function bankrollUsd(depositedSol: number, solUsd: number): number {
 
 export function maybeResizeBook(book: PaperBook, targetUsd: number): PaperBook {
   if (book.fills.length > 0 || book.positions.length > 0) return book;
+  if ((book.tape || []).length > 0) return book;
+  if (book.pairLearn && Object.keys(book.pairLearn).length) return book;
+  if (book.startedAt && Date.now() - book.startedAt > 60_000) return book;
+  const h = book.pair;
+  if (h && ((h.solQty || 0) > 0 || (h.spyxQty || 0) > 0 || (h.qqqxQty || 0) > 0 || (h.gldxQty || 0) > 0)) return book;
   if (Math.abs(book.startingUsd - targetUsd) < 1) return book;
   return emptyBook(targetUsd);
 }

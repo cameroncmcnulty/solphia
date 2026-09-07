@@ -132,3 +132,111 @@ export function lastSwingHigh(candles: Candle[]): number {
   if (highs.length) return highs[highs.length - 1].price;
   return Math.max(...candles.slice(-8).map((c) => c.h));
 }
+
+export function lastOf(xs: number[], fallback = 0): number {
+  return xs.length ? xs[xs.length - 1] : fallback;
+}
+
+/** Rolling VWAP. Uses volume when present, else equal weight. */
+export function vwap(candles: Candle[]): number {
+  if (!candles.length) return 0;
+  let pv = 0;
+  let vol = 0;
+  for (const c of candles) {
+    const tp = (c.h + c.l + c.c) / 3;
+    const v = c.v > 0 ? c.v : 1;
+    pv += tp * v;
+    vol += v;
+  }
+  return vol > 0 ? pv / vol : candles[candles.length - 1].c;
+}
+
+/** Wilder ADX. Strength of trend, not direction. */
+export function adx(candles: Candle[], period = 14): { adx: number; plusDi: number; minusDi: number } {
+  const empty = { adx: 0, plusDi: 0, minusDi: 0 };
+  if (candles.length < period + 2) return empty;
+  const plus: number[] = [];
+  const minus: number[] = [];
+  const tr: number[] = [];
+  for (let i = 1; i < candles.length; i++) {
+    const up = candles[i].h - candles[i - 1].h;
+    const down = candles[i - 1].l - candles[i].l;
+    plus.push(up > down && up > 0 ? up : 0);
+    minus.push(down > up && down > 0 ? down : 0);
+    tr.push(trueRange(candles[i], candles[i - 1]));
+  }
+  const smooth = (xs: number[]) => {
+    let s = 0;
+    for (let i = 0; i < period && i < xs.length; i++) s += xs[i];
+    const out: number[] = [];
+    out[period - 1] = s;
+    for (let i = period; i < xs.length; i++) {
+      s = s - s / period + xs[i];
+      out[i] = s;
+    }
+    return out;
+  };
+  const sp = smooth(plus);
+  const sm = smooth(minus);
+  const st = smooth(tr);
+  const dx: number[] = [];
+  for (let i = period - 1; i < st.length; i++) {
+    const pdi = st[i] ? (100 * sp[i]) / st[i] : 0;
+    const mdi = st[i] ? (100 * sm[i]) / st[i] : 0;
+    const den = pdi + mdi;
+    dx.push(den ? (100 * Math.abs(pdi - mdi)) / den : 0);
+  }
+  if (dx.length < period) return empty;
+  let adxN = dx.slice(0, period).reduce((a, b) => a + b, 0) / period;
+  for (let i = period; i < dx.length; i++) adxN = (adxN * (period - 1) + dx[i]) / period;
+  const last = candles.length - 2;
+  const pdi = st[last] ? (100 * sp[last]) / st[last] : 0;
+  const mdi = st[last] ? (100 * sm[last]) / st[last] : 0;
+  return { adx: adxN, plusDi: pdi, minusDi: mdi };
+}
+
+/** ATR SuperTrend. dir 1 = bull, -1 = bear. */
+export function supertrend(candles: Candle[], period = 10, mult = 3): { line: number; dir: 1 | -1 } {
+  const a = atr(candles, period);
+  if (candles.length < period + 2) {
+    const c = candles[candles.length - 1]?.c || 0;
+    return { line: c, dir: 1 };
+  }
+  let upper = 0;
+  let lower = 0;
+  let dir: 1 | -1 = 1;
+  let line = candles[period].c;
+  for (let i = period; i < candles.length; i++) {
+    const hl2 = (candles[i].h + candles[i].l) / 2;
+    const atrN = a[i] || a[i - 1] || candles[i].c * 0.01;
+    let bu = hl2 + mult * atrN;
+    let bl = hl2 - mult * atrN;
+    if (i > period) {
+      if (bl < lower && candles[i - 1].c > lower) bl = lower;
+      if (bu > upper && candles[i - 1].c < upper) bu = upper;
+    }
+    upper = bu;
+    lower = bl;
+    if (dir === 1 && candles[i].c < lower) dir = -1;
+    else if (dir === -1 && candles[i].c > upper) dir = 1;
+    line = dir === 1 ? lower : upper;
+  }
+  return { line, dir };
+}
+
+export function pack4h(hourly: Candle[]): Candle[] {
+  const map = new Map<number, Candle>();
+  const ms = 4 * 3_600_000;
+  for (const c of hourly) {
+    const b = Math.floor(c.t / ms) * ms;
+    const prev = map.get(b);
+    if (!prev) map.set(b, { t: b, o: c.o, h: c.h, l: c.l, c: c.c, v: c.v });
+    else {
+      prev.h = Math.max(prev.h, c.h);
+      prev.l = Math.min(prev.l, c.l);
+      prev.c = c.c;
+      prev.v += c.v;
+    }
+  }
+  return [...map.values()].sort((a, b) => a.t - b.t);
+}

@@ -20,6 +20,9 @@ import type { PairPrices } from "../lib/pair/prices";
 import type { RatioSample } from "../lib/pair/ratio";
 import type { AutoSettings } from "../lib/types";
 import { nextTrail } from "../lib/pair/signals";
+import { emptyFrames } from "../lib/pair/frames";
+import type { Candle } from "../lib/sol/indicators";
+import type { ScalpFrames } from "../lib/pair/frames";
 
 const CASH = Date.UTC(2026, 8, 3, 18, 0, 0); // Thu 14:00 ET
 
@@ -97,7 +100,70 @@ function uptrend(sol = 100, spyx = 770, n = 64, extra?: { qqqx?: number; gldx?: 
   return out;
 }
 
-/** Last hour SOL is ~1.2% cheap. The 0.8–1.5% clip she is built for. */
+function lastClose(cs: Candle[]): number {
+  return cs[cs.length - 1]?.c || 0;
+}
+
+function climb(n: number, px: number, t0: number, dt: number, step: number): Candle[] {
+  const out: Candle[] = [];
+  for (let i = 0; i < n; i++) {
+    const o = px;
+    const c = px * (1 + step);
+    out.push({ t: t0 + i * dt, o, h: Math.max(o, c) * 1.0012, l: Math.min(o, c) * 0.9988, c, v: 120 });
+    px = c;
+  }
+  return out;
+}
+
+function reclaim(cs: Candle[], dip = 0.007): Candle[] {
+  const out = cs.slice();
+  const dt = cs.length > 1 ? cs[1].t - cs[0].t : 15 * 60_000;
+  let t = out[out.length - 1].t;
+  let px = out[out.length - 1].c;
+  for (let i = 0; i < 3; i++) {
+    const o = px;
+    const c = px * (1 - dip / 3);
+    t += dt;
+    out.push({ t, o, h: o, l: Math.min(o, c) * 0.999, c, v: 90 });
+    px = c;
+  }
+  const o = px;
+  const c = o * 1.004;
+  t += dt;
+  out.push({ t, o, h: c, l: o, c, v: 160 });
+  return out;
+}
+
+function flatTape(n: number, px: number, t0: number, dt: number): Candle[] {
+  return climb(n, px, t0, dt, 0);
+}
+
+function spyPullbackFrames(now: number): ScalpFrames {
+  const t15 = now - 90 * 15 * 60_000;
+  const t5 = now - 90 * 5 * 60_000;
+  const t4 = now - 50 * 4 * 3_600_000;
+  const td = now - 80 * 86_400_000;
+  const spy = {
+    m5: reclaim(climb(70, 420, t5, 5 * 60_000, 0.0009)),
+    m15: reclaim(climb(70, 410, t15, 15 * 60_000, 0.0022)),
+    h4: climb(40, 380, t4, 4 * 3_600_000, 0.005),
+    d1: climb(60, 320, td, 86_400_000, 0.007),
+  };
+  const quiet = (px: number) => ({
+    m5: flatTape(40, px, t5, 5 * 60_000),
+    m15: flatTape(40, px, t15, 15 * 60_000),
+    h4: flatTape(30, px, t4, 4 * 3_600_000),
+    d1: climb(40, px * 0.98, td, 86_400_000, 0.0004),
+  });
+  const frames = emptyFrames();
+  frames.SPYx = spy;
+  frames.QQQx = quiet(480);
+  frames.GLDx = quiet(310);
+  frames.SOL = quiet(100);
+  return frames;
+}
+
+/** Last hour SOL is ~1.2% cheap — not enough without Daily/4H + 15m reclaim. */
 function dipSol(sol = 100, spyx = 770, n = 48, extra?: { qqqx?: number; gldx?: number }): RatioSample[] {
   const hour = 3_600_000;
   const q0 = extra?.qqqx ?? 480;
@@ -131,7 +197,7 @@ describe("USDC-home engine", () => {
     assert.match(d.reason, /USDC/i);
   });
 
-  it("buys SOL from USDC on a ~1.2% dip — the 0.8–1.5% clip", () => {
+  it("does not buy SOL just because RSI looks cheap", () => {
     const book = emptyBook(1000);
     const d = decidePair({
       auto: auto({ cooldownMin: 0, stopPct: 0.9 }),
@@ -141,11 +207,30 @@ describe("USDC-home engine", () => {
       study: DEFAULT_STUDY,
       now: CASH,
     });
+    assert.equal(d.action, "hold");
+    assert.match(d.reason, /USDC/i);
+  });
+
+  it("buys the sleeve with a 15m reclaim that agrees with Daily/4H — not only SOL", () => {
+    const book = emptyBook(1000);
+    const frames = spyPullbackFrames(CASH);
+    const d = decidePair({
+      auto: auto({ cooldownMin: 0, stopPct: 0.9 }),
+      book,
+      prices: px(100, lastClose(frames.SPYx.m15), 500_000, false, {
+        qqqx: lastClose(frames.QQQx.m15),
+        gldx: lastClose(frames.GLDx.m15),
+      }),
+      samples: hist(100, lastClose(frames.SPYx.m15)),
+      study: DEFAULT_STUDY,
+      now: CASH,
+      frames,
+    });
     assert.equal(d.action, "swap");
     assert.equal(d.from, "USDC");
-    assert.equal(d.to, "SOL");
+    assert.equal(d.to, "SPYx");
     assert.ok(d.clipUsd > 0);
-    assert.match(d.reason, /Buy SOL/i);
+    assert.match(d.reason, /Buy SPYx/i);
   });
 
   it("trails a winner and sells back to USDC when the stop is hit", () => {
@@ -366,7 +451,7 @@ describe("paper fills + kill", () => {
   it("v1 leverage is always 1 and cooldown is 2 minutes", () => {
     assert.equal(DEFAULT_AUTO.leverage, 1);
     assert.equal(DEFAULT_AUTO.mode, "paper");
-    assert.equal(DEFAULT_AUTO.style, "mean_revert");
+    assert.equal(DEFAULT_AUTO.style, "scalp");
     assert.equal(DEFAULT_AUTO.cooldownMin, 2);
     assert.equal(DEFAULT_AUTO.band, "normal");
   });

@@ -52,11 +52,11 @@ export const FAQS: { q: string; a: string }[] = [
   },
   {
     q: "What does she trade?",
-    a: "She sits in USDC. She buys official SPYx (S&P 500), QQQx (Nasdaq-100), GLDx (gold), or SOL when a sleeve is ~0.8% cheap. Once fees are covered she trails the stop up with every new high and only sells when that stop is hit — so a 1% clip can become 2%+. SOL runs 24/7. Nothing else. No memecoins, no copy trading, no sniping.",
+    a: "She sits in USDC and scalps official SPYx (S&P 500), QQQx (Nasdaq-100), GLDx (gold), or SOL — whichever prints a 5m/15m setup that agrees with the Daily and 4H trend. Once fees are covered she trails the stop up and only sells when it hits. Nothing else. No memecoins, no copy trading, no sniping.",
   },
   {
     q: "How does she decide?",
-    a: "Mean-revert clips, not trend-chasing. She buys a 0.5–2.5% dip, skips crash knives and dead tape, then walks the stop up under the peak for the life of the trade. No hard take-profit — the trail is the exit. SOL is the 24/7 sleeve. Equities sit more on weekends. She learns from closed trades. PnL stays in USDC.",
+    a: "Multi-timeframe scalp: Daily/4H bias, then 5m/15m EMA-VWAP reclaim or a range fade in discount, with SuperTrend and ADX as regime filters. She will not buy just because RSI looks low, and she will not prefer SOL over S&P, Nasdaq, or gold. Trail is the exit. Equities sit more on weekends. PnL stays in USDC.",
   },
   {
     q: "Are these the same as the New York market?",

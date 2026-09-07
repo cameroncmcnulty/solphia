@@ -430,6 +430,7 @@ export function tickPairBook(opts: {
   quoteOk?: boolean;
   live?: boolean;
   shortTape?: import("./shortTape").ShortTape;
+  frames?: import("./frames").ScalpFrames;
 }): { decision: PairDecision; fills: PaperFill[] } {
   const losses = opts.book.lossCount || 0;
   const decision = decidePair({
@@ -445,6 +446,7 @@ export function tickPairBook(opts: {
     quoteOk: opts.quoteOk,
     live: opts.live || (opts.auto.mode === "live" && liveTradingEnabled()),
     shortTape: opts.shortTape,
+    frames: opts.frames,
   });
   const live = opts.live || (opts.auto.mode === "live" && liveTradingEnabled());
   const actionable =

@@ -19,6 +19,7 @@ export default function AdminPage() {
   const [copied, setCopied] = useState("");
   const [saved, setSaved] = useState("");
   const [hint, setHint] = useState("");
+  const [pnlWin, setPnlWin] = useState<"h24" | "d7" | "d30">("h24");
   const owner = useOwner();
 
   async function login() {
@@ -182,6 +183,17 @@ export default function AdminPage() {
             {ticking ? "tick live" : "tick stale"} · {tickAge}
           </span>
           <span className="rounded-full border border-line px-3 py-1.5 font-mono text-[11px] text-mute">{session}</span>
+          <button
+            type="button"
+            onClick={() => {
+              if (!confirm("Restart the paper session? Open paper books go back to USDC. Live books are left alone.")) return;
+              patch({ resetPaper: true });
+            }}
+            disabled={busy}
+            className="rounded-full border border-blood/40 px-4 py-2 text-xs text-blood"
+          >
+            Reset paper session
+          </button>
           <button type="button" onClick={() => reload()} disabled={busy} className="btn-ghost rounded-full px-4 py-2 text-xs">
             Refresh
           </button>
@@ -191,13 +203,30 @@ export default function AdminPage() {
         </div>
       </header>
 
-      <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-6">
+      <div className="mt-6 flex flex-wrap gap-2">
+        {(["h24", "d7", "d30"] as const).map((k) => (
+          <button
+            key={k}
+            type="button"
+            onClick={() => setPnlWin(k)}
+            className={`rounded-full px-4 py-1.5 font-mono text-[11px] ${pnlWin === k ? "bg-acid/15 text-acid" : "border border-line text-mute"}`}
+          >
+            {k === "h24" ? "24h PnL" : k === "d7" ? "7 day PnL" : "Month PnL"}
+          </button>
+        ))}
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-6">
         <Stat k="Holding" v={money(ops.holdingUsd)} sub={`${ops.solIn.toFixed(3)} SOL in`} />
         <Stat k="Wallets" v={String(ops.wallets)} sub={`${ops.newWallets24} new / 24h`} />
         <Stat k="Trading now" v={String(ops.trading)} sub={`${data.traders.filter((t) => t.mode === "live" && !t.killed).length} live`} />
-        <Stat k="24h volume" v={money(ops.h24.volumeUsd)} sub={`${ops.h24.trades} clips`} />
-        <Stat k="7d volume" v={money(ops.d7.volumeUsd)} sub={`${ops.d7.trades} clips`} />
-        <Stat k="24h PnL" v={`${ops.h24.pnlUsd >= 0 ? "+" : "−"}${money(Math.abs(ops.h24.pnlUsd))}`} sub={`7d ${ops.d7.pnlUsd >= 0 ? "+" : "−"}${money(Math.abs(ops.d7.pnlUsd))}`} good={Math.abs(ops.h24.pnlUsd) < 0.01 ? undefined : ops.h24.pnlUsd >= 0} />
+        <Stat k="Volume" v={money((pnlWin === "d30" ? ops.d30 : pnlWin === "d7" ? ops.d7 : ops.h24).volumeUsd)} sub={`${(pnlWin === "d30" ? ops.d30 : pnlWin === "d7" ? ops.d7 : ops.h24).trades} clips`} />
+        <Stat
+          k={pnlWin === "d30" ? "Month PnL" : pnlWin === "d7" ? "7d PnL" : "24h PnL"}
+          v={`${(pnlWin === "d30" ? ops.d30 : pnlWin === "d7" ? ops.d7 : ops.h24).pnlUsd >= 0 ? "+" : "−"}${money(Math.abs((pnlWin === "d30" ? ops.d30 : pnlWin === "d7" ? ops.d7 : ops.h24).pnlUsd))}`}
+          sub={p.startedAt ? `session ${age(now - p.startedAt)}` : "session"}
+          good={Math.abs((pnlWin === "d30" ? ops.d30 : pnlWin === "d7" ? ops.d7 : ops.h24).pnlUsd) < 0.01 ? undefined : (pnlWin === "d30" ? ops.d30 : pnlWin === "d7" ? ops.d7 : ops.h24).pnlUsd >= 0}
+        />
+        <Stat k="Fees" v={money((pnlWin === "d30" ? ops.d30 : pnlWin === "d7" ? ops.d7 : ops.h24).feesUsd)} sub={pnlWin === "d30" ? "30d" : pnlWin === "d7" ? "7d" : "24h"} />
       </div>
 
       <div className="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-4">

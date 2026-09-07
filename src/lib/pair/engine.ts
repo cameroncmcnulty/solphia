@@ -16,6 +16,7 @@ import type { RatioSample } from "./ratio";
 import { SLEEVE_WEIGHT, TRADE_PAIRS, xstockIdOf, type Sleeve, type TradePair } from "./catalog";
 import { enrichStudy } from "./policy";
 import type { ShortTape } from "./shortTape";
+import type { ScalpFrames } from "./frames";
 import { DEFAULT_LEARN, RISK_SLEEVES, needOf, nextTrail, readAsset } from "./signals";
 
 export type { Sleeve, TradePair } from "./catalog";
@@ -244,6 +245,7 @@ export function decidePair(opts: {
   quoteOk?: boolean;
   live?: boolean;
   shortTape?: ShortTape;
+  frames?: ScalpFrames;
 }): PairDecision {
   const { auto, book, prices, samples, now } = opts;
   const study = enrichStudy(opts.study, opts.samples, opts.now);
@@ -320,7 +322,7 @@ export function decidePair(opts: {
   if (!h.stops) h.stops = {};
 
   const sigs = RISK_SLEEVES.map((s) =>
-    readAsset(s, samples, prices, study, now, opts.shortTape, learn[s] || DEFAULT_LEARN),
+    readAsset(s, samples, prices, study, now, opts.shortTape, learn[s] || DEFAULT_LEARN, opts.frames),
   ).filter((s): s is NonNullable<typeof s> => Boolean(s));
 
   for (const sig of sigs) {
@@ -384,14 +386,10 @@ export function decidePair(opts: {
 
   const clipUsd = Math.max(PAIR_MIN_CLIP_USD, Math.min(allocated * 0.85, h.usdcQty * 0.9));
   let best = sigs[0];
-  for (const s of sigs) {
-    const adj = s.buy + (s.sleeve === "SOL" ? 0.04 : 0);
-    const bestAdj = best ? best.buy + (best.sleeve === "SOL" ? 0.04 : 0) : -1;
-    if (!best || adj > bestAdj) best = s;
-  }
+  for (const s of sigs) if (!best || s.buy > best.buy) best = s;
   if (best && h.usdcQty >= PAIR_MIN_CLIP_USD * 2) {
     const need = needOf(learn[best.sleeve] || DEFAULT_LEARN);
-    if (best.buy >= need) {
+    if (best.buy >= need && best.setup !== "none") {
       return {
         action: "swap",
         reason: best.reason,
@@ -413,9 +411,14 @@ export function decidePair(opts: {
 
   const bits = sigs
     .sort((a, b) => b.buy - a.buy)
-    .slice(0, 3)
+    .slice(0, 4)
     .map((s) => `${s.sleeve} ${(s.buy * 100).toFixed(0)}`);
-  return empty("hold", bits.length ? `USDC. No buy cleared. ${bits.join(" · ")}` : "USDC. Need more tape before she sizes a buy.");
+  return empty(
+    "hold",
+    bits.length
+      ? `USDC. Waiting on a 5m/15m scalp that agrees with Daily/4H. ${bits.join(" · ")}`
+      : "USDC. Need 5m/15m tape before she sizes a buy.",
+  );
 
 }
 

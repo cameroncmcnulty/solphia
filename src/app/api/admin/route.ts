@@ -5,6 +5,7 @@ import { buildAdminDesk } from "@/lib/admin/desk";
 import { generatePromoPack, settlePendingPromo } from "@/lib/admin/promo";
 import { grantFounder, revokeFounder } from "@/lib/access";
 import { isSolanaAddress, clientIp } from "@/lib/security";
+import { emptyBook } from "@/lib/auto";
 import { mutateState, audit, pushBounded } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
@@ -28,6 +29,7 @@ const Patch = z.object({
   liveTrading: z.boolean().optional(),
   generatePromo: z.boolean().optional(),
   contentHint: z.string().max(280).optional(),
+  resetPaper: z.boolean().optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -65,6 +67,19 @@ export async function POST(req: NextRequest) {
       s.liveTrading = body.liveTrading;
       pushBounded(s.audit, audit("admin", "live_flag", String(body.liveTrading), ip), 400);
     });
+  }
+  if (body.resetPaper) {
+    await mutateState((s) => {
+      const start = s.paper?.startingUsd || 1000;
+      s.paper = emptyBook(start);
+      for (const t of Object.values(s.traders || {})) {
+        if (t.auto?.mode === "live") continue;
+        t.book = emptyBook(t.book?.startingUsd || start);
+        t.auto = { ...t.auto, armedAt: Date.now(), armed: true };
+      }
+      pushBounded(s.audit, audit("admin", "paper_reset", "new paper session", ip), 400);
+    });
+    return NextResponse.json({ ok: true, note: "Paper session restarted.", desk: buildAdminDesk() });
   }
   if (body.generatePromo) {
     const result = await generatePromoPack({ force: true, hint: body.contentHint });

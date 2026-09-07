@@ -6,6 +6,9 @@ import { samplePx, type RatioSample } from "./ratio";
 import { relAt, type ShortTape } from "./shortTape";
 import { PAIR_FEE_BPS, PAIR_SLIP_BPS, PROTOCOL_FEE_BPS } from "../config";
 import { cashOpenAuction, usEquitySession, type SessionKind } from "./knowledge";
+import type { ScalpFrames } from "./frames";
+import { scoreScalp } from "./scalp";
+import type { Bias, Setup } from "./scalp";
 
 export const RISK_SLEEVES: Exclude<Sleeve, "USDC">[] = ["SOL", "SPYx", "QQQx", "GLDx"];
 
@@ -34,6 +37,8 @@ export type AssetSignal = {
   buy: number;
   sell: number;
   reason: string;
+  bias?: Bias;
+  setup?: Setup;
 };
 
 export type SleeveLearn = {
@@ -44,12 +49,12 @@ export type SleeveLearn = {
   trailK: number;
 };
 
-export const DEFAULT_LEARN: SleeveLearn = { trades: 0, wins: 0, pnlUsd: 0, buyNeed: 0.3, trailK: 0.55 };
+export const DEFAULT_LEARN: SleeveLearn = { trades: 0, wins: 0, pnlUsd: 0, buyNeed: 0.5, trailK: 0.55 };
 
-/** Old 0.58 bar locked out 0.8% clips. Clamp whatever is stored. */
+/** Need a real 5m/15m setup that agrees with Daily/4H — RSI alone is not a trade. */
 export function needOf(learn?: SleeveLearn): number {
   const n = learn?.buyNeed ?? DEFAULT_LEARN.buyNeed;
-  return Math.min(0.42, Math.max(0.22, n));
+  return Math.min(0.62, Math.max(0.42, n));
 }
 
 export function bucketCandles(samples: RatioSample[], sleeve: Sleeve, ms = 15 * 60 * 1000): Candle[] {
@@ -104,6 +109,7 @@ export function readAsset(
   now: number,
   tape?: ShortTape,
   learn?: SleeveLearn,
+  frames?: ScalpFrames,
 ): AssetSignal | null {
   const candles = bucketCandles(samples, sleeve);
   const closes = candles.map((c) => c.c);
@@ -137,45 +143,28 @@ export function readAsset(
   const auction = cashOpenAuction(now);
   const need = needOf(learn);
   const equity = sleeve === "SPYx" || sleeve === "QQQx";
-  const atrFloor = Math.max(atrPct, 0.004);
-  const cheapPct = Math.max(0, -ret15m, -ret1h, -z24 * atrFloor);
-  const room = cheapPct >= ROUND_TRIP + 0.0025;
-  const bounce = ret15m > 0.0012 && ret1h < -0.003;
+  const scalp = frames ? scoreScalp(sleeve, frames[sleeve], live, now) : null;
 
   let buy = 0;
   const why: string[] = [];
-  if (room) {
-    buy += 0.34;
-    why.push(`−${(cheapPct * 100).toFixed(1)}% vs tape`);
+  if (scalp) {
+    buy = scalp.buy;
+    why.push(...scalp.why);
+  } else {
+    const cheapPct = Math.max(0, -ret15m, -ret1h);
+    const bounce = ret15m > 0.0012 && ret1h < -0.003;
+    if (trend === "up" && bounce && cheapPct >= ROUND_TRIP + 0.0025) {
+      buy += 0.28;
+      why.push("hourly pullback");
+    }
+    if (macd > prevMacd && trend === "up") buy += 0.08;
+    if (rsiN >= 38 && rsiN <= 58) buy += 0.06;
+    if (rsiN > 68) buy -= 0.4;
+    if (ret1h < -KNIFE_1H || ret24h < -0.08) buy -= 0.55;
+    if (auction && equity) buy -= 0.3;
+    if (session === "weekend" && equity) buy -= 0.45;
+    buy = Math.max(0, Math.min(1, buy));
   }
-  if (bounce) {
-    buy += 0.22;
-    why.push("bounce");
-  }
-  if (z24 <= -0.45 && z24 > -2.4) {
-    buy += 0.12;
-    why.push("z24 cheap");
-  }
-  if (rsiN >= 32 && rsiN <= 60) {
-    buy += 0.16;
-    why.push(`RSI ${rsiN.toFixed(0)}`);
-  }
-  if (sleeve === "SOL") {
-    buy += 0.08;
-    why.push("SOL 24/7");
-  }
-  if (macd > prevMacd) buy += 0.06;
-  if (sleeve === "GLDx" && (study.solRet24h || 0) < -0.025 && ret24h > -0.005) {
-    buy += 0.12;
-    why.push("gold haven");
-  }
-  if (rsiN > 68) buy -= 0.4;
-  if (ret1h < -KNIFE_1H || ret24h < -0.08) buy -= 0.55;
-  if (ret1h > 0.01 && z24 > 0.8) buy -= 0.3;
-  if (auction && equity) buy -= 0.25;
-  if (session === "weekend" && equity) buy -= 0.12;
-  if (cheapPct < ROUND_TRIP * 0.5 && Math.abs(ret15m) < ROUND_TRIP * 0.5 && Math.abs(ret1h) < ROUND_TRIP) buy -= 0.22;
-  buy = Math.max(0, Math.min(1, buy));
 
   let sell = 0;
   const sWhy: string[] = [];
@@ -202,28 +191,34 @@ export function readAsset(
   sell = Math.max(0, Math.min(1, sell));
 
   const reason =
-    buy >= need
-      ? `Buy ${sleeve} · ${why.slice(0, 3).join(" · ") || "clip"}`
-      : sell >= 0.45
-        ? `Exit ${sleeve} · ${sWhy.slice(0, 2).join(" · ")}`
-        : `${sleeve} quiet · RSI ${rsiN.toFixed(0)} · ${(ret1h * 100).toFixed(1)}% 1h`;
+    scalp && scalp.buy >= need
+      ? scalp.reason
+      : buy >= need
+        ? `Buy ${sleeve} · ${why.slice(0, 3).join(" · ") || "clip"}`
+        : sell >= 0.45
+          ? `Exit ${sleeve} · ${sWhy.slice(0, 2).join(" · ")}`
+          : scalp
+            ? scalp.reason
+            : `${sleeve} quiet · RSI ${rsiN.toFixed(0)} · ${(ret1h * 100).toFixed(1)}% 1h`;
 
   return {
     sleeve,
     px: live,
-    rsi: rsiN,
+    rsi: scalp?.rsi ?? rsiN,
     emaFast: fast,
     emaSlow: slow,
     macd,
     trend,
-    atrPct,
-    ret15m,
-    ret1h,
+    atrPct: scalp?.atrPct || atrPct,
+    ret15m: scalp?.ret15m ?? ret15m,
+    ret1h: scalp?.ret1h ?? ret1h,
     ret24h,
     z24,
     buy,
-    sell,
+    sell: Math.max(sell, scalp?.sell || 0),
     reason,
+    bias: scalp?.bias,
+    setup: scalp?.setup,
   };
 }
 
@@ -272,9 +267,9 @@ export function noteExit(learn: SleeveLearn, pnlUsd: number): SleeveLearn {
   const pnl = learn.pnlUsd + pnlUsd;
   const recentWin = trades >= 5 ? wins / trades : pnlUsd > 0 ? 0.55 : 0.45;
   let buyNeed = learn.buyNeed;
-  if (pnlUsd < 0) buyNeed = Math.min(0.42, buyNeed + 0.02);
-  else buyNeed = Math.max(0.22, buyNeed - 0.015);
-  if (recentWin < 0.4) buyNeed = Math.min(0.42, buyNeed + 0.02);
+  if (pnlUsd < 0) buyNeed = Math.min(0.62, buyNeed + 0.02);
+  else buyNeed = Math.max(0.42, buyNeed - 0.015);
+  if (recentWin < 0.4) buyNeed = Math.min(0.62, buyNeed + 0.02);
   let trailK = learn.trailK;
   if (pnlUsd < 0) trailK = Math.min(0.9, trailK + 0.04);
   else trailK = Math.max(0.4, trailK - 0.03);

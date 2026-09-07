@@ -126,6 +126,7 @@ export function buildAdminDesk(opts?: { light?: boolean }): AdminDesk {
       trading: tradingNow(s.traders || {}, Boolean(s.paper.killed)),
       h24: roundWindow(windows.h24),
       d7: roundWindow(windows.d7),
+      d30: roundWindow(windows.d30),
       newWallets24,
       solIn: round2(solIn),
     },

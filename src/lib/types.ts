@@ -17,7 +17,7 @@ export type Strategy =
   | "solphia_pick"
   | "sol_usd";
 
-export type PairStyle = "mean_revert" | "hold_mix";
+export type PairStyle = "mean_revert" | "hold_mix" | "scalp";
 export type PairBand = "tight" | "normal" | "wide";
 
 export type Side = "buy" | "sell";

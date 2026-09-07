@@ -8,6 +8,7 @@ import { publicPair, type PairDeskPublic } from "./pair/public";
 import { quoteSolSpyx } from "./pair/jupiter";
 import { DEFAULT_STUDY } from "./pair/knowledge";
 import { loadShortTape } from "./pair/shortTape";
+import { loadScalpFrames } from "./pair/frames";
 import { loadState, saveState } from "./store";
 import type { FeedHealth, PaperBook } from "./types";
 
@@ -36,7 +37,7 @@ export function publicBook(book: PaperBook | null | undefined) {
   const equity = Number.isFinite(b.equityUsd) ? b.equityUsd : start;
   return {
     startingUsd: start,
-    startedAt: b.startedAt || Date.now(),
+    startedAt: b.startedAt || (Array.isArray(b.fills) && b.fills[0]?.at) || (Array.isArray(b.curve) && b.curve[0]?.t) || 0,
     cashUsd: round2(Number(b.cashUsd) || 0),
     equityUsd: round2(equity),
     realizedPnlUsd: round2(Number(b.realizedPnlUsd) || 0),
@@ -89,6 +90,15 @@ function round2(n: number) {
   return Math.round(n * 100) / 100;
 }
 
+let paperLoop = false;
+export function ensurePaperLoop() {
+  if (paperLoop) return;
+  paperLoop = true;
+  setInterval(() => {
+    runMarketTick().catch(() => undefined);
+  }, 20_000);
+}
+
 export async function runMarketTick(): Promise<{
   paper: ReturnType<typeof publicBook>;
   health: FeedHealth[];
@@ -102,6 +112,7 @@ export async function runMarketTick(): Promise<{
   pair: PairDeskPublic | null;
   liveTrading: boolean;
 }> {
+  ensurePaperLoop();
   const run = lock.then(async () => {
     const state = loadState();
     const now = Date.now();
@@ -167,15 +178,18 @@ export async function runMarketTick(): Promise<{
     let impactPct = 0;
     let quoteOk: boolean | undefined;
     let shortTape;
+    let frames;
     try {
-      const [q, tape] = await Promise.all([
+      const [q, tape, scalp] = await Promise.all([
         Promise.race([
           quoteSolSpyx(0.1, 50),
           new Promise<null>((resolve) => setTimeout(() => resolve(null), 2500)),
         ]),
         loadShortTape().catch(() => null),
+        loadScalpFrames().catch(() => null),
       ]);
       shortTape = tape || undefined;
+      frames = scalp || undefined;
       if (q && "ok" in q) {
         quoteOk = q.ok ? true : undefined;
         if (q.ok) impactPct = q.impactPct;
@@ -211,6 +225,7 @@ export async function runMarketTick(): Promise<{
       mind: state.mind,
       impactPct,
       shortTape,
+      frames,
     });
 
     let entries = demo.fills.filter((f) => f.side === "buy").length;
@@ -249,6 +264,7 @@ export async function runMarketTick(): Promise<{
         impactPct,
         live,
         shortTape,
+        frames,
       });
       entries += t.fills.filter((f) => f.side === "buy").length;
       exits += t.fills.filter((f) => f.side === "sell").length;

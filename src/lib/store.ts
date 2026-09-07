@@ -68,8 +68,10 @@ export function loadState(): AppState {
         paper: isLegacyBook(rawPaper)
           ? emptyBook()
           : {
-              ...emptyBook(),
+              ...emptyBook(rawPaper.startingUsd || undefined),
               ...rawPaper,
+              startedAt: rawPaper.startedAt || rawPaper.fills?.[0]?.at || Date.now(),
+              pairLearn: rawPaper.pairLearn,
               pair: rawPaper.pair
                 ? {
                     solQty: rawPaper.pair.solQty || 0,

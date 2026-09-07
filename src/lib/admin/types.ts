@@ -58,12 +58,14 @@ export type AdminOps = {
   trading: number;
   h24: AdminWindow;
   d7: AdminWindow;
+  d30: AdminWindow;
   newWallets24: number;
   solIn: number;
 };
 
 export type AdminPaper = {
   startingUsd: number;
+  startedAt?: number;
   cashUsd: number;
   equityUsd: number;
   pnlPct: number;

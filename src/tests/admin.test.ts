@@ -58,6 +58,7 @@ describe("admin stats", () => {
     const both = sumWindows([book], now);
     assert.equal(both.h24.volumeUsd, 40);
     assert.equal(both.d7.volumeUsd, 120);
+    assert.equal(both.d30.volumeUsd, 120);
   });
 
   it("marks sleeve holding in USDC", () => {

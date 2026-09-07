@@ -53,7 +53,7 @@ function addFill(acc: WindowStats, f: PaperFill, since: number): WindowStats {
   return acc;
 }
 
-export function sumWindows(books: PaperBook[], now = Date.now()): { h24: WindowStats; d7: WindowStats } {
+export function sumWindows(books: PaperBook[], now = Date.now()): { h24: WindowStats; d7: WindowStats; d30: WindowStats } {
   const acc = (since: number) =>
     books.reduce(
       (a, b) => {
@@ -67,7 +67,11 @@ export function sumWindows(books: PaperBook[], now = Date.now()): { h24: WindowS
       },
       { volumeUsd: 0, trades: 0, feesUsd: 0, pnlUsd: 0 },
     );
-  return { h24: acc(now - 86_400_000), d7: acc(now - 7 * 86_400_000) };
+  return {
+    h24: acc(now - 86_400_000),
+    d7: acc(now - 7 * 86_400_000),
+    d30: acc(now - 30 * 86_400_000),
+  };
 }
 
 export function uniqueWallets(users: { pubkey: string }[], traders: Record<string, TraderAccount>): string[] {
