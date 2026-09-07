@@ -5,6 +5,7 @@ import { SolphiaFace } from "@/components/SolphiaFace";
 import { LiveStats } from "@/components/LiveStats";
 import { TickerCharts } from "@/components/TickerCharts";
 import { FaqList } from "@/components/FaqList";
+import { BacktestBrochure } from "@/components/BacktestBrochure";
 
 export default function Home() {
   return (
@@ -44,6 +45,7 @@ export default function Home() {
       </section>
 
       <LiveStats />
+      <BacktestBrochure />
       <TickerCharts />
 
       <section className="px-4 py-10 md:px-12 md:py-16">

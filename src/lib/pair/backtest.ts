@@ -1,0 +1,258 @@
+import { DEFAULT_AUTO, emptyBook } from "../auto";
+import { PAPER_STARTING_USD } from "../config";
+import { pack4h, packDaily, type Candle } from "../sol/indicators";
+import type {
+  BacktestFillLite,
+  BacktestMonth,
+  BacktestPoint,
+  BacktestReport,
+  BacktestSleeve,
+  PaperBook,
+  PaperFill,
+} from "../types";
+import { DEFAULT_STUDY } from "./knowledge";
+import { tickPairBook } from "./paper";
+import type { PairPrices } from "./prices";
+import type { RatioSample } from "./ratio";
+import type { ScalpFrames, SleeveFrames } from "./frames";
+import { emptyFrames } from "./frames";
+import { equityOf, markPair, pairOf } from "./engine";
+
+export type { BacktestReport, BacktestPoint } from "../types";
+
+export type BacktestTape = {
+  sol: Candle[];
+  spy: Candle[];
+  qqq: Candle[];
+  gld: Candle[];
+};
+
+function lastAt(cs: Candle[], t: number): Candle | null {
+  let hit: Candle | null = null;
+  for (const c of cs) {
+    if (c.t > t) break;
+    hit = c;
+  }
+  return hit;
+}
+
+function sliceTo(cs: Candle[], t: number, n: number): Candle[] {
+  const out: Candle[] = [];
+  for (const c of cs) {
+    if (c.t > t) break;
+    out.push(c);
+  }
+  return out.length > n ? out.slice(-n) : out;
+}
+
+function pricesAt(tape: BacktestTape, t: number): PairPrices | null {
+  const sol = lastAt(tape.sol, t);
+  const spy = lastAt(tape.spy, t);
+  const qqq = lastAt(tape.qqq, t);
+  const gld = lastAt(tape.gld, t);
+  if (!sol || !spy || !qqq || !gld) return null;
+  return {
+    sol: { usd: sol.c, source: "backtest", at: t },
+    spyx: { usd: spy.c, source: "backtest", at: t },
+    qqqx: { usd: qqq.c, source: "backtest", at: t },
+    gldx: { usd: gld.c, source: "backtest", at: t },
+    liquidityUsd: 1_000_000,
+    liquidities: { spyx: 1_000_000, qqqx: 1_000_000, gldx: 1_000_000 },
+    stale: false,
+    ageMs: 0,
+  };
+}
+
+function framesAt(tape: BacktestTape, t: number): ScalpFrames {
+  const one = (cs: Candle[]): SleeveFrames => {
+    const h1 = sliceTo(cs, t, 200);
+    return {
+      m5: h1,
+      m15: h1,
+      h4: pack4h(h1),
+      d1: packDaily(cs.filter((c) => c.t <= t)).slice(-80),
+    };
+  };
+  const frames = emptyFrames();
+  frames.SOL = one(tape.sol);
+  frames.SPYx = one(tape.spy);
+  frames.QQQx = one(tape.qqq);
+  frames.GLDx = one(tape.gld);
+  return frames;
+}
+
+function samplesAt(tape: BacktestTape, t: number): RatioSample[] {
+  const sol = sliceTo(tape.sol, t, 80);
+  const out: RatioSample[] = [];
+  for (const s of sol) {
+    const spy = lastAt(tape.spy, s.t);
+    const qqq = lastAt(tape.qqq, s.t);
+    const gld = lastAt(tape.gld, s.t);
+    if (!spy) continue;
+    out.push({ t: s.t, sol: s.c, spyx: spy.c, qqqx: qqq?.c, gldx: gld?.c });
+  }
+  return out;
+}
+
+function downsample(curve: BacktestPoint[], n = 96): BacktestPoint[] {
+  if (curve.length <= n) return curve;
+  const out: BacktestPoint[] = [];
+  const step = (curve.length - 1) / (n - 1);
+  for (let i = 0; i < n; i++) out.push(curve[Math.round(i * step)]);
+  return out;
+}
+
+function sleeveStats(fills: PaperFill[]): BacktestSleeve[] {
+  const ids = ["SOL", "SPYx", "QQQx", "GLDx"] as const;
+  return ids.map((id) => {
+    const sells = fills.filter((f) => f.symbol === id && f.side === "sell" && f.pnlUsd != null);
+    const wins = sells.filter((f) => (f.pnlUsd || 0) > 0);
+    const pnl = sells.reduce((s, f) => s + (f.pnlUsd || 0), 0);
+    return {
+      id,
+      trades: sells.length,
+      wins: wins.length,
+      pnlUsd: Math.round(pnl * 100) / 100,
+      winRate: sells.length ? wins.length / sells.length : 0,
+    };
+  });
+}
+
+function monthlyStats(curve: BacktestPoint[], fills: PaperFill[]): BacktestMonth[] {
+  const map = new Map<string, BacktestMonth>();
+  for (const p of curve) {
+    const ym = new Date(p.t).toISOString().slice(0, 7);
+    const prev = map.get(ym);
+    if (!prev) map.set(ym, { ym, pnlUsd: 0, trades: 0, endEquity: p.equity });
+    else prev.endEquity = p.equity;
+  }
+  const rows = [...map.values()].sort((a, b) => a.ym.localeCompare(b.ym));
+  for (let i = 0; i < rows.length; i++) {
+    const start = i === 0 ? (curve[0]?.equity || 0) : rows[i - 1].endEquity;
+    rows[i].pnlUsd = Math.round((rows[i].endEquity - start) * 100) / 100;
+  }
+  for (const f of fills) {
+    if (f.side !== "sell" || f.pnlUsd == null) continue;
+    const ym = new Date(f.at).toISOString().slice(0, 7);
+    const row = map.get(ym);
+    if (row) row.trades += 1;
+  }
+  return rows;
+}
+
+function reportOf(book: PaperBook, curve: BacktestPoint[], from: number, to: number, bars: number, maxDdPct: number): BacktestReport {
+  const sells = book.fills.filter((f) => f.side === "sell" && f.symbol !== "USDC" && f.pnlUsd != null);
+  const wins = sells.filter((f) => (f.pnlUsd || 0) > 0);
+  const losses = sells.filter((f) => (f.pnlUsd || 0) < 0);
+  const winUsd = wins.reduce((s, f) => s + (f.pnlUsd || 0), 0);
+  const lossUsd = Math.abs(losses.reduce((s, f) => s + (f.pnlUsd || 0), 0));
+  const start = book.startingUsd;
+  const end = book.equityUsd;
+  const days = Math.max(1, (to - from) / 86_400_000);
+  return {
+    ranAt: Date.now(),
+    from,
+    to,
+    bars,
+    horizon: `${Math.round(days)}d · 1h clips · Daily/4H bias · fees in`,
+    startingUsd: start,
+    endingUsd: Math.round(end * 100) / 100,
+    pnlUsd: Math.round((end - start) * 100) / 100,
+    pnlPct: start ? (end - start) / start : 0,
+    maxDdPct,
+    trades: sells.length,
+    wins: wins.length,
+    losses: losses.length,
+    winRate: sells.length ? wins.length / sells.length : 0,
+    profitFactor: lossUsd > 0 ? winUsd / lossUsd : wins.length ? 9 : 0,
+    feesUsd: Math.round(book.feesPaidUsd * 100) / 100,
+    slippageUsd: Math.round(book.slippagePaidUsd * 100) / 100,
+    avgWinUsd: wins.length ? winUsd / wins.length : 0,
+    avgLossUsd: losses.length ? -lossUsd / losses.length : 0,
+    bestTradeUsd: wins.length ? Math.max(...wins.map((f) => f.pnlUsd || 0)) : 0,
+    worstTradeUsd: losses.length ? Math.min(...losses.map((f) => f.pnlUsd || 0)) : 0,
+    sleeves: sleeveStats(book.fills),
+    monthly: monthlyStats(curve, book.fills),
+    curve: downsample(curve, 120),
+    fills: book.fills
+      .filter((f) => f.symbol !== "USDC")
+      .slice(-40)
+      .map((f) => ({
+        at: f.at,
+        side: f.side,
+        symbol: f.symbol,
+        sizeUsd: Math.round(f.sizeUsd * 100) / 100,
+        pnlUsd: f.pnlUsd != null ? Math.round(f.pnlUsd * 100) / 100 : undefined,
+        reason: f.reason.slice(0, 120),
+      })),
+    note: "Historical paper of this engine on SOL, SPY, QQQ, and gold. Fees and 0.1% clip are in the mark. Past results are not a live book and not a promise.",
+  };
+}
+
+export function publicBacktest(report: BacktestReport | null | undefined) {
+  if (!report) return { ready: false as const };
+  return {
+    ready: true as const,
+    from: report.from,
+    to: report.to,
+    horizon: report.horizon,
+    startingUsd: report.startingUsd,
+    endingUsd: report.endingUsd,
+    pnlUsd: report.pnlUsd,
+    pnlPct: report.pnlPct,
+    maxDdPct: report.maxDdPct,
+    trades: report.trades,
+    winRate: report.winRate,
+    feesUsd: report.feesUsd,
+    curve: report.curve,
+    note: report.note,
+  };
+}
+
+/** Replay the live scalp engine on a historical tape. */
+export function runBacktest(tape: BacktestTape, startingUsd = PAPER_STARTING_USD): BacktestReport {
+  const clock = tape.sol.filter((c) => lastAt(tape.spy, c.t) && lastAt(tape.qqq, c.t) && lastAt(tape.gld, c.t));
+  const warmup = 80;
+  const book = emptyBook(startingUsd);
+  const auto = { ...DEFAULT_AUTO, cooldownMin: 0, armed: true, mode: "paper" as const };
+  const curve: BacktestPoint[] = [{ t: clock[warmup]?.t || Date.now(), equity: startingUsd }];
+  let peak = startingUsd;
+  let maxDd = 0;
+  let ticks = 0;
+  for (let i = warmup; i < clock.length; i++) {
+    const t = clock[i].t;
+    const prices = pricesAt(tape, t);
+    if (!prices) continue;
+    const frames = framesAt(tape, t);
+    const samples = samplesAt(tape, t);
+    if (samples.length < 16) continue;
+    tickPairBook({
+      book,
+      auto,
+      prices,
+      samples,
+      study: DEFAULT_STUDY,
+      now: t,
+      frames,
+    });
+    markPair(book, prices);
+    const eq = equityOf(pairOf(book), prices);
+    if (eq > peak) peak = eq;
+    const dd = peak > 0 ? (peak - eq) / peak : 0;
+    if (dd > maxDd) maxDd = dd;
+    const last = curve[curve.length - 1];
+    if (!last || t - last.t >= 6 * 3_600_000 || Math.abs(eq - last.equity) > 0.5) {
+      curve.push({ t, equity: Math.round(eq * 100) / 100 });
+    }
+    ticks += 1;
+  }
+  const lastT = clock[clock.length - 1]?.t || Date.now();
+  const lastPx = pricesAt(tape, lastT);
+  if (lastPx) markPair(book, lastPx);
+  const from = clock[warmup]?.t || clock[0]?.t || 0;
+  const to = lastT;
+  if (curve[curve.length - 1]?.t !== to) {
+    curve.push({ t: to, equity: Math.round(book.equityUsd * 100) / 100 });
+  }
+  return reportOf(book, curve, from, to, ticks, maxDd);
+}

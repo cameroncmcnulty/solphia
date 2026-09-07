@@ -37,6 +37,7 @@ export function emptyState(): AppState {
     promos: [],
     promoPending: null,
     lastPromoDay: "",
+    backtest: null,
   };
 }
 
@@ -100,6 +101,7 @@ export function loadState(): AppState {
         promos: Array.isArray(raw.promos) ? raw.promos : [],
         promoPending: raw.promoPending || null,
         lastPromoDay: raw.lastPromoDay || "",
+        backtest: raw.backtest || null,
       };
       memMtime = mtime;
       return mem;

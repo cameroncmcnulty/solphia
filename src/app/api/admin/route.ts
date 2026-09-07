@@ -6,6 +6,8 @@ import { generatePromoPack, settlePendingPromo } from "@/lib/admin/promo";
 import { grantFounder, revokeFounder } from "@/lib/access";
 import { isSolanaAddress, clientIp } from "@/lib/security";
 import { emptyBook } from "@/lib/auto";
+import { runBacktest } from "@/lib/pair/backtest";
+import { loadBacktestTape } from "@/lib/pair/backtestTape";
 import { mutateState, audit, pushBounded } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
@@ -30,6 +32,7 @@ const Patch = z.object({
   generatePromo: z.boolean().optional(),
   contentHint: z.string().max(280).optional(),
   resetPaper: z.boolean().optional(),
+  runBacktest: z.boolean().optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -67,6 +70,29 @@ export async function POST(req: NextRequest) {
       s.liveTrading = body.liveTrading;
       pushBounded(s.audit, audit("admin", "live_flag", String(body.liveTrading), ip), 400);
     });
+  }
+  if (body.runBacktest) {
+    try {
+      const tape = await loadBacktestTape();
+      if (tape.sol.length < 120 || tape.spy.length < 80) {
+        return NextResponse.json({ error: "Not enough history to backtest.", desk: buildAdminDesk() }, { status: 400 });
+      }
+      const report = runBacktest(tape);
+      await mutateState((s) => {
+        s.backtest = report;
+        pushBounded(s.audit, audit("admin", "backtest", `${(report.pnlPct * 100).toFixed(1)}% · ${report.trades} clips`, ip), 400);
+      });
+      return NextResponse.json({
+        ok: true,
+        note: `Backtest ${(report.pnlPct * 100).toFixed(1)}% after fees · ${report.trades} clips · ${report.horizon}`,
+        desk: buildAdminDesk(),
+      });
+    } catch (e) {
+      return NextResponse.json(
+        { error: e instanceof Error ? e.message : "Backtest failed.", desk: buildAdminDesk() },
+        { status: 400 },
+      );
+    }
   }
   if (body.resetPaper) {
     await mutateState((s) => {

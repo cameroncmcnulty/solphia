@@ -225,8 +225,15 @@ export function supertrend(candles: Candle[], period = 10, mult = 3): { line: nu
 }
 
 export function pack4h(hourly: Candle[]): Candle[] {
+  return packBars(hourly, 4 * 3_600_000);
+}
+
+export function packDaily(hourly: Candle[]): Candle[] {
+  return packBars(hourly, 86_400_000);
+}
+
+function packBars(hourly: Candle[], ms: number): Candle[] {
   const map = new Map<number, Candle>();
-  const ms = 4 * 3_600_000;
   for (const c of hourly) {
     const b = Math.floor(c.t / ms) * ms;
     const prev = map.get(b);

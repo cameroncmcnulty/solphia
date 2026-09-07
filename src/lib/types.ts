@@ -475,4 +475,60 @@ export interface AppState {
   promos?: PromoItem[];
   promoPending?: PromoPending | null;
   lastPromoDay?: string;
+  backtest?: BacktestReport | null;
 }
+
+export type BacktestPoint = { t: number; equity: number };
+
+export type BacktestSleeve = {
+  id: string;
+  trades: number;
+  wins: number;
+  pnlUsd: number;
+  winRate: number;
+};
+
+export type BacktestMonth = {
+  ym: string;
+  pnlUsd: number;
+  trades: number;
+  endEquity: number;
+};
+
+export type BacktestFillLite = {
+  at: number;
+  side: "buy" | "sell";
+  symbol: string;
+  sizeUsd: number;
+  pnlUsd?: number;
+  reason: string;
+};
+
+export type BacktestReport = {
+  ranAt: number;
+  from: number;
+  to: number;
+  bars: number;
+  horizon: string;
+  startingUsd: number;
+  endingUsd: number;
+  pnlUsd: number;
+  pnlPct: number;
+  maxDdPct: number;
+  trades: number;
+  wins: number;
+  losses: number;
+  winRate: number;
+  profitFactor: number;
+  feesUsd: number;
+  slippageUsd: number;
+  avgWinUsd: number;
+  avgLossUsd: number;
+  bestTradeUsd: number;
+  worstTradeUsd: number;
+  sleeves: BacktestSleeve[];
+  monthly: BacktestMonth[];
+  curve: BacktestPoint[];
+  fills: BacktestFillLite[];
+  note: string;
+};

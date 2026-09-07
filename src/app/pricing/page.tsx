@@ -6,6 +6,7 @@ import { PLANS } from "@/lib/plans";
 import { WalletConnect } from "@/components/WalletConnect";
 import { PlanCompare } from "@/components/PlanCompare";
 import { FaqList } from "@/components/FaqList";
+import { BacktestBrochure } from "@/components/BacktestBrochure";
 
 export default function PricingPage() {
   const [email, setEmail] = useState("");
@@ -36,6 +37,9 @@ export default function PricingPage() {
         <p className="mt-4 max-w-xl text-lg text-mute">
           One bot. SOL vs official S&P 500, Nasdaq-100, and gold. 0.2 SOL / 30 days plus 0.1% per clip when live is on.
         </p>
+      </div>
+      <BacktestBrochure />
+      <div className="mx-auto max-w-6xl px-4 md:px-8">
 
         <Link href="/trading" className="panel mt-8 flex items-center gap-4 rounded-3xl p-4 sm:p-5">
           {/* eslint-disable-next-line @next/next/no-img-element */}

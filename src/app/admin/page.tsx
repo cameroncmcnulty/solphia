@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { AdminDesk } from "@/lib/admin/types";
 import { WalletConnect } from "@/components/WalletConnect";
+import { EquityCurve } from "@/components/EquityCurve";
 import { useOwner } from "@/lib/hooks";
 
 export default function AdminPage() {
@@ -379,6 +380,129 @@ export default function AdminPage() {
             </article>
           ))}
         </div>
+      </section>
+
+      <section className="panel mt-6 rounded-2xl p-5">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <div className="font-mono text-[10px] tracking-[0.3em] text-mute">ENGINE BACKTEST</div>
+            <h2 className="mt-1 font-display text-2xl text-ghost">Does this engine print?</h2>
+            <p className="mt-2 max-w-2xl text-sm text-mute">
+              Replay the live scalp rules on ~6 months of 1h SOL / SPY / QQQ / gold. Fees and the 0.1% clip are in the
+              mark. This is how you decide whether to tweak her.
+            </p>
+          </div>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => patch({ runBacktest: true })}
+            className="btn-acid rounded-full px-5 py-3 text-sm disabled:opacity-40"
+          >
+            {busy ? "Replaying history…" : "Run backtest"}
+          </button>
+        </div>
+        {data.backtest ? (
+          <div className="mt-6 space-y-6">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+              <div className={`font-display text-4xl ${data.backtest.pnlPct >= 0 ? "text-acid" : "text-blood"}`}>
+                {data.backtest.pnlPct >= 0 ? "+" : ""}
+                {(data.backtest.pnlPct * 100).toFixed(2)}%
+              </div>
+              <p className="font-mono text-[11px] text-mute">
+                {data.backtest.horizon} · ran {age(now - data.backtest.ranAt)} ago
+              </p>
+            </div>
+            <EquityCurve curve={data.backtest.curve} up={data.backtest.pnlPct >= 0} />
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-6">
+              <Mini k="Start" v={money(data.backtest.startingUsd)} />
+              <Mini k="End" v={money(data.backtest.endingUsd)} />
+              <Mini k="PnL" v={`${data.backtest.pnlUsd >= 0 ? "+" : "−"}${money(Math.abs(data.backtest.pnlUsd))}`} />
+              <Mini k="Max DD" v={`−${(data.backtest.maxDdPct * 100).toFixed(1)}%`} />
+              <Mini k="Clips" v={String(data.backtest.trades)} />
+              <Mini k="Win rate" v={`${Math.round(data.backtest.winRate * 100)}%`} />
+              <Mini k="Wins / losses" v={`${data.backtest.wins} / ${data.backtest.losses}`} />
+              <Mini k="Profit factor" v={data.backtest.profitFactor.toFixed(2)} />
+              <Mini k="Fees" v={money(data.backtest.feesUsd)} />
+              <Mini k="Slip" v={money(data.backtest.slippageUsd)} />
+              <Mini k="Avg win" v={`+${money(Math.abs(data.backtest.avgWinUsd))}`} />
+              <Mini k="Avg loss" v={money(data.backtest.avgLossUsd)} />
+              <Mini k="Best clip" v={`+${money(Math.abs(data.backtest.bestTradeUsd))}`} />
+              <Mini k="Worst clip" v={money(data.backtest.worstTradeUsd)} />
+              <Mini k="Bars" v={String(data.backtest.bars)} />
+            </div>
+            <div>
+              <div className="font-mono text-[10px] tracking-[0.2em] text-mute">PER SLEEVE</div>
+              <div className="mt-2 grid grid-cols-2 gap-3 md:grid-cols-4">
+                {data.backtest.sleeves.map((s) => (
+                  <div key={s.id} className="rounded-2xl border border-line/80 bg-void/50 p-4">
+                    <div className="font-mono text-[10px] tracking-[0.2em] text-mute">{s.id}</div>
+                    <div className={`mt-1 font-display text-xl ${s.pnlUsd >= 0 ? "text-acid" : "text-blood"}`}>
+                      {s.pnlUsd >= 0 ? "+" : "−"}
+                      {money(Math.abs(s.pnlUsd))}
+                    </div>
+                    <div className="font-mono text-[11px] text-mute">
+                      {s.trades} clips · {Math.round(s.winRate * 100)}% win
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            {data.backtest.monthly.length > 0 && (
+              <div>
+                <div className="font-mono text-[10px] tracking-[0.2em] text-mute">MONTHLY</div>
+                <div className="mt-2 overflow-auto">
+                  <table className="w-full min-w-[420px] text-left font-mono text-[12px]">
+                    <thead className="text-mute">
+                      <tr>
+                        <th className="py-2 font-normal">Month</th>
+                        <th className="py-2 font-normal">PnL</th>
+                        <th className="py-2 font-normal">Clips</th>
+                        <th className="py-2 font-normal">Equity</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.backtest.monthly.map((m) => (
+                        <tr key={m.ym} className="border-t border-line/60">
+                          <td className="py-2 text-ghost">{m.ym}</td>
+                          <td className={m.pnlUsd >= 0 ? "text-acid" : "text-blood"}>
+                            {m.pnlUsd >= 0 ? "+" : "−"}
+                            {money(Math.abs(m.pnlUsd))}
+                          </td>
+                          <td className="text-mute">{m.trades}</td>
+                          <td className="text-mute">{money(m.endEquity)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+            {data.backtest.fills.length > 0 && (
+              <div>
+                <div className="font-mono text-[10px] tracking-[0.2em] text-mute">LAST CLIPS</div>
+                <div className="mt-2 max-h-64 space-y-2 overflow-auto">
+                  {data.backtest.fills
+                    .slice()
+                    .reverse()
+                    .map((f, i) => (
+                      <div key={`${f.at}-${i}`} className="flex items-start justify-between gap-3 font-mono text-[11px]">
+                        <span className={f.side === "buy" ? "text-acid" : "text-ghost"}>
+                          {f.side.toUpperCase()} {f.symbol}
+                        </span>
+                        <span className="max-w-[70%] text-right text-mute">
+                          {money(f.sizeUsd)}
+                          {f.pnlUsd != null ? ` · ${f.pnlUsd >= 0 ? "+" : "−"}${money(Math.abs(f.pnlUsd))}` : ""} · {f.reason}
+                        </span>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
+            <p className="text-xs text-mute">{data.backtest.note}</p>
+          </div>
+        ) : (
+          <p className="mt-4 text-sm text-mute">No run yet. Hit Run backtest — it takes about a minute.</p>
+        )}
       </section>
 
       <section className="panel mt-6 rounded-2xl p-5">

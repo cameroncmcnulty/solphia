@@ -153,6 +153,7 @@ export function buildAdminDesk(opts?: { light?: boolean }): AdminDesk {
       leftName: p.leftName,
       rightName: p.rightName,
     })),
+    backtest: s.backtest || null,
   };
 }
 

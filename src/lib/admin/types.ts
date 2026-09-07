@@ -136,4 +136,5 @@ export type AdminDesk = {
     band: string;
   };
   pairs: { id: string; left: string; right: string; leftName: string; rightName: string }[];
+  backtest?: import("../types").BacktestReport | null;
 };
