@@ -49,6 +49,7 @@ export type AdminPromo = {
   pnlLabel: string;
   mime: string;
   url: string;
+  dataUrl?: string;
 };
 
 export type AdminOps = {

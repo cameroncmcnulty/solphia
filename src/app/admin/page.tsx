@@ -303,7 +303,11 @@ export default function AdminPage() {
               {item.kind === "video" ? (
                 <video src={item.url} controls className="aspect-[9/16] w-full bg-black object-cover sm:aspect-video" />
               ) : (
-                <img src={item.url} alt={item.headline} className="aspect-square w-full object-cover" />
+                <img
+                  src={item.dataUrl || item.url}
+                  alt={item.headline}
+                  className={`w-full object-cover ${item.aspect === "9:16" ? "aspect-[9/16]" : item.aspect === "16:9" ? "aspect-video" : "aspect-square"}`}
+                />
               )}
               <div className="space-y-2 p-4">
                 <div className="font-mono text-[10px] tracking-[0.2em] text-violet">

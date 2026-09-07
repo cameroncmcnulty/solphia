@@ -9,6 +9,7 @@ import { isFounder } from "../access";
 import { loadState } from "../store";
 import { lastPairDesk, lastPairPrices, publicBook } from "../tick";
 import { treasuryAddress } from "../treasury";
+import { promoDataUrl, promoViewToken } from "./promoFile";
 import { bookHoldingUsd, sumWindows, tradingNow, uniqueWallets } from "./stats";
 import type { AdminDesk, AdminPromo, AdminSeat, AdminSleeve, AdminTrader } from "./types";
 
@@ -77,17 +78,22 @@ export function buildAdminDesk(): AdminDesk {
   const promos: AdminPromo[] = (s.promos || [])
     .slice()
     .reverse()
-    .map((p) => ({
-      id: p.id,
-      at: p.at,
-      kind: p.kind,
-      aspect: p.aspect,
-      headline: p.headline,
-      caption: p.caption,
-      pnlLabel: p.pnlLabel,
-      mime: p.mime,
-      url: `/api/admin/promo/file?id=${encodeURIComponent(p.id)}`,
-    }));
+    .map((p, i) => {
+      const token = promoViewToken(p.id);
+      const url = `/api/admin/promo/file?id=${encodeURIComponent(p.id)}&t=${encodeURIComponent(token)}`;
+      return {
+        id: p.id,
+        at: p.at,
+        kind: p.kind,
+        aspect: p.aspect,
+        headline: p.headline,
+        caption: p.caption,
+        pnlLabel: p.pnlLabel,
+        mime: p.mime,
+        url,
+        dataUrl: i < 12 && p.file && p.kind === "image" ? promoDataUrl(p.file, p.mime) : undefined,
+      };
+    });
 
   return {
     liveTrading: liveTradingEnabled(),

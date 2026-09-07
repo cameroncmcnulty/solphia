@@ -1,21 +1,12 @@
 import fs from "fs";
-import path from "path";
 import { packNote, writePack } from "../content/copy";
 import { renderShot } from "../content/render";
-import { DATA_DIR, audit, loadState, mutateState, pushBounded } from "../store";
+import { audit, loadState, mutateState, pushBounded } from "../store";
 import type { AppState, PromoItem } from "../types";
+import { promoPath } from "./promoFile";
 
 export const PROMO_CAP = 24;
-
-function promoDir() {
-  const dir = path.join(DATA_DIR, "promos");
-  fs.mkdirSync(dir, { recursive: true });
-  return dir;
-}
-
-export function promoPath(file: string) {
-  return path.join(promoDir(), file);
-}
+export { promoPath, promoDataUrl, promoViewOk, promoViewToken } from "./promoFile";
 
 function id() {
   return `prm_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
