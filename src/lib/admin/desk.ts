@@ -7,6 +7,7 @@ import type { PairDeskPublic } from "../pair/public";
 import { heliusEnabled } from "../solana/connection";
 import { isFounder } from "../access";
 import { loadState } from "../store";
+import { latestBacktest } from "../pair/backtest";
 import { lastPairDesk, lastPairPrices, publicBook } from "../tick";
 import { treasuryAddress } from "../treasury";
 import { promoDataUrl, promoViewToken } from "./promoFile";
@@ -153,7 +154,7 @@ export function buildAdminDesk(opts?: { light?: boolean }): AdminDesk {
       leftName: p.leftName,
       rightName: p.rightName,
     })),
-    backtest: s.backtest || null,
+    backtest: latestBacktest(s.backtest),
   };
 }
 

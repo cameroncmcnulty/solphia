@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { publicBacktest, runBacktest, type BacktestTape } from "../lib/pair/backtest";
+import { latestBacktest, publicBacktest, runBacktest, type BacktestTape } from "../lib/pair/backtest";
 import type { Candle } from "../lib/sol/indicators";
 
 function climb(n: number, px: number, t0: number, dt: number, step: number): Candle[] {
@@ -31,7 +31,7 @@ describe("backtest replay", () => {
     assert.equal(report.startingUsd, 1000);
     assert.ok(report.endingUsd > 0);
     assert.ok(report.maxDdPct >= 0);
-    assert.match(report.note, /not a live book/i);
+    assert.match(report.note, /historical paper/i);
     assert.match(report.horizon, /fees/i);
     assert.ok(Array.isArray(report.daily));
     assert.ok(typeof report.bestDayUsd === "number");
@@ -43,8 +43,12 @@ describe("backtest replay", () => {
     }
   });
 
-  it("hides the brochure when there is no run", () => {
-    const pub = publicBacktest(null);
-    assert.equal(pub.ready, false);
+  it("falls back to the shipped seed so the public curve always has a mark", () => {
+    const pub = publicBacktest(latestBacktest(null));
+    assert.equal(pub.ready, true);
+    if (pub.ready) {
+      assert.ok((pub.curve?.length || 0) > 8);
+      assert.ok((pub.trades || 0) >= 1);
+    }
   });
 });

@@ -34,10 +34,10 @@ export default function Home() {
                 LAUNCH BOT
               </Link>
               <Link
-                href="/faq"
+                href="#backtest"
                 className="btn-ghost inline-flex min-h-[48px] w-full items-center justify-center rounded-full px-6 py-3 text-center text-base sm:min-h-[56px] sm:w-auto sm:px-8 sm:text-lg"
               >
-                How she trades
+                See the backtest
               </Link>
             </div>
           </div>

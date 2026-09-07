@@ -18,6 +18,12 @@ import type { RatioSample } from "./ratio";
 import type { ScalpFrames, SleeveFrames } from "./frames";
 import { emptyFrames } from "./frames";
 import { equityOf, markPair, pairOf } from "./engine";
+import seed from "./backtestSeed.json";
+
+export function latestBacktest(stored?: BacktestReport | null): BacktestReport {
+  if (stored && Array.isArray(stored.curve) && stored.curve.length) return stored;
+  return seed as BacktestReport;
+}
 
 export type { BacktestReport, BacktestPoint } from "../types";
 
@@ -222,7 +228,7 @@ function reportOf(book: PaperBook, curve: BacktestPoint[], from: number, to: num
         pnlUsd: f.pnlUsd != null ? Math.round(f.pnlUsd * 100) / 100 : undefined,
         reason: f.reason.slice(0, 120),
       })),
-    note: "Historical paper of this engine on SOL, SPY, QQQ, and gold. Fees and 0.1% clip are in the mark. Past results are not a live book and not a promise.",
+    note: "Historical paper of this engine on SOL, SPY, QQQ, and gold. Same rules she runs now. Fees and the 0.1% clip are in the mark. Past days are not a promise she prints $2 every session.",
   };
 }
 

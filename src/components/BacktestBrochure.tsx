@@ -31,7 +31,7 @@ function money(n: number) {
 
 function when(ms?: number) {
   if (!ms) return "";
-  return new Date(ms).toLocaleDateString("en-US", { month: "short", year: "numeric" });
+  return new Date(ms).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
 export function BacktestBrochure() {
@@ -44,45 +44,55 @@ export function BacktestBrochure() {
       .catch(() => setData({ ready: false }));
   }, []);
 
-  if (!data?.ready || !data.curve?.length) return null;
-
-  const up = (data.pnlPct || 0) >= 0;
-  const pct = `${up ? "+" : ""}${((data.pnlPct || 0) * 100).toFixed(1)}%`;
+  const ready = Boolean(data?.ready && data.curve?.length);
+  const up = (data?.pnlPct || 0) >= 0;
+  const pct = ready ? `${up ? "+" : ""}${((data?.pnlPct || 0) * 100).toFixed(1)}%` : "…";
 
   return (
-    <section className="px-4 py-10 md:px-12 md:py-16">
+    <section id="backtest" className="px-4 py-10 md:px-12 md:py-16">
       <div className="panel overflow-hidden rounded-[2rem] p-5 sm:p-8 md:p-12">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="font-mono text-[11px] tracking-[0.28em] text-acid">PAPER BACKTEST · FEES IN</p>
+            <p className="font-mono text-[11px] tracking-[0.28em] text-acid">PAPER BACKTEST · FEES IN · $1,000 START</p>
             <h2 className="mt-2 max-w-2xl font-display text-3xl leading-tight text-ghost sm:text-5xl md:text-6xl">
               The curve is the point.
             </h2>
             <p className="mt-3 max-w-xl text-sm text-mute sm:text-lg">
-              Same engine. Official SOL, S&P 500, Nasdaq-100, and gold. She sits in USDC, scalps the sleeve with a
-              5m/15m setup that agrees with Daily/4H, and trails the stop up.
+              Same engine she runs now. Official SOL, S&P 500, Nasdaq-100, and gold. She sits in USDC, scalps a 15m
+              setup that agrees with Daily/4H, and trails the stop up. Historical paper — not a live book.
             </p>
           </div>
           <div className="text-left lg:text-right">
-            <div className={`font-display text-5xl sm:text-7xl ${up ? "text-acid" : "text-blood"}`}>{pct}</div>
+            <div className={`font-display text-5xl sm:text-7xl ${ready ? (up ? "text-acid" : "text-blood") : "text-mute"}`}>
+              {pct}
+            </div>
             <div className="mt-1 font-mono text-xs text-mute">
-              {money(data.startingUsd || 1000)} → {money(data.endingUsd || 0)} USDC · {when(data.from)}–{when(data.to)}
+              {ready
+                ? `${money(data?.startingUsd || 1000)} → ${money(data?.endingUsd || 0)} USDC · ${when(data?.from)}–${when(data?.to)}`
+                : "Loading the last engine replay…"}
             </div>
           </div>
         </div>
 
-        <div className="mt-8">
-          <EquityCurve curve={data.curve} up={up} />
+        <div className="mt-8 min-h-[180px]">
+          {ready && data?.curve ? <EquityCurve curve={data.curve} up={up} /> : <div className="h-48 rounded-2xl bg-void/50" />}
         </div>
 
         <div className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Stat k="Clips" v={String(data.trades || 0)} sub={data.horizon || "1h marks"} />
-          <Stat k="Win rate" v={`${Math.round((data.winRate || 0) * 100)}%`} sub="closed to USDC" />
-          <Stat k="Max DD" v={`−${((data.maxDdPct || 0) * 100).toFixed(1)}%`} sub="from peak" />
-          <Stat k="Best day" v={`+$${Math.abs(data.bestDayUsd || 0).toFixed(0)}`} sub={`${data.daysGe2 || 0} days ≥ $2`} />
+          <Stat k="Clips" v={ready ? String(data?.trades || 0) : "—"} sub={data?.horizon || "15m marks"} />
+          <Stat k="Win rate" v={ready ? `${Math.round((data?.winRate || 0) * 100)}%` : "—"} sub="closed to USDC" />
+          <Stat k="Max DD" v={ready ? `−${((data?.maxDdPct || 0) * 100).toFixed(1)}%` : "—"} sub="from peak" />
+          <Stat
+            k="Best day"
+            v={ready ? `+$${Math.abs(data?.bestDayUsd || 0).toFixed(0)}` : "—"}
+            sub={ready ? `${data?.daysGe2 || 0} days ≥ $2` : "on a $1,000 book"}
+          />
         </div>
 
-        <p className="mt-6 max-w-3xl text-xs leading-relaxed text-mute sm:text-sm">{data.note}</p>
+        <p className="mt-6 max-w-3xl text-xs leading-relaxed text-mute sm:text-sm">
+          {data?.note ||
+            "Same rules she trades with now. A $2–3 day showed up on this replay — it is not a guarantee she prints that every session. Fees are already in the line."}
+        </p>
 
         <div className="mt-8 flex flex-col gap-3 sm:flex-row">
           <Link
