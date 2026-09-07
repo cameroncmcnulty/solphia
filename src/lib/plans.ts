@@ -77,7 +77,7 @@ export const FAQS: { q: string; a: string }[] = [
   },
   {
     q: "Where is leverage?",
-    a: "There isn’t any. Spot only. She will not borrow or loop your SOL.",
+    a: "Not in this version. Official SPYx, QQQx, and GLDx are spot tokens — there is no issuer 2x. Real leverage would be a separate SOL perps venue (liquidation and funding), not a fake multiplier on Jupiter. That is off until it is wired for real.",
   },
   {
     q: "What happens when I hit KILL?",

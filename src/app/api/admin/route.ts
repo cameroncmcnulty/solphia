@@ -8,7 +8,7 @@ import { isSolanaAddress, clientIp } from "@/lib/security";
 import { emptyBook } from "@/lib/auto";
 import { runBacktest } from "@/lib/pair/backtest";
 import { loadBacktestTape } from "@/lib/pair/backtestTape";
-import { mutateState, audit, pushBounded, readyState } from "@/lib/store";
+import { mutateState, audit, pushBounded, readyState, loadAllTraders } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -16,7 +16,8 @@ export const maxDuration = 120;
 export async function GET(req: NextRequest) {
   const denied = requireAdmin(req);
   if (denied) return denied;
-  await readyState();
+  const state = await readyState();
+  await loadAllTraders(state);
   try {
     await settlePendingPromo(0);
   } catch {

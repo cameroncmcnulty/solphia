@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "rate_limited" }, { status: 429 });
   }
   const state = await readyState();
-  const stale = Date.now() - (state.lastTickAt || 0) > 8_000;
+  const stale = Date.now() - (state.lastTickAt || 0) > 12_000;
   if (stale) {
     try {
       const tick = await Promise.race([

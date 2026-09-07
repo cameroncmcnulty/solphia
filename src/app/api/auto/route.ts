@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { clientIp, isSolanaAddress, rateLimit } from "@/lib/security";
-import { loadState, mutateState, readyState } from "@/lib/store";
+import { loadState, readyState, mutateTrader, loadTrader, touchHot, setLiveOwner, saveOps, saveTrader } from "@/lib/store";
 import { emptyTrader, bankrollUsd, maybeResizeBook, lockedAuto } from "@/lib/auto";
 import { publicBook } from "@/lib/tick";
 import { liveTradingEnabled } from "@/lib/liveFlag";
@@ -18,13 +18,15 @@ export async function GET(req: NextRequest) {
   const owner = req.nextUrl.searchParams.get("owner") || "";
   if (!isSolanaAddress(owner)) return NextResponse.json({ error: "bad_owner" }, { status: 400 });
   const state = await readyState();
-  let trader = state.traders[owner];
+  let trader = state.traders[owner] || (await loadTrader(owner));
   if (!trader) {
     trader = emptyTrader(owner);
-    await mutateState((s) => {
-      if (!s.traders[owner]) s.traders[owner] = trader;
-    });
+    state.traders[owner] = trader;
+    await saveTrader(trader);
   }
+  const prevHot = state.hotAt?.[owner] || 0;
+  touchHot(state, owner);
+  if (Date.now() - prevHot > 20_000) await saveOps(state);
   const auto = lockedAuto({
     ...trader.auto,
     mode: trader.auto.mode,
@@ -81,8 +83,7 @@ export async function POST(req: NextRequest) {
     prices = null;
   }
   const solUsd = prices?.sol.usd || 0;
-  const trader = await mutateState((s) => {
-    const t = s.traders[parsed.data.owner] || emptyTrader(parsed.data.owner);
+  const trader = await mutateTrader(parsed.data.owner, (t, s) => {
     const wasArmed = Boolean(t.auto?.armed);
     const nextMode = parsed.data.auto?.mode ?? t.auto.mode;
     const nextArmed = parsed.data.auto?.armed ?? t.auto.armed;
@@ -102,6 +103,8 @@ export async function POST(req: NextRequest) {
     if (!t.auto.armedAt) t.auto.armedAt = Date.now();
     if (t.auto.mode === "live" && !liveTradingEnabled()) t.auto.mode = "paper";
     if (t.auto.mode === "live" && treasuryAddress() && !liveSeatOk(s, parsed.data.owner)) t.auto.mode = "paper";
+    setLiveOwner(s, parsed.data.owner, t.auto.mode === "live" && !t.book.killed);
+    touchHot(s, parsed.data.owner);
     if (parsed.data.tradingPubkey) t.tradingPubkey = parsed.data.tradingPubkey;
     if (parsed.data.depositedSol != null) t.depositedSol = parsed.data.depositedSol;
     t.book = maybeResizeBook(t.book, bankrollUsd(t.depositedSol, solUsd || 100));
@@ -153,7 +156,6 @@ export async function POST(req: NextRequest) {
       }
     }
     t.updatedAt = Date.now();
-    s.traders[parsed.data.owner] = t;
     return t;
   });
   const autoOut = lockedAuto({

@@ -9,7 +9,7 @@ import { quoteSolSpyx } from "./pair/jupiter";
 import { DEFAULT_STUDY } from "./pair/knowledge";
 import { loadShortTape } from "./pair/shortTape";
 import { loadScalpFrames } from "./pair/frames";
-import { loadState, saveState, readyState } from "./store";
+import { readyState, saveOps, saveTrader, loadHotTraders } from "./store";
 import { liveSeatOk } from "./access";
 import { treasuryAddress } from "./treasury";
 import type { FeedHealth, PaperBook } from "./types";
@@ -151,7 +151,7 @@ export async function runMarketTick(): Promise<{
     if (!prices || prices.sol.usd <= 0) {
       state.feedHealth = health;
       state.lastTickAt = now;
-      await saveState(state);
+      await saveOps(state);
       return {
         paper: publicBook(state.paper),
         health,
@@ -233,7 +233,9 @@ export async function runMarketTick(): Promise<{
     let entries = demo.fills.filter((f) => f.side === "buy").length;
     let exits = demo.fills.filter((f) => f.side === "sell").length;
 
-    for (const [owner, trader] of Object.entries(state.traders || {})) {
+    const hot = await loadHotTraders(state);
+    for (const trader of hot) {
+      const owner = trader.owner;
       const seatOk = !treasuryAddress() || liveSeatOk(state, owner);
       const liveWanted = trader.auto?.mode === "live" && liveTradingEnabled() && seatOk;
       trader.auto = lockedAuto({
@@ -251,6 +253,7 @@ export async function runMarketTick(): Promise<{
       }
       if (trader.book.killed) {
         trader.updatedAt = now;
+        await saveTrader(trader);
         continue;
       }
       const live = trader.auto.mode === "live" && Boolean(trader.auto.armed);
@@ -272,6 +275,7 @@ export async function runMarketTick(): Promise<{
       entries += t.fills.filter((f) => f.side === "buy").length;
       exits += t.fills.filter((f) => f.side === "sell").length;
       trader.updatedAt = now;
+      await saveTrader(trader);
     }
 
     state.feedHealth = health;
@@ -284,7 +288,7 @@ export async function runMarketTick(): Promise<{
       gldxUsd: prices.gldx.usd,
     };
     state.lastPair = lastPairPublic;
-    await saveState(state);
+    await saveOps(state);
 
     return {
       paper: publicBook(state.paper),

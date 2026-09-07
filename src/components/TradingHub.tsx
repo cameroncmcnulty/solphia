@@ -63,7 +63,7 @@ function tapeLabel(action: string) {
 export function TradingHub() {
   const connected = useOwner();
   const owner = connected || loadOwner();
-  const { data, loading, refresh } = useMarket(8000);
+  const { data, loading, refresh } = useMarket(12_000);
   const [auto, setAuto] = useState<Auto | null>(null);
   const [paper, setPaper] = useState<any>(null);
   const [liveTrading, setLiveTrading] = useState(false);
@@ -135,7 +135,7 @@ export function TradingHub() {
 
   useEffect(() => {
     if (!owner) return;
-    const id = setInterval(() => refreshAuto(owner), 8000);
+    const id = setInterval(() => refreshAuto(owner), 12_000);
     return () => clearInterval(id);
   }, [owner]);
 

@@ -3,7 +3,7 @@
 import { useMarket } from "@/lib/hooks";
 
 export function LiveStats({ compact = false }: { compact?: boolean }) {
-  const { data, loading } = useMarket(8000);
+  const { data, loading } = useMarket(12_000);
   const paper = data?.paper || {
     equityUsd: 1000,
     startingUsd: 1000,

@@ -347,6 +347,8 @@ export interface TraderAccount {
   auto: AutoSettings;
   book: PaperBook;
   updatedAt: number;
+  /** Optimistic lock. Bumped on each durable save. */
+  rev?: number;
 }
 
 export interface AlertEvent {
@@ -469,6 +471,10 @@ export interface AppState {
   watchWallets: string[];
   adminWallets: string[];
   traders: Record<string, TraderAccount>;
+  /** Owners with REAL mode on. Tick these even if the hub is idle. */
+  liveOwners?: string[];
+  /** owner → last hub touch. Tick if recent. */
+  hotAt?: Record<string, number>;
   feedHealth: FeedHealth[];
   curveWatch: Record<string, CurveTick>;
   lastTickAt: number;
