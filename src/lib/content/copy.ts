@@ -32,9 +32,12 @@ export type Mood = "acid" | "violet" | "cyan" | "blood";
 export type Compose = "bleed-bottom" | "bleed-side" | "bleed-top" | "type-hero" | "tape-sky" | "orbit" | "kill-wash";
 export type Asset = "solphia-face.png" | "solphia-hero.png" | "solphia-head.png";
 
+export type Fit = "cover" | "left" | "right";
+
 export type Art = {
   compose: Compose;
   asset: Asset;
+  fit: Fit;
   cropX: number;
   cropY: number;
   shiftX: number;
@@ -115,7 +118,7 @@ const BEATS = [
 
 const SESSIONS = ["CASH SESSION", "AFTER HOURS", "WEEKEND TAPE"];
 const MOODS: Mood[] = ["acid", "violet", "cyan"];
-const ASSETS: Asset[] = ["solphia-head.png", "solphia-head.png", "solphia-hero.png"];
+const ASSETS: Asset[] = ["solphia-face.png", "solphia-hero.png"];
 const COMPOSES: Compose[] = ["bleed-bottom", "bleed-side", "bleed-top", "type-hero", "tape-sky", "orbit"];
 const FADES: Art["fade"][] = ["left", "right", "bottom", "top", "center"];
 const CHIPS = ["SPOT", "NO Leverage", "PHANTOM", "USDC PnL", "2m WAIT", "KILL ON", "xSTOCKS", "PAPER FIRST"];
@@ -136,11 +139,43 @@ const ALL_LAYOUTS: Layout[] = [
 ];
 
 function aspectFor(layout: Layout, rng: () => number): Aspect {
-  if (layout === "story" || layout === "steps" || layout === "kill" || layout === "quote") return rng() > 0.35 ? "9:16" : "1:1";
-  if (layout === "desk" || layout === "split" || layout === "session") return rng() > 0.4 ? "16:9" : "1:1";
-  if (layout === "tape" || layout === "curve") return rng() > 0.5 ? "1:1" : "16:9";
-  if (layout === "pairs" || layout === "sleeves") return rng() > 0.5 ? "1:1" : "16:9";
-  return pick(rng, ["1:1", "9:16", "16:9"] as Aspect[]);
+  if (layout === "desk" || layout === "session") return rng() > 0.35 ? "16:9" : "1:1";
+  if (layout === "story" || layout === "kill" || layout === "quote" || layout === "steps") return rng() > 0.28 ? "9:16" : "1:1";
+  if (layout === "tape" || layout === "curve") return rng() > 0.55 ? "1:1" : "9:16";
+  return pick(rng, ["1:1", "9:16", "1:1", "16:9"] as Aspect[]);
+}
+
+function directArt(layout: Layout, aspect: Aspect, rng: () => number, used: Compose[]): Art {
+  let fit: Fit = "cover";
+  let compose: Compose;
+  if (aspect === "16:9") {
+    fit = rng() > 0.5 ? "left" : "right";
+    compose = "bleed-side";
+  } else if (layout === "kill") {
+    compose = "kill-wash";
+    fit = "cover";
+  } else if (layout === "tape" || layout === "curve") {
+    compose = "tape-sky";
+    fit = "cover";
+  } else {
+    const pool = COMPOSES.filter((c) => c !== "bleed-side");
+    compose = pick(rng, pool);
+    if (used.includes(compose)) compose = pick(rng, pool, compose);
+    fit = "cover";
+  }
+  return {
+    compose,
+    fit,
+    asset: pick(rng, ASSETS),
+    cropX: 42 + rng() * 16,
+    cropY: aspect === "9:16" ? 6 + rng() * 16 : rng() * 14,
+    shiftX: 0,
+    shiftY: 0,
+    fade: aspect === "16:9" ? (fit === "left" ? "right" : "left") : pick(rng, ["bottom", "bottom", "top", "center"] as Art["fade"][]),
+    stars: 6 + Math.floor(rng() * 8),
+    tape: compose === "tape-sky" || (aspect === "16:9" && rng() > 0.4) || rng() > 0.62,
+    typeScale: 0.92 + rng() * 0.22,
+  };
 }
 
 export function aestheticPnl(seed: number) {
@@ -193,21 +228,8 @@ export function localPack(now = Date.now(), hint = ""): Shot[] {
     const pair = pick(rng, PAIRS);
     const vis = emptyVisual(rng);
     const caption = `${JOB}\n\n${beatA} ${beatB}\n\nIllustrative mark ${pnlLabel} — for the post, not a live book.${extra}\n\nsolphia.io`;
-    let compose: Compose = layout === "kill" ? "kill-wash" : layout === "tape" || layout === "curve" ? "tape-sky" : pick(rng, COMPOSES);
-    if (usedCompose.includes(compose) && compose !== "kill-wash") compose = pick(rng, COMPOSES, compose);
-    usedCompose.push(compose);
-    const art: Art = {
-      compose,
-      asset: pick(rng, ASSETS),
-      cropX: 28 + rng() * 44,
-      cropY: 18 + rng() * 50,
-      shiftX: Math.round((rng() - 0.5) * 18),
-      shiftY: Math.round((rng() - 0.35) * 14),
-      fade: pick(rng, FADES),
-      stars: 10 + Math.floor(rng() * 16),
-      tape: compose === "tape-sky" || compose === "orbit" || rng() > 0.45,
-      typeScale: 0.88 + rng() * 0.35,
-    };
+    const art = directArt(layout, aspect, rng, usedCompose);
+    usedCompose.push(art.compose);
     return {
       aspect,
       layout,

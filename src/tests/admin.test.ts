@@ -99,6 +99,8 @@ describe("content bot", () => {
       assert.equal(s.sleeves.length, 5);
       assert.ok(s.art.compose);
       assert.ok(s.art.asset);
+      assert.ok(s.art.fit === "cover" || s.art.fit === "left" || s.art.fit === "right");
+      assert.notEqual(s.art.asset, "solphia-head.png");
     }
     const composes = new Set(shots.map((s) => s.art.compose));
     assert.ok(composes.size >= 2);
