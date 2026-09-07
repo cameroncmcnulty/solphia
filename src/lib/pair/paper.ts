@@ -5,6 +5,7 @@ import { applyFee } from "../risk/engine";
 import {
   PAIR_FEE_BPS,
   PAIR_SLIP_BPS,
+  PROTOCOL_FEE_BPS,
   SLEEVE_WEIGHT,
   costOf,
   decidePair,
@@ -40,7 +41,7 @@ export function tapeOf(
 }
 
 function costs(sizeUsd: number, impactPct = 0) {
-  const fee = applyFee(sizeUsd, PAIR_FEE_BPS);
+  const fee = applyFee(sizeUsd, PAIR_FEE_BPS) + applyFee(sizeUsd, PROTOCOL_FEE_BPS);
   const slip = applyFee(sizeUsd, PAIR_SLIP_BPS) + sizeUsd * Math.max(0, impactPct);
   return { fee, slip, drag: fee + slip };
 }

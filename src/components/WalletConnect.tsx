@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { PhantomMark } from "./PhantomMark";
 
 type Provider = {
@@ -10,7 +10,6 @@ type Provider = {
   disconnect?: () => Promise<void>;
   on?: (event: string, handler: (pk?: { toString(): string } | null) => void) => void;
   off?: (event: string, handler: (pk?: { toString(): string } | null) => void) => void;
-  signMessage?: (msg: Uint8Array, enc?: string) => Promise<{ signature: Uint8Array } | Uint8Array>;
 };
 
 declare global {
@@ -34,16 +33,44 @@ function setOwner(pubkey: string | null) {
   window.dispatchEvent(new CustomEvent("solphia-owner", { detail: pubkey }));
 }
 
+function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error(`${label} timed out`)), ms);
+    p.then(
+      (v) => {
+        clearTimeout(t);
+        resolve(v);
+      },
+      (e) => {
+        clearTimeout(t);
+        reject(e);
+      },
+    );
+  });
+}
+
 export function WalletConnect({ compact: _compact = false }: { compact?: boolean }) {
   const [addr, setAddr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const mounted = useRef(true);
 
   useEffect(() => {
+    mounted.current = true;
     const found = phantom();
     if (found?.publicKey) {
       const pubkey = found.publicKey.toString();
       setAddr(pubkey);
       setOwner(pubkey);
+    } else if (found) {
+      found.connect({ onlyIfTrusted: true }).then(
+        (res) => {
+          if (!mounted.current || !res?.publicKey) return;
+          const pubkey = res.publicKey.toString();
+          setAddr(pubkey);
+          setOwner(pubkey);
+        },
+        () => undefined,
+      );
     }
     const onAccount = (pk?: { toString(): string } | null) => {
       const next = pk ? pk.toString() : null;
@@ -53,6 +80,7 @@ export function WalletConnect({ compact: _compact = false }: { compact?: boolean
     found?.on?.("accountChanged", onAccount);
     found?.on?.("disconnect", onAccount);
     return () => {
+      mounted.current = false;
       found?.off?.("accountChanged", onAccount);
       found?.off?.("disconnect", onAccount);
     };
@@ -68,34 +96,24 @@ export function WalletConnect({ compact: _compact = false }: { compact?: boolean
     setBusy(true);
     const prev = addr;
     try {
-      if (addr && found.disconnect) {
-        await found.disconnect();
+      if (addr && found.publicKey?.toString() === addr && found.disconnect) {
+        try {
+          await withTimeout(found.disconnect(), 4000, "disconnect");
+        } catch {
+          /* still try connect */
+        }
       }
-      const res = await found.connect();
+      const res = await withTimeout(found.connect(), 20000, "connect");
       const pubkey = res.publicKey.toString();
       setAddr(pubkey);
       setOwner(pubkey);
-      const nonceRes = await fetch("/api/session");
-      const nonceJson = await nonceRes.json();
-      if (found.signMessage && nonceJson.message) {
-        const serverMsg = String(nonceJson.message).replace("YOUR_WALLET", pubkey);
-        const encoded = new TextEncoder().encode(serverMsg);
-        const signed = await found.signMessage(encoded, "utf8");
-        const sig = signed && typeof signed === "object" && "signature" in signed ? signed.signature : (signed as Uint8Array);
-        const b64 = btoa(String.fromCharCode(...Array.from(sig)));
-        await fetch("/api/session", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ pubkey, signature: b64 }),
-        });
-      }
     } catch {
       if (prev) {
         setAddr(prev);
         setOwner(prev);
       }
     } finally {
-      setBusy(false);
+      if (mounted.current) setBusy(false);
     }
   }
 
@@ -108,7 +126,7 @@ export function WalletConnect({ compact: _compact = false }: { compact?: boolean
       className="btn-ghost inline-flex min-h-[40px] items-center gap-2 rounded-full px-3 py-2 font-mono text-[11px] tracking-widest sm:min-h-[44px] sm:px-4"
     >
       <PhantomMark className="h-5 w-5 shrink-0 text-white" />
-      {busy ? "SIGNING…" : addr ? `${addr.slice(0, 4)}…${addr.slice(-4)}` : "CONNECT"}
+      {busy ? "CONNECTING…" : addr ? `${addr.slice(0, 4)}…${addr.slice(-4)}` : "CONNECT"}
     </button>
   );
 }

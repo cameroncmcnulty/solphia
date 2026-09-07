@@ -298,11 +298,11 @@ describe("paper fills + kill", () => {
     assert.ok((book.pair?.usdcQty || 0) > 50);
   });
 
-  it("v1 leverage is always 1 and cooldown is 5 minutes", () => {
+  it("v1 leverage is always 1 and cooldown is 2 minutes", () => {
     assert.equal(DEFAULT_AUTO.leverage, 1);
     assert.equal(DEFAULT_AUTO.mode, "paper");
     assert.equal(DEFAULT_AUTO.style, "mean_revert");
-    assert.equal(DEFAULT_AUTO.cooldownMin, 5);
+    assert.equal(DEFAULT_AUTO.cooldownMin, 2);
     assert.equal(DEFAULT_AUTO.band, "normal");
   });
 

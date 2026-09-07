@@ -25,12 +25,12 @@ import {
   type Sleeve,
   type TradePair,
 } from "./catalog";
+import { enrichStudy, reviewTrade } from "./policy";
 
 export type { Sleeve, TradePair } from "./catalog";
 export { SLEEVE_WEIGHT, TRADE_PAIRS };
 
-export const PAIR_FEE_BPS = 5;
-export const PAIR_SLIP_BPS = 4;
+export { PAIR_FEE_BPS, PAIR_SLIP_BPS, PROTOCOL_FEE_BPS } from "../config";
 export const PAIR_MIN_CLIP_USD = 15;
 export const PAIR_MAX_IMPACT = 0.004;
 export const SOL_WEIGHT = SLEEVE_WEIGHT;
@@ -251,7 +251,8 @@ export function decidePair(opts: {
   quoteOk?: boolean;
   live?: boolean;
 }): PairDecision {
-  const { auto, book, prices, samples, study, now } = opts;
+  const { auto, book, prices, samples, now } = opts;
+  const study = enrichStudy(opts.study, opts.samples, opts.now);
   const session = usEquitySession(now);
   const userBand = (auto.band || "normal") as BandName;
   const band = bumpBand(userBand, opts.losses || 0);
@@ -319,7 +320,7 @@ export function decidePair(opts: {
     };
   }
 
-  const cooldownMs = (auto.cooldownMin ?? 5) * 60_000;
+  const cooldownMs = (auto.cooldownMin ?? 2) * 60_000;
   const allocated = allocatedUsd(book, auto, prices.sol.usd, opts.depositedSol || 0);
   const clipPct = clamp(auto.clipPct ?? 0.12, 0.05, 0.35);
   const clipUsd = Math.max(PAIR_MIN_CLIP_USD, Math.min(allocated * clipPct, allocated * 0.35));
@@ -400,13 +401,14 @@ export function decidePair(opts: {
 
   type Cand = PairDecision & { score: number };
   const cands: Cand[] = [];
+  let lastVeto = "";
   for (const pair of TRADE_PAIRS) {
     if (auction && involvesEquity(pair)) continue;
     const read = reads[pair.id];
     if (!read || read.n7 < 12) continue;
     const lastPair = h.lastClipAt?.[pair.id] || 0;
     if (cooldownMs > 0 && lastPair && now - lastPair < cooldownMs) continue;
-    if (cooldownMs > 0 && book.lastTradeAt && now - book.lastTradeAt < Math.min(90_000, cooldownMs)) continue;
+    if (cooldownMs > 0 && book.lastTradeAt && now - book.lastTradeAt < cooldownMs) continue;
     const minExt = involvesSol(pair) ? solExt : usdExt;
     const ext7 = Math.abs(read.logR - read.mean7);
     if (ext7 < minExt) continue;
@@ -417,14 +419,31 @@ export function decidePair(opts: {
     const to = high ? pair.right : pair.left;
     const fromUsd = usdOf(from);
     if (fromUsd < PAIR_MIN_CLIP_USD) continue;
-    const size = Math.min(clipUsd, fromUsd);
-    const why = high
-      ? `${sleeveName(pair.left)} looks expensive versus ${sleeveName(pair.right)}. Selling a slice of ${pair.left} for ${pair.right}.`
-      : `${sleeveName(pair.left)} looks cheap versus ${sleeveName(pair.right)}. Selling a slice of ${pair.right} for ${pair.left}.`;
+    const verdict = reviewTrade({
+      pair,
+      from,
+      to,
+      high,
+      read,
+      ext7,
+      session,
+      study,
+      equity,
+      fromUsd,
+      toUsd: usdOf(to),
+      clipUsd: Math.min(clipUsd, fromUsd),
+      impactPct: opts.impactPct || 0,
+      samples,
+      now,
+    });
+    if (!verdict.ok) {
+      lastVeto = verdict.reason;
+      continue;
+    }
     cands.push({
       action: actionFor(from, to),
-      reason: why,
-      clipUsd: size,
+      reason: verdict.reason,
+      clipUsd: Math.min(verdict.clipUsd, fromUsd),
       from,
       to,
       asset: xstockIdOf(from) || xstockIdOf(to) || undefined,
@@ -436,7 +455,7 @@ export function decidePair(opts: {
       session,
       read,
       reads,
-      score: Math.abs(read.z7),
+      score: verdict.score,
     });
   }
   cands.sort((a, b) => b.score - a.score);
@@ -482,7 +501,8 @@ export function decidePair(opts: {
     .slice(0, 3)
     .map((p) => `${p.left}/${p.right} ${reads[p.id].z7.toFixed(1)}`);
   if (!zParts.length) return empty("skip", "Need a bit more price history before she sizes a trade.");
-  return empty("hold", `Nothing stretched enough yet. Sitting. ${zParts.join(" · ")}`);
+  if (lastVeto) return empty("hold", lastVeto);
+  return empty("hold", `Nothing cleared risk. Sitting. ${zParts.join(" · ")}`);
 }
 
 export function id(prefix: string): string {

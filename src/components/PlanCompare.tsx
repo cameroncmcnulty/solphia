@@ -4,7 +4,7 @@ import Link from "next/link";
 import { COMPARE_ROWS } from "@/lib/plans";
 
 const HEADS = ["Paper", "Live"];
-const PRICES = ["Free", "0.15 SOL / 30d"];
+const PRICES = ["Free", "0.2 SOL / 30d"];
 const ICONS = ["/icons/plan-paper.jpg", "/icons/plan-full.jpg"];
 
 export function PlanCompare() {

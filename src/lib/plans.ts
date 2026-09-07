@@ -16,10 +16,10 @@ export const PLANS: Plan[] = [
   {
     id: "live",
     name: "Live",
-    sol: 0.15,
-    tagline: "Paper is free. Live later, flat SOL / 30d.",
-    story: "Connect Phantom, add SOL, let her trade S&P 500, Nasdaq-100, and gold. Paid gate stays simple.",
-    points: ["Paper book included", "Kill switch always on", "Official SPYx, QQQx, GLDx only", "Keys never with us"],
+    sol: 0.2,
+    tagline: "Paper is free. Live 0.2 SOL / 30d plus 0.1% per clip.",
+    story: "Connect Phantom once, add SOL, she runs. Paid gate stays simple.",
+    points: ["Paper book included", "Kill switch always on", "0.1% clip fee", "Keys never with us"],
     includes: ["live"],
     icon: "/icons/plan-paper.jpg",
     featured: true,
@@ -32,7 +32,7 @@ export function planById(id: string): Plan | undefined {
 
 export function lamportsForPlan(id: PlanId): number {
   const p = planById(id);
-  return Math.round((p?.sol || 0.15) * 1_000_000_000);
+  return Math.round((p?.sol || 0.2) * 1_000_000_000);
 }
 
 export const COMPARE_ROWS: { label: string; hint?: string; values: [string, string] }[] = [
@@ -41,13 +41,14 @@ export const COMPARE_ROWS: { label: string; hint?: string; values: [string, stri
   { label: "SOL vs SPYx, QQQx, GLDx", values: ["Paper", "When live is on"] },
   { label: "Leverage", values: ["None", "Spot only"] },
   { label: "Keys with us", values: ["Never", "Never"] },
-  { label: "30 days", values: ["Free", "0.15 SOL"] },
+  { label: "30 days", values: ["Free", "0.2 SOL"] },
+  { label: "Clip fee", hint: "0.1% (10 bps) on each live clip.", values: ["Paper mark", "0.1%"] },
 ];
 
 export const FAQS: { q: string; a: string }[] = [
   {
     q: "Does she spend my SOL?",
-    a: "Only after you connect Phantom and add SOL to the trading wallet on this device. Keys stay in Phantom. Practice mode is on until you flip to real trades.",
+    a: "Connect Phantom once and add SOL to the trading wallet on this device. After that she signs swaps herself from that wallet. Keys never leave the device. Practice is on until you flip to real trades.",
   },
   {
     q: "What does she trade?",
@@ -55,15 +56,19 @@ export const FAQS: { q: string; a: string }[] = [
   },
   {
     q: "How does she decide?",
-    a: "She stays split across SOL, USDC, S&P 500, Nasdaq, and gold. If USDC/GLDx (or any other pair) looks stretched, she trades it. Expensive side gets sold for the cheap side. If nothing has moved enough, she waits. Profit and loss stay in USDC.",
+    a: "She studies SOL, S&P 500, Nasdaq, and gold history — typical day ranges, crash knives, gold safe-haven spikes, cash-session vs overnight, and whether the move even covers fees. Stretch is one input. She skips knives, closed-market fake prints, and trades that fees would eat. PnL stays in USDC.",
   },
   {
     q: "Are these the same as the New York market?",
     a: "No. They are issuer tokens with extra risk. After the US market closes and on weekends they can still move. You can lose SOL.",
   },
   {
+    q: "Do I sign every trade?",
+    a: "No. Connect Phantom once and add SOL once. After that the trading wallet on this device signs for her. Phantom is not asked again until you withdraw.",
+  },
+  {
     q: "Can I change her settings?",
-    a: "No. Size, wait time, and the 8% stop are locked to the safer defaults. The only switch is practice vs real trades.",
+    a: "No. Size, 2-minute wait, and the 8% stop are locked. The only switch is practice vs real trades.",
   },
   {
     q: "Where is leverage?",
@@ -75,6 +80,6 @@ export const FAQS: { q: string; a: string }[] = [
   },
   {
     q: "How do I pay?",
-    a: "Paper is free. A simple 0.15 SOL / 30 days live seat comes later.",
+    a: "Paper is free. Live is 0.2 SOL / 30 days, plus a 0.1% fee on each clip.",
   },
 ];

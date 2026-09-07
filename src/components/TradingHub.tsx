@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { loadOwner, saveOwner, tradingPubkey, buildTransfer, withdrawToOwner, signAndSendSwap } from "@/lib/wallet/trading";
 import { WalletConnect } from "./WalletConnect";
 import { useMarket, useOwner } from "@/lib/hooks";
-import { SOL_MINT, USDC_MINT, XSTOCKS, xstockBySymbol, xstockMint } from "@/lib/pair/mints";
+import { SOL_MINT, USDC_MINT, XSTOCKS, xstockMint } from "@/lib/pair/mints";
 
 function pickProvider() {
   if (typeof window === "undefined") return null;
@@ -35,13 +35,6 @@ function fmtDur(ms: number) {
   return `${sec}s`;
 }
 
-function mintFor(label: string): string {
-  if (label === "SOL") return SOL_MINT;
-  if (label === "USDC") return USDC_MINT;
-  const row = xstockBySymbol(label);
-  return row ? xstockMint(row.id) : xstockMint("spyx");
-}
-
 function qtyKey(id: string): "spyxQty" | "qqqxQty" | "gldxQty" {
   if (id === "qqqx") return "qqqxQty";
   if (id === "gldx") return "gldxQty";
@@ -69,7 +62,6 @@ export function TradingHub() {
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
   const [now, setNow] = useState(Date.now());
-  const liveLock = useRef(false);
   const lastDep = useRef<number | null>(null);
 
   const demoPaper = data?.paper;
@@ -126,91 +118,6 @@ export function TradingHub() {
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
   }, [armed]);
-
-  useEffect(() => {
-    if (!liveTrading || auto?.mode !== "live" || !armed || !owner) return;
-    const intent = paper?.pendingIntent;
-    if (!intent || liveLock.current) return;
-    const solPx = Number(pair?.solUsd || data?.solUsd || 0);
-    if (!(solPx > 0)) return;
-    liveLock.current = true;
-    (async () => {
-      try {
-        const tpk = tradingPubkey();
-        const slip = 50;
-        async function swapOne(inputMint: string, outputMint: string, amount: number) {
-          const r = await fetch("/api/pair/swap", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ owner, tradingPubkey: tpk, inputMint, outputMint, amount, slippageBps: slip }),
-          });
-          const j = await r.json();
-          if (!r.ok) throw new Error(j.error || "swap build failed");
-          return signAndSendSwap(j.transaction);
-        }
-        async function swap(inputMint: string, outputMint: string, amount: number) {
-          const from = inputMint === SOL_MINT ? "SOL" : inputMint === USDC_MINT ? "USDC" : xstockBySymbolLabel(inputMint);
-          const to = outputMint === SOL_MINT ? "SOL" : outputMint === USDC_MINT ? "USDC" : xstockBySymbolLabel(outputMint);
-          const q = await fetch(`/api/pair/quote?from=${from}&to=${to}&amount=${amount}&slippageBps=${slip}`).then((r) => r.json());
-          if (!q.ok) throw new Error(q.reason || "quote failed");
-          if (q.viaUsdc && q.midAmount > 0) {
-            await swapOne(inputMint, USDC_MINT, amount);
-            return swapOne(USDC_MINT, outputMint, q.midAmount);
-          }
-          return swapOne(inputMint, outputMint, amount);
-        }
-        function pxOf(label: string) {
-          if (label === "USDC") return 1;
-          if (label === "SOL") return solPx;
-          if (label === "QQQx") return Number(pair?.qqqxUsd || 0);
-          if (label === "GLDx") return Number(pair?.gldxUsd || 0);
-          return Number(pair?.spyxUsd || 0);
-        }
-        function amtOf(label: string, usd: number) {
-          const p = pxOf(label);
-          return p > 0 ? usd / p : 0;
-        }
-        let sig = "";
-        if (intent.action === "flatten") {
-          const h = paper?.pair;
-          for (const x of XSTOCKS) {
-            const qty = Number(h?.[qtyKey(x.id)] || 0);
-            if (qty > 0.0001) sig = await swap(xstockMint(x.id), SOL_MINT, qty);
-          }
-          const usdc = Number(h?.usdcQty || 0);
-          if (usdc > 1) sig = await swap(USDC_MINT, SOL_MINT, usdc);
-        } else if (intent.action === "deploy") {
-          if (intent.to && intent.to !== "SOL") {
-            const amt = intent.clipUsd / solPx;
-            if (amt > 0.002) sig = await swap(SOL_MINT, mintFor(intent.to), amt);
-          } else {
-            const slice = (intent.clipUsd * 0.2) / solPx;
-            if (slice > 0.002) sig = await swap(SOL_MINT, USDC_MINT, slice);
-            for (const x of XSTOCKS) {
-              if (slice > 0.002) sig = await swap(SOL_MINT, xstockMint(x.id), slice);
-            }
-          }
-        } else if (intent.from && intent.to && intent.from !== "none" && intent.to !== "none") {
-          const amt = amtOf(intent.from, intent.clipUsd);
-          if (amt > 0) sig = await swap(mintFor(intent.from), mintFor(intent.to), amt);
-        }
-        if (sig) {
-          const r = await fetch("/api/auto", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ owner, liveFill: { signature: sig } }),
-          });
-          const j = await r.json();
-          setPaper(j.paper);
-          setMsg(`Trade sent · ${sig.slice(0, 16)}…`);
-        }
-      } catch (e) {
-        setMsg(e instanceof Error ? e.message : "live swap failed");
-      } finally {
-        liveLock.current = false;
-      }
-    })();
-  }, [liveTrading, auto?.mode, armed, owner, paper?.pendingIntent, pair?.solUsd, pair?.spyxUsd, pair?.qqqxUsd, pair?.gldxUsd, data?.solUsd]);
 
   async function patch(partial: Record<string, unknown>) {
     if (!owner) return setMsg("Connect Phantom first.");
@@ -372,7 +279,7 @@ export function TradingHub() {
       <ol className="mt-5 grid gap-3 sm:grid-cols-3">
         <How n="1" t="Connect Phantom" d="Your keys stay in the wallet. We never see them." />
         <How n="2" t="Add SOL" d="Move SOL into the trading wallet on this device." />
-        <How n="3" t="Let her work" d="She trades any pair that’s stretched — even USDC vs gold. Hit KILL to stop." />
+        <How n="3" t="Let her work" d="Connect and add SOL once. She trades from the wallet on this device — no extra popups. Hit KILL to stop." />
       </ol>
 
       <div className="mt-5 rounded-2xl border border-blood/40 bg-blood/10 p-4 text-sm leading-relaxed text-ghost">
@@ -420,8 +327,8 @@ export function TradingHub() {
         <p className="mt-4 text-sm leading-relaxed text-mute">
           {(owner && book?.lastAction) || pair?.reason || book?.lastAction || "Waiting on prices…"}
         </p>
-        {book?.pendingIntent && (
-          <p className="mt-2 font-mono text-sm text-acid">Approve the swap in Phantom to complete this live trade.</p>
+        {book?.pendingIntent && auto?.mode === "live" && (
+          <p className="mt-2 font-mono text-sm text-acid">Live trade going out from the trading wallet on this device — no extra Phantom popup.</p>
         )}
 
         <div className="mt-6 border-t border-violet/20 pt-5">
@@ -465,7 +372,7 @@ export function TradingHub() {
             <p className="mt-1 text-sm text-mute">
               {liveTrading
                 ? auto?.mode === "live"
-                  ? "Uses the SOL you added. Phantom asks you to approve each swap."
+                  ? "Uses the SOL you added. You already connected — she signs from this device."
                   : "Fake fills on live prices. Flip to real trades after you add SOL."
                 : "Practice only right now. Real swaps are not turned on for this site yet."}
             </p>
@@ -491,9 +398,9 @@ export function TradingHub() {
           <div className="font-mono text-[10px] tracking-[0.22em] text-violet">HOW SHE TRADES</div>
           <h3 className="font-display text-2xl text-ghost">Every pair. USDC PnL.</h3>
           <p className="text-sm leading-relaxed text-mute">
-            She keeps SOL, USDC, S&P 500, Nasdaq, and gold so she can trade any of those pairs — including USDC vs gold —
-            when one side looks expensive. Profit and loss are marked in USDC. If nothing has moved enough, she sits. An
-            8% drop sells everything back to USDC and pauses.
+            She studies how SOL, S&P 500, Nasdaq, and gold actually move — crash days, cash-session fades, gold
+            safe-haven runs, and fee drag — not just “looks cheap.” PnL is in USDC. 0.1% on each clip. 2 minutes between
+            trades. An 8% drop sells everything back to USDC and pauses.
           </p>
           <div className="grid grid-cols-3 gap-2">
             <Mini k="S&P 500" v={spyxUsd ? `$${Number(spyxUsd).toFixed(0)}` : "—"} />
@@ -527,11 +434,6 @@ export function TradingHub() {
       </div>
     </main>
   );
-}
-
-function xstockBySymbolLabel(mint: string): string {
-  const row = XSTOCKS.find((x) => xstockMint(x.id) === mint);
-  return row?.symbol || "SPYx";
 }
 
 function How({ n, t, d }: { n: string; t: string; d: string }) {

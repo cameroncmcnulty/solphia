@@ -34,7 +34,7 @@ export default function PricingPage() {
         <p className="text-base text-acid">Pricing</p>
         <h1 className="mt-2 font-display text-4xl leading-tight text-ghost sm:text-6xl">Paper is free. Live is simple.</h1>
         <p className="mt-4 max-w-xl text-lg text-mute">
-          One bot. SOL vs official S&P 500, Nasdaq-100, and gold. 0.15 SOL / 30 days when live is actually on.
+          One bot. SOL vs official S&P 500, Nasdaq-100, and gold. 0.2 SOL / 30 days plus 0.1% per clip when live is on.
         </p>
 
         <Link href="/trading" className="panel mt-8 flex items-center gap-4 rounded-3xl p-4 sm:p-5">

@@ -13,7 +13,7 @@ export default function LegalPage() {
           These tokens are not the New York print. Issuer and custody risk. After hours and weekends they can move
           while the cash market is closed. You can lose SOL. This is not financial advice.
         </p>
-        <p>Paper is free. A simple 0.15 SOL / 30 days live seat comes later. Spot only in v1 — no leverage.</p>
+        <p>Paper is free. Live is 0.2 SOL / 30 days plus a 0.1% fee on each clip. Spot only in v1 — no leverage.</p>
       </div>
     </main>
   );

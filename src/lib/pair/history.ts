@@ -62,13 +62,15 @@ function alignSamples(solH: Candle[], spyH: Candle[], qqqH: Candle[], gldH: Cand
 
 export async function loadPairHistory(): Promise<{ samples: RatioSample[]; study: HistoryStudy }> {
   if (cache && Date.now() - cache.at < TTL) return { samples: cache.samples, study: cache.study };
-  const [sol, spyH, spyD, gspc, qqqH, gldH] = await Promise.all([
+  const [sol, spyH, spyD, gspc, qqqH, gldH, qqqD, gldD] = await Promise.all([
     loadSolCandles().catch(() => ({ m15: [] as Candle[], h1: [] as Candle[] })),
     yahoo("SPY", "1h", "7d"),
     yahoo("SPY", "1d", "2y"),
     yahoo("^GSPC", "1d", "10y"),
     yahoo("QQQ", "1h", "7d"),
     yahoo("GLD", "1h", "7d"),
+    yahoo("QQQ", "1d", "2y"),
+    yahoo("GLD", "1d", "2y"),
   ]);
   const spyDaily = gspc.length > spyD.length ? gspc : spyD;
   let samples = alignSamples(sol.h1, spyH.length ? spyH : spyDaily, qqqH, gldH);
@@ -91,7 +93,13 @@ export async function loadPairHistory(): Promise<{ samples: RatioSample[]; study
   const lastAtr = atr15.length ? atr15[atr15.length - 1] : 0;
   const lastClose = sol.m15.length ? sol.m15[sol.m15.length - 1].c : 0;
   const atrPct = lastClose > 0 ? lastAtr / lastClose : 0;
-  const study = mergeStudy(dailyRanges(solDaily), dailyRanges(spyDaily), atrPct);
+  const study = mergeStudy(
+    dailyRanges(solDaily),
+    dailyRanges(spyDaily),
+    atrPct,
+    dailyRanges(qqqD),
+    dailyRanges(gldD),
+  );
   cache = { at: Date.now(), samples, study, solDaily: sol.h1, spyDaily };
   return { samples, study };
 }

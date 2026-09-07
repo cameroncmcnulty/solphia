@@ -1,7 +1,7 @@
 import type { AutoSettings, PaperBook, TraderAccount } from "./types";
 import { PAPER_STARTING_USD } from "./config";
 
-/** Locked knobs. The hub does not expose these — mean-revert, normal band, 5m cooldown. */
+/** Locked knobs. The hub does not expose these — mean-revert, normal band, 2m cooldown. */
 export const DEFAULT_AUTO: AutoSettings = {
   armed: true,
   mode: "paper",
@@ -9,7 +9,7 @@ export const DEFAULT_AUTO: AutoSettings = {
   style: "mean_revert",
   band: "normal",
   clipPct: 0.12,
-  cooldownMin: 5,
+  cooldownMin: 2,
   stopPct: 0.08,
   takeProfitPct: 0.12,
   targetSolPct: 0.2,
