@@ -17,6 +17,9 @@ type PublicBt = {
   trades?: number;
   winRate?: number;
   feesUsd?: number;
+  bestDayUsd?: number;
+  avgDayUsd?: number;
+  daysGe2?: number;
   curve?: { t: number; equity: number }[];
   note?: string;
 };
@@ -76,7 +79,7 @@ export function BacktestBrochure() {
           <Stat k="Clips" v={String(data.trades || 0)} sub={data.horizon || "1h marks"} />
           <Stat k="Win rate" v={`${Math.round((data.winRate || 0) * 100)}%`} sub="closed to USDC" />
           <Stat k="Max DD" v={`−${((data.maxDdPct || 0) * 100).toFixed(1)}%`} sub="from peak" />
-          <Stat k="Fees" v={money(data.feesUsd || 0)} sub="pair + 0.1% clip" />
+          <Stat k="Best day" v={`+$${Math.abs(data.bestDayUsd || 0).toFixed(0)}`} sub={`${data.daysGe2 || 0} days ≥ $2`} />
         </div>
 
         <p className="mt-6 max-w-3xl text-xs leading-relaxed text-mute sm:text-sm">{data.note}</p>

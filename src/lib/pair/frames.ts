@@ -105,5 +105,5 @@ export async function loadScalpFrames(): Promise<ScalpFrames> {
 }
 
 export function hasTape(f: SleeveFrames | undefined): boolean {
-  return Boolean(f && f.m15.length >= 24 && f.d1.length >= 12);
+  return Boolean(f && f.m15.length >= 20 && (f.d1.length >= 5 || f.h4.length >= 16));
 }

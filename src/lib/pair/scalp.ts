@@ -7,7 +7,7 @@ import { hasTape } from "./frames";
 const CLIP_MIN = 0.008;
 
 export type Bias = "bull" | "bear" | "flat";
-export type Setup = "trend_pullback" | "range_fade" | "none";
+export type Setup = "trend_pullback" | "range_fade" | "momentum" | "none";
 
 export type ScalpRead = {
   sleeve: Exclude<Sleeve, "USDC">;
@@ -33,9 +33,20 @@ function ret(cs: Candle[], bars: number): number {
 function taggedThenReclaim(cs: Candle[], level: number): boolean {
   if (cs.length < 4 || !(level > 0)) return false;
   const last = cs[cs.length - 1];
-  const prev = cs.slice(-5, -1);
-  const touched = prev.some((c) => c.l <= level * 1.0015);
+  const prev = cs.slice(-6, -1);
+  const touched = prev.some((c) => c.l <= level * 1.002);
   return touched && last.c > level && last.c >= last.o;
+}
+
+function bounceOffDip(cs: Candle[]): boolean {
+  if (cs.length < 5) return false;
+  const last = cs[cs.length - 1];
+  const a = cs[cs.length - 4].c;
+  const b = cs[cs.length - 2].c;
+  if (!(a > 0 && b > 0)) return false;
+  const dip = b / a - 1;
+  const bounce = last.c / b - 1;
+  return dip <= -0.002 && bounce >= 0.0012 && last.c >= last.o;
 }
 
 function discount(cs: Candle[], live: number): number {
@@ -119,18 +130,22 @@ export function scoreScalp(
   const ret1h = ret(m15, Math.min(4, m15.length - 1));
   const ret5m = ret(m5, 1);
   const disc = discount(h4, live);
-  const trending = dmi.adx >= 18;
-  /** 0.8% is the trade target (trail), not a 15m bar. 4H ATR is the right room check. */
-  const room = atr4Pct >= CLIP_MIN * 0.7 || atrPct * 4 >= CLIP_MIN;
-  const pullback = taggedThenReclaim(m15, e9) || taggedThenReclaim(m5, vw) || taggedThenReclaim(m15, vw);
+  const trending = dmi.adx >= 14;
+  const room = atr4Pct >= CLIP_MIN * 0.45 || atrPct * 3 >= CLIP_MIN * 0.7;
+  const pullback =
+    taggedThenReclaim(m15, e9) ||
+    taggedThenReclaim(m5, vw) ||
+    taggedThenReclaim(m15, vw) ||
+    bounceOffDip(m15);
   const bounce5 = ret5m > 0.0008 && ret15m > -0.004;
   const hl = structureBull(m15);
+  const aligned = e9 > e21 && live > e9;
+  const lastBar = m15[m15.length - 1];
+  const green = lastBar && lastBar.c >= lastBar.o;
 
   let bias: Bias = "flat";
-  if (daily === "bull" && htf !== "bear") bias = "bull";
-  else if (daily === "bear" && htf !== "bull") bias = "bear";
-  else if (daily === "bull" && htf === "bull") bias = "bull";
-  else if (htf === "bull" && daily !== "bear") bias = "bull";
+  if (daily === "bear" && htf === "bear") bias = "bear";
+  else if (daily === "bull" || htf === "bull") bias = "bull";
   else if (daily === "bear" || htf === "bear") bias = "bear";
 
   let buy = 0;
@@ -139,49 +154,49 @@ export function scoreScalp(
 
   if (bias === "bear") {
     buy = 0;
-  } else if (bias === "bull" && trending && pullback && st.dir === 1) {
+  } else if (pullback && st.dir !== -1 && (aligned || bias === "bull")) {
     setup = "trend_pullback";
-    buy += 0.24;
-    why.push("Daily/4H bull");
-    buy += 0.28;
-    why.push("15m EMA/VWAP reclaim");
+    buy += 0.22;
+    why.push(bias === "bull" ? "HTF bull" : "15m aligned");
+    buy += 0.26;
+    why.push("15m reclaim");
     if (hl) {
-      buy += 0.1;
+      buy += 0.08;
       why.push("HL structure");
     }
-    if (macdUp) buy += 0.08;
-    if (rsiN >= 35 && rsiN <= 68) buy += 0.08;
-    if (disc <= 0.62) {
-      buy += 0.1;
-      why.push("4H discount");
-    }
-    if (room) buy += 0.1;
-    else buy -= 0.08;
-  } else if (!trending && (disc <= 0.35 || rsiN <= 38) && bounce5) {
+    if (macdUp) buy += 0.06;
+    if (rsiN >= 32 && rsiN <= 68) buy += 0.06;
+    if (disc <= 0.7) buy += 0.08;
+    if (room) buy += 0.08;
+    if (st.dir === 1) buy += 0.06;
+  } else if (aligned && st.dir === 1 && green && rsiN >= 40 && rsiN <= 64 && ret15m > 0.001 && ret15m < 0.007) {
+    setup = "momentum";
+    buy += 0.2;
+    why.push("15m momentum");
+    if (bias === "bull") buy += 0.12;
+    if (live > vw) buy += 0.08;
+    if (macdUp) buy += 0.06;
+    if (room) buy += 0.08;
+    if (hl) buy += 0.06;
+  } else if (!trending && (disc <= 0.38 || rsiN <= 40) && bounce5 && st.dir !== -1) {
     setup = "range_fade";
     buy += 0.2;
     why.push("range fade");
     if (disc <= 0.35) {
-      buy += 0.16;
+      buy += 0.14;
       why.push("discount");
     }
     if (rsiN <= 42 && rsiN >= 28) buy += 0.1;
-    if (bounce5) {
-      buy += 0.14;
-      why.push("5m bounce");
-    }
-    if (st.dir === 1) buy += 0.08;
-    if (room) buy += 0.1;
-    else buy -= 0.22;
+    if (bounce5) buy += 0.12;
     if (bias === "bull") buy += 0.08;
+    if (room) buy += 0.08;
   }
 
-  if (setup !== "trend_pullback" && rsiN > 70) buy -= 0.4;
+  if (setup === "none" && rsiN > 70) buy -= 0.4;
   if (ret15m < -0.022 || ret1h < -0.035) buy -= 0.5;
-  if (st.dir === -1 && setup === "trend_pullback") buy -= 0.25;
-  if (equity && auction) buy -= 0.3;
+  if (equity && auction) buy -= 0.28;
   if (equity && session === "weekend") buy -= 0.45;
-  if (equity && session === "after_hours") buy -= 0.1;
+  if (equity && session === "after_hours") buy -= 0.08;
   buy = Math.max(0, Math.min(1, buy));
 
   let sell = 0;
@@ -192,7 +207,7 @@ export function scoreScalp(
   sell = Math.max(0, Math.min(1, sell));
 
   const reason =
-    buy >= 0.5
+    buy >= 0.34
       ? `Buy ${sleeve} · ${why.slice(0, 3).join(" · ") || setup}`
       : `${sleeve} ${bias} · ${setup === "none" ? "no setup" : setup} · ADX ${dmi.adx.toFixed(0)}`;
 

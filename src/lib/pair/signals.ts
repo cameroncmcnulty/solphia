@@ -49,12 +49,12 @@ export type SleeveLearn = {
   trailK: number;
 };
 
-export const DEFAULT_LEARN: SleeveLearn = { trades: 0, wins: 0, pnlUsd: 0, buyNeed: 0.5, trailK: 0.55 };
+export const DEFAULT_LEARN: SleeveLearn = { trades: 0, wins: 0, pnlUsd: 0, buyNeed: 0.34, trailK: 0.55 };
 
-/** Need a real 5m/15m setup that agrees with Daily/4H — RSI alone is not a trade. */
+/** A 15m reclaim / momentum clip — not RSI alone. */
 export function needOf(learn?: SleeveLearn): number {
   const n = learn?.buyNeed ?? DEFAULT_LEARN.buyNeed;
-  return Math.min(0.62, Math.max(0.42, n));
+  return Math.min(0.5, Math.max(0.28, n));
 }
 
 export function bucketCandles(samples: RatioSample[], sleeve: Sleeve, ms = 15 * 60 * 1000): Candle[] {
@@ -225,13 +225,12 @@ export function readAsset(
 /** How far below the peak the stop sits. Tightens as the run extends. Never used to lower a stop. */
 export function trailGiveback(peakProfit: number, atrPct: number, trailK: number): number {
   const atr = Math.max(atrPct, 0.004);
-  const base = Math.max(0.003, Math.min(0.008, (trailK || 0.55) * atr));
-  if (peakProfit >= 0.04) return Math.min(base * 0.35, 0.003);
-  if (peakProfit >= 0.025) return Math.min(base * 0.42, 0.0035);
-  if (peakProfit >= CLIP_HARD) return Math.min(base * 0.5, 0.004);
-  if (peakProfit >= CLIP_AIM) return Math.min(base * 0.62, 0.005);
-  if (peakProfit >= CLIP_MIN) return Math.min(base * 0.75, 0.006);
-  return base;
+  const base = Math.max(0.0025, Math.min(0.006, (trailK || 0.55) * atr));
+  if (peakProfit >= 0.025) return Math.min(base * 0.4, 0.0028);
+  if (peakProfit >= CLIP_HARD) return Math.min(base * 0.5, 0.0032);
+  if (peakProfit >= CLIP_AIM) return Math.min(base * 0.6, 0.0038);
+  if (peakProfit >= CLIP_MIN) return Math.min(base * 0.7, 0.0045);
+  return 0.01;
 }
 
 export function nextTrail(opts: {
@@ -253,10 +252,11 @@ export function nextTrail(opts: {
     armed = true;
     stopPx = Math.max(stopPx, breakeven);
   }
-  if (armed) {
+  if (armed && peakProfit >= CLIP_MIN) {
     const k = trailGiveback(peakProfit, opts.atrPct, opts.trailK);
     const raw = peakPx * (1 - k);
-    stopPx = Math.max(stopPx, raw, breakeven);
+    const lock = opts.entryPx * (1 + CLIP_MIN * 0.55);
+    stopPx = Math.max(stopPx, raw, breakeven, lock);
   }
   return { peakPx, stopPx, armed };
 }
@@ -267,9 +267,9 @@ export function noteExit(learn: SleeveLearn, pnlUsd: number): SleeveLearn {
   const pnl = learn.pnlUsd + pnlUsd;
   const recentWin = trades >= 5 ? wins / trades : pnlUsd > 0 ? 0.55 : 0.45;
   let buyNeed = learn.buyNeed;
-  if (pnlUsd < 0) buyNeed = Math.min(0.62, buyNeed + 0.02);
-  else buyNeed = Math.max(0.42, buyNeed - 0.015);
-  if (recentWin < 0.4) buyNeed = Math.min(0.62, buyNeed + 0.02);
+  if (pnlUsd < 0) buyNeed = Math.min(0.5, buyNeed + 0.02);
+  else buyNeed = Math.max(0.28, buyNeed - 0.015);
+  if (recentWin < 0.4) buyNeed = Math.min(0.5, buyNeed + 0.02);
   let trailK = learn.trailK;
   if (pnlUsd < 0) trailK = Math.min(0.9, trailK + 0.04);
   else trailK = Math.max(0.4, trailK - 0.03);

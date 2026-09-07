@@ -495,6 +495,13 @@ export type BacktestMonth = {
   endEquity: number;
 };
 
+export type BacktestDay = {
+  day: string;
+  pnlUsd: number;
+  trades: number;
+  endEquity: number;
+};
+
 export type BacktestFillLite = {
   at: number;
   side: "buy" | "sell";
@@ -528,6 +535,11 @@ export type BacktestReport = {
   worstTradeUsd: number;
   sleeves: BacktestSleeve[];
   monthly: BacktestMonth[];
+  daily: BacktestDay[];
+  bestDayUsd: number;
+  worstDayUsd: number;
+  avgDayUsd: number;
+  daysGe2: number;
   curve: BacktestPoint[];
   fills: BacktestFillLite[];
   note: string;

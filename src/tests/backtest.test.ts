@@ -33,6 +33,8 @@ describe("backtest replay", () => {
     assert.ok(report.maxDdPct >= 0);
     assert.match(report.note, /not a live book/i);
     assert.match(report.horizon, /fees/i);
+    assert.ok(Array.isArray(report.daily));
+    assert.ok(typeof report.bestDayUsd === "number");
     const pub = publicBacktest(report);
     assert.equal(pub.ready, true);
     if (pub.ready) {

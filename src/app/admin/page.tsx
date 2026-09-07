@@ -388,8 +388,8 @@ export default function AdminPage() {
             <div className="font-mono text-[10px] tracking-[0.3em] text-mute">ENGINE BACKTEST</div>
             <h2 className="mt-1 font-display text-2xl text-ghost">Does this engine print?</h2>
             <p className="mt-2 max-w-2xl text-sm text-mute">
-              Replay the live scalp rules on ~6 months of 1h SOL / SPY / QQQ / gold. Fees and the 0.1% clip are in the
-              mark. This is how you decide whether to tweak her.
+              Replay the live scalp rules on ~40 days of 15m SOL / SPY / QQQ / gold. Fees and the 0.1% clip are in the
+              mark. Target on $1,000 is +$2–3 in a day.
             </p>
           </div>
           <button
@@ -428,6 +428,9 @@ export default function AdminPage() {
               <Mini k="Avg loss" v={money(data.backtest.avgLossUsd)} />
               <Mini k="Best clip" v={`+${money(Math.abs(data.backtest.bestTradeUsd))}`} />
               <Mini k="Worst clip" v={money(data.backtest.worstTradeUsd)} />
+              <Mini k="Best day" v={`+${money(Math.abs(data.backtest.bestDayUsd || 0))}`} />
+              <Mini k="Avg day" v={`${(data.backtest.avgDayUsd || 0) >= 0 ? "+" : "−"}${money(Math.abs(data.backtest.avgDayUsd || 0))}`} />
+              <Mini k="Days ≥ $2" v={String(data.backtest.daysGe2 || 0)} />
               <Mini k="Bars" v={String(data.backtest.bars)} />
             </div>
             <div>
@@ -447,6 +450,39 @@ export default function AdminPage() {
                 ))}
               </div>
             </div>
+            {(data.backtest.daily || []).length > 0 && (
+              <div>
+                <div className="font-mono text-[10px] tracking-[0.2em] text-mute">DAILY · $2–3 TARGET</div>
+                <div className="mt-2 max-h-56 overflow-auto">
+                  <table className="w-full min-w-[420px] text-left font-mono text-[12px]">
+                    <thead className="text-mute">
+                      <tr>
+                        <th className="py-2 font-normal">Day</th>
+                        <th className="py-2 font-normal">PnL</th>
+                        <th className="py-2 font-normal">Clips</th>
+                        <th className="py-2 font-normal">Equity</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(data.backtest.daily || [])
+                        .slice()
+                        .reverse()
+                        .map((d) => (
+                          <tr key={d.day} className="border-t border-line/60">
+                            <td className="py-2 text-ghost">{d.day}</td>
+                            <td className={d.pnlUsd >= 2 ? "text-acid" : d.pnlUsd < 0 ? "text-blood" : "text-mute"}>
+                              {d.pnlUsd >= 0 ? "+" : "−"}
+                              {money(Math.abs(d.pnlUsd))}
+                            </td>
+                            <td className="text-mute">{d.trades}</td>
+                            <td className="text-mute">{money(d.endEquity)}</td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
             {data.backtest.monthly.length > 0 && (
               <div>
                 <div className="font-mono text-[10px] tracking-[0.2em] text-mute">MONTHLY</div>

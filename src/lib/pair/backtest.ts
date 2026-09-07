@@ -2,6 +2,7 @@ import { DEFAULT_AUTO, emptyBook } from "../auto";
 import { PAPER_STARTING_USD } from "../config";
 import { pack4h, packDaily, type Candle } from "../sol/indicators";
 import type {
+  BacktestDay,
   BacktestFillLite,
   BacktestMonth,
   BacktestPoint,
@@ -27,22 +28,30 @@ export type BacktestTape = {
   gld: Candle[];
 };
 
-function lastAt(cs: Candle[], t: number): Candle | null {
-  let hit: Candle | null = null;
-  for (const c of cs) {
-    if (c.t > t) break;
-    hit = c;
+function lastIdx(cs: Candle[], t: number): number {
+  let lo = 0;
+  let hi = cs.length - 1;
+  let hit = -1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (cs[mid].t <= t) {
+      hit = mid;
+      lo = mid + 1;
+    } else hi = mid - 1;
   }
   return hit;
 }
 
+function lastAt(cs: Candle[], t: number): Candle | null {
+  const i = lastIdx(cs, t);
+  return i >= 0 ? cs[i] : null;
+}
+
 function sliceTo(cs: Candle[], t: number, n: number): Candle[] {
-  const out: Candle[] = [];
-  for (const c of cs) {
-    if (c.t > t) break;
-    out.push(c);
-  }
-  return out.length > n ? out.slice(-n) : out;
+  const i = lastIdx(cs, t);
+  if (i < 0) return [];
+  const from = Math.max(0, i - n + 1);
+  return cs.slice(from, i + 1);
 }
 
 function pricesAt(tape: BacktestTape, t: number): PairPrices | null {
@@ -63,21 +72,21 @@ function pricesAt(tape: BacktestTape, t: number): PairPrices | null {
   };
 }
 
-function framesAt(tape: BacktestTape, t: number): ScalpFrames {
-  const one = (cs: Candle[]): SleeveFrames => {
-    const h1 = sliceTo(cs, t, 200);
+function framesAt(tape: BacktestTape, t: number, packed: { h4: Record<string, Candle[]>; d1: Record<string, Candle[]> }): ScalpFrames {
+  const one = (cs: Candle[], key: string): SleeveFrames => {
+    const m15 = sliceTo(cs, t, 120);
     return {
-      m5: h1,
-      m15: h1,
-      h4: pack4h(h1),
-      d1: packDaily(cs.filter((c) => c.t <= t)).slice(-80),
+      m5: m15,
+      m15,
+      h4: sliceTo(packed.h4[key], t, 40),
+      d1: sliceTo(packed.d1[key], t, 40),
     };
   };
   const frames = emptyFrames();
-  frames.SOL = one(tape.sol);
-  frames.SPYx = one(tape.spy);
-  frames.QQQx = one(tape.qqq);
-  frames.GLDx = one(tape.gld);
+  frames.SOL = one(tape.sol, "sol");
+  frames.SPYx = one(tape.spy, "spy");
+  frames.QQQx = one(tape.qqq, "qqq");
+  frames.GLDx = one(tape.gld, "gld");
   return frames;
 }
 
@@ -118,6 +127,28 @@ function sleeveStats(fills: PaperFill[]): BacktestSleeve[] {
   });
 }
 
+function dailyStats(curve: BacktestPoint[], fills: PaperFill[], startUsd: number): BacktestDay[] {
+  const map = new Map<string, BacktestDay>();
+  for (const p of curve) {
+    const day = new Date(p.t).toISOString().slice(0, 10);
+    const prev = map.get(day);
+    if (!prev) map.set(day, { day, pnlUsd: 0, trades: 0, endEquity: p.equity });
+    else prev.endEquity = p.equity;
+  }
+  const rows = [...map.values()].sort((a, b) => a.day.localeCompare(b.day));
+  for (let i = 0; i < rows.length; i++) {
+    const open = i === 0 ? startUsd : rows[i - 1].endEquity;
+    rows[i].pnlUsd = Math.round((rows[i].endEquity - open) * 100) / 100;
+  }
+  for (const f of fills) {
+    if (f.side !== "sell" || f.symbol === "USDC" || f.pnlUsd == null) continue;
+    const day = new Date(f.at).toISOString().slice(0, 10);
+    const row = map.get(day);
+    if (row) row.trades += 1;
+  }
+  return rows;
+}
+
 function monthlyStats(curve: BacktestPoint[], fills: PaperFill[]): BacktestMonth[] {
   const map = new Map<string, BacktestMonth>();
   for (const p of curve) {
@@ -149,12 +180,13 @@ function reportOf(book: PaperBook, curve: BacktestPoint[], from: number, to: num
   const start = book.startingUsd;
   const end = book.equityUsd;
   const days = Math.max(1, (to - from) / 86_400_000);
+  const daily = dailyStats(curve, book.fills, start);
   return {
     ranAt: Date.now(),
     from,
     to,
     bars,
-    horizon: `${Math.round(days)}d · 1h clips · Daily/4H bias · fees in`,
+    horizon: `${Math.round(days)}d · 15m clips · Daily/4H bias · fees in`,
     startingUsd: start,
     endingUsd: Math.round(end * 100) / 100,
     pnlUsd: Math.round((end - start) * 100) / 100,
@@ -173,6 +205,11 @@ function reportOf(book: PaperBook, curve: BacktestPoint[], from: number, to: num
     worstTradeUsd: losses.length ? Math.min(...losses.map((f) => f.pnlUsd || 0)) : 0,
     sleeves: sleeveStats(book.fills),
     monthly: monthlyStats(curve, book.fills),
+    daily: daily,
+    bestDayUsd: daily.length ? Math.max(...daily.map((d) => d.pnlUsd)) : 0,
+    worstDayUsd: daily.length ? Math.min(...daily.map((d) => d.pnlUsd)) : 0,
+    avgDayUsd: daily.length ? daily.reduce((s, d) => s + d.pnlUsd, 0) / daily.length : 0,
+    daysGe2: daily.filter((d) => d.pnlUsd >= 2).length,
     curve: downsample(curve, 120),
     fills: book.fills
       .filter((f) => f.symbol !== "USDC")
@@ -204,6 +241,9 @@ export function publicBacktest(report: BacktestReport | null | undefined) {
     trades: report.trades,
     winRate: report.winRate,
     feesUsd: report.feesUsd,
+    bestDayUsd: report.bestDayUsd,
+    avgDayUsd: report.avgDayUsd,
+    daysGe2: report.daysGe2,
     curve: report.curve,
     note: report.note,
   };
@@ -211,8 +251,13 @@ export function publicBacktest(report: BacktestReport | null | undefined) {
 
 /** Replay the live scalp engine on a historical tape. */
 export function runBacktest(tape: BacktestTape, startingUsd = PAPER_STARTING_USD): BacktestReport {
-  const clock = tape.sol.filter((c) => lastAt(tape.spy, c.t) && lastAt(tape.qqq, c.t) && lastAt(tape.gld, c.t));
+  const spy0 = tape.spy[0]?.t || 0;
+  const clock = tape.sol.filter((c) => c.t >= spy0);
   const warmup = 80;
+  const packed = {
+    h4: { sol: pack4h(tape.sol), spy: pack4h(tape.spy), qqq: pack4h(tape.qqq), gld: pack4h(tape.gld) },
+    d1: { sol: packDaily(tape.sol), spy: packDaily(tape.spy), qqq: packDaily(tape.qqq), gld: packDaily(tape.gld) },
+  };
   const book = emptyBook(startingUsd);
   const auto = { ...DEFAULT_AUTO, cooldownMin: 0, armed: true, mode: "paper" as const };
   const curve: BacktestPoint[] = [{ t: clock[warmup]?.t || Date.now(), equity: startingUsd }];
@@ -223,7 +268,7 @@ export function runBacktest(tape: BacktestTape, startingUsd = PAPER_STARTING_USD
     const t = clock[i].t;
     const prices = pricesAt(tape, t);
     if (!prices) continue;
-    const frames = framesAt(tape, t);
+    const frames = framesAt(tape, t, packed);
     const samples = samplesAt(tape, t);
     if (samples.length < 16) continue;
     tickPairBook({
@@ -241,7 +286,7 @@ export function runBacktest(tape: BacktestTape, startingUsd = PAPER_STARTING_USD
     const dd = peak > 0 ? (peak - eq) / peak : 0;
     if (dd > maxDd) maxDd = dd;
     const last = curve[curve.length - 1];
-    if (!last || t - last.t >= 6 * 3_600_000 || Math.abs(eq - last.equity) > 0.5) {
+    if (!last || t - last.t >= 2 * 3_600_000 || Math.abs(eq - last.equity) > 0.4) {
       curve.push({ t, equity: Math.round(eq * 100) / 100 });
     }
     ticks += 1;
