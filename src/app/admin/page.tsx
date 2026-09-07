@@ -17,6 +17,7 @@ export default function AdminPage() {
   const [adminPk, setAdminPk] = useState("");
   const [treasuryPk, setTreasuryPk] = useState("");
   const [copied, setCopied] = useState("");
+  const [saved, setSaved] = useState("");
   const [hint, setHint] = useState("");
   const owner = useOwner();
 
@@ -274,7 +275,7 @@ export default function AdminPage() {
             <div className="font-mono text-[10px] tracking-[0.3em] text-mute">CONTENT BOT · IN HOUSE · MAX 24</div>
             <h2 className="mt-1 font-display text-2xl text-ghost">She writes and paints the posts</h2>
             <p className="mt-2 max-w-2xl text-sm text-mute">
-              A bot that lives here — not an outside image shop. She writes the caption, then paints square / wide / story frames from her face, the wordmark, and solphia.io. PnL on the card is aesthetic. Oldest drop at 24. Daily cron runs her too.
+              She writes the caption and paints the frame: her face, candlestick tapes, sleeve mix, how-to steps, session warnings, kill switch, pair list. Aesthetic PnL — for the post, not the live book. Oldest drop at 24.
             </p>
           </div>
           <button
@@ -327,9 +328,23 @@ export default function AdminPage() {
                   >
                     {copied === item.id ? "Copied" : "Copy caption"}
                   </button>
-                  <a href={item.url} download className="rounded-full border border-line px-4 py-1.5 text-xs text-mute">
-                    Download
-                  </a>
+                  <button
+                    type="button"
+                    className="rounded-full border border-line px-4 py-1.5 text-xs text-mute"
+                    onClick={async () => {
+                      const src = item.dataUrl || item.url;
+                      const blob = await fetch(src).then((r) => r.blob());
+                      const a = document.createElement("a");
+                      a.href = URL.createObjectURL(blob);
+                      a.download = `solphia-${item.aspect.replace(":", "x")}-${item.id}.png`;
+                      a.click();
+                      URL.revokeObjectURL(a.href);
+                      setSaved(item.id);
+                      setTimeout(() => setSaved(""), 1500);
+                    }}
+                  >
+                    {saved === item.id ? "Saved" : "Save image"}
+                  </button>
                 </div>
               </div>
             </article>

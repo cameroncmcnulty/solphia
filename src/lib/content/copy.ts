@@ -1,30 +1,80 @@
 import { XAI_API_KEY, XAI_BASE, XAI_MODEL } from "../config";
+import {
+  PAIRS,
+  STEPS,
+  fakeCandles,
+  fakeCurve,
+  fakeSleeves,
+  mulberry,
+  pick,
+  type Candle,
+  type CurveBar,
+  type SleeveBar,
+  type Step,
+} from "./chart";
 
 export type Aspect = "1:1" | "16:9" | "9:16";
+export type Layout =
+  | "face"
+  | "desk"
+  | "story"
+  | "tape"
+  | "split"
+  | "sleeves"
+  | "steps"
+  | "quote"
+  | "session"
+  | "kill"
+  | "pairs"
+  | "curve";
+
+export type Mood = "acid" | "violet" | "cyan";
 
 export type Shot = {
   aspect: Aspect;
-  layout: "face" | "desk" | "story";
+  layout: Layout;
   headline: string;
   caption: string;
   pnlLabel: string;
   kicker: string;
+  sub: string;
+  mood: Mood;
+  pair: string;
+  session: string;
+  candles: Candle[];
+  sleeves: SleeveBar[];
+  curve: CurveBar[];
+  steps: Step[];
+  chips: string[];
 };
 
 const JOB =
   "She holds SOL, USDC, and official SPYx (S&P 500), QQQx (Nasdaq-100), and GLDx (gold). She trades whichever pair is stretched. Spot only. Keys stay in Phantom. No memecoins. No copy list. No sniper.";
 
-const HEADLINES = [
-  "She watches the tape",
-  "Add SOL. She runs.",
-  "SOL vs S&P, Nasdaq, gold",
-  "When it stretches, she clips",
-  "She sits when nothing moved",
-  "Spot only. Keys with you.",
-  "Official xStocks. Nothing else.",
-  "Paper first. Kill switch on.",
-  "Five sleeves. One home: USDC.",
-  "Connect once. No extra popups.",
+const HEADLINES: Record<Layout, string[]> = {
+  face: ["She watches the tape", "Your SOL. Her night shift.", "The face of the desk", "Calm. Then a clip."],
+  desk: ["SOL vs S&P, Nasdaq, gold", "Five sleeves. One home.", "Official xStocks only", "The book is USDC."],
+  story: ["Add SOL. She runs.", "Connect once. No popups.", "Paper first. Then live.", "She sits when nothing moved."],
+  tape: ["When it stretches, she clips", "A quiet range. Then 1%.", "Mean revert. Not a knife.", "The short tape just spoke."],
+  split: ["Watch the stretch", "SOL dumped. Gold held.", "She fades the gap", "Chart in one eye. Pair in the other."],
+  sleeves: ["Split the bag. Wait.", "20% each. Fire the stretched one.", "USDC is home.", "Gold sleeve for bad days."],
+  steps: ["Three steps. Then sleep.", "Connect. Add. She works.", "Phantom once. That’s it.", "No extra signatures."],
+  quote: ["Keys never leave the phone.", "Not a fund. A bot on your device.", "Spot only. She will not borrow.", "She skips more than she trades."],
+  session: ["Cash hours hit different", "After 4pm this is not New York", "Weekend gold still moves", "She knows the session."],
+  kill: ["KILL flattens her.", "One switch. Back to dry powder.", "You stay in charge.", "Pause. Withdraw. Done."],
+  pairs: ["Ten pairs. Nothing else.", "USDC / gold is a trade.", "Not a memecoin menu.", "Official rails only."],
+  curve: ["Quiet compounding", "The line is the point", "Fees already in the mark", "Paper so the PnL isn’t a fairy tale."],
+};
+
+const SUBS = [
+  "Illustrative mark — not a live book.",
+  "Spot only. No borrowed SOL.",
+  "Official SPYx · QQQx · GLDx.",
+  "Phantom holds the keys.",
+  "2-minute wait. Then a clip.",
+  "0.2 SOL / 30d · 0.1% a clip.",
+  "Kill switch always on.",
+  "PnL home is USDC.",
 ];
 
 const KICKERS = [
@@ -32,6 +82,8 @@ const KICKERS = [
   "solphia.io",
   "NON-CUSTODIAL · SPOT",
   "PHANTOM ONLY",
+  "PAPER FIRST",
+  "SHE SITS WHEN IT’S NOISE",
 ];
 
 const BEATS = [
@@ -40,21 +92,36 @@ const BEATS = [
   "She skips crash knives, weekend fake prints, and any clip fees would eat.",
   "PnL stays in USDC. Kill switch always on.",
   "Live is 0.2 SOL / 30 days plus 0.1% a clip. Paper is free.",
+  "These tokens are not the New York print after 16:00 ET. You can lose SOL.",
+  "No memecoins, no copy list, no sniper. Ten pairs among five official sleeves.",
+  "Connect and add SOL once. The trading wallet on your device signs. Phantom is not asked again until you withdraw.",
 ];
 
-function mulberry(seed: number) {
-  let s = seed | 0;
-  return () => {
-    s = (s + 0x6d2b79f5) | 0;
-    let t = Math.imul(s ^ (s >>> 15), 1 | s);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
+const SESSIONS = ["CASH SESSION", "AFTER HOURS", "WEEKEND TAPE"];
+const MOODS: Mood[] = ["acid", "violet", "cyan"];
+const CHIPS = ["SPOT", "NO Leverage", "PHANTOM", "USDC PnL", "2m WAIT", "KILL ON", "xSTOCKS", "PAPER FIRST"];
 
-function pick<T>(rng: () => number, xs: T[], avoid?: T): T {
-  const pool = avoid ? xs.filter((x) => x !== avoid) : xs;
-  return pool[Math.floor(rng() * pool.length)] || xs[0];
+const ALL_LAYOUTS: Layout[] = [
+  "face",
+  "desk",
+  "story",
+  "tape",
+  "split",
+  "sleeves",
+  "steps",
+  "quote",
+  "session",
+  "kill",
+  "pairs",
+  "curve",
+];
+
+function aspectFor(layout: Layout, rng: () => number): Aspect {
+  if (layout === "story" || layout === "steps" || layout === "kill" || layout === "quote") return rng() > 0.35 ? "9:16" : "1:1";
+  if (layout === "desk" || layout === "split" || layout === "session") return rng() > 0.4 ? "16:9" : "1:1";
+  if (layout === "tape" || layout === "curve") return rng() > 0.5 ? "1:1" : "16:9";
+  if (layout === "pairs" || layout === "sleeves") return rng() > 0.5 ? "1:1" : "16:9";
+  return pick(rng, ["1:1", "9:16", "16:9"] as Aspect[]);
 }
 
 export function aestheticPnl(seed: number) {
@@ -64,62 +131,79 @@ export function aestheticPnl(seed: number) {
   return `+${pct.toFixed(1)}% · +$${usd.toFixed(0)} USDC`;
 }
 
-function bias(hint: string) {
+function biasLayouts(hint: string): Layout[] {
   const h = hint.toLowerCase();
-  if (h.includes("gold") || h.includes("gld")) {
-    return HEADLINES.filter((x) => /gold|sit|stretch|clip/i.test(x)).concat(["Gold when the rest panics"]);
-  }
-  if (h.includes("nasdaq") || h.includes("qqq")) {
-    return HEADLINES.filter((x) => /nasdaq|tape|clip|spot/i.test(x)).concat(["Nasdaq sleeve, official QQQx"]);
-  }
-  if (h.includes("s&p") || h.includes("spy")) {
-    return HEADLINES.filter((x) => /s&p|tape|official/i.test(x)).concat(["S&P 500 on Solana rails"]);
-  }
-  return HEADLINES;
+  if (h.includes("gold") || h.includes("gld")) return ["sleeves", "split", "tape", "quote", "face"];
+  if (h.includes("how") || h.includes("step") || h.includes("start")) return ["steps", "story", "kill", "face"];
+  if (h.includes("chart") || h.includes("pnl") || h.includes("candle") || h.includes("tape")) return ["tape", "curve", "split", "desk"];
+  if (h.includes("weekend") || h.includes("session") || h.includes("after")) return ["session", "quote", "tape", "story"];
+  if (h.includes("kill") || h.includes("stop")) return ["kill", "steps", "quote"];
+  return ALL_LAYOUTS;
+}
+
+function emptyVisual(rng: () => number) {
+  return {
+    candles: fakeCandles(rng),
+    sleeves: fakeSleeves(rng),
+    curve: fakeCurve(rng),
+    steps: STEPS,
+    chips: [pick(rng, CHIPS), pick(rng, CHIPS), pick(rng, CHIPS)].filter((v, i, a) => a.indexOf(v) === i),
+  };
 }
 
 export function localPack(now = Date.now(), hint = ""): Shot[] {
-  const heads = bias(hint);
-  const aspects: Aspect[] = ["1:1", "16:9", "9:16"];
-  const layouts: Shot["layout"][] = ["face", "desk", "story"];
+  const rng0 = mulberry(now);
+  const pool = biasLayouts(hint);
+  const layouts: Layout[] = [];
+  let guard = 0;
+  while (layouts.length < 4 && guard++ < 48) {
+    const next = pick(rng0, pool.length > layouts.length ? pool : ALL_LAYOUTS);
+    if (!layouts.includes(next)) layouts.push(next);
+  }
   let lastHead = "";
-  return aspects.map((aspect, i) => {
+  return layouts.slice(0, 4).map((layout, i) => {
     const rng = mulberry(now + (i + 1) * 7919);
-    const headline = pick(rng, heads, lastHead);
+    const aspect = aspectFor(layout, rng);
+    const headline = pick(rng, HEADLINES[layout], lastHead);
     lastHead = headline;
     const pnlLabel = aestheticPnl(now + i * 13);
     const beatA = pick(rng, BEATS);
     const beatB = pick(rng, BEATS, beatA);
     const extra = hint.trim() ? `\n\n${hint.trim()}` : "";
+    const pair = pick(rng, PAIRS);
+    const vis = emptyVisual(rng);
     const caption = `${JOB}\n\n${beatA} ${beatB}\n\nIllustrative mark ${pnlLabel} — for the post, not a live book.${extra}\n\nsolphia.io`;
     return {
       aspect,
-      layout: layouts[i],
+      layout,
       headline,
       caption,
       pnlLabel,
       kicker: pick(rng, KICKERS),
+      sub: pick(rng, SUBS),
+      mood: layout === "kill" ? "acid" : layout === "session" ? "cyan" : pick(rng, MOODS),
+      pair,
+      session: pick(rng, SESSIONS),
+      ...vis,
     };
   });
 }
 
-function parseShots(raw: string): Shot[] | null {
+function parseShots(raw: string, fallback: Shot[]): Shot[] | null {
   const match = raw.match(/\[[\s\S]*\]/);
   if (!match) return null;
   try {
     const rows = JSON.parse(match[0]) as Partial<Shot>[];
     if (!Array.isArray(rows) || rows.length < 3) return null;
-    const aspects: Aspect[] = ["1:1", "16:9", "9:16"];
-    const layouts: Shot["layout"][] = ["face", "desk", "story"];
-    return aspects.map((aspect, i) => {
+    return fallback.map((base, i) => {
       const row = rows[i] || {};
       return {
-        aspect,
-        layout: layouts[i],
-        headline: String(row.headline || HEADLINES[i]).slice(0, 72),
-        caption: String(row.caption || localPack()[i].caption).slice(0, 900),
-        pnlLabel: String(row.pnlLabel || aestheticPnl(Date.now() + i)).slice(0, 40),
-        kicker: String(row.kicker || "solphia.io").slice(0, 48),
+        ...base,
+        headline: String(row.headline || base.headline).slice(0, 72),
+        caption: String(row.caption || base.caption).slice(0, 900),
+        pnlLabel: String(row.pnlLabel || base.pnlLabel).slice(0, 40),
+        kicker: String(row.kicker || base.kicker).slice(0, 48),
+        sub: String(row.sub || base.sub).slice(0, 80),
       };
     });
   } catch {
@@ -127,27 +211,29 @@ function parseShots(raw: string): Shot[] | null {
   }
 }
 
-async function grokPack(hint: string): Promise<Shot[] | null> {
+async function grokPack(hint: string, fallback: Shot[]): Promise<Shot[] | null> {
   if (!XAI_API_KEY) return null;
   const res = await fetch(`${XAI_BASE}/chat/completions`, {
     method: "POST",
     headers: { authorization: `Bearer ${XAI_API_KEY}`, "content-type": "application/json" },
     body: JSON.stringify({
       model: XAI_MODEL,
-      temperature: 0.7,
+      temperature: 0.8,
       messages: [
         {
           role: "system",
           content: `You are Solphia's in-house content bot. You only write social posts for solphia.io.
 She is a non-custodial Solana bot. She holds SOL, USDC, official SPYx, QQQx, and GLDx. Spot only. Phantom only. No memecoins, copy, sniper, or leverage.
-Return ONLY a JSON array of 3 objects with keys: headline, caption, pnlLabel, kicker.
+Return ONLY a JSON array of 4 objects with keys: headline, caption, pnlLabel, kicker, sub.
 PnL is aesthetic (like +1.4% · +$42 USDC), labeled as not a live book.
 Captions must include solphia.io and a one-line explanation of what she does.
-Keep headlines under 8 words. No hashtags dump. No seed/keys.`,
+Headlines under 8 words. No hashtag dump. No seed/keys. Make them feel like they belong on X, Instagram, and TikTok.`,
         },
         {
           role: "user",
-          content: hint.trim() ? `Write today's 3 posts. Angle: ${hint.trim()}` : "Write today's 3 posts: square, widescreen, story.",
+          content: hint.trim()
+            ? `Write 4 posts. Angle: ${hint.trim()}. Layouts: ${fallback.map((s) => s.layout).join(", ")}.`
+            : `Write 4 posts for layouts: ${fallback.map((s) => s.layout).join(", ")}.`,
         },
       ],
     }),
@@ -156,21 +242,22 @@ Keep headlines under 8 words. No hashtags dump. No seed/keys.`,
   if (!res.ok) return null;
   const json = (await res.json()) as { choices?: { message?: { content?: string } }[] };
   const text = json.choices?.[0]?.message?.content || "";
-  return parseShots(text);
+  return parseShots(text, fallback);
 }
 
 export async function writePack(opts?: { hint?: string; now?: number }): Promise<Shot[]> {
   const now = opts?.now ?? Date.now();
   const hint = opts?.hint || "";
+  const local = localPack(now, hint);
   try {
-    const grok = await grokPack(hint);
+    const grok = await grokPack(hint, local);
     if (grok) return grok;
   } catch {
     /* local always works */
   }
-  return localPack(now, hint);
+  return local;
 }
 
 export function packNote(shots: Shot[]) {
-  return `Wrote ${shots.length}: ${shots.map((s) => `${s.aspect} “${s.headline}”`).join(" · ")}`;
+  return `Wrote ${shots.length}: ${shots.map((s) => `${s.layout} “${s.headline}”`).join(" · ")}`;
 }

@@ -85,19 +85,24 @@ describe("promo cap", () => {
 });
 
 describe("content bot", () => {
-  it("writes three in-house shots with solphia.io and no memecoins", () => {
+  it("writes a mixed in-house pack with solphia.io and no memecoins", () => {
     const shots = localPack(1_700_000_000_000, "");
-    assert.equal(shots.length, 3);
-    assert.deepEqual(
-      shots.map((s) => s.aspect),
-      ["1:1", "16:9", "9:16"],
-    );
+    assert.equal(shots.length, 4);
+    const layouts = new Set(shots.map((s) => s.layout));
+    assert.ok(layouts.size >= 3);
     for (const s of shots) {
       assert.match(s.caption, /solphia\.io/i);
       assert.match(s.caption, /illustrative/i);
       assert.match(s.caption, /No memecoins/);
       assert.ok(s.headline.length > 4);
+      assert.ok(s.candles.length > 8);
+      assert.equal(s.sleeves.length, 5);
     }
+  });
+
+  it("builds a tape shot with candles when asked for charts", () => {
+    const shots = localPack(99, "candlestick pnl");
+    assert.ok(shots.some((s) => s.layout === "tape" || s.layout === "curve" || s.layout === "split"));
   });
 
   it("leans gold when asked", () => {
