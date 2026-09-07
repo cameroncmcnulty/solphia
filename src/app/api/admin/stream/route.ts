@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { requireAdmin } from "@/lib/admin/auth";
 import { buildAdminDesk } from "@/lib/admin/desk";
+import { readyState } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -12,16 +13,19 @@ export async function GET(req: NextRequest) {
   let closed = false;
   const stream = new ReadableStream({
     start(controller) {
-      const send = () => {
+      const send = async () => {
         if (closed) return;
         try {
+          await readyState();
           controller.enqueue(encoder.encode(`data: ${JSON.stringify(buildAdminDesk({ light: true }))}\n\n`));
         } catch {
           closed = true;
         }
       };
-      send();
-      const id = setInterval(send, 4000);
+      void send();
+      const id = setInterval(() => {
+        void send();
+      }, 4000);
       const stop = () => {
         if (closed) return;
         closed = true;

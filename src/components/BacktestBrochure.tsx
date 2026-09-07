@@ -37,16 +37,27 @@ function when(ms?: number) {
 }
 
 export function BacktestBrochure() {
-  const [data, setData] = useState<PublicBt | null>(null);
+  const [reports, setReports] = useState<Partial<Record<1 | 2 | 3, PublicBt>>>({});
   const [lev, setLev] = useState<1 | 2 | 3>(1);
 
   useEffect(() => {
-    fetch(`/api/backtest?lev=${lev}`, { cache: "no-store" })
-      .then((r) => r.json())
-      .then((j) => setData(j))
-      .catch(() => setData({ ready: false }));
-  }, [lev]);
+    let stop = false;
+    for (const n of [1, 2, 3] as const) {
+      fetch(`/api/backtest?lev=${n}`, { cache: "no-store" })
+        .then((r) => r.json())
+        .then((j) => {
+          if (!stop) setReports((prev) => ({ ...prev, [n]: j }));
+        })
+        .catch(() => {
+          if (!stop) setReports((prev) => ({ ...prev, [n]: { ready: false } }));
+        });
+    }
+    return () => {
+      stop = true;
+    };
+  }, []);
 
+  const data = reports[lev] || null;
   const ready = Boolean(data?.ready && data.curve?.length);
   const up = (data?.pnlPct || 0) >= 0;
   const pct = ready ? `${up ? "+" : ""}${((data?.pnlPct || 0) * 100).toFixed(1)}%` : "…";

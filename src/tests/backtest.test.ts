@@ -82,6 +82,17 @@ describe("backtest replay", () => {
     assert.equal(publicBacktest(latestBacktest(null, 2)).ready, false);
     assert.equal(latestBacktest(null, 3), null);
   });
+
+  it("serves a stored 2x report instead of the 1x seed", () => {
+    const stored = { ...latestBacktest(null)!, leverage: 2 as const, pnlPct: 0.12, curve: [{ t: 1, equity: 1120 }] };
+    const got = latestBacktest(stored, 2);
+    assert.ok(got);
+    assert.equal(got.leverage, 2);
+    assert.equal(got.pnlPct, 0.12);
+    const pub = publicBacktest(got);
+    assert.equal(pub.ready, true);
+    if (pub.ready) assert.equal(pub.leverage, 2);
+  });
 });
 
 function fill(at: number, side: "buy" | "sell", symbol: string, pnlUsd?: number): PaperFill {

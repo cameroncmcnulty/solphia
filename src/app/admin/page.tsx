@@ -21,6 +21,7 @@ export default function AdminPage() {
   const [saved, setSaved] = useState("");
   const [hint, setHint] = useState("");
   const [pnlWin, setPnlWin] = useState<"h24" | "d7" | "d30">("h24");
+  const [btLev, setBtLev] = useState<1 | 2 | 3>(1);
   const owner = useOwner();
 
   async function login() {
@@ -158,6 +159,8 @@ export default function AdminPage() {
   const session =
     pair?.session === "cash" ? "cash" : pair?.session === "weekend" ? "weekend" : pair?.session === "after_hours" ? "after hours" : "—";
   const tape = p.tape || [];
+  const shownBt =
+    (btLev === 3 ? data.backtestLev3 : btLev === 2 ? data.backtestLev2 : data.backtest) || data.backtest;
 
   return (
     <main className="mx-auto max-w-7xl px-4 pb-24 pt-2 md:px-8">
@@ -414,21 +417,37 @@ export default function AdminPage() {
             {busy ? "Replaying history…" : "Run backtest"}
           </button>
         </div>
-        {data.backtest ? (
+        {shownBt ? (
           <div className="mt-6 space-y-6">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-              <div className={`font-display text-4xl ${data.backtest.pnlPct >= 0 ? "text-acid" : "text-blood"}`}>
-                {data.backtest.pnlPct >= 0 ? "+" : ""}
-                {(data.backtest.pnlPct * 100).toFixed(2)}%
+              <div>
+                <div className="mb-2 flex flex-wrap gap-2">
+                  {([1, 2, 3] as const).map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      onClick={() => setBtLev(n)}
+                      disabled={n > 1 && !(n === 2 ? data.backtestLev2 : data.backtestLev3)}
+                      className={`rounded-full px-3 py-1 font-mono text-[11px] ${btLev === n ? "btn-on" : "btn-ghost"} disabled:opacity-40`}
+                    >
+                      {n === 1 ? "Spot 1×" : `SOL ${n}×`}
+                    </button>
+                  ))}
+                </div>
+                <div className={`font-display text-4xl ${shownBt.pnlPct >= 0 ? "text-acid" : "text-blood"}`}>
+                  {shownBt.pnlPct >= 0 ? "+" : ""}
+                  {(shownBt.pnlPct * 100).toFixed(2)}%
+                </div>
               </div>
               <p className="font-mono text-[11px] text-mute">
-                {data.backtest.horizon} · ran {age(now - data.backtest.ranAt)} ago
+                {shownBt.horizon} · ran {age(now - shownBt.ranAt)} ago
+                {shownBt.leverage && shownBt.leverage > 1 ? ` · liq ${shownBt.liquidations || 0}` : ""}
               </p>
             </div>
             {(data.backtestLev2 || data.backtestLev3) && (
               <div className="grid gap-3 sm:grid-cols-2">
                 {data.backtestLev2 && (
-                  <div className="rounded-2xl border border-line/80 bg-void/50 p-4">
+                  <button type="button" onClick={() => setBtLev(2)} className={`rounded-2xl border p-4 text-left ${btLev === 2 ? "border-acid/50 bg-acid/5" : "border-line/80 bg-void/50"}`}>
                     <div className="font-mono text-[10px] text-mute">SOL 2×</div>
                     <div className={`font-display text-2xl ${data.backtestLev2.pnlPct >= 0 ? "text-acid" : "text-blood"}`}>
                       {data.backtestLev2.pnlPct >= 0 ? "+" : ""}
@@ -438,10 +457,10 @@ export default function AdminPage() {
                       {data.backtestLev2.trades} clips · liq {data.backtestLev2.liquidations || 0} · DD −
                       {(data.backtestLev2.maxDdPct * 100).toFixed(1)}%
                     </div>
-                  </div>
+                  </button>
                 )}
                 {data.backtestLev3 && (
-                  <div className="rounded-2xl border border-line/80 bg-void/50 p-4">
+                  <button type="button" onClick={() => setBtLev(3)} className={`rounded-2xl border p-4 text-left ${btLev === 3 ? "border-acid/50 bg-acid/5" : "border-line/80 bg-void/50"}`}>
                     <div className="font-mono text-[10px] text-mute">SOL 3×</div>
                     <div className={`font-display text-2xl ${data.backtestLev3.pnlPct >= 0 ? "text-acid" : "text-blood"}`}>
                       {data.backtestLev3.pnlPct >= 0 ? "+" : ""}
@@ -451,52 +470,52 @@ export default function AdminPage() {
                       {data.backtestLev3.trades} clips · liq {data.backtestLev3.liquidations || 0} · DD −
                       {(data.backtestLev3.maxDdPct * 100).toFixed(1)}%
                     </div>
-                  </div>
+                  </button>
                 )}
               </div>
             )}
-            <EquityCurve curve={data.backtest.curve} up={data.backtest.pnlPct >= 0} />
+            <EquityCurve curve={shownBt.curve} up={shownBt.pnlPct >= 0} />
             <div className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-6">
-              <Mini k="Start" v={money(data.backtest.startingUsd)} />
-              <Mini k="End" v={money(data.backtest.endingUsd)} />
-              <Mini k="PnL" v={`${data.backtest.pnlUsd >= 0 ? "+" : "−"}${money(Math.abs(data.backtest.pnlUsd))}`} />
-              <Mini k="Max DD" v={`−${(data.backtest.maxDdPct * 100).toFixed(1)}%`} />
-              <Mini k="Closed clips" v={String(data.backtest.trades)} />
-              <Mini k="Win rate" v={`${Math.round(data.backtest.winRate * 100)}%`} />
-              <Mini k="Wins / losses" v={`${data.backtest.wins} / ${data.backtest.losses}`} />
+              <Mini k="Start" v={money(shownBt.startingUsd)} />
+              <Mini k="End" v={money(shownBt.endingUsd)} />
+              <Mini k="PnL" v={`${shownBt.pnlUsd >= 0 ? "+" : "−"}${money(Math.abs(shownBt.pnlUsd))}`} />
+              <Mini k="Max DD" v={`−${(shownBt.maxDdPct * 100).toFixed(1)}%`} />
+              <Mini k="Closed clips" v={String(shownBt.trades)} />
+              <Mini k="Win rate" v={`${Math.round(shownBt.winRate * 100)}%`} />
+              <Mini k="Wins / losses" v={`${shownBt.wins} / ${shownBt.losses}`} />
               <Mini
                 k="Profit factor"
                 v={
-                  data.backtest.profitFactor == null
-                    ? data.backtest.wins
+                  shownBt.profitFactor == null
+                    ? shownBt.wins
                       ? "∞"
                       : "—"
-                    : data.backtest.profitFactor.toFixed(2)
+                    : shownBt.profitFactor.toFixed(2)
                 }
               />
               <Mini
                 k="Realized"
-                v={`${(data.backtest.realizedUsd || 0) >= 0 ? "+" : "−"}${money(Math.abs(data.backtest.realizedUsd || 0))}`}
+                v={`${(shownBt.realizedUsd || 0) >= 0 ? "+" : "−"}${money(Math.abs(shownBt.realizedUsd || 0))}`}
               />
               <Mini
                 k="Open mark"
-                v={`${(data.backtest.unrealizedUsd || 0) >= 0 ? "+" : "−"}${money(Math.abs(data.backtest.unrealizedUsd || 0))}`}
+                v={`${(shownBt.unrealizedUsd || 0) >= 0 ? "+" : "−"}${money(Math.abs(shownBt.unrealizedUsd || 0))}`}
               />
-              <Mini k="Fees" v={money(data.backtest.feesUsd)} />
-              <Mini k="Slip" v={money(data.backtest.slippageUsd)} />
-              <Mini k="Avg win" v={`+${money(Math.abs(data.backtest.avgWinUsd))}`} />
-              <Mini k="Avg loss" v={money(data.backtest.avgLossUsd)} />
-              <Mini k="Best clip" v={`+${money(Math.abs(data.backtest.bestTradeUsd))}`} />
-              <Mini k="Worst clip" v={money(data.backtest.worstTradeUsd)} />
-              <Mini k="Best day" v={`+${money(Math.abs(data.backtest.bestDayUsd || 0))}`} />
-              <Mini k="Avg day" v={`${(data.backtest.avgDayUsd || 0) >= 0 ? "+" : "−"}${money(Math.abs(data.backtest.avgDayUsd || 0))}`} />
-              <Mini k="Days ≥ $2" v={String(data.backtest.daysGe2 || 0)} />
-              <Mini k="Bars" v={String(data.backtest.bars)} />
+              <Mini k="Fees" v={money(shownBt.feesUsd)} />
+              <Mini k="Slip" v={money(shownBt.slippageUsd)} />
+              <Mini k="Avg win" v={`+${money(Math.abs(shownBt.avgWinUsd))}`} />
+              <Mini k="Avg loss" v={money(shownBt.avgLossUsd)} />
+              <Mini k="Best clip" v={`+${money(Math.abs(shownBt.bestTradeUsd))}`} />
+              <Mini k="Worst clip" v={money(shownBt.worstTradeUsd)} />
+              <Mini k="Best day" v={`+${money(Math.abs(shownBt.bestDayUsd || 0))}`} />
+              <Mini k="Avg day" v={`${(shownBt.avgDayUsd || 0) >= 0 ? "+" : "−"}${money(Math.abs(shownBt.avgDayUsd || 0))}`} />
+              <Mini k="Days ≥ $2" v={String(shownBt.daysGe2 || 0)} />
+              <Mini k="Bars" v={String(shownBt.bars)} />
             </div>
             <div>
               <div className="font-mono text-[10px] tracking-[0.2em] text-mute">PER SLEEVE</div>
               <div className="mt-2 grid grid-cols-2 gap-3 md:grid-cols-4">
-                {data.backtest.sleeves.map((s) => (
+                {shownBt.sleeves.map((s) => (
                   <div key={s.id} className="rounded-2xl border border-line/80 bg-void/50 p-4">
                     <div className="font-mono text-[10px] tracking-[0.2em] text-mute">{s.id}</div>
                     <div className={`mt-1 font-display text-xl ${s.pnlUsd >= 0 ? "text-acid" : "text-blood"}`}>
@@ -510,7 +529,7 @@ export default function AdminPage() {
                 ))}
               </div>
             </div>
-            {(data.backtest.daily || []).length > 0 && (
+            {(shownBt.daily || []).length > 0 && (
               <div>
                 <div className="font-mono text-[10px] tracking-[0.2em] text-mute">DAILY · MARKED BOOK</div>
                 <p className="mt-1 text-xs text-mute">
@@ -529,7 +548,7 @@ export default function AdminPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {(data.backtest.daily || [])
+                      {(shownBt.daily || [])
                         .slice()
                         .reverse()
                         .map((d) => {
@@ -560,7 +579,7 @@ export default function AdminPage() {
                 </div>
               </div>
             )}
-            {data.backtest.monthly.length > 0 && (
+            {shownBt.monthly.length > 0 && (
               <div>
                 <div className="font-mono text-[10px] tracking-[0.2em] text-mute">MONTHLY</div>
                 <div className="mt-2 overflow-auto">
@@ -574,7 +593,7 @@ export default function AdminPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {data.backtest.monthly.map((m) => (
+                      {shownBt.monthly.map((m) => (
                         <tr key={m.ym} className="border-t border-line/60">
                           <td className="py-2 text-ghost">{m.ym}</td>
                           <td className={m.pnlUsd >= 0 ? "text-acid" : "text-blood"}>
@@ -592,11 +611,11 @@ export default function AdminPage() {
                 </div>
               </div>
             )}
-            {data.backtest.fills.length > 0 && (
+            {(shownBt.fills || []).length > 0 && (
               <div>
                 <div className="font-mono text-[10px] tracking-[0.2em] text-mute">LAST CLIPS</div>
                 <div className="mt-2 max-h-64 space-y-2 overflow-auto">
-                  {data.backtest.fills
+                  {(shownBt.fills || [])
                     .slice()
                     .reverse()
                     .map((f, i) => (
@@ -613,7 +632,7 @@ export default function AdminPage() {
                 </div>
               </div>
             )}
-            <p className="text-xs text-mute">{data.backtest.note}</p>
+            <p className="text-xs text-mute">{shownBt.note}</p>
           </div>
         ) : (
           <p className="mt-4 text-sm text-mute">No run yet. Hit Run backtest — it takes about a minute.</p>
@@ -765,7 +784,13 @@ function mergeDesk(prev: AdminDesk | null, next: AdminDesk): AdminDesk {
     const older = prev.promos.find((x) => x.id === p.id);
     return { ...p, dataUrl: p.dataUrl || older?.dataUrl };
   });
-  return { ...next, promos };
+  return {
+    ...next,
+    promos,
+    backtest: next.backtest || prev.backtest,
+    backtestLev2: next.backtestLev2 || prev.backtestLev2,
+    backtestLev3: next.backtestLev3 || prev.backtestLev3,
+  };
 }
 
 function Stat({ k, v, sub, good }: { k: string; v: string; sub: string; good?: boolean }) {

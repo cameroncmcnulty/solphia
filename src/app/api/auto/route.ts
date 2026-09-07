@@ -6,6 +6,7 @@ import { emptyTrader, bankrollUsd, maybeResizeBook, lockedAuto } from "@/lib/aut
 import { publicBook } from "@/lib/tick";
 import { liveTradingEnabled } from "@/lib/liveFlag";
 import { liveSeatOk, levSeatOk } from "@/lib/access";
+import { leverageUnlocked } from "@/lib/leverage";
 import { treasuryAddress } from "@/lib/treasury";
 import { publicMind } from "@/lib/mind/engine";
 import { killBook, unkilled, flattenToUsdc, applyPairDecision } from "@/lib/pair/paper";
@@ -89,7 +90,12 @@ export async function POST(req: NextRequest) {
     const nextMode = parsed.data.auto?.mode ?? t.auto.mode;
     const nextArmed = parsed.data.auto?.armed ?? t.auto.armed;
     const wantLev = parsed.data.auto?.leverage;
-    const levAllowed = levSeatOk(s, parsed.data.owner);
+    const liveNow = nextMode === "live";
+    const levAllowed = leverageUnlocked({
+      mode: liveNow ? "live" : "paper",
+      levSeat: levSeatOk(s, parsed.data.owner),
+      founder: false,
+    });
     t.auto = lockedAuto({
       ...t.auto,
       mode: nextMode,
@@ -98,6 +104,9 @@ export async function POST(req: NextRequest) {
       armedAt: t.auto.armedAt,
       leverage: wantLev === 2 || wantLev === 3 ? (levAllowed ? wantLev : 1) : t.auto.leverage,
     });
+    if (t.auto.mode === "live" && !levSeatOk(s, parsed.data.owner) && t.auto.leverage !== 1) {
+      t.auto.leverage = 1;
+    }
     if (t.auto.mode !== "live" && !t.book.killed) t.auto.armed = true;
     if (t.auto.armed && !wasArmed) {
       t.auto.armedAt = Date.now();

@@ -11,6 +11,7 @@ import { loadShortTape } from "./pair/shortTape";
 import { loadScalpFrames } from "./pair/frames";
 import { readyState, saveOps, saveTrader, loadHotTraders } from "./store";
 import { liveSeatOk, levSeatOk } from "./access";
+import { leverageUnlocked } from "./leverage";
 import { treasuryAddress } from "./treasury";
 import type { FeedHealth, PaperBook } from "./types";
 
@@ -244,7 +245,12 @@ export async function runMarketTick(): Promise<{
         armed: !trader.book.killed,
         tradingPubkey: trader.auto?.tradingPubkey,
         armedAt: trader.auto?.armedAt,
-        leverage: levSeatOk(state, owner) ? trader.auto?.leverage : 1,
+        leverage: leverageUnlocked({
+          mode: liveWanted ? "live" : "paper",
+          levSeat: levSeatOk(state, owner),
+        })
+          ? trader.auto?.leverage
+          : 1,
       });
       if (trader.auto.mode === "live" && (!liveTradingEnabled() || !seatOk)) trader.auto.mode = "paper";
       const target = bankrollUsd(trader.depositedSol, prices.sol.usd);

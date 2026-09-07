@@ -520,15 +520,15 @@ export function TradingHub() {
         <div className="mt-4 rounded-2xl border border-violet/20 p-4">
           <div className="font-mono text-[10px] tracking-[0.2em] text-mute">SOL SLEEVE</div>
           <p className="mt-1 text-sm text-mute">
-            Equities and gold stay spot. SOL can run Jupiter Perps-style 2× or 3× (borrow + liquidation). Needs the
-            0.15 SOL seat. On-chain perps wait on Jupiter’s API — this marks live prices with those fees.
+            Equities and gold stay spot. Paper 2×/3× is free. Live 2×/3× needs the 0.15 SOL seat. Jupiter Perps fees,
+            borrow, and liquidation. On-chain perps wait on Jupiter’s API — this marks live prices with those fees.
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
             {([1, 2, 3] as const).map((n) => (
               <button
                 key={n}
                 type="button"
-                disabled={n > 1 && !seat?.levSeat && !seat?.founder}
+                disabled={n > 1 && auto?.mode === "live" && !seat?.levSeat && !seat?.founder}
                 onClick={() => patch({ leverage: n })}
                 className={`min-h-[40px] rounded-full px-4 font-mono text-[12px] ${
                   (auto?.leverage || 1) === n ? "btn-on" : "btn-ghost"

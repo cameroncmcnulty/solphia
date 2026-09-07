@@ -8,6 +8,7 @@ export const KEYS = {
   ops: "solphia:ops",
   traders: "solphia:traders",
   trader: (owner: string) => `solphia:trader:${owner}`,
+  backtest: (lev: 1 | 2 | 3) => `solphia:backtest:${lev}`,
 };
 
 const BLOB_PATH = "solphia-state.json";

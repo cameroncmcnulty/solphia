@@ -30,6 +30,13 @@ export function canUseLeverage(plan?: string | null, founder?: boolean): boolean
   return plan === "lev" || plan === "full";
 }
 
+/** Paper 2×/3× is free. Live 2×/3× needs the lev seat (or founder). */
+export function leverageUnlocked(opts: { mode?: string | null; levSeat?: boolean; founder?: boolean }): boolean {
+  if (opts.founder) return true;
+  if (opts.mode !== "live") return true;
+  return Boolean(opts.levSeat);
+}
+
 export function notionalUsd(collateralUsd: number, lev: Lev): number {
   return Math.max(0, collateralUsd) * lev;
 }

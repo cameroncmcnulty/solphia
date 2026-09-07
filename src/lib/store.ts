@@ -15,7 +15,7 @@ import {
   pullRemoteState,
   KEYS,
 } from "./persist";
-import type { AppState, AuditEvent, TraderAccount } from "./types";
+import type { AppState, AuditEvent, BacktestReport, PairHoldings, TraderAccount } from "./types";
 
 export const DATA_DIR = process.env.DATA_DIR || (process.env.VERCEL ? "/tmp/solphia" : path.join(process.cwd(), "data"));
 const FILE = path.join(DATA_DIR, "state.json");
@@ -85,21 +85,7 @@ function hydrateFromRaw(raw: AppState): AppState {
           ...rawPaper,
           startedAt: rawPaper.startedAt || rawPaper.fills?.[0]?.at || Date.now(),
           pairLearn: rawPaper.pairLearn,
-          pair: rawPaper.pair
-            ? {
-                solQty: rawPaper.pair.solQty || 0,
-                spyxQty: rawPaper.pair.spyxQty || 0,
-                qqqxQty: rawPaper.pair.qqqxQty || 0,
-                gldxQty: rawPaper.pair.gldxQty || 0,
-                usdcQty: rawPaper.pair.usdcQty ?? rawPaper.cashUsd ?? emptyBook().cashUsd,
-                solCostUsd: rawPaper.pair.solCostUsd,
-                spyxCostUsd: rawPaper.pair.spyxCostUsd,
-                qqqxCostUsd: rawPaper.pair.qqqxCostUsd,
-                gldxCostUsd: rawPaper.pair.gldxCostUsd,
-                lastClipAt: rawPaper.pair.lastClipAt,
-                stops: rawPaper.pair.stops || {},
-              }
-            : { solQty: 0, spyxQty: 0, qqqxQty: 0, gldxQty: 0, usdcQty: rawPaper.cashUsd ?? emptyBook().cashUsd },
+          pair: restorePair(rawPaper.pair, rawPaper.cashUsd ?? emptyBook().cashUsd),
           tape: rawPaper.tape || [],
           skipped: rawPaper.skipped || 0,
         },
@@ -121,8 +107,38 @@ function hydrateFromRaw(raw: AppState): AppState {
   };
 }
 
+export function restorePair(p?: PairHoldings | null, cashUsd = 0): PairHoldings {
+  if (!p) return { solQty: 0, spyxQty: 0, qqqxQty: 0, gldxQty: 0, usdcQty: cashUsd };
+  return {
+    solQty: p.solQty || 0,
+    spyxQty: p.spyxQty || 0,
+    qqqxQty: p.qqqxQty || 0,
+    gldxQty: p.gldxQty || 0,
+    usdcQty: p.usdcQty ?? cashUsd,
+    solCostUsd: p.solCostUsd,
+    spyxCostUsd: p.spyxCostUsd,
+    qqqxCostUsd: p.qqqxCostUsd,
+    gldxCostUsd: p.gldxCostUsd,
+    lastClipAt: p.lastClipAt,
+    stops: p.stops || {},
+    solPerp: p.solPerp || null,
+  };
+}
+
+function slimBacktest(report?: BacktestReport | null): BacktestReport | null {
+  if (!report || !Array.isArray(report.curve) || !report.curve.length) return null;
+  const fills = Array.isArray(report.fills) ? report.fills.slice(-80) : [];
+  return { ...report, fills };
+}
+
 function opsView(state: AppState): AppState {
-  return { ...state, traders: {} };
+  return {
+    ...state,
+    traders: {},
+    backtest: slimBacktest(state.backtest),
+    backtestLev2: slimBacktest(state.backtestLev2),
+    backtestLev3: slimBacktest(state.backtestLev3),
+  };
 }
 
 export function touchHot(state: AppState, owner: string, at = Date.now()) {
@@ -188,7 +204,27 @@ function writeFs(next: AppState) {
   }
 }
 
+async function persistBacktests(next: AppState) {
+  const jobs: Promise<boolean>[] = [];
+  const b1 = slimBacktest(next.backtest);
+  const b2 = slimBacktest(next.backtestLev2);
+  const b3 = slimBacktest(next.backtestLev3);
+  if (b1) jobs.push(kvSetJson(KEYS.backtest(1), b1));
+  if (b2) jobs.push(kvSetJson(KEYS.backtest(2), b2));
+  if (b3) jobs.push(kvSetJson(KEYS.backtest(3), b3));
+  if (jobs.length) await Promise.all(jobs);
+}
+
+async function overlayBacktests(state: AppState) {
+  const rows = await kvMGetJson([KEYS.backtest(1), KEYS.backtest(2), KEYS.backtest(3)]);
+  const [b1, b2, b3] = rows;
+  if (b1 && typeof b1 === "object") state.backtest = b1 as AppState["backtest"];
+  if (b2 && typeof b2 === "object") state.backtestLev2 = b2 as AppState["backtestLev2"];
+  if (b3 && typeof b3 === "object") state.backtestLev3 = b3 as AppState["backtestLev3"];
+}
+
 async function persistShards(next: AppState, owners: string[]) {
+  await persistBacktests(next);
   await kvSetJson(KEYS.ops, opsView(next));
   const uniq = [...new Set(owners.filter(Boolean))];
   await Promise.all(
@@ -224,6 +260,7 @@ export async function saveOps(next: AppState): Promise<void> {
     writeFs(next);
     if (durableConfigured()) {
       try {
+        await persistBacktests(next);
         await kvSetJson(KEYS.ops, opsView(next));
       } catch {
         /* ignore */
@@ -318,6 +355,7 @@ async function hydrate(): Promise<AppState> {
       if (ops && typeof ops === "object") {
         mem = hydrateFromRaw(ops as AppState);
         mem.traders = mem.traders || {};
+        await overlayBacktests(mem);
         knownTraderOwners = await kvSmembers(KEYS.traders);
         memMtime = Date.now();
         hydrated = true;
@@ -328,6 +366,7 @@ async function hydrate(): Promise<AppState> {
         mem = hydrateFromRaw(remote as AppState);
         const owners = Object.keys(mem.traders || {});
         knownTraderOwners = owners;
+        await overlayBacktests(mem);
         await persistShards(mem, owners);
         memMtime = Date.now();
         hydrated = true;
@@ -339,6 +378,13 @@ async function hydrate(): Promise<AppState> {
   }
   const local = loadState();
   knownTraderOwners = Object.keys(local.traders || {});
+  if (durableConfigured()) {
+    try {
+      await overlayBacktests(local);
+    } catch {
+      /* disk still usable */
+    }
+  }
   hydrated = true;
   return local;
 }

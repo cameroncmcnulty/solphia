@@ -59,6 +59,13 @@ export function normalizeBacktest(report: BacktestReport): BacktestReport {
   };
 }
 
+/** Drop bulky fill history so three reports fit in Upstash ops. Curve + daily stay. */
+export function slimBacktest(report?: BacktestReport | null): BacktestReport | null {
+  if (!report || !Array.isArray(report.curve) || !report.curve.length) return null;
+  const fills = Array.isArray(report.fills) ? report.fills.slice(-80) : [];
+  return { ...report, fills };
+}
+
 export function latestBacktest(stored?: BacktestReport | null, lev: Lev = 1): BacktestReport | null {
   const has = stored && Array.isArray(stored.curve) && stored.curve.length;
   if (has) {
