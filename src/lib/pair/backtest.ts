@@ -258,7 +258,7 @@ export function publicBacktest(report: BacktestReport | null | undefined) {
 /** Replay the live scalp engine on a historical tape. */
 export function runBacktest(tape: BacktestTape, startingUsd = PAPER_STARTING_USD): BacktestReport {
   const spy0 = tape.spy[0]?.t || 0;
-  const clock = tape.sol.filter((c) => c.t >= spy0);
+  const clock = tape.sol.filter((c) => c.t >= spy0 && lastAt(tape.spy, c.t) && lastAt(tape.qqq, c.t) && lastAt(tape.gld, c.t));
   const warmup = 80;
   const packed = {
     h4: { sol: pack4h(tape.sol), spy: pack4h(tape.spy), qqq: pack4h(tape.qqq), gld: pack4h(tape.gld) },

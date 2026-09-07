@@ -17,7 +17,7 @@ import { SLEEVE_WEIGHT, TRADE_PAIRS, xstockIdOf, type Sleeve, type TradePair } f
 import { enrichStudy } from "./policy";
 import type { ShortTape } from "./shortTape";
 import type { ScalpFrames } from "./frames";
-import { DEFAULT_LEARN, RISK_SLEEVES, needOf, nextTrail, readAsset } from "./signals";
+import { CLIP_AIM, DEFAULT_LEARN, RISK_SLEEVES, needOf, nextTrail, readAsset } from "./signals";
 
 export type { Sleeve, TradePair } from "./catalog";
 export { SLEEVE_WEIGHT, TRADE_PAIRS };
@@ -199,7 +199,7 @@ function sleeve(
 
 export function allocatedUsd(book: PaperBook, auto: AutoSettings, solUsd: number, depositedSol: number): number {
   const wallet = depositedSol > 0.001 && solUsd > 0 ? depositedSol * solUsd : book.startingUsd;
-  const pct = clamp(auto.allocationPct ?? 0.6, 0.2, 0.8);
+  const pct = clamp(auto.allocationPct ?? 0.6, 0.2, 0.9);
   return Math.max(0, wallet * pct - GAS_RESERVE_SOL * solUsd);
 }
 
@@ -346,11 +346,30 @@ export function decidePair(opts: {
     h.stops[sig.sleeve] = { ...trail, entryPx: prev.entryPx || entryPx };
     book.pair = h;
     const basis = prev.entryPx || entryPx;
+    const pnlPct = basis > 0 ? sig.px / basis - 1 : 0;
     const locked = basis > 0 ? trail.stopPx / basis - 1 : 0;
     if (trail.armed && sig.px <= trail.stopPx) {
       return {
         action: "swap",
         reason: `Trail hit on ${sig.sleeve} at ${sig.px.toFixed(2)} (stop ${trail.stopPx.toFixed(2)}, locked ${(locked * 100).toFixed(1)}%). Back to USDC.`,
+        clipUsd: pos,
+        from: sig.sleeve,
+        to: "USDC",
+        asset: xstockIdOf(sig.sleeve) || undefined,
+        pairId: `usdc-${sig.sleeve.toLowerCase()}`,
+        z7: primary.z7,
+        z24: primary.z24,
+        ratio: primary.ratio,
+        bandK,
+        session,
+        read: primary,
+        reads,
+      };
+    }
+    if (pnlPct >= CLIP_AIM) {
+      return {
+        action: "swap",
+        reason: `${sig.sleeve} up ${(pnlPct * 100).toFixed(1)}%. Banking the 1.2% clip to USDC and looking for the next one.`,
         clipUsd: pos,
         from: sig.sleeve,
         to: "USDC",
@@ -384,7 +403,7 @@ export function decidePair(opts: {
     return empty("hold", `USDC. Waiting ${left}m before the next buy.`);
   }
 
-  const clipUsd = Math.max(PAIR_MIN_CLIP_USD, Math.min(allocated * 0.85, h.usdcQty * 0.9));
+  const clipUsd = Math.max(PAIR_MIN_CLIP_USD, Math.min(allocated * 0.9, h.usdcQty * 0.92));
   let best = sigs[0];
   for (const s of sigs) if (!best || s.buy > best.buy) best = s;
   if (best && h.usdcQty >= PAIR_MIN_CLIP_USD * 2) {

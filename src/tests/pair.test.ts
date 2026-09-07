@@ -266,12 +266,12 @@ describe("USDC-home engine", () => {
       gldxQty: 0,
       usdcQty: 200,
       solCostUsd: 400,
-      stops: { SOL: { entryPx: 100, peakPx: 101.2, stopPx: 100.4, armed: true } },
+      stops: { SOL: { entryPx: 100, peakPx: 101.1, stopPx: 100.4, armed: true } },
     };
     const d = decidePair({
       auto: auto({ cooldownMin: 0, stopPct: 0.9 }),
       book,
-      prices: px(103, 770),
+      prices: px(101.1, 770),
       samples: hist(100, 770),
       study: DEFAULT_STUDY,
       now: CASH,
@@ -280,9 +280,34 @@ describe("USDC-home engine", () => {
     assert.match(d.reason, /Riding it/i);
     const stop = book.pair?.stops?.SOL;
     assert.ok(stop?.armed);
-    assert.ok((stop?.peakPx || 0) >= 103);
+    assert.ok((stop?.peakPx || 0) >= 101.1);
     assert.ok((stop?.stopPx || 0) > 100.4);
-    assert.ok((stop?.stopPx || 0) < 103);
+    assert.ok((stop?.stopPx || 0) < 101.1);
+  });
+
+  it("banks a 1.2% clip to USDC so she can take the next setup", () => {
+    const book = emptyBook(1000);
+    book.pair = {
+      solQty: 4,
+      spyxQty: 0,
+      qqqxQty: 0,
+      gldxQty: 0,
+      usdcQty: 200,
+      solCostUsd: 400,
+      stops: { SOL: { entryPx: 100, peakPx: 101.3, stopPx: 100.7, armed: true } },
+    };
+    const d = decidePair({
+      auto: auto({ cooldownMin: 0, stopPct: 0.9 }),
+      book,
+      prices: px(101.3, 770),
+      samples: hist(100, 770),
+      study: DEFAULT_STUDY,
+      now: CASH,
+    });
+    assert.equal(d.action, "swap");
+    assert.equal(d.from, "SOL");
+    assert.equal(d.to, "USDC");
+    assert.match(d.reason, /1\.2%|Banking/i);
   });
 
   it("sells only when price falls through the ratcheted trail", () => {

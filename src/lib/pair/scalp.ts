@@ -46,7 +46,16 @@ function bounceOffDip(cs: Candle[]): boolean {
   if (!(a > 0 && b > 0)) return false;
   const dip = b / a - 1;
   const bounce = last.c / b - 1;
-  return dip <= -0.002 && bounce >= 0.0012 && last.c >= last.o;
+  return dip <= -0.0015 && bounce >= 0.0008 && last.c >= last.o;
+}
+
+function nearEmaBounce(cs: Candle[], ema9: number, live: number): boolean {
+  if (cs.length < 3 || !(ema9 > 0)) return false;
+  const last = cs[cs.length - 1];
+  const prev = cs[cs.length - 2];
+  const dipped = prev.l <= ema9 * 0.9995 || prev.c < ema9;
+  const reclaimed = live >= ema9 && last.c >= last.o && last.c > ema9;
+  return dipped && reclaimed;
 }
 
 function discount(cs: Candle[], live: number): number {
@@ -136,7 +145,8 @@ export function scoreScalp(
     taggedThenReclaim(m15, e9) ||
     taggedThenReclaim(m5, vw) ||
     taggedThenReclaim(m15, vw) ||
-    bounceOffDip(m15);
+    bounceOffDip(m15) ||
+    nearEmaBounce(m15, e9, live);
   const bounce5 = ret5m > 0.0008 && ret15m > -0.004;
   const hl = structureBull(m15);
   const aligned = e9 > e21 && live > e9;
@@ -144,9 +154,14 @@ export function scoreScalp(
   const green = lastBar && lastBar.c >= lastBar.o;
 
   let bias: Bias = "flat";
-  if (daily === "bear" && htf === "bear") bias = "bear";
-  else if (daily === "bull" || htf === "bull") bias = "bull";
-  else if (daily === "bear" || htf === "bear") bias = "bear";
+  if (equity) {
+    if (htf === "bear" && daily !== "bull") bias = "bear";
+    else if (daily === "bull" || htf === "bull") bias = "bull";
+  } else if (htf === "bear") {
+    bias = "bear";
+  } else if (htf === "bull" || daily === "bull" || aligned) {
+    bias = "bull";
+  }
 
   let buy = 0;
   const why: string[] = [];
@@ -169,7 +184,25 @@ export function scoreScalp(
     if (disc <= 0.7) buy += 0.08;
     if (room) buy += 0.08;
     if (st.dir === 1) buy += 0.06;
-  } else if (aligned && st.dir === 1 && green && rsiN >= 40 && rsiN <= 64 && ret15m > 0.001 && ret15m < 0.007) {
+  } else if (
+    !equity &&
+    aligned &&
+    st.dir === 1 &&
+    green &&
+    rsiN >= 36 &&
+    rsiN <= 68 &&
+    ret15m > 0 &&
+    ret15m < 0.012 &&
+    ret1h > -0.008
+  ) {
+    setup = "momentum";
+    buy += 0.28;
+    why.push("SOL/gold 15m continuation");
+    if (bias === "bull") buy += 0.1;
+    if (live > vw) buy += 0.08;
+    if (macdUp) buy += 0.06;
+    if (room) buy += 0.08;
+  } else if (aligned && st.dir === 1 && green && rsiN >= 38 && rsiN <= 66 && ret15m > 0.0008 && ret15m < 0.01) {
     setup = "momentum";
     buy += 0.2;
     why.push("15m momentum");
@@ -178,7 +211,7 @@ export function scoreScalp(
     if (macdUp) buy += 0.06;
     if (room) buy += 0.08;
     if (hl) buy += 0.06;
-  } else if (!trending && (disc <= 0.38 || rsiN <= 40) && bounce5 && st.dir !== -1) {
+  } else if (dmi.adx < 22 && (disc <= 0.42 || rsiN <= 42) && bounce5 && st.dir !== -1) {
     setup = "range_fade";
     buy += 0.2;
     why.push("range fade");
@@ -193,6 +226,7 @@ export function scoreScalp(
   }
 
   if (setup === "none" && rsiN > 70) buy -= 0.4;
+  if (setup === "momentum" && ret1h > 0.012) buy -= 0.18;
   if (ret15m < -0.022 || ret1h < -0.035) buy -= 0.5;
   if (equity && auction) buy -= 0.28;
   if (equity && session === "weekend") buy -= 0.45;

@@ -5,7 +5,7 @@ import { PAPER_STARTING_USD } from "./config";
 export const DEFAULT_AUTO: AutoSettings = {
   armed: true,
   mode: "paper",
-  allocationPct: 0.8,
+  allocationPct: 0.88,
   style: "scalp",
   band: "normal",
   clipPct: 0.12,

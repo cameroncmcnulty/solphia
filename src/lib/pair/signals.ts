@@ -49,7 +49,7 @@ export type SleeveLearn = {
   trailK: number;
 };
 
-export const DEFAULT_LEARN: SleeveLearn = { trades: 0, wins: 0, pnlUsd: 0, buyNeed: 0.34, trailK: 0.55 };
+export const DEFAULT_LEARN: SleeveLearn = { trades: 0, wins: 0, pnlUsd: 0, buyNeed: 0.32, trailK: 0.55 };
 
 /** A 15m reclaim / momentum clip — not RSI alone. */
 export function needOf(learn?: SleeveLearn): number {
@@ -255,7 +255,9 @@ export function nextTrail(opts: {
   if (armed && peakProfit >= CLIP_MIN) {
     const k = trailGiveback(peakProfit, opts.atrPct, opts.trailK);
     const raw = peakPx * (1 - k);
-    const lock = opts.entryPx * (1 + CLIP_MIN * 0.55);
+    let lock = opts.entryPx * (1 + CLIP_MIN * 0.7);
+    if (peakProfit >= CLIP_AIM) lock = opts.entryPx * (1 + CLIP_MIN);
+    if (peakProfit >= CLIP_HARD) lock = opts.entryPx * (1 + CLIP_AIM);
     stopPx = Math.max(stopPx, raw, breakeven, lock);
   }
   return { peakPx, stopPx, armed };
