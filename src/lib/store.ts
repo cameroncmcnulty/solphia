@@ -6,7 +6,7 @@ import { emptyLab, mergeLab } from "./desk/shadow";
 import { emptyMind, mergeMind } from "./mind/engine";
 import type { AppState, AuditEvent } from "./types";
 
-const DATA_DIR = process.env.DATA_DIR || (process.env.VERCEL ? "/tmp/solphia" : path.join(process.cwd(), "data"));
+export const DATA_DIR = process.env.DATA_DIR || (process.env.VERCEL ? "/tmp/solphia" : path.join(process.cwd(), "data"));
 const FILE = path.join(DATA_DIR, "state.json");
 
 let mem: AppState | null = null;
@@ -31,6 +31,11 @@ export function emptyState(): AppState {
     lastTickAt: 0,
     lastSnapshots: [],
     pairSamples: [],
+    treasuryWallet: "",
+    liveTrading: undefined,
+    promos: [],
+    promoPending: null,
+    lastPromoDay: "",
   };
 }
 
@@ -85,6 +90,11 @@ export function loadState(): AppState {
         curveWatch: raw.curveWatch || {},
         traders: raw.traders || {},
         adminWallets: raw.adminWallets || [],
+        treasuryWallet: raw.treasuryWallet || "",
+        liveTrading: typeof raw.liveTrading === "boolean" ? raw.liveTrading : undefined,
+        promos: Array.isArray(raw.promos) ? raw.promos : [],
+        promoPending: raw.promoPending || null,
+        lastPromoDay: raw.lastPromoDay || "",
       };
       return mem;
     }

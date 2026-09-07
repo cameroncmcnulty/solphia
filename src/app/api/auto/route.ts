@@ -4,7 +4,9 @@ import { clientIp, isSolanaAddress, rateLimit } from "@/lib/security";
 import { loadState, mutateState } from "@/lib/store";
 import { emptyTrader, bankrollUsd, maybeResizeBook, lockedAuto } from "@/lib/auto";
 import { publicBook } from "@/lib/tick";
-import { LIVE_TRADING } from "@/lib/config";
+import { liveTradingEnabled } from "@/lib/liveFlag";
+import { liveSeatOk } from "@/lib/access";
+import { treasuryAddress } from "@/lib/treasury";
 import { publicMind } from "@/lib/mind/engine";
 import { killBook, unkilled, flattenToUsdc, applyPairDecision } from "@/lib/pair/paper";
 import { loadPairPrices } from "@/lib/pair/prices";
@@ -32,7 +34,7 @@ export async function GET(req: NextRequest) {
     depositedSol: trader.depositedSol,
     paper: publicBook(trader.book),
     mind: publicMind(state.mind),
-    liveTrading: LIVE_TRADING,
+    liveTrading: liveTradingEnabled(),
   });
 }
 
@@ -92,7 +94,8 @@ export async function POST(req: NextRequest) {
     }
     if (parsed.data.auto?.armed === true && t.book.killed) unkilled(t.book);
     if (!t.auto.armedAt) t.auto.armedAt = Date.now();
-    if (t.auto.mode === "live" && !LIVE_TRADING) t.auto.mode = "paper";
+    if (t.auto.mode === "live" && !liveTradingEnabled()) t.auto.mode = "paper";
+    if (t.auto.mode === "live" && treasuryAddress() && !liveSeatOk(s, parsed.data.owner)) t.auto.mode = "paper";
     if (parsed.data.tradingPubkey) t.tradingPubkey = parsed.data.tradingPubkey;
     if (parsed.data.depositedSol != null) t.depositedSol = parsed.data.depositedSol;
     t.book = maybeResizeBook(t.book, bankrollUsd(t.depositedSol, solUsd || 100));
@@ -163,6 +166,6 @@ export async function POST(req: NextRequest) {
     depositedSol: trader.depositedSol,
     paper: publicBook(trader.book),
     mind: publicMind(loadState().mind),
-    liveTrading: LIVE_TRADING,
+    liveTrading: liveTradingEnabled(),
   });
 }

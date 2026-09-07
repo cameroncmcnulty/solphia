@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { SystemProgram, Transaction, PublicKey } from "@solana/web3.js";
 import { clientIp, isEmail, isSolanaAddress, rateLimit, sanitizeText } from "@/lib/security";
-import { LIVE_TRADING, TREASURY } from "@/lib/config";
+import { liveTradingEnabled } from "@/lib/liveFlag";
+import { treasuryAddress } from "@/lib/treasury";
 import { PLANS, planById, lamportsForPlan, type PlanId } from "@/lib/plans";
 import { connection, confirmedSolTransfer } from "@/lib/solana/connection";
 import { loadState, mutateState } from "@/lib/store";
@@ -23,8 +24,8 @@ const Body = z.object({
 export async function GET() {
   return NextResponse.json({
     plans: PLANS,
-    treasury: TREASURY || null,
-    liveTrading: LIVE_TRADING,
+    treasury: treasuryAddress() || null,
+    liveTrading: liveTradingEnabled(),
     paperSubscribeAllowed: true,
   });
 }
@@ -52,7 +53,8 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  if (parsed.data.paper || !TREASURY) {
+  const treasury = treasuryAddress();
+  if (parsed.data.paper || !treasury) {
     await mutateState(async (s) => {
       let user = s.users.find((u) => u.pubkey === parsed.data.pubkey);
       if (!user) {
@@ -81,7 +83,7 @@ export async function POST(req: NextRequest) {
     const tx = new Transaction().add(
       SystemProgram.transfer({
         fromPubkey: new PublicKey(parsed.data.pubkey),
-        toPubkey: new PublicKey(TREASURY),
+        toPubkey: new PublicKey(treasury),
         lamports,
       }),
     );
@@ -89,13 +91,13 @@ export async function POST(req: NextRequest) {
     const { blockhash } = await connection().getLatestBlockhash();
     tx.recentBlockhash = blockhash;
     const serialized = tx.serialize({ requireAllSignatures: false }).toString("base64");
-    return NextResponse.json({ needsSignature: true, transaction: serialized, treasury: TREASURY, lamports, plan: plan.id });
+    return NextResponse.json({ needsSignature: true, transaction: serialized, treasury, lamports, plan: plan.id });
   }
 
   const check = await confirmedSolTransfer({
     signature: parsed.data.signature,
     from: parsed.data.pubkey,
-    to: TREASURY,
+    to: treasury,
     lamports,
   });
   if (!check.ok) return NextResponse.json({ error: check.error }, { status: 400 });

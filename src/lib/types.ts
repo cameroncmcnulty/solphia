@@ -410,6 +410,30 @@ export interface LabStrategy {
   denied: number;
 }
 
+export interface PromoItem {
+  id: string;
+  at: number;
+  kind: "image" | "video";
+  aspect: "1:1" | "16:9" | "9:16";
+  headline: string;
+  caption: string;
+  pnlLabel: string;
+  prompt: string;
+  mime: string;
+  file?: string;
+  remoteUrl?: string;
+}
+
+export interface PromoPending {
+  requestId: string;
+  at: number;
+  headline: string;
+  caption: string;
+  pnlLabel: string;
+  aspect: "9:16" | "16:9" | "1:1";
+  prompt: string;
+}
+
 export interface AppState {
   paper: PaperBook;
   lab: Record<LabKind, LabStrategy>;
@@ -429,4 +453,9 @@ export interface AppState {
   lastSnapshots: TokenSnapshot[];
   pairSamples?: { t: number; sol: number; spyx: number; qqqx?: number; gldx?: number }[];
   lastPair?: unknown;
+  treasuryWallet?: string;
+  liveTrading?: boolean;
+  promos?: PromoItem[];
+  promoPending?: PromoPending | null;
+  lastPromoDay?: string;
 }

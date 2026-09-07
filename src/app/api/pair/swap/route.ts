@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { clientIp, isSolanaAddress, rateLimit } from "@/lib/security";
-import { LIVE_TRADING } from "@/lib/config";
+import { liveTradingEnabled } from "@/lib/liveFlag";
 import { buildSwapTx, quoteSwap } from "@/lib/pair/jupiter";
 import { isAllowedMint } from "@/lib/pair/mints";
 
@@ -17,7 +17,7 @@ const Body = z.object({
 });
 
 export async function POST(req: NextRequest) {
-  if (!LIVE_TRADING) return NextResponse.json({ error: "live_off" }, { status: 403 });
+  if (!liveTradingEnabled()) return NextResponse.json({ error: "live_off" }, { status: 403 });
   if (!rateLimit(clientIp(req) + ":pairswap", 8, 60_000)) {
     return NextResponse.json({ error: "rate_limited" }, { status: 429 });
   }

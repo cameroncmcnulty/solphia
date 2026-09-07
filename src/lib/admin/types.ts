@@ -27,8 +27,38 @@ export type AdminSeat = {
   pubkey: string;
   plan: string;
   paid: boolean;
+  admin: boolean;
   until: number | null;
   lastSeen: number;
+};
+
+export type AdminWindow = {
+  volumeUsd: number;
+  trades: number;
+  feesUsd: number;
+  pnlUsd: number;
+};
+
+export type AdminPromo = {
+  id: string;
+  at: number;
+  kind: "image" | "video";
+  aspect: "1:1" | "16:9" | "9:16";
+  headline: string;
+  caption: string;
+  pnlLabel: string;
+  mime: string;
+  url: string;
+};
+
+export type AdminOps = {
+  holdingUsd: number;
+  wallets: number;
+  trading: number;
+  h24: AdminWindow;
+  d7: AdminWindow;
+  newWallets24: number;
+  solIn: number;
 };
 
 export type AdminPaper = {
@@ -69,6 +99,7 @@ export type AdminPair = {
 export type AdminDesk = {
   liveTrading: boolean;
   helius: boolean;
+  treasury: string;
   treasurySet: boolean;
   lastTickAt: number;
   seatSol: number;
@@ -83,6 +114,12 @@ export type AdminDesk = {
   feedHealth: FeedHealth[];
   traders: AdminTrader[];
   seats: AdminSeat[];
+  adminWallets: string[];
+  ops: AdminOps;
+  promos: AdminPromo[];
+  promoPending: boolean;
+  lastPromoDay: string;
+  xai: boolean;
   audit: AuditEvent[];
   locked: {
     cooldownMin: number;

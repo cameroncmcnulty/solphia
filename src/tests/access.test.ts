@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { grantFounder, isFounder } from "../lib/access";
+import { grantFounder, isFounder, liveSeatOk, revokeFounder } from "../lib/access";
 import { emptyState } from "../lib/store";
 
 describe("founder access", () => {
@@ -11,8 +11,12 @@ describe("founder access", () => {
     grantFounder(s, pk);
     assert.equal(isFounder(s, pk), true);
     const u = s.users.find((x) => x.pubkey === pk);
-    assert.equal(u?.plan, "full");
+    assert.equal(u?.plan, "live");
     assert.equal(u?.comped, true);
     assert.ok((u?.subscribedUntil || 0) > Date.now() + 1000 * 60 * 60 * 24 * 30);
+    assert.equal(liveSeatOk(s, pk), true);
+    revokeFounder(s, pk);
+    assert.equal(isFounder(s, pk), false);
+    assert.equal(liveSeatOk(s, pk), false);
   });
 });

@@ -1,19 +1,16 @@
 import { DEFAULT_AUTO } from "../auto";
-import {
-  LIVE_TRADING,
-  PAIR_FEE_BPS,
-  PAIR_SLIP_BPS,
-  PROTOCOL_FEE_BPS,
-  SUBSCRIPTION_SOL,
-  TREASURY,
-} from "../config";
+import { PAIR_FEE_BPS, PAIR_SLIP_BPS, PROTOCOL_FEE_BPS, SUBSCRIPTION_SOL, XAI_API_KEY } from "../config";
+import { liveTradingEnabled } from "../liveFlag";
 import { SLEEVE_WEIGHT, TRADE_PAIRS } from "../pair/catalog";
 import { SOL_MINT, USDC_MINT, gldxMint, qqqxMint, spyxMint } from "../pair/mints";
 import type { PairDeskPublic } from "../pair/public";
 import { heliusEnabled } from "../solana/connection";
+import { isFounder } from "../access";
 import { loadState } from "../store";
 import { lastPairDesk, lastPairPrices, publicBook } from "../tick";
-import type { AdminDesk, AdminSeat, AdminSleeve, AdminTrader } from "./types";
+import { treasuryAddress } from "../treasury";
+import { bookHoldingUsd, sumWindows, tradingNow, uniqueWallets } from "./stats";
+import type { AdminDesk, AdminPromo, AdminSeat, AdminSleeve, AdminTrader } from "./types";
 
 export type { AdminDesk, AdminSeat, AdminSleeve, AdminTrader } from "./types";
 
@@ -26,6 +23,7 @@ export function buildAdminDesk(): AdminDesk {
   const spyxUsd = px.spyxUsd || pair?.spyxUsd || 0;
   const qqqxUsd = px.qqqxUsd || pair?.qqqxUsd || 0;
   const gldxUsd = px.gldxUsd || pair?.gldxUsd || 0;
+  const prices = { solUsd, spyxUsd, qqqxUsd, gldxUsd };
   const h = paper.pair || { solQty: 0, spyxQty: 0, qqqxQty: 0, gldxQty: 0, usdcQty: paper.cashUsd };
 
   const sleeves: AdminSleeve[] = [
@@ -57,17 +55,45 @@ export function buildAdminDesk(): AdminDesk {
 
   const seats: AdminSeat[] = (s.users || []).map((u) => ({
     pubkey: u.pubkey,
-    plan: u.plan === "live" ? "live" : "paper",
+    plan: u.plan === "live" || u.plan === "full" ? "live" : "paper",
     paid: Boolean(u.subscribedUntil && u.subscribedUntil > Date.now()),
+    admin: isFounder(s, u.pubkey),
     until: u.subscribedUntil || null,
     lastSeen: u.lastSeen,
   }));
   seats.sort((a, b) => b.lastSeen - a.lastSeen);
 
+  const books = [s.paper, ...Object.values(s.traders || {}).map((t) => t.book)];
+  const windows = sumWindows(books);
+  let holdingUsd = bookHoldingUsd(s.paper, prices);
+  let solIn = 0;
+  for (const t of Object.values(s.traders || {})) {
+    holdingUsd += bookHoldingUsd(t.book, prices);
+    solIn += t.depositedSol || 0;
+  }
+  const now = Date.now();
+  const newWallets24 = (s.users || []).filter((u) => now - (u.createdAt || 0) < 86_400_000).length;
+  const treasury = treasuryAddress();
+  const promos: AdminPromo[] = (s.promos || [])
+    .slice()
+    .reverse()
+    .map((p) => ({
+      id: p.id,
+      at: p.at,
+      kind: p.kind,
+      aspect: p.aspect,
+      headline: p.headline,
+      caption: p.caption,
+      pnlLabel: p.pnlLabel,
+      mime: p.mime,
+      url: `/api/admin/promo/file?id=${encodeURIComponent(p.id)}`,
+    }));
+
   return {
-    liveTrading: LIVE_TRADING,
+    liveTrading: liveTradingEnabled(),
     helius: heliusEnabled(),
-    treasurySet: Boolean(TREASURY),
+    treasury,
+    treasurySet: Boolean(treasury),
     lastTickAt: s.lastTickAt || 0,
     seatSol: SUBSCRIPTION_SOL,
     protocolFeeBps: PROTOCOL_FEE_BPS,
@@ -75,7 +101,7 @@ export function buildAdminDesk(): AdminDesk {
     slipBps: PAIR_SLIP_BPS,
     paper,
     pair,
-    prices: { solUsd, spyxUsd, qqqxUsd, gldxUsd },
+    prices,
     mints: {
       sol: SOL_MINT,
       usdc: USDC_MINT,
@@ -87,6 +113,20 @@ export function buildAdminDesk(): AdminDesk {
     feedHealth: s.feedHealth || [],
     traders,
     seats,
+    adminWallets: s.adminWallets || [],
+    ops: {
+      holdingUsd: round2(holdingUsd),
+      wallets: uniqueWallets(s.users || [], s.traders || {}).length,
+      trading: tradingNow(s.traders || {}, Boolean(s.paper.killed)),
+      h24: roundWindow(windows.h24),
+      d7: roundWindow(windows.d7),
+      newWallets24,
+      solIn: round2(solIn),
+    },
+    promos,
+    promoPending: Boolean(s.promoPending),
+    lastPromoDay: s.lastPromoDay || "",
+    xai: Boolean(XAI_API_KEY),
     audit: (s.audit || []).slice(-40).reverse(),
     locked: {
       cooldownMin: DEFAULT_AUTO.cooldownMin,
@@ -105,5 +145,18 @@ export function buildAdminDesk(): AdminDesk {
       leftName: p.leftName,
       rightName: p.rightName,
     })),
+  };
+}
+
+function round2(n: number) {
+  return Math.round((Number(n) || 0) * 100) / 100;
+}
+
+function roundWindow(w: { volumeUsd: number; trades: number; feesUsd: number; pnlUsd: number }) {
+  return {
+    volumeUsd: round2(w.volumeUsd),
+    trades: w.trades,
+    feesUsd: round2(w.feesUsd),
+    pnlUsd: round2(w.pnlUsd),
   };
 }

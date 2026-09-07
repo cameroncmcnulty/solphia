@@ -24,7 +24,7 @@ export function grantFounder(state: AppState, pubkey: string) {
   if (!user) {
     user = {
       pubkey,
-      plan: "full",
+      plan: "live",
       comped: true,
       createdAt: Date.now(),
       lastSeen: Date.now(),
@@ -33,9 +33,27 @@ export function grantFounder(state: AppState, pubkey: string) {
     };
     state.users.push(user);
   } else {
-    user.plan = "full";
+    user.plan = "live";
     user.comped = true;
     user.subscribedUntil = Date.now() + FOUNDER_MS;
     user.alertsEnabled = true;
   }
+}
+
+export function revokeFounder(state: AppState, pubkey: string) {
+  state.adminWallets = (state.adminWallets || []).filter((w) => w !== pubkey);
+  const u = state.users.find((x) => x.pubkey === pubkey);
+  if (u) {
+    u.comped = false;
+    if (u.plan === "full" || u.plan === "live") u.plan = "paper";
+    u.subscribedUntil = Date.now();
+  }
+}
+
+/** Admin wallets skip the 0.2 SOL seat. Everyone else needs a paid live plan when treasury is set. */
+export function liveSeatOk(state: AppState, pubkey?: string | null): boolean {
+  if (!pubkey) return false;
+  if (isFounder(state, pubkey)) return true;
+  const u = state.users.find((x) => x.pubkey === pubkey);
+  return Boolean(u?.subscribedUntil && u.subscribedUntil > Date.now() && (u.plan === "live" || u.plan === "full"));
 }

@@ -4,8 +4,10 @@ import { runMarketTick } from "@/lib/tick";
 import { loadState, mutateState } from "@/lib/store";
 import { queueEmail } from "@/lib/email/send";
 import { alertEmailHtml } from "@/lib/email/templates";
+import { maybeGeneratePromos } from "@/lib/admin/promo";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 export async function GET(req: NextRequest) {
   const auth = req.headers.get("authorization") || "";
@@ -27,5 +29,12 @@ export async function GET(req: NextRequest) {
       }
     });
   }
-  return NextResponse.json({ ok: true, entries: tick.entries, exits: tick.exits, equity: tick.paper.equityUsd });
+  let promos = 0;
+  try {
+    const pack = await maybeGeneratePromos();
+    promos = pack.made;
+  } catch {
+    /* tick still counts */
+  }
+  return NextResponse.json({ ok: true, entries: tick.entries, exits: tick.exits, equity: tick.paper.equityUsd, promos });
 }

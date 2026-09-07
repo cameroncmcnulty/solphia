@@ -3,7 +3,8 @@ import { clientIp, rateLimit } from "@/lib/security";
 import { loadState } from "@/lib/store";
 import { runMarketTick, publicBook, lastPairDesk, lastPairPrices } from "@/lib/tick";
 import { publicMind } from "@/lib/mind/engine";
-import { LIVE_TRADING, TREASURY } from "@/lib/config";
+import { liveTradingEnabled } from "@/lib/liveFlag";
+import { treasuryAddress } from "@/lib/treasury";
 import { gldxMint, qqqxMint, spyxMint } from "@/lib/pair/mints";
 
 export const dynamic = "force-dynamic";
@@ -35,7 +36,7 @@ export async function GET(req: NextRequest) {
           lastTickAt: Date.now(),
           pair: tick.pair,
           liveTrading: tick.liveTrading,
-          treasury: TREASURY,
+          treasury: treasuryAddress(),
         });
       }
     } catch {
@@ -57,7 +58,7 @@ export async function GET(req: NextRequest) {
     spyxMint: spyxMint(),
     qqqxMint: qqqxMint(),
     gldxMint: gldxMint(),
-    liveTrading: LIVE_TRADING,
-    treasury: TREASURY,
+    liveTrading: liveTradingEnabled(),
+    treasury: treasuryAddress(),
   });
 }

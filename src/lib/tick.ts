@@ -1,5 +1,5 @@
 import { DEFAULT_AUTO, lockedAuto, bankrollUsd, maybeResizeBook } from "./auto";
-import { LIVE_TRADING } from "./config";
+import { liveTradingEnabled } from "./liveFlag";
 import { publicMind } from "./mind/engine";
 import { tickPairBook } from "./pair/paper";
 import { loadPairHistory, pushLiveSample } from "./pair/history";
@@ -150,7 +150,7 @@ export async function runMarketTick(): Promise<{
         exits: 0,
         mind: publicMind(state.mind),
         pair: null,
-        liveTrading: LIVE_TRADING,
+        liveTrading: liveTradingEnabled(),
       };
     }
 
@@ -217,7 +217,7 @@ export async function runMarketTick(): Promise<{
     let exits = demo.fills.filter((f) => f.side === "sell").length;
 
     for (const trader of Object.values(state.traders || {})) {
-      const liveWanted = trader.auto?.mode === "live" && LIVE_TRADING;
+      const liveWanted = trader.auto?.mode === "live" && liveTradingEnabled();
       trader.auto = lockedAuto({
         ...trader.auto,
         mode: liveWanted ? "live" : "paper",
@@ -225,7 +225,7 @@ export async function runMarketTick(): Promise<{
         tradingPubkey: trader.auto?.tradingPubkey,
         armedAt: trader.auto?.armedAt,
       });
-      if (trader.auto.mode === "live" && !LIVE_TRADING) trader.auto.mode = "paper";
+      if (trader.auto.mode === "live" && !liveTradingEnabled()) trader.auto.mode = "paper";
       const target = bankrollUsd(trader.depositedSol, prices.sol.usd);
       trader.book = maybeResizeBook(trader.book, target);
       if (!trader.book.pair) {
@@ -278,7 +278,7 @@ export async function runMarketTick(): Promise<{
       exits,
       mind: publicMind(state.mind),
       pair: lastPairPublic,
-      liveTrading: LIVE_TRADING,
+      liveTrading: liveTradingEnabled(),
     };
   });
   lock = run.then(

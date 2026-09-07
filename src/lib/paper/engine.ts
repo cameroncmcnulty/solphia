@@ -10,7 +10,7 @@ import type {
   TokenSnapshot,
 } from "../types";
 import { applyFee, positionSizeUsd, scoreToken, slippageBps } from "../risk/engine";
-import { LIVE_TRADING } from "../config";
+import { liveTradingEnabled } from "../liveFlag";
 import { pushBounded } from "../store";
 import { tokenPriceUsd } from "./price";
 import { dayPnlUsd, exitPlan } from "./exits";
@@ -426,7 +426,7 @@ export function tickPaper(
       book: state.paper,
       sizeUsd: Math.max(size, 8),
       lab: state.lab,
-      live: LIVE_TRADING,
+      live: liveTradingEnabled(),
       mind: state.mind,
     });
     if (!d.ok) {

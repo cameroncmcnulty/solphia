@@ -18,7 +18,7 @@ import {
   type PairDecision,
   type Sleeve,
 } from "./engine";
-import { LIVE_TRADING } from "../config";
+import { liveTradingEnabled } from "../liveFlag";
 import type { HistoryStudy } from "./knowledge";
 import { SOL_MINT, USDC_MINT, XSTOCKS, type XStockId, type XStockSymbol, xstockBySymbol, xstockMint } from "./mints";
 import type { PairPrices } from "./prices";
@@ -425,10 +425,10 @@ export function tickPairBook(opts: {
     depositedSol: opts.depositedSol,
     impactPct: opts.impactPct,
     quoteOk: opts.quoteOk,
-    live: opts.live || (opts.auto.mode === "live" && LIVE_TRADING),
+    live: opts.live || (opts.auto.mode === "live" && liveTradingEnabled()),
     shortTape: opts.shortTape,
   });
-  const live = opts.live || (opts.auto.mode === "live" && LIVE_TRADING);
+  const live = opts.live || (opts.auto.mode === "live" && liveTradingEnabled());
   const actionable =
     decision.action === "sell_sol" ||
     decision.action === "sell_xstock" ||

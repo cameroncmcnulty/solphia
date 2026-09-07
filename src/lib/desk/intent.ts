@@ -1,5 +1,5 @@
 import type { Strategy, TokenSnapshot, PaperBook, EngineSettings } from "../types";
-import { LIVE_TRADING } from "../config";
+import { liveTradingEnabled } from "../liveFlag";
 import { dayPnlUsd } from "../paper/exits";
 import { venueAllowed } from "./programs";
 import { slippageBps } from "../risk/engine";
@@ -61,6 +61,6 @@ export function policyCheck(intent: Intent, ctx: PolicyCtx): { ok: boolean; reas
     }
   }
 
-  if (ctx.live && !LIVE_TRADING) return { ok: false, reason: "Live trading is off. Paper only." };
+  if (ctx.live && !liveTradingEnabled()) return { ok: false, reason: "Live trading is off. Paper only." };
   return { ok: true, reason: "Policy clear." };
 }

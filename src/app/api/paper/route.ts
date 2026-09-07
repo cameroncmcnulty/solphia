@@ -8,7 +8,7 @@ import { positionSizeUsd, scoreToken } from "@/lib/risk/engine";
 import { ingestMarket } from "@/lib/feeds";
 import { decide } from "@/lib/desk/consensus";
 import { applyShadow, emptyLab, noteDenial } from "@/lib/desk/shadow";
-import { LIVE_TRADING } from "@/lib/config";
+import { liveTradingEnabled } from "@/lib/liveFlag";
 
 export const dynamic = "force-dynamic";
 
@@ -77,7 +77,7 @@ export async function POST(req: NextRequest) {
         book: s.paper,
         sizeUsd: Math.max(size, 8),
         lab: s.lab,
-        live: LIVE_TRADING,
+        live: liveTradingEnabled(),
         mind: s.mind,
       });
       if (!d.ok) {

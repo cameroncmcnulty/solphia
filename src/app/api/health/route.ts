@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { HELIUS_API_KEY, LIVE_TRADING, SITE_URL } from "@/lib/config";
+import { HELIUS_API_KEY, SITE_URL } from "@/lib/config";
+import { liveTradingEnabled } from "@/lib/liveFlag";
 import { loadState } from "@/lib/store";
 import { heliusEnabled } from "@/lib/solana/connection";
 
@@ -10,7 +11,7 @@ export async function GET() {
   return NextResponse.json({
     ok: true,
     site: SITE_URL,
-    mode: LIVE_TRADING ? "LIVE" : "PAPER",
+    mode: liveTradingEnabled() ? "LIVE" : "PAPER",
     helius: heliusEnabled(),
     xai: Boolean(process.env.XAI_API_KEY),
     smtp: Boolean(process.env.SMTP_HOST),
