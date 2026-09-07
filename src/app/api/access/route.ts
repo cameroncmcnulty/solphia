@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isSolanaAddress } from "@/lib/security";
 import { readyState } from "@/lib/store";
-import { isFounder, liveSeatOk } from "@/lib/access";
+import { isFounder, liveSeatOk, levSeatOk } from "@/lib/access";
 import { treasuryAddress } from "@/lib/treasury";
 import { publicSeat, seatSol, SEAT_PERIOD_DAYS } from "@/lib/seat";
 
@@ -16,13 +16,14 @@ export async function GET(req: NextRequest) {
   const seat = publicSeat(user);
   return NextResponse.json({
     founder,
-    plan: founder ? "live" : user?.plan || null,
+    plan: founder ? "lev" : user?.plan || null,
     subscribedUntil: founder ? user?.subscribedUntil || Date.now() + 86400000 : seat.subscribedUntil,
     autoRenew: founder ? false : seat.autoRenew,
     tosAcceptedAt: seat.tosAcceptedAt,
     due: founder ? false : seat.due,
     liveSeat: liveSeatOk(s, pubkey),
-    seatSol: seatSol(),
+    levSeat: levSeatOk(s, pubkey),
+    seatSol: seatSol(founder ? "lev" : user?.plan),
     periodDays: SEAT_PERIOD_DAYS,
     treasury: treasuryAddress() || null,
     lastPaidAt: seat.lastPaidAt,

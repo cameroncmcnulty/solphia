@@ -79,14 +79,22 @@ export async function POST(req: NextRequest) {
       if (tape.sol.length < 120 || tape.spy.length < 80) {
         return NextResponse.json({ error: "Not enough history to backtest.", desk: buildAdminDesk() }, { status: 400 });
       }
-      const report = runBacktest(tape);
+      const report = runBacktest(tape, undefined, 1);
+      const lev2 = runBacktest(tape, undefined, 2);
+      const lev3 = runBacktest(tape, undefined, 3);
       await mutateState((s) => {
         s.backtest = report;
-        pushBounded(s.audit, audit("admin", "backtest", `${(report.pnlPct * 100).toFixed(1)}% · ${report.trades} clips`, ip), 400);
+        s.backtestLev2 = lev2;
+        s.backtestLev3 = lev3;
+        pushBounded(
+          s.audit,
+          audit("admin", "backtest", `1x ${(report.pnlPct * 100).toFixed(1)}% · 2x ${(lev2.pnlPct * 100).toFixed(1)}% · 3x ${(lev3.pnlPct * 100).toFixed(1)}%`, ip),
+          400,
+        );
       });
       return NextResponse.json({
         ok: true,
-        note: `Backtest ${(report.pnlPct * 100).toFixed(1)}% after fees · ${report.trades} clips · ${report.horizon}`,
+        note: `Spot ${(report.pnlPct * 100).toFixed(1)}% · 2x ${(lev2.pnlPct * 100).toFixed(1)}% · 3x ${(lev3.pnlPct * 100).toFixed(1)}% after fees`,
         desk: buildAdminDesk(),
       });
     } catch (e) {

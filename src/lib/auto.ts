@@ -1,6 +1,6 @@
 import type { AutoSettings, PaperBook, TraderAccount } from "./types";
 import { PAPER_STARTING_USD } from "./config";
-import { SPOT_LEVERAGE } from "./leverage";
+import { clampLev, SPOT_LEVERAGE, type Lev } from "./leverage";
 
 /** Locked knobs. The hub does not expose these — mean-revert, normal band, 2m cooldown. */
 export const DEFAULT_AUTO: AutoSettings = {
@@ -27,7 +27,7 @@ export function lockedAuto(partial?: Partial<AutoSettings>): AutoSettings {
     armed: partial?.armed !== false,
     armedAt: partial?.armedAt,
     tradingPubkey: partial?.tradingPubkey,
-    leverage: SPOT_LEVERAGE,
+    leverage: clampLev(partial?.leverage) as Lev,
   };
 }
 

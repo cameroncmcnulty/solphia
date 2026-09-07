@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { emptyState, hotOwners, MAX_TICK_TRADERS, setLiveOwner, touchHot } from "../lib/store";
 import { emptyTrader } from "../lib/auto";
-import { assertSpotOnly, LEVERAGE_LIVE, SPOT_LEVERAGE, leverageVenue } from "../lib/leverage";
+import { SPOT_LEVERAGE, borrowUsd, canUseLeverage, leverageVenue, liqPrice, openFeeUsd } from "../lib/leverage";
 import { KEYS } from "../lib/persist";
 
 describe("scale store", () => {
@@ -27,11 +27,17 @@ describe("scale store", () => {
 });
 
 describe("leverage", () => {
-  it("is spot-only until a perps venue is wired", () => {
-    assert.equal(LEVERAGE_LIVE, false);
+  it("prices SOL-PERP with Jupiter fees and a real liq", () => {
     assert.equal(SPOT_LEVERAGE, 1);
-    assert.equal(leverageVenue(), "spot");
-    assert.doesNotThrow(() => assertSpotOnly(1));
-    assert.throws(() => assertSpotOnly(2));
+    assert.equal(leverageVenue(1), "spot");
+    assert.equal(leverageVenue(2), "jupiter_perps");
+    assert.equal(Math.round(liqPrice(100, 2) * 10) / 10, 60);
+    assert.equal(Math.round(liqPrice(100, 3) * 100) / 100, 73.33);
+    assert.equal(openFeeUsd(1000), 0.6);
+    assert.equal(canUseLeverage("live"), false);
+    assert.equal(canUseLeverage("lev"), true);
+    assert.equal(canUseLeverage("paper", true), true);
+    const hour = borrowUsd({ notionalUsd: 1000, lev: 2, from: 0, to: 3_600_000 });
+    assert.ok(hour > 0 && hour < 0.1);
   });
 });

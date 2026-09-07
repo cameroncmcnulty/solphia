@@ -6,8 +6,8 @@ import { loadOwner, tradingPubkey } from "@/lib/wallet/trading";
 import { tryAutoRenew } from "@/lib/wallet/seatPay";
 
 /**
- * While this site is open, collect the 0.1 SOL monthly seat from the on-device
- * trading wallet when a paid live seat is due. No Phantom popup.
+ * While this site is open, collect the monthly seat (0.1 SOL live, 0.15 SOL lev)
+ * from the on-device trading wallet when a paid seat is due. No Phantom popup.
  */
 export function SeatRunner() {
   const connected = useOwner();

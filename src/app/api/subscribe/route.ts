@@ -29,7 +29,7 @@ const Body = z.object({
   email: z.string().optional(),
   signature: z.string().optional(),
   paper: z.boolean().optional(),
-  plan: z.enum(["paper", "live", "pulse", "copy", "snipers", "full"]).optional(),
+  plan: z.enum(["paper", "live", "lev", "pulse", "copy", "snipers", "full"]).optional(),
   tos: z.boolean().optional(),
   autoRenew: z.boolean().optional(),
   payer: z.string().optional(),
@@ -74,7 +74,7 @@ export async function POST(req: NextRequest) {
   await readyState();
   const email = parsed.data.email && isEmail(parsed.data.email) ? sanitizeText(parsed.data.email, 120) : undefined;
   const action = parsed.data.action || "subscribe";
-  const planId = (parsed.data.plan === "paper" ? "paper" : "live") as PlanId;
+  const planId = (parsed.data.plan === "paper" ? "paper" : parsed.data.plan === "lev" ? "lev" : "live") as PlanId;
   const plan = planById(planId) || PLANS[0];
   const autoRenew = parsed.data.autoRenew !== false;
   const payer = parsed.data.payer && isSolanaAddress(parsed.data.payer) ? parsed.data.payer : parsed.data.pubkey;
@@ -83,7 +83,7 @@ export async function POST(req: NextRequest) {
     const until = Date.now() + 10 * 365 * 24 * 60 * 60 * 1000;
     await mutateState((s) => {
       const user = upsertUser(s, parsed.data.pubkey);
-      user.plan = "live";
+      user.plan = "lev";
       user.subscribedUntil = until;
       user.autoRenew = false;
       if (parsed.data.tos) acceptTos(user);
@@ -96,7 +96,7 @@ export async function POST(req: NextRequest) {
       seatPayload({
         ok: true,
         mode: "founder",
-        plan: "live",
+        plan: "lev",
         sol: 0,
         subscribedUntil: until,
         autoRenew: false,
@@ -141,7 +141,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "payer_not_linked" }, { status: 400 });
   }
 
-  const lamports = lamportsForPlan("live");
+  const lamports = lamportsForPlan(planId === "lev" ? "lev" : "live");
 
   if (!parsed.data.signature) {
     const tx = new Transaction().add(
@@ -161,8 +161,8 @@ export async function POST(req: NextRequest) {
         transaction: serialized,
         treasury,
         lamports,
-        sol: seatSol(),
-        plan: "live",
+        sol: seatSol(planId),
+        plan: planId,
         payer,
         fromPhantom: payer === parsed.data.pubkey,
       }),
@@ -176,7 +176,7 @@ export async function POST(req: NextRequest) {
         ok: true,
         mode: "onchain",
         reused: true,
-        sol: seatSol(),
+        sol: seatSol(planId),
         ...publicSeat(existing),
       }),
     );
@@ -194,7 +194,7 @@ export async function POST(req: NextRequest) {
     const user = upsertUser(s, parsed.data.pubkey);
     acceptTos(user);
     user.lastPaySig = parsed.data.signature;
-    extendSeat(user, Date.now(), autoRenew);
+    extendSeat(user, Date.now(), autoRenew, planId);
     if (email) {
       user.email = email;
       user.alertsEnabled = Boolean(email);
@@ -207,8 +207,8 @@ export async function POST(req: NextRequest) {
     seatPayload({
       ok: true,
       mode: "onchain",
-      plan: "live",
-      sol: seatSol(),
+      plan: planId,
+      sol: seatSol(planId),
       subscribedUntil: until,
       autoRenew,
     }),

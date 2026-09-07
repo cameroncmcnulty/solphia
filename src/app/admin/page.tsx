@@ -245,7 +245,7 @@ export default function AdminPage() {
       <section className="mt-6 grid gap-6 lg:grid-cols-2">
         <div className="panel rounded-2xl p-5">
           <div className="font-mono text-[10px] tracking-[0.3em] text-mute">ADMIN WALLET · FREE SEAT</div>
-          <p className="mt-2 text-sm text-mute">Connect the Phantom you trade with. That address skips the {data.seatSol} SOL / 30d seat. Keys stay in the wallet.</p>
+          <p className="mt-2 text-sm text-mute">Connect the Phantom you trade with. That address skips the {data.seatSol} / {data.seatSolLev} SOL seat. Keys stay in the wallet.</p>
           <div className="mt-3">
             <WalletConnect />
           </div>
@@ -281,8 +281,8 @@ export default function AdminPage() {
         <div className="panel rounded-2xl p-5">
           <div className="font-mono text-[10px] tracking-[0.3em] text-mute">TREASURY · PAYMENTS IN</div>
           <p className="mt-2 text-sm text-mute">
-            {data.seatSol} SOL seats and 0.1% clip fees land here. Default is the founder treasury. Save another
-            address to override it.
+            {data.seatSol} SOL (spot) and {data.seatSolLev} SOL (2×/3×) seats plus 0.1% clip fees land here. Default is
+            the founder treasury. Save another address to override it.
           </p>
           <input
             value={treasuryPk}
@@ -401,8 +401,8 @@ export default function AdminPage() {
             <div className="font-mono text-[10px] tracking-[0.3em] text-mute">ENGINE BACKTEST</div>
             <h2 className="mt-1 font-display text-2xl text-ghost">Does this engine print?</h2>
             <p className="mt-2 max-w-2xl text-sm text-mute">
-              Replay the live scalp rules on ~40 days of 15m SOL / SPY / QQQ / gold. Fees and the 0.1% clip are in the
-              mark. Target on $1,000 is +$2–3 in a day.
+              Replay spot 1× plus SOL-PERP 2× and 3× on the same ~40d 15m tape. Jupiter Perps fees and liquidation are
+              in the lev marks.
             </p>
           </div>
           <button
@@ -425,6 +425,36 @@ export default function AdminPage() {
                 {data.backtest.horizon} · ran {age(now - data.backtest.ranAt)} ago
               </p>
             </div>
+            {(data.backtestLev2 || data.backtestLev3) && (
+              <div className="grid gap-3 sm:grid-cols-2">
+                {data.backtestLev2 && (
+                  <div className="rounded-2xl border border-line/80 bg-void/50 p-4">
+                    <div className="font-mono text-[10px] text-mute">SOL 2×</div>
+                    <div className={`font-display text-2xl ${data.backtestLev2.pnlPct >= 0 ? "text-acid" : "text-blood"}`}>
+                      {data.backtestLev2.pnlPct >= 0 ? "+" : ""}
+                      {(data.backtestLev2.pnlPct * 100).toFixed(2)}%
+                    </div>
+                    <div className="font-mono text-[11px] text-mute">
+                      {data.backtestLev2.trades} clips · liq {data.backtestLev2.liquidations || 0} · DD −
+                      {(data.backtestLev2.maxDdPct * 100).toFixed(1)}%
+                    </div>
+                  </div>
+                )}
+                {data.backtestLev3 && (
+                  <div className="rounded-2xl border border-line/80 bg-void/50 p-4">
+                    <div className="font-mono text-[10px] text-mute">SOL 3×</div>
+                    <div className={`font-display text-2xl ${data.backtestLev3.pnlPct >= 0 ? "text-acid" : "text-blood"}`}>
+                      {data.backtestLev3.pnlPct >= 0 ? "+" : ""}
+                      {(data.backtestLev3.pnlPct * 100).toFixed(2)}%
+                    </div>
+                    <div className="font-mono text-[11px] text-mute">
+                      {data.backtestLev3.trades} clips · liq {data.backtestLev3.liquidations || 0} · DD −
+                      {(data.backtestLev3.maxDdPct * 100).toFixed(1)}%
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
             <EquityCurve curve={data.backtest.curve} up={data.backtest.pnlPct >= 0} />
             <div className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-6">
               <Mini k="Start" v={money(data.backtest.startingUsd)} />
@@ -662,6 +692,7 @@ export default function AdminPage() {
                   <span>{shortPk(t.owner)}</span>
                   <span className={t.killed ? "text-blood" : t.mode === "live" ? "text-acid" : "text-cyan"}>
                     {t.killed ? "KILL" : t.mode.toUpperCase()}
+                    {t.leverage > 1 ? ` · SOL ${t.leverage}×` : ""}
                     {t.pending ? " · CLIP" : ""}
                   </span>
                 </div>
@@ -675,7 +706,9 @@ export default function AdminPage() {
           </div>
         </div>
         <div className="panel rounded-2xl p-5">
-          <div className="font-mono text-[10px] tracking-[0.3em] text-mute">SEATS · {data.seatSol} SOL / 30d</div>
+          <div className="font-mono text-[10px] tracking-[0.3em] text-mute">
+            SEATS · {data.seatSol} / {data.seatSolLev} SOL / 30d
+          </div>
           {data.seats.length === 0 && <p className="mt-3 text-sm text-mute">No seats yet.</p>}
           <div className="mt-2 max-h-80 space-y-2 overflow-auto">
             {data.seats.map((u) => (
@@ -700,8 +733,8 @@ export default function AdminPage() {
             <Row k="Clip" v={`${(data.locked.clipPct * 100).toFixed(0)}%`} />
             <Row k="Stop" v={`${(data.locked.stopPct * 100).toFixed(0)}%`} />
             <Row k="Home" v="USDC" />
-            <Row k="Leverage" v="spot only" />
-            <Row k="Seat" v={`${data.seatSol} SOL / 30d`} />
+            <Row k="Leverage" v="spot · opt SOL 2×/3×" />
+            <Row k="Seat" v={`${data.seatSol} / ${data.seatSolLev} SOL`} />
             <Row k="Clip fee" v={`${data.protocolFeeBps} bps`} />
             <Row k="PnL" v="USDC" />
           </div>

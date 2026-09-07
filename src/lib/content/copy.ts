@@ -78,7 +78,7 @@ const HEADLINES: Record<Layout, string[]> = {
   split: ["Watch the stretch", "SOL dumped. Gold held.", "She fades the gap", "Chart in one eye. Pair in the other."],
   sleeves: ["Split the bag. Wait.", "20% each. Fire the stretched one.", "USDC is home.", "Gold sleeve for bad days."],
   steps: ["Three steps. Then sleep.", "Connect. Add. She works.", "Phantom once. That’s it.", "No extra signatures."],
-  quote: ["Keys never leave the phone.", "Not a fund. A bot on your device.", "Spot only. She will not borrow.", "She skips more than she trades."],
+  quote: ["Keys never leave the phone.", "Not a fund. A bot on your device.", "xStocks stay spot. SOL 2×/3× is optional.", "She skips more than she trades."],
   session: ["Cash hours hit different", "After 4pm this is not New York", "Weekend gold still moves", "She knows the session."],
   kill: ["KILL flattens her.", "One switch. Back to dry powder.", "You stay in charge.", "Pause. Withdraw. Done."],
   pairs: ["Ten pairs. Nothing else.", "USDC / gold is a trade.", "Not a memecoin menu.", "Official rails only."],
@@ -87,11 +87,11 @@ const HEADLINES: Record<Layout, string[]> = {
 
 const SUBS = [
   "Illustrative mark — not a live book.",
-  "Spot only. No borrowed SOL.",
+  "xStocks stay spot. SOL 2×/3× optional.",
   "Official SPYx · QQQx · GLDx.",
   "Phantom holds the keys.",
   "2-minute wait. Then a clip.",
-  "0.1 SOL / 30d · 0.1% a clip.",
+  "0.1 or 0.15 SOL / 30d · 0.1% a clip.",
   "Kill switch always on.",
   "PnL home is USDC.",
 ];
@@ -99,7 +99,7 @@ const SUBS = [
 const KICKERS = [
   "SOL · SPYx · QQQx · GLDx · USDC",
   "solphia.io",
-  "NON-CUSTODIAL · SPOT",
+  "NON-CUSTODIAL",
   "PHANTOM ONLY",
   "PAPER FIRST",
   "SHE SITS WHEN IT’S NOISE",
@@ -110,7 +110,7 @@ const BEATS = [
   "When SOL looks expensive vs a market she sells SOL for that token. When it looks cheap she buys SOL back.",
   "She skips crash knives, weekend fake prints, and any clip fees would eat.",
   "PnL stays in USDC. Kill switch always on.",
-  "Live is 0.1 SOL / 30 days plus 0.1% a clip. Paper is free.",
+  "Live is 0.1 SOL / 30 days. SOL 2×/3× is 0.15. Plus 0.1% a clip. Paper is free.",
   "These tokens are not the New York print after 16:00 ET. You can lose SOL.",
   "No memecoins, no copy list, no sniper. Ten pairs among five official sleeves.",
   "Connect and add SOL once. The trading wallet on your device signs. Phantom is not asked again until you withdraw.",
@@ -121,7 +121,7 @@ const MOODS: Mood[] = ["acid", "violet", "cyan"];
 const ASSETS: Asset[] = ["solphia-face.png", "solphia-hero.png"];
 const COMPOSES: Compose[] = ["bleed-bottom", "bleed-side", "bleed-top", "type-hero", "tape-sky", "orbit"];
 const FADES: Art["fade"][] = ["left", "right", "bottom", "top", "center"];
-const CHIPS = ["SPOT", "NO Leverage", "PHANTOM", "USDC PnL", "2m WAIT", "KILL ON", "xSTOCKS", "PAPER FIRST"];
+const CHIPS = ["SPOT xSTOCKS", "OPT 2×/3×", "PHANTOM", "USDC PnL", "2m WAIT", "KILL ON", "xSTOCKS", "PAPER FIRST"];
 
 const ALL_LAYOUTS: Layout[] = [
   "face",
@@ -281,7 +281,7 @@ async function grokPack(hint: string, fallback: Shot[]): Promise<Shot[] | null> 
         {
           role: "system",
           content: `You are Solphia's in-house content bot. You only write social posts for solphia.io.
-She is a non-custodial Solana bot. She holds SOL, USDC, official SPYx, QQQx, and GLDx. Spot only. Phantom only. No memecoins, copy, sniper, or leverage.
+She is a non-custodial Solana bot. She holds SOL, USDC, official SPYx, QQQx, and GLDx. xStocks stay spot. Optional SOL 2×/3× is Jupiter Perps-style with liquidation. Phantom only. No memecoins, copy, or sniper.
 Return ONLY a JSON array of 4 objects with keys: headline, caption, pnlLabel, kicker, sub.
 PnL is aesthetic (like +1.4% · +$42 USDC), labeled as not a live book.
 Captions must include solphia.io and a one-line explanation of what she does.

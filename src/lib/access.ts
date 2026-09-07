@@ -24,7 +24,7 @@ export function grantFounder(state: AppState, pubkey: string) {
   if (!user) {
     user = {
       pubkey,
-      plan: "live",
+      plan: "lev",
       comped: true,
       createdAt: Date.now(),
       lastSeen: Date.now(),
@@ -33,7 +33,7 @@ export function grantFounder(state: AppState, pubkey: string) {
     };
     state.users.push(user);
   } else {
-    user.plan = "live";
+    user.plan = "lev";
     user.comped = true;
     user.subscribedUntil = Date.now() + FOUNDER_MS;
     user.alertsEnabled = true;
@@ -45,15 +45,26 @@ export function revokeFounder(state: AppState, pubkey: string) {
   const u = state.users.find((x) => x.pubkey === pubkey);
   if (u) {
     u.comped = false;
-    if (u.plan === "full" || u.plan === "live") u.plan = "paper";
+    if (u.plan === "full" || u.plan === "live" || u.plan === "lev") u.plan = "paper";
     u.subscribedUntil = Date.now();
   }
 }
 
-/** Admin wallets skip the 0.1 SOL seat. Everyone else needs a paid live plan when treasury is set. */
+/** Admin wallets skip the 0.1 / 0.15 SOL seat. Everyone else needs a paid live or lev plan when treasury is set. */
 export function liveSeatOk(state: AppState, pubkey?: string | null): boolean {
   if (!pubkey) return false;
   if (isFounder(state, pubkey)) return true;
   const u = state.users.find((x) => x.pubkey === pubkey);
-  return Boolean(u?.subscribedUntil && u.subscribedUntil > Date.now() && (u.plan === "live" || u.plan === "full"));
+  return Boolean(
+    u?.subscribedUntil &&
+      u.subscribedUntil > Date.now() &&
+      (u.plan === "live" || u.plan === "lev" || u.plan === "full"),
+  );
+}
+
+export function levSeatOk(state: AppState, pubkey?: string | null): boolean {
+  if (!pubkey) return false;
+  if (isFounder(state, pubkey)) return true;
+  const u = state.users.find((x) => x.pubkey === pubkey);
+  return Boolean(u?.subscribedUntil && u.subscribedUntil > Date.now() && (u.plan === "lev" || u.plan === "full"));
 }

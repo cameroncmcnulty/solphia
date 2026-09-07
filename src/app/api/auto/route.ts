@@ -5,7 +5,7 @@ import { loadState, readyState, mutateTrader, loadTrader, touchHot, setLiveOwner
 import { emptyTrader, bankrollUsd, maybeResizeBook, lockedAuto } from "@/lib/auto";
 import { publicBook } from "@/lib/tick";
 import { liveTradingEnabled } from "@/lib/liveFlag";
-import { liveSeatOk } from "@/lib/access";
+import { liveSeatOk, levSeatOk } from "@/lib/access";
 import { treasuryAddress } from "@/lib/treasury";
 import { publicMind } from "@/lib/mind/engine";
 import { killBook, unkilled, flattenToUsdc, applyPairDecision } from "@/lib/pair/paper";
@@ -61,6 +61,7 @@ const Body = z.object({
     .object({
       armed: z.boolean().optional(),
       mode: z.enum(["paper", "live"]).optional(),
+      leverage: z.union([z.literal(1), z.literal(2), z.literal(3)]).optional(),
     })
     .optional(),
 });
@@ -87,12 +88,15 @@ export async function POST(req: NextRequest) {
     const wasArmed = Boolean(t.auto?.armed);
     const nextMode = parsed.data.auto?.mode ?? t.auto.mode;
     const nextArmed = parsed.data.auto?.armed ?? t.auto.armed;
+    const wantLev = parsed.data.auto?.leverage;
+    const levAllowed = levSeatOk(s, parsed.data.owner);
     t.auto = lockedAuto({
       ...t.auto,
       mode: nextMode,
       armed: nextArmed,
       tradingPubkey: t.auto.tradingPubkey,
       armedAt: t.auto.armedAt,
+      leverage: wantLev === 2 || wantLev === 3 ? (levAllowed ? wantLev : 1) : t.auto.leverage,
     });
     if (t.auto.mode !== "live" && !t.book.killed) t.auto.armed = true;
     if (t.auto.armed && !wasArmed) {

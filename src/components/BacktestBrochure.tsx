@@ -22,6 +22,8 @@ type PublicBt = {
   daysGe2?: number;
   curve?: { t: number; equity: number }[];
   note?: string;
+  leverage?: 1 | 2 | 3;
+  liquidations?: number;
 };
 
 function money(n: number) {
@@ -36,13 +38,14 @@ function when(ms?: number) {
 
 export function BacktestBrochure() {
   const [data, setData] = useState<PublicBt | null>(null);
+  const [lev, setLev] = useState<1 | 2 | 3>(1);
 
   useEffect(() => {
-    fetch("/api/backtest", { cache: "no-store" })
+    fetch(`/api/backtest?lev=${lev}`, { cache: "no-store" })
       .then((r) => r.json())
       .then((j) => setData(j))
       .catch(() => setData({ ready: false }));
-  }, []);
+  }, [lev]);
 
   const ready = Boolean(data?.ready && data.curve?.length);
   const up = (data?.pnlPct || 0) >= 0;
@@ -59,17 +62,32 @@ export function BacktestBrochure() {
             </h2>
             <p className="mt-3 max-w-xl text-sm text-mute sm:text-lg">
               Same engine she runs now. Official SOL, S&P 500, Nasdaq-100, and gold. She sits in USDC, scalps a 15m
-              setup that agrees with Daily/4H, and trails the stop up. Historical paper — not a live book.
+              setup that agrees with Daily/4H, and trails the stop up. 2×/3× is the same tape with Jupiter Perps fees
+              and liquidation. Historical paper — not a live book.
             </p>
           </div>
           <div className="text-left lg:text-right">
+            <div className="mb-3 flex flex-wrap gap-2 lg:justify-end">
+              {([1, 2, 3] as const).map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => setLev(n)}
+                  className={`rounded-full px-3 py-1 font-mono text-[11px] ${lev === n ? "btn-on" : "btn-ghost"}`}
+                >
+                  {n === 1 ? "Spot 1×" : `SOL ${n}×`}
+                </button>
+              ))}
+            </div>
             <div className={`font-display text-5xl sm:text-7xl ${ready ? (up ? "text-acid" : "text-blood") : "text-mute"}`}>
               {pct}
             </div>
             <div className="mt-1 font-mono text-xs text-mute">
               {ready
                 ? `${money(data?.startingUsd || 1000)} → ${money(data?.endingUsd || 0)} USDC · ${when(data?.from)}–${when(data?.to)}`
-                : "Loading the last engine replay…"}
+                : lev === 1
+                  ? "Loading the last engine replay…"
+                  : "No 2×/3× replay stored yet. Run backtest from the admin desk."}
             </div>
           </div>
         </div>
@@ -83,9 +101,23 @@ export function BacktestBrochure() {
           <Stat k="Win rate" v={ready ? `${Math.round((data?.winRate || 0) * 100)}%` : "—"} sub="closed to USDC" />
           <Stat k="Max DD" v={ready ? `−${((data?.maxDdPct || 0) * 100).toFixed(1)}%` : "—"} sub="from peak" />
           <Stat
-            k="Best day"
-            v={ready ? `+$${Math.abs(data?.bestDayUsd || 0).toFixed(0)}` : "—"}
-            sub={ready ? `${data?.daysGe2 || 0} days ≥ $2` : "on a $1,000 book"}
+            k={lev > 1 ? "Liquidations" : "Best day"}
+            v={
+              lev > 1
+                ? ready
+                  ? String(data?.liquidations || 0)
+                  : "—"
+                : ready
+                  ? `+$${Math.abs(data?.bestDayUsd || 0).toFixed(0)}`
+                  : "—"
+            }
+            sub={
+              lev > 1
+                ? "SOL-PERP stopped out"
+                : ready
+                  ? `${data?.daysGe2 || 0} days ≥ $2`
+                  : "on a $1,000 book"
+            }
           />
         </div>
 
@@ -105,7 +137,7 @@ export function BacktestBrochure() {
             href="/pricing"
             className="btn-ghost inline-flex min-h-[48px] items-center justify-center rounded-full px-8 py-3 text-base sm:min-h-[56px] sm:text-lg"
           >
-            Go live · 0.1 SOL
+            Go live · from 0.1 SOL
           </Link>
         </div>
       </div>

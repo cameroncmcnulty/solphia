@@ -27,6 +27,7 @@ type Auto = {
   armed?: boolean;
   armedAt?: number;
   mode?: "paper" | "live";
+  leverage?: 1 | 2 | 3;
 };
 
 function money(n: number) {
@@ -81,6 +82,7 @@ export function TradingHub() {
     founder?: boolean;
     due?: boolean;
     treasury?: string | null;
+    levSeat?: boolean;
   } | null>(null);
   const [restore, setRestore] = useState("");
 
@@ -256,7 +258,15 @@ export function TradingHub() {
   const uptime = book?.startedAt ? fmtDur(now - book.startedAt) : auto?.armedAt ? fmtDur(now - auto.armedAt) : "on";
   const status = book?.killed ? "STOPPED" : "RUNNING";
   const halted = book?.haltReason && (book.haltedUntil || 0) > Date.now();
-  const solQty = book?.pair?.solQty ?? pair?.solQty ?? 0;
+  const solPerp = book?.pair?.solPerp as
+    | { leverage: 2 | 3; collateralUsd: number; notionalUsd: number; entryPx: number }
+    | null
+    | undefined;
+  const solQty = solPerp
+    ? solPerp.entryPx > 0
+      ? solPerp.notionalUsd / solPerp.entryPx
+      : 0
+    : book?.pair?.solQty ?? pair?.solQty ?? 0;
   const spyxQty = book?.pair?.spyxQty ?? pair?.spyxQty ?? 0;
   const qqqxQty = book?.pair?.qqqxQty ?? pair?.qqqxQty ?? 0;
   const gldxQty = book?.pair?.gldxQty ?? pair?.gldxQty ?? 0;
@@ -307,14 +317,14 @@ export function TradingHub() {
       <ol className="mt-5 grid gap-3 sm:grid-cols-3">
         <How n="1" t="Connect Phantom" d="Your keys stay in the wallet. We never see them." />
         <How n="2" t="Add SOL" d="Phantom is login. Added SOL sits in a trading wallet on this device until you withdraw." />
-        <How n="3" t="Let her work" d="Practice never spends it. Real trades only after a paid 0.1 SOL seat, LIVE ON, and you flip to REAL." />
+        <How n="3" t="Let her work" d="Practice never spends it. Real trades only after a paid 0.1 SOL (spot) or 0.15 SOL (2×/3×) seat, LIVE ON, and you flip to REAL." />
       </ol>
 
       <div className="mt-5 rounded-2xl border border-blood/40 bg-blood/10 p-4 text-sm leading-relaxed text-ghost">
         These are official tokenized S&P 500, Nasdaq-100, and gold (xStocks). They are not the same as the New York
-        market after hours. You can lose SOL. Spot only — no borrowed money. Keys stay on this device. Adding SOL is a
-        real on-chain transfer to the trading wallet on this browser. Backup that key. Clearing the browser without a
-        backup can lose the SOL.
+        market after hours. You can lose SOL. xStocks stay spot. Optional SOL 2×/3× is a Jupiter Perps-style long with
+        borrow and liquidation. Keys stay on this device. Adding SOL is a real on-chain transfer to the trading wallet
+        on this browser. Backup that key. Clearing the browser without a backup can lose the SOL.
       </div>
 
       {!owner && (
@@ -338,7 +348,17 @@ export function TradingHub() {
         </div>
         <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-3">
           <Huge k="USDC" v={money(usdcQty)} sub="PnL home · dry powder" />
-          <Huge k="SOL" v={solQty ? solQty.toFixed(4) : "0"} sub={solUsd ? money(solQty * solUsd) : "sleeve"} />
+          <Huge
+            k={solPerp ? `SOL ${solPerp.leverage}×` : "SOL"}
+            v={solPerp ? money(solPerp.collateralUsd) : solQty ? solQty.toFixed(4) : "0"}
+            sub={
+              solPerp
+                ? `notional ${money(solPerp.notionalUsd)}`
+                : solUsd
+                  ? money(solQty * solUsd)
+                  : "sleeve"
+            }
+          />
           <Huge
             k="PnL (USDC)"
             v={`${pnlPct >= 0 ? "+" : ""}${(pnlPct * 100).toFixed(1)}%`}
@@ -444,7 +464,7 @@ export function TradingHub() {
               {!liveTrading
                 ? "Practice only right now. Real swaps are not turned on for this site yet."
                 : seat?.treasury && !seat?.liveSeat && !seat?.founder
-                  ? "Live is on, but you need a paid 0.1 SOL seat before she can spend the trading wallet."
+                  ? "Live is on, but you need a paid 0.1 SOL (spot) or 0.15 SOL (2×/3×) seat before she can spend the trading wallet."
                   : auto?.mode === "live"
                     ? "Uses the SOL you added. You already connected — she signs from this device."
                     : "Fake fills on live prices. Flip to real trades after you add SOL and pay the seat."}
@@ -469,7 +489,7 @@ export function TradingHub() {
             </button>
             {seat?.treasury && !seat?.liveSeat && !seat?.founder && (
               <Link href="/pricing" className="btn-acid inline-flex min-h-[40px] items-center justify-center rounded-full px-4 font-mono text-[11px]">
-                Pay 0.1 SOL
+                Pay the seat
               </Link>
             )}
             {seat?.autoRenew && !seat?.founder && (
@@ -496,6 +516,34 @@ export function TradingHub() {
             )}
           </div>
         </div>
+
+        <div className="mt-4 rounded-2xl border border-violet/20 p-4">
+          <div className="font-mono text-[10px] tracking-[0.2em] text-mute">SOL SLEEVE</div>
+          <p className="mt-1 text-sm text-mute">
+            Equities and gold stay spot. SOL can run Jupiter Perps-style 2× or 3× (borrow + liquidation). Needs the
+            0.15 SOL seat. On-chain perps wait on Jupiter’s API — this marks live prices with those fees.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {([1, 2, 3] as const).map((n) => (
+              <button
+                key={n}
+                type="button"
+                disabled={n > 1 && !seat?.levSeat && !seat?.founder}
+                onClick={() => patch({ leverage: n })}
+                className={`min-h-[40px] rounded-full px-4 font-mono text-[12px] ${
+                  (auto?.leverage || 1) === n ? "btn-on" : "btn-ghost"
+                } disabled:opacity-40`}
+              >
+                {n === 1 ? "SOL 1× spot" : `SOL ${n}×`}
+              </button>
+            ))}
+          </div>
+          {(auto?.leverage || 1) > 1 && (
+            <p className="mt-2 font-mono text-[11px] text-acid">
+              SOL {(auto?.leverage || 2)}× · 6 bps in/out · borrow on · liq if SOL dumps hard. Not fake size on SPYx.
+            </p>
+          )}
+        </div>
       </section>
 
       {halted && <p className="mt-3 font-mono text-sm text-blood">{book.haltReason}</p>}
@@ -508,7 +556,8 @@ export function TradingHub() {
           <p className="text-sm leading-relaxed text-mute">
             She sits in USDC and buys the sleeve — SOL, S&P 500, Nasdaq, or gold — with a 5m/15m scalp that agrees
             with Daily and 4H bias. After fees she only moves the stop up. SOL and gold run around the clock; equities
-            sit more on weekends. 0.1% on each clip. An 8% drop sells everything back to USDC and pauses.
+            sit more on weekends. 0.1% on each clip. Optional SOL 2×/3× uses Jupiter Perps fees and can be liquidated.
+            An 8% drop sells everything back to USDC and pauses.
           </p>
           <div className="grid grid-cols-3 gap-2">
             <Mini k="S&P 500" v={spyxUsd ? `$${Number(spyxUsd).toFixed(0)}` : "—"} />

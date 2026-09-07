@@ -55,7 +55,7 @@ function localVoice(message: string, context: string): string {
     return "I will never take your keys. Connect Phantom. You sign. I watch.";
   }
   if (m.includes("fee")) {
-    return "I take 0.1% on each clip, plus 0.1 SOL a month for live. The paper book already subtracts those costs so the PnL is not a fairy tale.";
+    return "I take 0.1% on each clip, plus 0.1 SOL a month for live spot or 0.15 SOL for optional SOL 2×/3×. The paper book already subtracts those costs so the PnL is not a fairy tale.";
   }
   if (m.includes("score") || m.includes("risk")) {
     return "I skip a coin if they can freeze you, print extra tokens, yank liquidity, or if snipers already own it. Telegram links are a P(grad) feature, not a buy signal. Unique buyers and a clean creator do more work than mention counts.";

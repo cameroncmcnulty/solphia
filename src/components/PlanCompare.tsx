@@ -3,9 +3,9 @@
 import Link from "next/link";
 import { COMPARE_ROWS, PLANS } from "@/lib/plans";
 
-const HEADS = ["Paper", "Live"];
-const PRICES = ["Free", `${PLANS[0]?.sol ?? 0.1} SOL / 30d`];
-const ICONS = ["/icons/plan-paper.jpg", "/icons/plan-full.jpg"];
+const HEADS = ["Paper", "Live", "SOL 2×/3×"];
+const PRICES = ["Free", `${PLANS.find((p) => p.id === "live")?.sol ?? 0.1} SOL / 30d`, `${PLANS.find((p) => p.id === "lev")?.sol ?? 0.15} SOL / 30d`];
+const ICONS = ["/icons/plan-paper.jpg", "/icons/plan-paper.jpg", "/icons/plan-full.jpg"];
 
 export function PlanCompare() {
   return (
@@ -15,12 +15,12 @@ export function PlanCompare() {
           <div
             key={h}
             className={`w-[min(78vw,320px)] shrink-0 snap-center rounded-2xl border p-4 ${
-              i === 1 ? "border-acid/40 bg-acid/5" : "border-violet/20 bg-void/40"
+              i === 2 ? "border-acid/40 bg-acid/5" : "border-violet/20 bg-void/40"
             }`}
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={ICONS[i]} alt="" className="mb-3 h-12 w-12 rounded-xl" />
-            <div className={`font-display text-2xl ${i === 1 ? "text-acid" : "text-ghost"}`}>{h}</div>
+            <div className={`font-display text-2xl ${i === 2 ? "text-acid" : "text-ghost"}`}>{h}</div>
             <div className="mt-1 font-mono text-sm text-mute">{PRICES[i]}</div>
             <ul className="mt-4 space-y-3">
               {COMPARE_ROWS.map((row) => (
@@ -34,12 +34,12 @@ export function PlanCompare() {
         ))}
       </div>
       <div className="hidden overflow-x-auto md:block">
-        <table className="w-full min-w-[520px] text-left">
+        <table className="w-full min-w-[640px] text-left">
           <thead>
             <tr className="border-b border-violet/20">
               <th className="p-4 text-sm text-mute"> </th>
               {HEADS.map((h, i) => (
-                <th key={h} className={`p-4 font-display text-xl ${i === 1 ? "text-acid" : "text-ghost"}`}>
+                <th key={h} className={`p-4 font-display text-xl ${i === 2 ? "text-acid" : "text-ghost"}`}>
                   {h}
                   <div className="font-mono text-xs font-normal text-mute">{PRICES[i]}</div>
                 </th>

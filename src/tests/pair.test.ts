@@ -473,12 +473,67 @@ describe("paper fills + kill", () => {
     assert.ok((book.pair?.usdcQty || 0) > 50);
   });
 
-  it("v1 leverage is always 1 and cooldown is 2 minutes", () => {
+  it("default leverage is spot 1x and cooldown is 2 minutes", () => {
     assert.equal(DEFAULT_AUTO.leverage, 1);
     assert.equal(DEFAULT_AUTO.mode, "paper");
     assert.equal(DEFAULT_AUTO.style, "scalp");
     assert.equal(DEFAULT_AUTO.cooldownMin, 2);
     assert.equal(DEFAULT_AUTO.band, "normal");
+  });
+
+  it("flatten closes a SOL-PERP back to USDC", () => {
+    const book = emptyBook(1000);
+    book.pair = {
+      solQty: 0,
+      spyxQty: 0,
+      qqqxQty: 0,
+      gldxQty: 0,
+      usdcQty: 500,
+      solPerp: {
+        leverage: 2,
+        collateralUsd: 200,
+        notionalUsd: 400,
+        entryPx: 100,
+        openedAt: CASH,
+        lastBorrowAt: CASH,
+        borrowPaidUsd: 0,
+      },
+    };
+    flattenToUsdc(book, px(110), CASH, "test flatten perp");
+    assert.equal(book.pair?.solPerp || null, null);
+    assert.ok((book.pair?.usdcQty || 0) > 700);
+  });
+
+  it("liquidates a 2x SOL-PERP when SOL dumps through maintenance", () => {
+    const book = emptyBook(1000);
+    book.solLeverage = 2;
+    book.pair = {
+      solQty: 0,
+      spyxQty: 0,
+      qqqxQty: 0,
+      gldxQty: 0,
+      usdcQty: 500,
+      solPerp: {
+        leverage: 2,
+        collateralUsd: 200,
+        notionalUsd: 400,
+        entryPx: 100,
+        openedAt: CASH,
+        lastBorrowAt: CASH,
+        borrowPaidUsd: 0,
+      },
+    };
+    const d = decidePair({
+      auto: auto({ leverage: 2, stopPct: 0.9 }),
+      book,
+      prices: px(55),
+      samples: hist(55),
+      study: DEFAULT_STUDY,
+      now: CASH + 60_000,
+    });
+    assert.equal(d.action, "swap");
+    assert.match(d.reason, /liquidat/i);
+    assert.equal(d.to, "USDC");
   });
 
   it("does not flood the tape with the same hold", () => {

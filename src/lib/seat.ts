@@ -6,12 +6,13 @@ export const SEAT_PERIOD_MS = SEAT_PERIOD_DAYS * 24 * 60 * 60 * 1000;
 /** Start collecting the next month 12 hours before the paid-through date. */
 export const SEAT_RENEW_LEAD_MS = 12 * 60 * 60 * 1000;
 
-export function seatSol(): number {
+export function seatSol(plan?: string): number {
+  if (plan === "lev") return 0.15;
   return SUBSCRIPTION_SOL;
 }
 
-export function seatLamports(): number {
-  return Math.round(seatSol() * 1_000_000_000);
+export function seatLamports(plan?: string): number {
+  return Math.round(seatSol(plan) * 1_000_000_000);
 }
 
 export function upsertUser(state: AppState, pubkey: string): AppUser {
@@ -30,10 +31,10 @@ export function upsertUser(state: AppState, pubkey: string): AppUser {
   return user;
 }
 
-export function extendSeat(user: AppUser, now = Date.now(), autoRenew = true): AppUser {
+export function extendSeat(user: AppUser, now = Date.now(), autoRenew = true, plan: string = "live"): AppUser {
   const base = Math.max(Number(user.subscribedUntil) || 0, now);
   user.subscribedUntil = base + SEAT_PERIOD_MS;
-  user.plan = "live";
+  user.plan = plan === "lev" ? "lev" : "live";
   user.lastPaidAt = now;
   user.autoRenew = autoRenew;
   return user;
@@ -53,7 +54,7 @@ export function acceptTos(user: AppUser, now = Date.now()): AppUser {
 /** True when auto-renew is on and the paid-through date is inside the lead window or already past. */
 export function seatDue(user: AppUser | undefined, now = Date.now()): boolean {
   if (!user || user.autoRenew === false) return false;
-  if (user.plan !== "live" && user.plan !== "full") return false;
+  if (user.plan !== "live" && user.plan !== "lev" && user.plan !== "full") return false;
   if (!user.subscribedUntil) return Boolean(user.autoRenew);
   return user.subscribedUntil - now <= SEAT_RENEW_LEAD_MS;
 }

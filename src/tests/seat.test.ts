@@ -22,9 +22,12 @@ const TRADE = "D4uCNcBKAbG9NAkmhQg7pBiztuejNzbWrZDcZmFGut81";
 describe("live seat", () => {
   it("prices live at 0.1 SOL / 30d", () => {
     assert.equal(SUBSCRIPTION_SOL, 0.1);
-    assert.equal(PLANS[0].sol, 0.1);
+    assert.equal(PLANS.find((p) => p.id === "live")?.sol, 0.1);
+    assert.equal(PLANS.find((p) => p.id === "lev")?.sol, 0.15);
     assert.equal(lamportsForPlan("live"), 100_000_000);
+    assert.equal(lamportsForPlan("lev"), 150_000_000);
     assert.equal(seatLamports(), 100_000_000);
+    assert.equal(seatLamports("lev"), 150_000_000);
   });
 
   it("a paper user is not a live seat even with a date", () => {

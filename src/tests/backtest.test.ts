@@ -34,6 +34,7 @@ describe("backtest replay", () => {
       gld: climb(n, 300, t0, dt, 0.0002),
     };
     const report = runBacktest(tape, 1000);
+    assert.equal(report.leverage, 1);
     assert.ok(report.bars > 80);
     assert.ok(report.curve.length > 4);
     assert.equal(report.startingUsd, 1000);
@@ -57,6 +58,11 @@ describe("backtest replay", () => {
       assert.equal(pub.curve?.length, report.curve.length);
       assert.ok(!("fills" in pub));
     }
+    const lev2 = runBacktest(tape, 1000, 2);
+    assert.equal(lev2.leverage, 2);
+    assert.ok(typeof lev2.liquidations === "number");
+    const lev3 = runBacktest(tape, 1000, 3);
+    assert.equal(lev3.leverage, 3);
   });
 
   it("falls back to the shipped seed so the public curve always has a mark", () => {
@@ -67,7 +73,14 @@ describe("backtest replay", () => {
       assert.ok((pub.trades || 0) >= 1);
     }
     const seeded = latestBacktest(null);
-    if (seeded.losses === 0 && seeded.wins > 0) assert.equal(seeded.profitFactor, null);
+    assert.ok(seeded);
+    if (seeded && seeded.losses === 0 && seeded.wins > 0) assert.equal(seeded.profitFactor, null);
+  });
+
+  it("does not fake a 2x curve from the 1x seed", () => {
+    assert.equal(latestBacktest(null, 2), null);
+    assert.equal(publicBacktest(latestBacktest(null, 2)).ready, false);
+    assert.equal(latestBacktest(null, 3), null);
   });
 });
 

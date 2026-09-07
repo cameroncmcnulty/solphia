@@ -213,6 +213,16 @@ export interface SleeveLearn {
   trailK: number;
 }
 
+export interface SolPerp {
+  leverage: 2 | 3;
+  collateralUsd: number;
+  notionalUsd: number;
+  entryPx: number;
+  openedAt: number;
+  lastBorrowAt: number;
+  borrowPaidUsd: number;
+}
+
 export interface PairHoldings {
   solQty: number;
   spyxQty: number;
@@ -225,6 +235,7 @@ export interface PairHoldings {
   gldxCostUsd?: number;
   lastClipAt?: Record<string, number>;
   stops?: Partial<Record<"SOL" | "SPYx" | "QQQx" | "GLDx", SleeveStop>>;
+  solPerp?: SolPerp | null;
 }
 
 export interface PairIntent {
@@ -275,6 +286,8 @@ export interface PaperBook {
   tape?: PairTape[];
   pendingIntent?: PairIntent | null;
   pairLearn?: Record<string, SleeveLearn>;
+  /** Last leverage used on this book (1 spot, 2/3 SOL-PERP). */
+  solLeverage?: 1 | 2 | 3;
 }
 
 export interface CreatorStat {
@@ -323,8 +336,8 @@ export interface AutoSettings {
   targetSolPct: number;
   slippageBps: number;
   maxImpactPct: number;
-  /** v1 is always 1. Slider stays disabled. */
-  leverage: 1;
+  /** 1 = spot SOL. 2 or 3 = isolated SOL-PERP (Jupiter Perps fee model). */
+  leverage: 1 | 2 | 3;
   tradingPubkey?: string;
   /** @deprecated memecoin desks — ignored */
   copy?: boolean;
@@ -487,6 +500,8 @@ export interface AppState {
   promoPending?: PromoPending | null;
   lastPromoDay?: string;
   backtest?: BacktestReport | null;
+  backtestLev2?: BacktestReport | null;
+  backtestLev3?: BacktestReport | null;
 }
 
 export type BacktestPoint = { t: number; equity: number };
@@ -533,6 +548,8 @@ export type BacktestReport = {
   from: number;
   to: number;
   bars: number;
+  leverage?: 1 | 2 | 3;
+  liquidations?: number;
   horizon: string;
   startingUsd: number;
   endingUsd: number;

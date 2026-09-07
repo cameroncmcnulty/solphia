@@ -1,5 +1,5 @@
 import { DEFAULT_AUTO } from "../auto";
-import { PAIR_FEE_BPS, PAIR_SLIP_BPS, PROTOCOL_FEE_BPS, SUBSCRIPTION_SOL, XAI_API_KEY } from "../config";
+import { PAIR_FEE_BPS, PAIR_SLIP_BPS, PROTOCOL_FEE_BPS, XAI_API_KEY } from "../config";
 import { liveTradingEnabled } from "../liveFlag";
 import { SLEEVE_WEIGHT, TRADE_PAIRS } from "../pair/catalog";
 import { SOL_MINT, USDC_MINT, gldxMint, qqqxMint, spyxMint } from "../pair/mints";
@@ -10,6 +10,7 @@ import { loadState, storeInfo } from "../store";
 import { latestBacktest } from "../pair/backtest";
 import { lastPairDesk, lastPairPrices, publicBook } from "../tick";
 import { treasuryAddress } from "../treasury";
+import { seatSol } from "../seat";
 import { promoDataUrl, promoViewToken } from "./promoFile";
 import { bookHoldingUsd, sumWindows, tradingNow, uniqueWallets } from "./stats";
 import type { AdminDesk, AdminPromo, AdminSeat, AdminSleeve, AdminTrader } from "./types";
@@ -50,6 +51,7 @@ export function buildAdminDesk(opts?: { light?: boolean }): AdminDesk {
       trades: book.trades,
       lastAction: t.book.lastAction,
       pending: Boolean(t.book.pendingIntent),
+      leverage: t.auto?.leverage === 2 || t.auto?.leverage === 3 ? t.auto.leverage : 1,
       updatedAt: t.updatedAt,
     };
   });
@@ -57,7 +59,7 @@ export function buildAdminDesk(opts?: { light?: boolean }): AdminDesk {
 
   const seats: AdminSeat[] = (s.users || []).map((u) => ({
     pubkey: u.pubkey,
-    plan: u.plan === "live" || u.plan === "full" ? "live" : "paper",
+    plan: u.plan || "paper",
     paid: Boolean(u.subscribedUntil && u.subscribedUntil > Date.now()),
     admin: isFounder(s, u.pubkey),
     until: u.subscribedUntil || null,
@@ -105,7 +107,8 @@ export function buildAdminDesk(opts?: { light?: boolean }): AdminDesk {
     durable: storeInfo().durable,
     durableKind: storeInfo().kind,
     lastTickAt: s.lastTickAt || 0,
-    seatSol: SUBSCRIPTION_SOL,
+    seatSol: seatSol("live"),
+    seatSolLev: seatSol("lev"),
     protocolFeeBps: PROTOCOL_FEE_BPS,
     pairFeeBps: PAIR_FEE_BPS,
     slipBps: PAIR_SLIP_BPS,
@@ -157,7 +160,9 @@ export function buildAdminDesk(opts?: { light?: boolean }): AdminDesk {
       leftName: p.leftName,
       rightName: p.rightName,
     })),
-    backtest: latestBacktest(s.backtest),
+    backtest: latestBacktest(s.backtest, 1),
+    backtestLev2: s.backtestLev2 ? latestBacktest(s.backtestLev2, 2) : null,
+    backtestLev3: s.backtestLev3 ? latestBacktest(s.backtestLev3, 3) : null,
   };
 }
 

@@ -18,6 +18,7 @@ import { enrichStudy } from "./policy";
 import type { ShortTape } from "./shortTape";
 import type { ScalpFrames } from "./frames";
 import { CLIP_AIM, DEFAULT_LEARN, RISK_SLEEVES, needOf, nextTrail, readAsset } from "./signals";
+import { borrowUsd, clampLev, liqPrice } from "../leverage";
 
 export type { Sleeve, TradePair } from "./catalog";
 export { SLEEVE_WEIGHT, TRADE_PAIRS };
@@ -74,6 +75,7 @@ export function pairOf(book: PaperBook): PairHoldings {
       gldxCostUsd: p.gldxCostUsd || 0,
       lastClipAt: p.lastClipAt || {},
       stops: p.stops || {},
+      solPerp: p.solPerp || null,
     };
   }
   return {
@@ -88,6 +90,7 @@ export function pairOf(book: PaperBook): PairHoldings {
     gldxCostUsd: 0,
     lastClipAt: {},
     stops: {},
+    solPerp: null,
   };
 }
 
@@ -120,16 +123,23 @@ function pxOf(prices: PairPrices, id: XStockId): number {
   return prices[id]?.usd || 0;
 }
 
-export function sleeveUsd(h: PairHoldings, sleeve: Sleeve, prices: PairPrices): number {
+export function sleeveUsd(h: BookHoldings, sleeve: Sleeve, prices: PairPrices): number {
   if (sleeve === "USDC") return h.usdcQty || 0;
-  if (sleeve === "SOL") return (h.solQty || 0) * (prices.sol.usd || 0);
+  if (sleeve === "SOL") {
+    const p = h.solPerp;
+    if (p && p.entryPx > 0) {
+      const pnl = ((prices.sol.usd - p.entryPx) / p.entryPx) * p.notionalUsd;
+      return p.collateralUsd + pnl - (p.borrowPaidUsd || 0);
+    }
+    return (h.solQty || 0) * (prices.sol.usd || 0);
+  }
   return qtyOf(h, xstockIdOf(sleeve) || "spyx") * livePx(prices, sleeve);
 }
 
-export function equityOf(h: PairHoldings, prices: PairPrices): number {
+export function equityOf(h: BookHoldings, prices: PairPrices): number {
   return (
     h.usdcQty +
-    h.solQty * prices.sol.usd +
+    sleeveUsd(h, "SOL", prices) +
     h.spyxQty * (prices.spyx.usd || 0) +
     (h.qqqxQty || 0) * (prices.qqqx.usd || 0) +
     (h.gldxQty || 0) * (prices.gldx.usd || 0)
@@ -143,7 +153,12 @@ export function markPair(book: PaperBook, prices: PairPrices): PaperBook {
   book.cashUsd = Math.round(h.usdcQty * 100) / 100;
   book.equityUsd = Math.round(equity * 100) / 100;
   const positions: PaperPosition[] = [];
-  if (h.solQty > 1e-9) {
+  if (h.solPerp && h.solPerp.entryPx > 0) {
+    const p = h.solPerp;
+    const pnl = ((prices.sol.usd - p.entryPx) / p.entryPx) * p.notionalUsd;
+    const mark = p.collateralUsd + pnl - (p.borrowPaidUsd || 0);
+    positions.push(sleeve("SOL-PERP", SOL_MINT, p.notionalUsd / p.entryPx, prices.sol.usd, mark, p.collateralUsd, `SOL ${p.leverage}x`));
+  } else if (h.solQty > 1e-9) {
     const size = h.solQty * prices.sol.usd;
     const cost = h.solCostUsd || size;
     positions.push(sleeve("SOL", SOL_MINT, h.solQty, prices.sol.usd, size, cost, "Solana"));
@@ -293,12 +308,42 @@ export function decidePair(opts: {
   }
 
   const h = pairOf(book);
+  book.solLeverage = clampLev(auto.leverage);
+  if (h.solPerp && h.solPerp.entryPx > 0) {
+    const fee = borrowUsd({
+      notionalUsd: h.solPerp.notionalUsd,
+      lev: h.solPerp.leverage,
+      from: h.solPerp.lastBorrowAt,
+      to: now,
+    });
+    h.solPerp.borrowPaidUsd = (h.solPerp.borrowPaidUsd || 0) + fee;
+    h.solPerp.lastBorrowAt = now;
+    book.pair = h;
+    const liq = liqPrice(h.solPerp.entryPx, h.solPerp.leverage);
+    if (prices.sol.usd <= liq) {
+      return {
+        action: "swap",
+        reason: `SOL ${h.solPerp.leverage}x liquidated at ${prices.sol.usd.toFixed(2)} (liq ${liq.toFixed(2)}). Back to USDC.`,
+        clipUsd: sleeveUsd(h, "SOL", prices),
+        from: "SOL",
+        to: "USDC",
+        pairId: "usdc-sol",
+        z7: primary.z7,
+        z24: primary.z24,
+        ratio: primary.ratio,
+        bandK,
+        session,
+        read: primary,
+        reads,
+      };
+    }
+  }
   const equity = equityOf(h, prices);
   const start = book.startingUsd || equity;
   const dd = start > 0 ? (start - equity) / start : 0;
   const stop = auto.stopPct || 0.08;
   const anyX = XSTOCKS.some((x) => qtyOf(h, x.id) > 0);
-  if (dd >= stop && (h.solQty > 0 || anyX)) {
+  if (dd >= stop && (h.solQty > 0 || Boolean(h.solPerp) || anyX)) {
     return {
       action: "flatten",
       reason: `Down ${(dd * 100).toFixed(1)}%. Selling everything back to USDC and pausing.`,

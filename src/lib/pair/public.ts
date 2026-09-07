@@ -40,7 +40,7 @@ export type PairDeskPublic = {
   stale: boolean;
   oracle: { sol: string; spyx: string; qqqx: string; gldx: string; ageMs: number };
   knowledge: HistoryStudy;
-  leverage: 1;
+  leverage: 1 | 2 | 3;
   solQty: number;
   spyxQty: number;
   qqqxQty: number;
@@ -96,7 +96,7 @@ export function publicPair(
       ageMs: prices.ageMs,
     },
     knowledge: study,
-    leverage: 1,
+    leverage: book.solLeverage === 2 || book.solLeverage === 3 ? book.solLeverage : 1,
     solQty: h.solQty,
     spyxQty: h.spyxQty,
     qqqxQty: h.qqqxQty || 0,

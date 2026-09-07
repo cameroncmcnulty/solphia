@@ -20,6 +20,7 @@ export type AdminTrader = {
   trades: number;
   lastAction?: string;
   pending: boolean;
+  leverage: 1 | 2 | 3;
   updatedAt: number;
 };
 
@@ -109,6 +110,7 @@ export type AdminDesk = {
   durableKind: "fs" | "upstash" | "blob";
   lastTickAt: number;
   seatSol: number;
+  seatSolLev: number;
   protocolFeeBps: number;
   pairFeeBps: number;
   slipBps: number;
@@ -134,10 +136,12 @@ export type AdminDesk = {
     clipPct: number;
     stopPct: number;
     sleeveWeight: number;
-    leverage: 1;
+    leverage: 1 | 2 | 3;
     style: string;
     band: string;
   };
   pairs: { id: string; left: string; right: string; leftName: string; rightName: string }[];
   backtest?: import("../types").BacktestReport | null;
+  backtestLev2?: import("../types").BacktestReport | null;
+  backtestLev3?: import("../types").BacktestReport | null;
 };

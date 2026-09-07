@@ -18,15 +18,18 @@ export default function LegalPage() {
         </p>
         <p>
           These tokens are not the New York print. Issuer and custody risk. After hours and weekends they can move
-          while the cash market is closed. You can lose SOL. This is not financial advice. Spot only — no leverage.
+          while the cash market is closed. You can lose SOL. This is not financial advice. Spot xStocks stay 1×. Optional
+          SOL 2×/3× is a Jupiter Perps-style long with liquidation.
         </p>
         <h2 className="pt-4 font-display text-2xl text-ghost">Live seat</h2>
         <p>
-          Paper is free. Live is 0.1 SOL every 30 days plus a 0.1% fee on each clip, paid to the Solphia treasury. By
-          checking “I agree” on the pricing page you authorize that transfer.
+          Paper is free. Live spot is 0.1 SOL / 30 days. SOL 2×/3× is 0.15 SOL / 30 days. Plus 0.1% per clip to the
+          treasury. SOL leverage: 6 bps in, 6 bps out, hourly borrow, liquidation near 40% against at 2× or 27% at 3×.
+          Jupiter’s on-chain Perps API is still WIP — 2×/3× is live-priced with those fees until that API is ready. By
+          checking “I agree” you authorize the transfer.
         </p>
         <p>
-          The first 0.1 SOL is signed in Phantom. Later months are signed by the trading wallet on this device while
+          The first payment is signed in Phantom. Later months are signed by the trading wallet on this device while
           solphia.io is open, until you unsubscribe. If the site is closed when a month is due, we cannot pull SOL —
           the seat simply expires at the paid-through date and live flips back to practice.
         </p>
@@ -35,8 +38,8 @@ export default function LegalPage() {
           30-day window.
         </p>
         <p>
-          Keep a little spare SOL in the trading wallet for the monthly seat and network fees. If that wallet is short,
-          pay again from Phantom on the pricing page.
+          Keep a little spare SOL in the trading wallet for the monthly seat (0.1 or 0.15) and network fees. If that
+          wallet is short, pay again from Phantom on the pricing page.
         </p>
         <p>
           <Link href="/pricing" className="text-acid">

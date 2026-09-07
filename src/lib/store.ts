@@ -57,6 +57,8 @@ export function emptyState(): AppState {
     promoPending: null,
     lastPromoDay: "",
     backtest: null,
+    backtestLev2: null,
+    backtestLev3: null,
   };
 }
 
@@ -114,6 +116,8 @@ function hydrateFromRaw(raw: AppState): AppState {
     promoPending: raw.promoPending || null,
     lastPromoDay: raw.lastPromoDay || "",
     backtest: raw.backtest || null,
+    backtestLev2: raw.backtestLev2 || null,
+    backtestLev3: raw.backtestLev3 || null,
   };
 }
 

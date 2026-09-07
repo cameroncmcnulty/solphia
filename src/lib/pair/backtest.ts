@@ -1,4 +1,5 @@
 import { DEFAULT_AUTO, emptyBook } from "../auto";
+import { clampLev, levNote, type Lev } from "../leverage";
 import { PAPER_STARTING_USD } from "../config";
 import { pack4h, packDaily, type Candle } from "../sol/indicators";
 import type {
@@ -58,9 +59,17 @@ export function normalizeBacktest(report: BacktestReport): BacktestReport {
   };
 }
 
-export function latestBacktest(stored?: BacktestReport | null): BacktestReport {
-  const raw = stored && Array.isArray(stored.curve) && stored.curve.length ? stored : (seed as BacktestReport);
-  return normalizeBacktest(raw);
+export function latestBacktest(stored?: BacktestReport | null, lev: Lev = 1): BacktestReport | null {
+  const has = stored && Array.isArray(stored.curve) && stored.curve.length;
+  if (has) {
+    const report = normalizeBacktest(stored);
+    if (!report.leverage) report.leverage = lev;
+    return report;
+  }
+  if (lev !== 1) return null;
+  const report = normalizeBacktest(seed as BacktestReport);
+  if (!report.leverage) report.leverage = 1;
+  return report;
 }
 
 export type { BacktestReport, BacktestPoint } from "../types";
@@ -147,7 +156,7 @@ function samplesAt(tape: BacktestTape, t: number): RatioSample[] {
   return out;
 }
 
-const ASSETS = new Set(["SOL", "SPYx", "QQQx", "GLDx"]);
+const ASSETS = new Set(["SOL", "SOL-PERP", "SPYx", "QQQx", "GLDx"]);
 
 function utcDay(t: number): string {
   return new Date(t).toISOString().slice(0, 10);
@@ -180,7 +189,9 @@ function downsample(curve: BacktestPoint[], n = 96): BacktestPoint[] {
 function sleeveStats(fills: PaperFill[]): BacktestSleeve[] {
   const ids = ["SOL", "SPYx", "QQQx", "GLDx"] as const;
   return ids.map((id) => {
-    const sells = fills.filter((f) => f.symbol === id && f.side === "sell" && f.pnlUsd != null);
+    const sells = fills.filter(
+      (f) => (f.symbol === id || (id === "SOL" && f.symbol === "SOL-PERP")) && f.side === "sell" && f.pnlUsd != null,
+    );
     const wins = sells.filter((f) => (f.pnlUsd || 0) > 0);
     const pnl = sells.reduce((s, f) => s + (f.pnlUsd || 0), 0);
     return {
@@ -286,6 +297,8 @@ function reportOf(book: PaperBook, curve: BacktestPoint[], from: number, to: num
     from,
     to,
     bars,
+    leverage: clampLev((book as { solLeverage?: Lev }).solLeverage),
+    liquidations: book.fills.filter((f) => /liquidat/i.test(f.reason || "")).length,
     horizon: `${Math.round(days)}d · 15m clips · Daily/4H bias · fees in`,
     startingUsd: start,
     endingUsd: Math.round(end * 100) / 100,
@@ -323,7 +336,7 @@ function reportOf(book: PaperBook, curve: BacktestPoint[], from: number, to: num
         pnlUsd: f.pnlUsd != null ? Math.round(f.pnlUsd * 100) / 100 : undefined,
         reason: f.reason.slice(0, 140),
       })),
-    note: "Historical paper of this engine on SOL, SPY, QQQ, and gold. Same rules she runs now. Fees and the 0.1% clip are in the mark. Daily PnL is the marked book (open position included). Clips are entries and exits. A green day with 0 clips means she was holding. Past days are not a promise she prints $2 every session.",
+    note: `Historical paper of this engine on SOL, SPY, QQQ, and gold. ${levNote(clampLev((book as { solLeverage?: Lev }).solLeverage))} Fees and the 0.1% clip are in the mark. Daily PnL is the marked book. Past days are not a promise.`,
   };
 }
 
@@ -345,13 +358,15 @@ export function publicBacktest(report: BacktestReport | null | undefined) {
     bestDayUsd: report.bestDayUsd,
     avgDayUsd: report.avgDayUsd,
     daysGe2: report.daysGe2,
+    leverage: report.leverage || 1,
+    liquidations: report.liquidations || 0,
     curve: report.curve,
     note: report.note,
   };
 }
 
 /** Replay the live scalp engine on a historical tape. */
-export function runBacktest(tape: BacktestTape, startingUsd = PAPER_STARTING_USD): BacktestReport {
+export function runBacktest(tape: BacktestTape, startingUsd = PAPER_STARTING_USD, lev: Lev = 1): BacktestReport {
   const spy0 = tape.spy[0]?.t || 0;
   const clock = tape.sol.filter((c) => c.t >= spy0 && lastAt(tape.spy, c.t) && lastAt(tape.qqq, c.t) && lastAt(tape.gld, c.t));
   const warmup = 80;
@@ -360,7 +375,8 @@ export function runBacktest(tape: BacktestTape, startingUsd = PAPER_STARTING_USD
     d1: { sol: packDaily(tape.sol), spy: packDaily(tape.spy), qqq: packDaily(tape.qqq), gld: packDaily(tape.gld) },
   };
   const book = emptyBook(startingUsd);
-  const auto = { ...DEFAULT_AUTO, armed: true, mode: "paper" as const };
+  const auto = { ...DEFAULT_AUTO, armed: true, mode: "paper" as const, leverage: clampLev(lev) };
+  book.solLeverage = clampLev(lev);
   const curve: BacktestPoint[] = [{ t: clock[warmup]?.t || Date.now(), equity: startingUsd }];
   let peak = startingUsd;
   let maxDd = 0;

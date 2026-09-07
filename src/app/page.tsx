@@ -74,7 +74,11 @@ export default function Home() {
           <Feature t="PnL in USDC" d="The book, stops, and profit are marked in USDC so a SOL candle doesn’t fake the score." href="/trading" />
           <Feature t="Practice first" d="Paper is always on so you can see PnL before you risk SOL." href="/trading" />
           <Feature t="Your wallet, your keys" d="Phantom stays in charge. She never asks for a seed phrase." href="/trading" />
-          <Feature t="Spot only" d="No borrowed money. An 8% drop sells everything and pauses." href="/trading" />
+          <Feature
+            t="Optional SOL 2×/3×"
+            d="xStocks stay spot. SOL can run 2× or 3× with Jupiter Perps fees and a real liquidation. An 8% drop still sells everything and pauses."
+            href="/pricing"
+          />
         </div>
       </section>
 

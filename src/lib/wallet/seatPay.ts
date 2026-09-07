@@ -14,11 +14,13 @@ async function confirmPay(body: Record<string, unknown>) {
 export async function subscribeWithPhantom(opts: {
   owner: string;
   email?: string;
+  plan?: "live" | "lev";
 }): Promise<{ subscribedUntil: number; autoRenew: boolean }> {
+  const plan = opts.plan || "live";
   const start = await confirmPay({
     pubkey: opts.owner,
     email: opts.email,
-    plan: "live",
+    plan,
     tos: true,
     autoRenew: true,
     action: "subscribe",
@@ -31,12 +33,12 @@ export async function subscribeWithPhantom(opts: {
     if (start.ok) return { subscribedUntil: Number(start.subscribedUntil), autoRenew: Boolean(start.autoRenew) };
     throw new Error(start.error || "Could not start the live seat.");
   }
-  const sig = await paySeatFromPhantom(opts.owner, start.treasury, Number(start.sol || 0.1));
+  const sig = await paySeatFromPhantom(opts.owner, start.treasury, Number(start.sol || (plan === "lev" ? 0.15 : 0.1)));
   if (!sig) throw new Error("Phantom did not return a signature.");
   const done = await confirmPayRetry({
     pubkey: opts.owner,
     email: opts.email,
-    plan: "live",
+    plan,
     tos: true,
     autoRenew: true,
     action: "subscribe",
@@ -68,18 +70,19 @@ export async function unsubscribeSeat(owner: string) {
   return j;
 }
 
-/** Pays 0.1 SOL from the trading wallet when a seat is due. Returns need_phantom if that wallet is short. */
+/** Pays the live (0.1) or lev (0.15) seat from the trading wallet when due. Returns need_phantom if that wallet is short. */
 export async function tryAutoRenew(owner: string): Promise<"paid" | "skipped" | "need_phantom"> {
   const a = await fetch(`/api/access?pubkey=${owner}`).then((r) => r.json());
   if (a.founder || !a.autoRenew || !a.due || !a.treasury) return "skipped";
+  const plan = a.plan === "lev" ? "lev" : "live";
   const tpk = tradingPubkey();
   try {
-    const sig = await paySeatFromTrading(a.treasury, Number(a.seatSol || 0.1));
+    const sig = await paySeatFromTrading(a.treasury, Number(a.seatSol || (plan === "lev" ? 0.15 : 0.1)));
     const done = await confirmPayRetry({
       pubkey: owner,
       payer: tpk,
       signature: sig,
-      plan: "live",
+      plan,
       tos: true,
       autoRenew: true,
       action: "renew",

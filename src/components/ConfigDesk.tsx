@@ -166,7 +166,7 @@ export function ConfigDesk({
             />
             <DeskToggle
               label="SOL / USDT day-trade"
-              hint="Spot scalp vs Tether. Stop ≥ 0.5%, first target 2R after fees, daily goal 0.5%. No leverage."
+              hint="Spot scalp vs Tether. Stop ≥ 0.5%, first target 2R after fees, daily goal 0.5%. SOL-PERP is a separate sleeve."
               on={value.solUsd}
               onChange={(v) => onChange({ solUsd: v })}
             />

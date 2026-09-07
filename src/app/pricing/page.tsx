@@ -30,7 +30,8 @@ export default function PricingPage() {
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
   const [seat, setSeat] = useState<SeatInfo | null>(null);
-  const selected = PLANS[0];
+  const [planId, setPlanId] = useState<"live" | "lev">("lev");
+  const selected = PLANS.find((p) => p.id === planId) || PLANS[1] || PLANS[0];
 
   async function refreshSeat(pk = owner) {
     if (!pk) {
@@ -51,8 +52,10 @@ export default function PricingPage() {
     if (!tos) return setMsg("Agree to the terms to start a live seat.");
     setBusy(true);
     try {
-      const j = await subscribeWithPhantom({ owner, email: email || undefined });
-      setMsg(`Live on until ${new Date(j.subscribedUntil).toLocaleDateString()}. 0.1 SOL left Phantom for the treasury.`);
+      const j = await subscribeWithPhantom({ owner, email: email || undefined, plan: planId });
+      setMsg(
+        `${selected.name} on until ${new Date(j.subscribedUntil).toLocaleDateString()}. ${selected.sol} SOL left Phantom for the treasury.`,
+      );
       await refreshSeat(owner);
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "subscribe failed");
@@ -82,10 +85,10 @@ export default function PricingPage() {
     <main className="pb-24">
       <div className="mx-auto max-w-6xl px-4 pt-6 md:px-8 md:pt-10">
         <p className="text-base text-acid">Pricing</p>
-        <h1 className="mt-2 font-display text-4xl leading-tight text-ghost sm:text-6xl">Paper is free. Live is 0.1 SOL.</h1>
+        <h1 className="mt-2 font-display text-4xl leading-tight text-ghost sm:text-6xl">Paper is free. Live is 0.1. SOL 2×/3× is 0.15.</h1>
         <p className="mt-4 max-w-xl text-lg text-mute">
-          One bot. SOL vs official S&P 500, Nasdaq-100, and gold. 0.1 SOL / 30 days to the treasury, plus 0.1% per
-          clip, until you unsubscribe.
+          Spot live 0.1 SOL / 30d. Optional SOL-PERP 2× or 3× is 0.15 SOL / 30d (Jupiter Perps fees, liquidation).
+          Plus 0.1% per clip.
         </p>
       </div>
       <BacktestBrochure />
@@ -101,32 +104,43 @@ export default function PricingPage() {
         </Link>
 
         <div className="mt-6 grid gap-4 sm:grid-cols-2">
-          <div className="panel rounded-3xl p-5 ring-2 ring-acid shadow-[0_0_40px_rgba(20,241,149,0.18)]">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={selected.icon} alt="" className="h-16 w-16 rounded-2xl" />
-            <div className="mt-4 font-display text-2xl text-ghost">{selected.name}</div>
-            <div className="mt-1 font-display text-3xl text-acid">
-              {selected.sol} <span className="text-lg text-mute">SOL / 30d</span>
-            </div>
-            <p className="mt-2 text-sm text-mute">{selected.tagline}</p>
-            <ul className="mt-4 space-y-2 text-sm text-ghost">
-              {selected.points.map((x) => (
-                <li key={x} className="flex items-center gap-2">
-                  <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-acid text-void">
-                    <svg width="10" height="10" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                      <path d="M3.2 8.4l3.1 3.1 6.5-7" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                  </span>
-                  {x}
-                </li>
-              ))}
-            </ul>
-          </div>
+          {PLANS.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => setPlanId(p.id === "lev" ? "lev" : "live")}
+              className={`panel rounded-3xl p-5 text-left ${
+                planId === p.id ? "ring-2 ring-acid shadow-[0_0_40px_rgba(20,241,149,0.18)]" : ""
+              }`}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={p.icon} alt="" className="h-16 w-16 rounded-2xl" />
+              <div className="mt-4 font-display text-2xl text-ghost">{p.name}</div>
+              <div className="mt-1 font-display text-3xl text-acid">
+                {p.sol} <span className="text-lg text-mute">SOL / 30d</span>
+              </div>
+              <p className="mt-2 text-sm text-mute">{p.tagline}</p>
+              <ul className="mt-4 space-y-2 text-sm text-ghost">
+                {p.points.map((x) => (
+                  <li key={x} className="flex items-center gap-2">
+                    <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-acid text-void">
+                      <svg width="10" height="10" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                        <path d="M3.2 8.4l3.1 3.1 6.5-7" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </span>
+                    {x}
+                  </li>
+                ))}
+              </ul>
+            </button>
+          ))}
+        </div>
+        <div className="mt-6">
           <div className="panel rounded-3xl p-5">
-            <div className="font-mono text-[11px] tracking-[0.2em] text-violet">LIVE SEAT</div>
+            <div className="font-mono text-[11px] tracking-[0.2em] text-violet">CHECKOUT · {selected.name.toUpperCase()}</div>
             <p className="mt-2 text-base text-mute">
-              Connect Phantom, agree to the terms, pay 0.1 SOL. Later months leave the trading wallet while this site
-              is open, until you unsubscribe.
+              Connect Phantom, agree to the terms, pay {selected.sol} SOL. Later months leave the trading wallet while
+              this site is open, until you unsubscribe.
             </p>
             {paid && (
               <p className="mt-3 font-mono text-sm text-acid">
@@ -152,7 +166,8 @@ export default function PricingPage() {
                 <Link href="/legal" className="text-acid">
                   terms
                 </Link>
-                . Pull 0.1 SOL every 30 days to the treasury until I unsubscribe. I can lose SOL on live trades.
+                . Pull {selected.sol} SOL every 30 days to the treasury until I unsubscribe. 2×/3× SOL can be
+                liquidated. I can lose SOL.
               </span>
             </label>
             <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -163,7 +178,7 @@ export default function PricingPage() {
                 disabled={busy || !tos}
                 className="btn-acid min-h-[48px] rounded-full px-6 disabled:opacity-40"
               >
-                {paid && seat?.due ? "Pay this month" : paid ? "Extend 30 days" : "Pay 0.1 SOL"}
+                {paid && seat?.due ? "Pay this month" : paid ? "Extend 30 days" : `Pay ${selected.sol} SOL`}
               </button>
             </div>
             {paid && seat?.autoRenew && !seat?.founder && (

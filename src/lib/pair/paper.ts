@@ -23,6 +23,8 @@ import { DEFAULT_LEARN, noteExit } from "./signals";
 import type { HistoryStudy } from "./knowledge";
 import { SOL_MINT, USDC_MINT, XSTOCKS, type XStockId, type XStockSymbol, xstockBySymbol, xstockMint } from "./mints";
 import type { PairPrices } from "./prices";
+import { borrowUsd, closeFeeUsd, clampLev, notionalUsd, openFeeUsd } from "../leverage";
+import type { SolPerp } from "../types";
 import type { RatioSample } from "./ratio";
 import type { PairIntent } from "../types";
 
@@ -108,6 +110,10 @@ function touchClip(h: ReturnType<typeof pairOf>, pairId: string | undefined, now
 export function flattenToUsdc(book: PaperBook, prices: PairPrices, now: number, reason: string, mind?: Mind): PaperFill[] {
   const h = pairOf(book);
   const fills: PaperFill[] = [];
+  if (h.solPerp) {
+    const fill = closeSolPerp(h, book, prices, now, reason);
+    if (fill) fills.push(fill);
+  }
   if (h.solQty > 0 && prices.sol.usd > 0) {
     const size = h.solQty * prices.sol.usd;
     const { fee, slip, drag } = costs(size);
@@ -237,6 +243,46 @@ function applyBuy(h: ReturnType<typeof pairOf>, sleeve: Sleeve, qty: number, cos
   if (id) setSleeve(h, id, qtyOf(h, id) + qty, costOf(h, id) + costUsd);
 }
 
+function openSolPerp(h: ReturnType<typeof pairOf>, now: number, collateralUsd: number, px: number, lev: 2 | 3): SolPerp {
+  const notional = notionalUsd(collateralUsd, lev);
+  return {
+    leverage: lev,
+    collateralUsd,
+    notionalUsd: notional,
+    entryPx: px,
+    openedAt: now,
+    lastBorrowAt: now,
+    borrowPaidUsd: 0,
+  };
+}
+
+function closeSolPerp(
+  h: ReturnType<typeof pairOf>,
+  book: PaperBook,
+  prices: PairPrices,
+  now: number,
+  reason: string,
+): PaperFill | null {
+  const p = h.solPerp;
+  if (!p || !(p.entryPx > 0)) return null;
+  const px = prices.sol.usd;
+  const pnl = ((px - p.entryPx) / p.entryPx) * p.notionalUsd;
+  const fee = closeFeeUsd(p.notionalUsd);
+  const borrow =
+    (p.borrowPaidUsd || 0) +
+    borrowUsd({ notionalUsd: p.notionalUsd, lev: p.leverage, from: p.lastBorrowAt, to: now });
+  const back = p.collateralUsd + pnl - fee - borrow;
+  h.usdcQty += Math.max(0, back);
+  const fill = fillOf(now, "sell", "SOL-PERP", SOL_MINT, px, p.notionalUsd / p.entryPx, p.notionalUsd, fee, 0, reason);
+  fill.pnlUsd = back - p.collateralUsd;
+  pushFill(book, fill);
+  h.solPerp = null;
+  if (h.stops) delete h.stops.SOL;
+  if (!book.pairLearn) book.pairLearn = {};
+  book.pairLearn.SOL = noteExit(book.pairLearn.SOL || DEFAULT_LEARN, fill.pnlUsd || 0);
+  return fill;
+}
+
 function swapSleeves(
   book: PaperBook,
   prices: PairPrices,
@@ -254,6 +300,32 @@ function swapSleeves(
   const toPx = sleevePx(prices, to);
   const fromQtyAvail = sleeveQty(h, from);
   const maxUsd = fromQtyAvail * fromPx;
+  const lev = clampLev(book.solLeverage);
+  if (from === "USDC" && to === "SOL" && (lev === 2 || lev === 3)) {
+    if (h.solPerp) return [];
+    const size = Math.min(clipUsd, h.usdcQty);
+    if (size < 8 || toPx <= 0) return [];
+    const notional = notionalUsd(size, lev);
+    const fee = openFeeUsd(notional);
+    const collat = Math.max(8, size - fee);
+    if (h.usdcQty < size) return [];
+    h.usdcQty -= size;
+    h.solPerp = openSolPerp(h, now, collat, toPx, lev);
+    const buy = fillOf(now, "buy", "SOL-PERP", SOL_MINT, toPx, notional / toPx, notional, fee, 0, `${reason} · ${lev}x`);
+    pushFill(book, buy);
+    touchClip(h, pairId, now);
+    if (!h.stops) h.stops = {};
+    h.stops.SOL = { entryPx: toPx, peakPx: toPx, stopPx: 0, armed: false };
+    book.pair = h;
+    book.lastTradeAt = now;
+    return [buy];
+  }
+  if (from === "SOL" && to === "USDC" && h.solPerp) {
+    const fill = closeSolPerp(h, book, prices, now, reason);
+    book.pair = h;
+    book.lastTradeAt = now;
+    return fill ? [fill] : [];
+  }
   const size = Math.min(clipUsd, maxUsd);
   if (size < 8 || fromPx <= 0 || toPx <= 0) return [];
   const { fee, slip, drag } = costs(size, impactPct);
@@ -448,7 +520,8 @@ export function tickPairBook(opts: {
     shortTape: opts.shortTape,
     frames: opts.frames,
   });
-  const live = opts.live || (opts.auto.mode === "live" && liveTradingEnabled());
+  opts.book.solLeverage = clampLev(opts.auto.leverage);
+  const live = (opts.live || (opts.auto.mode === "live" && liveTradingEnabled())) && opts.book.solLeverage === 1;
   const actionable =
     decision.action === "sell_sol" ||
     decision.action === "sell_xstock" ||
