@@ -7,7 +7,12 @@ export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
   const lev = clampLev(Number(req.nextUrl.searchParams.get("lev") || 1));
-  const s = await readyState();
-  const stored = lev === 3 ? s.backtestLev3 : lev === 2 ? s.backtestLev2 : s.backtest;
+  let stored = null;
+  try {
+    const s = await readyState();
+    stored = lev === 3 ? s.backtestLev3 : lev === 2 ? s.backtestLev2 : s.backtest;
+  } catch {
+    stored = null;
+  }
   return NextResponse.json(publicBacktest(latestBacktest(stored, lev)));
 }

@@ -20,6 +20,8 @@ import type { ScalpFrames, SleeveFrames } from "./frames";
 import { emptyFrames } from "./frames";
 import { equityOf, markPair, pairOf } from "./engine";
 import seed from "./backtestSeed.json";
+import seedLev2 from "./backtestSeedLev2.json";
+import seedLev3 from "./backtestSeedLev3.json";
 
 function normalizeDay(d: BacktestDay): BacktestDay {
   const entries = d.entries ?? 0;
@@ -66,16 +68,17 @@ export function slimBacktest(report?: BacktestReport | null): BacktestReport | n
   return { ...report, fills };
 }
 
-export function latestBacktest(stored?: BacktestReport | null, lev: Lev = 1): BacktestReport | null {
+function seedFor(lev: Lev): BacktestReport {
+  if (lev === 3) return seedLev3 as BacktestReport;
+  if (lev === 2) return seedLev2 as BacktestReport;
+  return seed as BacktestReport;
+}
+
+/** Stored admin run wins. Otherwise the shipped seed for that leverage so the public page always has a curve. */
+export function latestBacktest(stored?: BacktestReport | null, lev: Lev = 1): BacktestReport {
   const has = stored && Array.isArray(stored.curve) && stored.curve.length;
-  if (has) {
-    const report = normalizeBacktest(stored);
-    if (!report.leverage) report.leverage = lev;
-    return report;
-  }
-  if (lev !== 1) return null;
-  const report = normalizeBacktest(seed as BacktestReport);
-  if (!report.leverage) report.leverage = 1;
+  const report = normalizeBacktest(has ? stored : seedFor(lev));
+  if (!report.leverage) report.leverage = lev;
   return report;
 }
 

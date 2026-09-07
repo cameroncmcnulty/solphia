@@ -80,11 +80,15 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Not enough history to backtest.", desk: buildAdminDesk() }, { status: 400 });
       }
       const report = runBacktest(tape, undefined, 1);
-      const lev2 = runBacktest(tape, undefined, 2);
-      const lev3 = runBacktest(tape, undefined, 3);
       await mutateState((s) => {
         s.backtest = report;
+      });
+      const lev2 = runBacktest(tape, undefined, 2);
+      await mutateState((s) => {
         s.backtestLev2 = lev2;
+      });
+      const lev3 = runBacktest(tape, undefined, 3);
+      await mutateState((s) => {
         s.backtestLev3 = lev3;
         pushBounded(
           s.audit,

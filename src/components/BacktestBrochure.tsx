@@ -96,9 +96,7 @@ export function BacktestBrochure() {
             <div className="mt-1 font-mono text-xs text-mute">
               {ready
                 ? `${money(data?.startingUsd || 1000)} → ${money(data?.endingUsd || 0)} USDC · ${when(data?.from)}–${when(data?.to)}`
-                : lev === 1
-                  ? "Loading the last engine replay…"
-                  : "No 2×/3× replay stored yet. Run backtest from the admin desk."}
+                : "Loading the last engine replay…"}
             </div>
           </div>
         </div>

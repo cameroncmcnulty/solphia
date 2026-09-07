@@ -135,9 +135,9 @@ function opsView(state: AppState): AppState {
   return {
     ...state,
     traders: {},
-    backtest: slimBacktest(state.backtest),
-    backtestLev2: slimBacktest(state.backtestLev2),
-    backtestLev3: slimBacktest(state.backtestLev3),
+    backtest: null,
+    backtestLev2: null,
+    backtestLev3: null,
   };
 }
 

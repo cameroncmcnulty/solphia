@@ -161,8 +161,8 @@ export function buildAdminDesk(opts?: { light?: boolean }): AdminDesk {
       rightName: p.rightName,
     })),
     backtest: latestBacktest(s.backtest, 1),
-    backtestLev2: s.backtestLev2 ? latestBacktest(s.backtestLev2, 2) : null,
-    backtestLev3: s.backtestLev3 ? latestBacktest(s.backtestLev3, 3) : null,
+    backtestLev2: latestBacktest(s.backtestLev2, 2),
+    backtestLev3: latestBacktest(s.backtestLev3, 3),
   };
 }
 

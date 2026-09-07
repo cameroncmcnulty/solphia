@@ -77,10 +77,17 @@ describe("backtest replay", () => {
     if (seeded && seeded.losses === 0 && seeded.wins > 0) assert.equal(seeded.profitFactor, null);
   });
 
-  it("does not fake a 2x curve from the 1x seed", () => {
-    assert.equal(latestBacktest(null, 2), null);
-    assert.equal(publicBacktest(latestBacktest(null, 2)).ready, false);
-    assert.equal(latestBacktest(null, 3), null);
+  it("ships a distinct 2x and 3x seed so the public page always has those curves", () => {
+    const spot = latestBacktest(null, 1);
+    const lev2 = latestBacktest(null, 2);
+    const lev3 = latestBacktest(null, 3);
+    assert.equal(lev2.leverage, 2);
+    assert.equal(lev3.leverage, 3);
+    assert.equal(publicBacktest(lev2).ready, true);
+    assert.equal(publicBacktest(lev3).ready, true);
+    assert.ok((lev2.curve?.length || 0) > 8);
+    assert.ok(Math.abs(lev2.pnlPct - spot.pnlPct) > 0.01);
+    assert.ok(Math.abs(lev3.pnlPct - spot.pnlPct) > 0.01);
   });
 
   it("serves a stored 2x report instead of the 1x seed", () => {
