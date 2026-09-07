@@ -1,18 +1,12 @@
-import { NextRequest, NextResponse } from "next/server";
-import { latestBacktest, publicBacktest } from "@/lib/pair/backtest";
-import { readyState } from "@/lib/store";
-import { clampLev } from "@/lib/leverage";
+import { NextResponse } from "next/server";
+import { publicBacktestPack } from "@/lib/pair/backtest";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(req: NextRequest) {
-  const lev = clampLev(Number(req.nextUrl.searchParams.get("lev") || 1));
-  let stored = null;
-  try {
-    const s = await readyState();
-    stored = lev === 3 ? s.backtestLev3 : lev === 2 ? s.backtestLev2 : s.backtest;
-  } catch {
-    stored = null;
-  }
-  return NextResponse.json(publicBacktest(latestBacktest(stored, lev)));
+export async function GET() {
+  const pack = publicBacktestPack();
+  return NextResponse.json({
+    ...pack,
+    ...pack.reports[1],
+  });
 }

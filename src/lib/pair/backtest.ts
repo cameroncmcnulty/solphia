@@ -74,10 +74,13 @@ function seedFor(lev: Lev): BacktestReport {
   return seed as BacktestReport;
 }
 
-/** Stored admin run wins. Otherwise the shipped seed for that leverage so the public page always has a curve. */
+function usableStored(stored?: BacktestReport | null): stored is BacktestReport {
+  return Boolean(stored && Array.isArray(stored.curve) && stored.curve.length > 8 && typeof stored.pnlPct === "number");
+}
+
+/** Stored admin run wins only if it is a full curve. Otherwise the shipped seed for that leverage. */
 export function latestBacktest(stored?: BacktestReport | null, lev: Lev = 1): BacktestReport {
-  const has = stored && Array.isArray(stored.curve) && stored.curve.length;
-  const report = normalizeBacktest(has ? stored : seedFor(lev));
+  const report = normalizeBacktest(usableStored(stored) ? stored : seedFor(lev));
   if (!report.leverage) report.leverage = lev;
   return report;
 }
@@ -351,7 +354,7 @@ function reportOf(book: PaperBook, curve: BacktestPoint[], from: number, to: num
 }
 
 export function publicBacktest(report: BacktestReport | null | undefined) {
-  if (!report) return { ready: false as const };
+  if (!report || !Array.isArray(report.curve) || !report.curve.length) return { ready: false as const };
   return {
     ready: true as const,
     from: report.from,
@@ -373,6 +376,18 @@ export function publicBacktest(report: BacktestReport | null | undefined) {
     curve: report.curve,
     note: report.note,
   };
+}
+
+export type PublicBacktest = ReturnType<typeof publicBacktest>;
+
+/** Same pack the homepage uses for 1×, 2×, and 3×. Seeds, not a live store read. */
+export function publicBacktestPack() {
+  const reports = {
+    1: publicBacktest(latestBacktest(null, 1)),
+    2: publicBacktest(latestBacktest(null, 2)),
+    3: publicBacktest(latestBacktest(null, 3)),
+  };
+  return { ready: true as const, reports };
 }
 
 /** Replay the live scalp engine on a historical tape. */

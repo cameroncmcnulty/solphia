@@ -17,7 +17,8 @@ export const LEV_BORROW_PER_HOUR = 0.00008;
 export const LEV_MAINT = 0.8;
 
 export function clampLev(n: unknown): Lev {
-  if (n === 2 || n === 3) return n;
+  const v = typeof n === "string" ? Number(n) : n;
+  if (v === 2 || v === 3) return v;
   return 1;
 }
 

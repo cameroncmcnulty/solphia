@@ -5,6 +5,7 @@ import {
   latestBacktest,
   monthlyStats,
   publicBacktest,
+  publicBacktestPack,
   runBacktest,
   type BacktestTape,
 } from "../lib/pair/backtest";
@@ -88,10 +89,24 @@ describe("backtest replay", () => {
     assert.ok((lev2.curve?.length || 0) > 8);
     assert.ok(Math.abs(lev2.pnlPct - spot.pnlPct) > 0.01);
     assert.ok(Math.abs(lev3.pnlPct - spot.pnlPct) > 0.01);
+    const pack = publicBacktestPack();
+    assert.equal(pack.reports[1].ready, true);
+    assert.equal(pack.reports[2].ready, true);
+    assert.equal(pack.reports[3].ready, true);
+    if (pack.reports[1].ready && pack.reports[2].ready && pack.reports[3].ready) {
+      assert.equal(pack.reports[2].leverage, 2);
+      assert.equal(pack.reports[3].leverage, 3);
+      assert.ok((pack.reports[3].curve?.length || 0) > 8);
+    }
   });
 
   it("serves a stored 2x report instead of the 1x seed", () => {
-    const stored = { ...latestBacktest(null)!, leverage: 2 as const, pnlPct: 0.12, curve: [{ t: 1, equity: 1120 }] };
+    const stored = {
+      ...latestBacktest(null)!,
+      leverage: 2 as const,
+      pnlPct: 0.12,
+      curve: Array.from({ length: 12 }, (_, i) => ({ t: i, equity: 1000 + i })),
+    };
     const got = latestBacktest(stored, 2);
     assert.ok(got);
     assert.equal(got.leverage, 2);

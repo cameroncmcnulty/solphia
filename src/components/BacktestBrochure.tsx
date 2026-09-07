@@ -42,16 +42,20 @@ export function BacktestBrochure() {
 
   useEffect(() => {
     let stop = false;
-    for (const n of [1, 2, 3] as const) {
-      fetch(`/api/backtest?lev=${n}`, { cache: "no-store" })
-        .then((r) => r.json())
-        .then((j) => {
-          if (!stop) setReports((prev) => ({ ...prev, [n]: j }));
-        })
-        .catch(() => {
-          if (!stop) setReports((prev) => ({ ...prev, [n]: { ready: false } }));
-        });
-    }
+    fetch("/api/backtest", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => {
+        if (stop) return;
+        const pack = j?.reports as Partial<Record<1 | 2 | 3, PublicBt>> | undefined;
+        if (pack?.[1] && pack?.[2] && pack?.[3]) {
+          setReports({ 1: pack[1], 2: pack[2], 3: pack[3] });
+          return;
+        }
+        if (j?.ready && j?.curve) setReports({ 1: j, 2: j, 3: j });
+      })
+      .catch(() => {
+        if (!stop) setReports({});
+      });
     return () => {
       stop = true;
     };
