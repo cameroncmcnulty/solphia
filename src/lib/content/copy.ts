@@ -28,7 +28,22 @@ export type Layout =
   | "pairs"
   | "curve";
 
-export type Mood = "acid" | "violet" | "cyan";
+export type Mood = "acid" | "violet" | "cyan" | "blood";
+export type Compose = "bleed-bottom" | "bleed-side" | "bleed-top" | "type-hero" | "tape-sky" | "orbit" | "kill-wash";
+export type Asset = "solphia-face.png" | "solphia-hero.png" | "solphia-head.png";
+
+export type Art = {
+  compose: Compose;
+  asset: Asset;
+  cropX: number;
+  cropY: number;
+  shiftX: number;
+  shiftY: number;
+  fade: "left" | "right" | "bottom" | "top" | "center";
+  stars: number;
+  tape: boolean;
+  typeScale: number;
+};
 
 export type Shot = {
   aspect: Aspect;
@@ -46,6 +61,7 @@ export type Shot = {
   curve: CurveBar[];
   steps: Step[];
   chips: string[];
+  art: Art;
 };
 
 const JOB =
@@ -99,6 +115,9 @@ const BEATS = [
 
 const SESSIONS = ["CASH SESSION", "AFTER HOURS", "WEEKEND TAPE"];
 const MOODS: Mood[] = ["acid", "violet", "cyan"];
+const ASSETS: Asset[] = ["solphia-head.png", "solphia-head.png", "solphia-hero.png"];
+const COMPOSES: Compose[] = ["bleed-bottom", "bleed-side", "bleed-top", "type-hero", "tape-sky", "orbit"];
+const FADES: Art["fade"][] = ["left", "right", "bottom", "top", "center"];
 const CHIPS = ["SPOT", "NO Leverage", "PHANTOM", "USDC PnL", "2m WAIT", "KILL ON", "xSTOCKS", "PAPER FIRST"];
 
 const ALL_LAYOUTS: Layout[] = [
@@ -161,6 +180,7 @@ export function localPack(now = Date.now(), hint = ""): Shot[] {
     if (!layouts.includes(next)) layouts.push(next);
   }
   let lastHead = "";
+  const usedCompose: Compose[] = [];
   return layouts.slice(0, 4).map((layout, i) => {
     const rng = mulberry(now + (i + 1) * 7919);
     const aspect = aspectFor(layout, rng);
@@ -173,6 +193,21 @@ export function localPack(now = Date.now(), hint = ""): Shot[] {
     const pair = pick(rng, PAIRS);
     const vis = emptyVisual(rng);
     const caption = `${JOB}\n\n${beatA} ${beatB}\n\nIllustrative mark ${pnlLabel} — for the post, not a live book.${extra}\n\nsolphia.io`;
+    let compose: Compose = layout === "kill" ? "kill-wash" : layout === "tape" || layout === "curve" ? "tape-sky" : pick(rng, COMPOSES);
+    if (usedCompose.includes(compose) && compose !== "kill-wash") compose = pick(rng, COMPOSES, compose);
+    usedCompose.push(compose);
+    const art: Art = {
+      compose,
+      asset: pick(rng, ASSETS),
+      cropX: 28 + rng() * 44,
+      cropY: 18 + rng() * 50,
+      shiftX: Math.round((rng() - 0.5) * 18),
+      shiftY: Math.round((rng() - 0.35) * 14),
+      fade: pick(rng, FADES),
+      stars: 10 + Math.floor(rng() * 16),
+      tape: compose === "tape-sky" || compose === "orbit" || rng() > 0.45,
+      typeScale: 0.88 + rng() * 0.35,
+    };
     return {
       aspect,
       layout,
@@ -181,9 +216,10 @@ export function localPack(now = Date.now(), hint = ""): Shot[] {
       pnlLabel,
       kicker: pick(rng, KICKERS),
       sub: pick(rng, SUBS),
-      mood: layout === "kill" ? "acid" : layout === "session" ? "cyan" : pick(rng, MOODS),
+      mood: layout === "kill" ? "blood" : layout === "session" ? "cyan" : pick(rng, MOODS),
       pair,
       session: pick(rng, SESSIONS),
+      art,
       ...vis,
     };
   });

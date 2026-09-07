@@ -8,7 +8,7 @@ import { isSolanaAddress, clientIp } from "@/lib/security";
 import { mutateState, audit, pushBounded } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 export async function GET(req: NextRequest) {
   const denied = requireAdmin(req);

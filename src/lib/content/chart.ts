@@ -19,6 +19,21 @@ export function pick<T>(rng: () => number, xs: T[], avoid?: T): T {
   return pool[Math.floor(rng() * pool.length)] || xs[0];
 }
 
+export type Star = { x: number; y: number; s: number; a: number };
+
+export function starField(rng: () => number, n: number, w: number, h: number): Star[] {
+  const out: Star[] = [];
+  for (let i = 0; i < n; i++) {
+    out.push({
+      x: Math.round(rng() * w),
+      y: Math.round(rng() * h * 0.72),
+      s: 2 + Math.round(rng() * 4),
+      a: 0.35 + rng() * 0.65,
+    });
+  }
+  return out;
+}
+
 /** Aesthetic 15m tape: range, a dip, a clip back. Not a live book. */
 export function fakeCandles(rng: () => number, n = 52): Candle[] {
   let px = 48 + rng() * 8;

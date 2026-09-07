@@ -97,7 +97,11 @@ describe("content bot", () => {
       assert.ok(s.headline.length > 4);
       assert.ok(s.candles.length > 8);
       assert.equal(s.sleeves.length, 5);
+      assert.ok(s.art.compose);
+      assert.ok(s.art.asset);
     }
+    const composes = new Set(shots.map((s) => s.art.compose));
+    assert.ok(composes.size >= 2);
   });
 
   it("builds a tape shot with candles when asked for charts", () => {
