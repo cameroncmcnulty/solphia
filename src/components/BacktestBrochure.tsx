@@ -105,7 +105,7 @@ export function BacktestBrochure() {
             href="/pricing"
             className="btn-ghost inline-flex min-h-[48px] items-center justify-center rounded-full px-8 py-3 text-base sm:min-h-[56px] sm:text-lg"
           >
-            Go live · 0.2 SOL
+            Go live · 0.1 SOL
           </Link>
         </div>
       </div>

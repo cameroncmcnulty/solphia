@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isSolanaAddress } from "@/lib/security";
 import { loadState } from "@/lib/store";
-import { isFounder } from "@/lib/access";
+import { isFounder, liveSeatOk } from "@/lib/access";
+import { treasuryAddress } from "@/lib/treasury";
+import { publicSeat, seatSol, SEAT_PERIOD_DAYS } from "@/lib/seat";
 
 export const dynamic = "force-dynamic";
 
@@ -11,9 +13,18 @@ export async function GET(req: NextRequest) {
   const s = loadState();
   const user = s.users.find((u) => u.pubkey === pubkey);
   const founder = isFounder(s, pubkey);
+  const seat = publicSeat(user);
   return NextResponse.json({
     founder,
-    plan: founder ? "full" : user?.plan || null,
-    subscribedUntil: founder ? user?.subscribedUntil || Date.now() + 86400000 : user?.subscribedUntil || null,
+    plan: founder ? "live" : user?.plan || null,
+    subscribedUntil: founder ? user?.subscribedUntil || Date.now() + 86400000 : seat.subscribedUntil,
+    autoRenew: founder ? false : seat.autoRenew,
+    tosAcceptedAt: seat.tosAcceptedAt,
+    due: founder ? false : seat.due,
+    liveSeat: liveSeatOk(s, pubkey),
+    seatSol: seatSol(),
+    periodDays: SEAT_PERIOD_DAYS,
+    treasury: treasuryAddress() || null,
+    lastPaidAt: seat.lastPaidAt,
   });
 }

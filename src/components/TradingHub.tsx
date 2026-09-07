@@ -1,7 +1,18 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { loadOwner, saveOwner, tradingPubkey, buildTransfer, withdrawToOwner, signAndSendSwap } from "@/lib/wallet/trading";
+import Link from "next/link";
+import {
+  loadOwner,
+  saveOwner,
+  tradingPubkey,
+  buildTransfer,
+  withdrawToOwner,
+  signAndSendSwap,
+  exportSecret,
+  importSecret,
+} from "@/lib/wallet/trading";
+import { unsubscribeSeat } from "@/lib/wallet/seatPay";
 import { WalletConnect } from "./WalletConnect";
 import { useMarket, useOwner } from "@/lib/hooks";
 import { SOL_MINT, USDC_MINT, XSTOCKS, xstockMint } from "@/lib/pair/mints";
@@ -63,6 +74,15 @@ export function TradingHub() {
   const [busy, setBusy] = useState(false);
   const [now, setNow] = useState(Date.now());
   const lastDep = useRef<number | null>(null);
+  const [seat, setSeat] = useState<{
+    liveSeat?: boolean;
+    autoRenew?: boolean;
+    subscribedUntil?: number | null;
+    founder?: boolean;
+    due?: boolean;
+    treasury?: string | null;
+  } | null>(null);
+  const [restore, setRestore] = useState("");
 
   const demoPaper = data?.paper;
   const book = paper || demoPaper;
@@ -75,6 +95,12 @@ export function TradingHub() {
     setAuto(a.auto);
     setPaper(a.paper);
     setLiveTrading(Boolean(a.liveTrading));
+    try {
+      const s = await fetch(`/api/access?pubkey=${pk}`).then((r) => r.json());
+      setSeat(s);
+    } catch {
+      /* seat is optional for paper */
+    }
     const tpk = a.tradingPubkey || tradingPubkey();
     setTradePk(tpk);
     const b = await fetch(`/api/sol/balance?pubkey=${tpk}`).then((r) => r.json());
@@ -280,13 +306,15 @@ export function TradingHub() {
 
       <ol className="mt-5 grid gap-3 sm:grid-cols-3">
         <How n="1" t="Connect Phantom" d="Your keys stay in the wallet. We never see them." />
-        <How n="2" t="Add SOL" d="Move SOL into the trading wallet on this device." />
-        <How n="3" t="Let her work" d="Connect and add SOL once. She trades from the wallet on this device — no extra popups. Hit KILL to stop." />
+        <How n="2" t="Add SOL" d="Phantom is login. Added SOL sits in a trading wallet on this device until you withdraw." />
+        <How n="3" t="Let her work" d="Practice never spends it. Real trades only after a paid 0.1 SOL seat, LIVE ON, and you flip to REAL." />
       </ol>
 
       <div className="mt-5 rounded-2xl border border-blood/40 bg-blood/10 p-4 text-sm leading-relaxed text-ghost">
         These are official tokenized S&P 500, Nasdaq-100, and gold (xStocks). They are not the same as the New York
-        market after hours. You can lose SOL. Spot only — no borrowed money. Keys stay on this device.
+        market after hours. You can lose SOL. Spot only — no borrowed money. Keys stay on this device. Adding SOL is a
+        real on-chain transfer to the trading wallet on this browser. Backup that key. Clearing the browser without a
+        backup can lose the SOL.
       </div>
 
       {!owner && (
@@ -366,29 +394,107 @@ export function TradingHub() {
               {book?.killed ? "Withdraw" : "KILL to withdraw"}
             </button>
           </div>
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(exportSecret());
+                  setMsg("Trading key copied. Store it offline. Anyone with it can spend this wallet.");
+                } catch {
+                  setMsg("Could not copy the trading key.");
+                }
+              }}
+              className="btn-ghost min-h-[40px] rounded-full px-4 font-mono text-[11px]"
+            >
+              Backup trading key
+            </button>
+            <form
+              className="flex min-w-0 flex-1 gap-2"
+              onSubmit={(e) => {
+                e.preventDefault();
+                try {
+                  const pk = importSecret(restore);
+                  setTradePk(pk);
+                  setRestore("");
+                  setMsg(`Restored trading wallet ${pk.slice(0, 4)}…${pk.slice(-4)}`);
+                  if (owner) refreshAuto(owner);
+                } catch (err) {
+                  setMsg(err instanceof Error ? err.message : "restore failed");
+                }
+              }}
+            >
+              <input
+                value={restore}
+                onChange={(e) => setRestore(e.target.value)}
+                placeholder="paste backup to restore"
+                className="min-h-[40px] min-w-0 flex-1 rounded-full border border-violet/30 bg-void px-4 font-mono text-[11px] text-ghost"
+              />
+              <button type="submit" className="btn-ghost min-h-[40px] rounded-full px-4 font-mono text-[11px]">
+                Restore
+              </button>
+            </form>
+          </div>
         </div>
 
         <div className="mt-6 flex flex-col gap-3 rounded-2xl border border-violet/20 p-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
             <div className="font-display text-xl text-ghost">{auto?.mode === "live" ? "Real trades" : "Practice mode"}</div>
             <p className="mt-1 text-sm text-mute">
-              {liveTrading
-                ? auto?.mode === "live"
-                  ? "Uses the SOL you added. You already connected — she signs from this device."
-                  : "Fake fills on live prices. Flip to real trades after you add SOL."
-                : "Practice only right now. Real swaps are not turned on for this site yet."}
+              {!liveTrading
+                ? "Practice only right now. Real swaps are not turned on for this site yet."
+                : seat?.treasury && !seat?.liveSeat && !seat?.founder
+                  ? "Live is on, but you need a paid 0.1 SOL seat before she can spend the trading wallet."
+                  : auto?.mode === "live"
+                    ? "Uses the SOL you added. You already connected — she signs from this device."
+                    : "Fake fills on live prices. Flip to real trades after you add SOL and pay the seat."}
             </p>
+            {seat?.liveSeat && seat.subscribedUntil ? (
+              <p className="mt-2 font-mono text-[11px] text-acid">
+                Seat through {new Date(seat.subscribedUntil).toLocaleDateString()}
+                {seat.autoRenew ? " · auto-renew on" : " · auto-renew off"}
+              </p>
+            ) : null}
           </div>
-          <button
-            type="button"
-            disabled={!liveTrading}
-            onClick={() => patch({ mode: auto?.mode === "live" ? "paper" : "live" })}
-            className={`min-h-[44px] w-full shrink-0 rounded-full px-5 font-mono text-[12px] sm:w-auto ${
-              auto?.mode === "live" ? "btn-on" : "btn-ghost"
-            } disabled:opacity-40`}
-          >
-            {liveTrading ? (auto?.mode === "live" ? "REAL" : "PRACTICE") : "PRACTICE"}
-          </button>
+          <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto">
+            <button
+              type="button"
+              disabled={!liveTrading || Boolean(seat?.treasury && !seat?.liveSeat && !seat?.founder)}
+              onClick={() => patch({ mode: auto?.mode === "live" ? "paper" : "live" })}
+              className={`min-h-[44px] w-full rounded-full px-5 font-mono text-[12px] sm:w-auto ${
+                auto?.mode === "live" ? "btn-on" : "btn-ghost"
+              } disabled:opacity-40`}
+            >
+              {liveTrading ? (auto?.mode === "live" ? "REAL" : "PRACTICE") : "PRACTICE"}
+            </button>
+            {seat?.treasury && !seat?.liveSeat && !seat?.founder && (
+              <Link href="/pricing" className="btn-acid inline-flex min-h-[40px] items-center justify-center rounded-full px-4 font-mono text-[11px]">
+                Pay 0.1 SOL
+              </Link>
+            )}
+            {seat?.autoRenew && !seat?.founder && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={async () => {
+                  if (!owner) return;
+                  setBusy(true);
+                  try {
+                    await unsubscribeSeat(owner);
+                    setMsg("Auto-renew off. Seat stays until the paid-through date.");
+                    await refreshAuto(owner);
+                  } catch (e) {
+                    setMsg(e instanceof Error ? e.message : "unsubscribe failed");
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+                className="min-h-[40px] rounded-full border border-blood/40 px-4 font-mono text-[11px] text-blood"
+              >
+                Unsubscribe
+              </button>
+            )}
+          </div>
         </div>
       </section>
 

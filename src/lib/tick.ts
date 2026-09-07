@@ -10,6 +10,8 @@ import { DEFAULT_STUDY } from "./pair/knowledge";
 import { loadShortTape } from "./pair/shortTape";
 import { loadScalpFrames } from "./pair/frames";
 import { loadState, saveState } from "./store";
+import { liveSeatOk } from "./access";
+import { treasuryAddress } from "./treasury";
 import type { FeedHealth, PaperBook } from "./types";
 
 let lock: Promise<unknown> = Promise.resolve();
@@ -231,8 +233,9 @@ export async function runMarketTick(): Promise<{
     let entries = demo.fills.filter((f) => f.side === "buy").length;
     let exits = demo.fills.filter((f) => f.side === "sell").length;
 
-    for (const trader of Object.values(state.traders || {})) {
-      const liveWanted = trader.auto?.mode === "live" && liveTradingEnabled();
+    for (const [owner, trader] of Object.entries(state.traders || {})) {
+      const seatOk = !treasuryAddress() || liveSeatOk(state, owner);
+      const liveWanted = trader.auto?.mode === "live" && liveTradingEnabled() && seatOk;
       trader.auto = lockedAuto({
         ...trader.auto,
         mode: liveWanted ? "live" : "paper",
@@ -240,7 +243,7 @@ export async function runMarketTick(): Promise<{
         tradingPubkey: trader.auto?.tradingPubkey,
         armedAt: trader.auto?.armedAt,
       });
-      if (trader.auto.mode === "live" && !liveTradingEnabled()) trader.auto.mode = "paper";
+      if (trader.auto.mode === "live" && (!liveTradingEnabled() || !seatOk)) trader.auto.mode = "paper";
       const target = bankrollUsd(trader.depositedSol, prices.sol.usd);
       trader.book = maybeResizeBook(trader.book, target);
       if (!trader.book.pair) {

@@ -30,6 +30,7 @@ export type AdminSeat = {
   admin: boolean;
   until: number | null;
   lastSeen: number;
+  autoRenew: boolean;
 };
 
 export type AdminWindow = {

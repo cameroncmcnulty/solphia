@@ -62,6 +62,7 @@ export function buildAdminDesk(opts?: { light?: boolean }): AdminDesk {
     admin: isFounder(s, u.pubkey),
     until: u.subscribedUntil || null,
     lastSeen: u.lastSeen,
+    autoRenew: Boolean(u.autoRenew),
   }));
   seats.sort((a, b) => b.lastSeen - a.lastSeen);
 

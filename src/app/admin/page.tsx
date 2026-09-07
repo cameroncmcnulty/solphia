@@ -240,7 +240,7 @@ export default function AdminPage() {
       <section className="mt-6 grid gap-6 lg:grid-cols-2">
         <div className="panel rounded-2xl p-5">
           <div className="font-mono text-[10px] tracking-[0.3em] text-mute">ADMIN WALLET · FREE SEAT</div>
-          <p className="mt-2 text-sm text-mute">Connect the Phantom you trade with. That address skips the 0.2 SOL / 30d seat. Keys stay in the wallet.</p>
+          <p className="mt-2 text-sm text-mute">Connect the Phantom you trade with. That address skips the {data.seatSol} SOL / 30d seat. Keys stay in the wallet.</p>
           <div className="mt-3">
             <WalletConnect />
           </div>
@@ -275,7 +275,7 @@ export default function AdminPage() {
 
         <div className="panel rounded-2xl p-5">
           <div className="font-mono text-[10px] tracking-[0.3em] text-mute">TREASURY · PAYMENTS IN</div>
-          <p className="mt-2 text-sm text-mute">0.2 SOL seats and 0.1% clip fees land here. Leave blank to use the env wallet.</p>
+          <p className="mt-2 text-sm text-mute">{data.seatSol} SOL seats and 0.1% clip fees land here. Leave blank to use the env wallet.</p>
           <input
             value={treasuryPk}
             onChange={(e) => setTreasuryPk(e.target.value.trim())}
@@ -626,7 +626,7 @@ export default function AdminPage() {
           </div>
         </div>
         <div className="panel rounded-2xl p-5">
-          <div className="font-mono text-[10px] tracking-[0.3em] text-mute">SEATS · 0.2 SOL / 30d</div>
+          <div className="font-mono text-[10px] tracking-[0.3em] text-mute">SEATS · {data.seatSol} SOL / 30d</div>
           {data.seats.length === 0 && <p className="mt-3 text-sm text-mute">No seats yet.</p>}
           <div className="mt-2 max-h-80 space-y-2 overflow-auto">
             {data.seats.map((u) => (
@@ -634,6 +634,7 @@ export default function AdminPage() {
                 <span>{shortPk(u.pubkey)}</span>
                 <span className="text-mute">
                   {u.admin ? "admin" : u.plan}
+                  {u.autoRenew ? " · auto" : ""}
                   {u.paid && u.until ? ` · to ${new Date(u.until).toLocaleDateString()}` : u.admin ? "" : " · unpaid"}
                 </span>
               </div>

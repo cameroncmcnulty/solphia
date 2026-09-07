@@ -16,10 +16,10 @@ export const PLANS: Plan[] = [
   {
     id: "live",
     name: "Live",
-    sol: 0.2,
-    tagline: "Paper is free. Live 0.2 SOL / 30d plus 0.1% per clip.",
-    story: "Connect Phantom once, add SOL, she runs. Paid gate stays simple.",
-    points: ["Paper book included", "Kill switch always on", "0.1% clip fee", "Keys never with us"],
+    sol: 0.1,
+    tagline: "Paper is free. Live 0.1 SOL / 30d plus 0.1% per clip.",
+    story: "Connect Phantom once, agree to the terms, pay 0.1 SOL. She bills the same each month until you unsubscribe.",
+    points: ["Paper book included", "Kill switch always on", "0.1% clip fee", "Keys never with us", "Cancel anytime"],
     includes: ["live"],
     icon: "/icons/plan-paper.jpg",
     featured: true,
@@ -32,7 +32,7 @@ export function planById(id: string): Plan | undefined {
 
 export function lamportsForPlan(id: PlanId): number {
   const p = planById(id);
-  return Math.round((p?.sol || 0.2) * 1_000_000_000);
+  return Math.round((p?.sol || 0.1) * 1_000_000_000);
 }
 
 export const COMPARE_ROWS: { label: string; hint?: string; values: [string, string] }[] = [
@@ -41,7 +41,8 @@ export const COMPARE_ROWS: { label: string; hint?: string; values: [string, stri
   { label: "SOL vs SPYx, QQQx, GLDx", values: ["Paper", "When live is on"] },
   { label: "Leverage", values: ["None", "Spot only"] },
   { label: "Keys with us", values: ["Never", "Never"] },
-  { label: "30 days", values: ["Free", "0.2 SOL"] },
+  { label: "30 days", values: ["Free", "0.1 SOL"] },
+  { label: "Auto-renew", values: ["—", "Until you unsubscribe"] },
   { label: "Clip fee", hint: "0.1% (10 bps) on each live clip.", values: ["Paper mark", "0.1%"] },
 ];
 
@@ -49,6 +50,10 @@ export const FAQS: { q: string; a: string }[] = [
   {
     q: "Does she spend my SOL?",
     a: "Connect Phantom once and add SOL to the trading wallet on this device. After that she signs swaps herself from that wallet. Keys never leave the device. Practice is on until you flip to real trades.",
+  },
+  {
+    q: "Where does the SOL I add sit?",
+    a: "Phantom is your login. The SOL you add is sent on-chain to a trading wallet that lives only on this device. It stays there until you hit KILL and withdraw back to Phantom. We never hold the key.",
   },
   {
     q: "What does she trade?",
@@ -80,6 +85,6 @@ export const FAQS: { q: string; a: string }[] = [
   },
   {
     q: "How do I pay?",
-    a: "Paper is free. Live is 0.2 SOL / 30 days, plus a 0.1% fee on each clip.",
+    a: "Paper is free. Live is 0.1 SOL / 30 days, billed to the treasury, plus a 0.1% fee on each clip. Agree to the terms once. The first payment is from Phantom. Later months leave the trading wallet while this site is open on this device, until you unsubscribe.",
   },
 ];

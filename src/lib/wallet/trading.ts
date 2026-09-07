@@ -97,8 +97,12 @@ export async function skimProtocolFee(treasury: string, clipUsd: number, solUsd:
 }
 
 export async function withdrawToOwner(owner: string, sol: number): Promise<string> {
+  return sendFromTrading(owner, sol);
+}
+
+async function sendFromTrading(to: string, sol: number): Promise<string> {
   const kp = tradingKeypair();
-  const tx = await buildTransfer(kp.publicKey.toBase58(), owner, sol);
+  const tx = await buildTransfer(kp.publicKey.toBase58(), to, sol);
   tx.sign(kp);
   const b64 = toB64(tx.serialize());
   const r = await fetch("/api/sol/send", {
@@ -107,6 +111,39 @@ export async function withdrawToOwner(owner: string, sol: number): Promise<strin
     body: JSON.stringify({ transaction: b64 }),
   });
   const j = await r.json();
-  if (!r.ok) throw new Error(j.error || "withdraw failed");
-  return j.signature;
+  if (!r.ok) throw new Error(j.error || "send failed");
+  return j.signature as string;
+}
+
+export function phantomProvider(): {
+  isPhantom?: boolean;
+  signAndSendTransaction: (tx: Transaction) => Promise<{ signature?: string } | string>;
+} | null {
+  if (typeof window === "undefined") return null;
+  const w = window as unknown as { phantom?: { solana?: any }; solana?: any };
+  const p = w.phantom?.solana?.isPhantom ? w.phantom.solana : w.solana?.isPhantom ? w.solana : null;
+  return p || null;
+}
+
+/** First-month seat: Phantom (owner) → treasury. */
+export async function paySeatFromPhantom(owner: string, treasury: string, sol: number): Promise<string> {
+  const provider = phantomProvider();
+  if (!provider) throw new Error("Open this page in Phantom (browser or in-app).");
+  const tx = await buildTransfer(owner, treasury, sol);
+  const sent = await provider.signAndSendTransaction(tx);
+  return String(typeof sent === "string" ? sent : sent.signature || "");
+}
+
+/** Later months: on-device trading wallet → treasury. No extra Phantom popup. */
+export async function paySeatFromTrading(treasury: string, sol: number): Promise<string> {
+  return sendFromTrading(treasury, sol);
+}
+
+export function importSecret(b64: string): string {
+  const cleaned = b64.trim();
+  const bytes = Uint8Array.from(atob(cleaned), (c) => c.charCodeAt(0));
+  if (bytes.length !== 64) throw new Error("Backup is not a 64-byte trading key.");
+  const kp = Keypair.fromSecretKey(bytes);
+  localStorage.setItem(SECRET, JSON.stringify(Array.from(kp.secretKey)));
+  return kp.publicKey.toBase58();
 }

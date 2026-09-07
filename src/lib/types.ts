@@ -302,6 +302,11 @@ export interface AppUser {
   createdAt: number;
   lastSeen: number;
   alertsEnabled: boolean;
+  tosAcceptedAt?: number;
+  autoRenew?: boolean;
+  lastPaidAt?: number;
+  lastPaySig?: string;
+  unsubscribedAt?: number;
 }
 
 export interface AutoSettings {

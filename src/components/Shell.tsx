@@ -4,6 +4,7 @@ import { Nav } from "./Nav";
 import { ParticleField } from "./ParticleField";
 import { BottomNav } from "./BottomNav";
 import { LiveRunner } from "./LiveRunner";
+import { SeatRunner } from "./SeatRunner";
 
 export function Shell({ children }: { children: React.ReactNode }) {
   return (
@@ -15,6 +16,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
         {children}
       </div>
       <LiveRunner />
+      <SeatRunner />
       <BottomNav />
     </div>
   );

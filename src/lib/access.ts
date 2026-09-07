@@ -50,7 +50,7 @@ export function revokeFounder(state: AppState, pubkey: string) {
   }
 }
 
-/** Admin wallets skip the 0.2 SOL seat. Everyone else needs a paid live plan when treasury is set. */
+/** Admin wallets skip the 0.1 SOL seat. Everyone else needs a paid live plan when treasury is set. */
 export function liveSeatOk(state: AppState, pubkey?: string | null): boolean {
   if (!pubkey) return false;
   if (isFounder(state, pubkey)) return true;
