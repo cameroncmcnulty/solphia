@@ -20,9 +20,47 @@ import { emptyFrames } from "./frames";
 import { equityOf, markPair, pairOf } from "./engine";
 import seed from "./backtestSeed.json";
 
+function normalizeDay(d: BacktestDay): BacktestDay {
+  const entries = d.entries ?? 0;
+  const exits = d.exits ?? d.trades ?? 0;
+  return {
+    ...d,
+    entries,
+    exits,
+    realizedUsd: d.realizedUsd ?? 0,
+    trades: entries + exits || d.trades || 0,
+  };
+}
+
+function normalizeMonth(m: BacktestMonth): BacktestMonth {
+  const entries = m.entries ?? 0;
+  const exits = m.exits ?? m.trades ?? 0;
+  return {
+    ...m,
+    entries,
+    exits,
+    realizedUsd: m.realizedUsd ?? 0,
+    trades: entries + exits || m.trades || 0,
+  };
+}
+
+export function normalizeBacktest(report: BacktestReport): BacktestReport {
+  const daily = (report.daily || []).map(normalizeDay);
+  const monthly = (report.monthly || []).map(normalizeMonth);
+  const noLosses = (report.losses || 0) === 0 && (report.wins || 0) > 0;
+  return {
+    ...report,
+    daily,
+    monthly,
+    profitFactor: noLosses ? null : report.profitFactor,
+    realizedUsd: report.realizedUsd ?? 0,
+    unrealizedUsd: report.unrealizedUsd ?? 0,
+  };
+}
+
 export function latestBacktest(stored?: BacktestReport | null): BacktestReport {
-  if (stored && Array.isArray(stored.curve) && stored.curve.length) return stored;
-  return seed as BacktestReport;
+  const raw = stored && Array.isArray(stored.curve) && stored.curve.length ? stored : (seed as BacktestReport);
+  return normalizeBacktest(raw);
 }
 
 export type { BacktestReport, BacktestPoint } from "../types";
@@ -109,6 +147,28 @@ function samplesAt(tape: BacktestTape, t: number): RatioSample[] {
   return out;
 }
 
+const ASSETS = new Set(["SOL", "SPYx", "QQQx", "GLDx"]);
+
+function utcDay(t: number): string {
+  return new Date(t).toISOString().slice(0, 10);
+}
+
+function utcMonth(t: number): string {
+  return new Date(t).toISOString().slice(0, 7);
+}
+
+function isAssetFill(f: { symbol: string }): boolean {
+  return ASSETS.has(f.symbol);
+}
+
+function emptyDay(day: string, endEquity = 0): BacktestDay {
+  return { day, pnlUsd: 0, trades: 0, entries: 0, exits: 0, realizedUsd: 0, endEquity };
+}
+
+function emptyMonth(ym: string, endEquity = 0): BacktestMonth {
+  return { ym, pnlUsd: 0, trades: 0, entries: 0, exits: 0, realizedUsd: 0, endEquity };
+}
+
 function downsample(curve: BacktestPoint[], n = 96): BacktestPoint[] {
   if (curve.length <= n) return curve;
   const out: BacktestPoint[] = [];
@@ -133,60 +193,94 @@ function sleeveStats(fills: PaperFill[]): BacktestSleeve[] {
   });
 }
 
-function dailyStats(curve: BacktestPoint[], fills: PaperFill[], startUsd: number): BacktestDay[] {
+/** Closed asset sells. USDC legs are the other side of the same clip, not a second trade. */
+export function closedClips(fills: { side: string; symbol: string; pnlUsd?: number }[]): typeof fills {
+  return fills.filter((f) => f.side === "sell" && isAssetFill(f) && f.pnlUsd != null);
+}
+
+export function dailyStats(curve: BacktestPoint[], fills: PaperFill[], startUsd: number): BacktestDay[] {
   const map = new Map<string, BacktestDay>();
   for (const p of curve) {
-    const day = new Date(p.t).toISOString().slice(0, 10);
+    const day = utcDay(p.t);
     const prev = map.get(day);
-    if (!prev) map.set(day, { day, pnlUsd: 0, trades: 0, endEquity: p.equity });
+    if (!prev) map.set(day, emptyDay(day, p.equity));
     else prev.endEquity = p.equity;
+  }
+  for (const f of fills) {
+    if (!isAssetFill(f)) continue;
+    const day = utcDay(f.at);
+    let row = map.get(day);
+    if (!row) {
+      row = emptyDay(day, 0);
+      map.set(day, row);
+    }
+    if (f.side === "buy") row.entries = (row.entries || 0) + 1;
+    if (f.side === "sell") {
+      row.exits = (row.exits || 0) + 1;
+      if (f.pnlUsd != null) row.realizedUsd = Math.round(((row.realizedUsd || 0) + f.pnlUsd) * 100) / 100;
+    }
   }
   const rows = [...map.values()].sort((a, b) => a.day.localeCompare(b.day));
   for (let i = 0; i < rows.length; i++) {
-    const open = i === 0 ? startUsd : rows[i - 1].endEquity;
+    const open = i === 0 ? startUsd : rows[i - 1].endEquity || startUsd;
+    if (rows[i].endEquity === 0 && i > 0) rows[i].endEquity = rows[i - 1].endEquity;
     rows[i].pnlUsd = Math.round((rows[i].endEquity - open) * 100) / 100;
-  }
-  for (const f of fills) {
-    if (f.side !== "sell" || f.symbol === "USDC" || f.pnlUsd == null) continue;
-    const day = new Date(f.at).toISOString().slice(0, 10);
-    const row = map.get(day);
-    if (row) row.trades += 1;
+    rows[i].entries = rows[i].entries || 0;
+    rows[i].exits = rows[i].exits || 0;
+    rows[i].realizedUsd = rows[i].realizedUsd || 0;
+    rows[i].trades = (rows[i].entries || 0) + (rows[i].exits || 0);
   }
   return rows;
 }
 
-function monthlyStats(curve: BacktestPoint[], fills: PaperFill[]): BacktestMonth[] {
+export function monthlyStats(curve: BacktestPoint[], fills: PaperFill[]): BacktestMonth[] {
   const map = new Map<string, BacktestMonth>();
   for (const p of curve) {
-    const ym = new Date(p.t).toISOString().slice(0, 7);
+    const ym = utcMonth(p.t);
     const prev = map.get(ym);
-    if (!prev) map.set(ym, { ym, pnlUsd: 0, trades: 0, endEquity: p.equity });
+    if (!prev) map.set(ym, emptyMonth(ym, p.equity));
     else prev.endEquity = p.equity;
+  }
+  for (const f of fills) {
+    if (!isAssetFill(f)) continue;
+    const ym = utcMonth(f.at);
+    let row = map.get(ym);
+    if (!row) {
+      row = emptyMonth(ym, 0);
+      map.set(ym, row);
+    }
+    if (f.side === "buy") row.entries = (row.entries || 0) + 1;
+    if (f.side === "sell") {
+      row.exits = (row.exits || 0) + 1;
+      if (f.pnlUsd != null) row.realizedUsd = Math.round(((row.realizedUsd || 0) + f.pnlUsd) * 100) / 100;
+    }
   }
   const rows = [...map.values()].sort((a, b) => a.ym.localeCompare(b.ym));
   for (let i = 0; i < rows.length; i++) {
-    const start = i === 0 ? (curve[0]?.equity || 0) : rows[i - 1].endEquity;
+    const start = i === 0 ? curve[0]?.equity || 0 : rows[i - 1].endEquity;
+    if (rows[i].endEquity === 0 && i > 0) rows[i].endEquity = rows[i - 1].endEquity;
     rows[i].pnlUsd = Math.round((rows[i].endEquity - start) * 100) / 100;
-  }
-  for (const f of fills) {
-    if (f.side !== "sell" || f.pnlUsd == null) continue;
-    const ym = new Date(f.at).toISOString().slice(0, 7);
-    const row = map.get(ym);
-    if (row) row.trades += 1;
+    rows[i].entries = rows[i].entries || 0;
+    rows[i].exits = rows[i].exits || 0;
+    rows[i].realizedUsd = rows[i].realizedUsd || 0;
+    rows[i].trades = (rows[i].entries || 0) + (rows[i].exits || 0);
   }
   return rows;
 }
 
 function reportOf(book: PaperBook, curve: BacktestPoint[], from: number, to: number, bars: number, maxDdPct: number): BacktestReport {
-  const sells = book.fills.filter((f) => f.side === "sell" && f.symbol !== "USDC" && f.pnlUsd != null);
+  const sells = closedClips(book.fills);
   const wins = sells.filter((f) => (f.pnlUsd || 0) > 0);
   const losses = sells.filter((f) => (f.pnlUsd || 0) < 0);
   const winUsd = wins.reduce((s, f) => s + (f.pnlUsd || 0), 0);
   const lossUsd = Math.abs(losses.reduce((s, f) => s + (f.pnlUsd || 0), 0));
+  const realizedUsd = Math.round(sells.reduce((s, f) => s + (f.pnlUsd || 0), 0) * 100) / 100;
   const start = book.startingUsd;
   const end = book.equityUsd;
+  const pnlUsd = Math.round((end - start) * 100) / 100;
   const days = Math.max(1, (to - from) / 86_400_000);
   const daily = dailyStats(curve, book.fills, start);
+  const monthly = monthlyStats(curve, book.fills);
   return {
     ranAt: Date.now(),
     from,
@@ -195,14 +289,16 @@ function reportOf(book: PaperBook, curve: BacktestPoint[], from: number, to: num
     horizon: `${Math.round(days)}d · 15m clips · Daily/4H bias · fees in`,
     startingUsd: start,
     endingUsd: Math.round(end * 100) / 100,
-    pnlUsd: Math.round((end - start) * 100) / 100,
+    pnlUsd,
     pnlPct: start ? (end - start) / start : 0,
     maxDdPct,
     trades: sells.length,
     wins: wins.length,
     losses: losses.length,
     winRate: sells.length ? wins.length / sells.length : 0,
-    profitFactor: lossUsd > 0 ? winUsd / lossUsd : wins.length ? 9 : 0,
+    profitFactor: lossUsd > 0 ? Math.round((winUsd / lossUsd) * 100) / 100 : null,
+    realizedUsd,
+    unrealizedUsd: Math.round((pnlUsd - realizedUsd) * 100) / 100,
     feesUsd: Math.round(book.feesPaidUsd * 100) / 100,
     slippageUsd: Math.round(book.slippagePaidUsd * 100) / 100,
     avgWinUsd: wins.length ? winUsd / wins.length : 0,
@@ -210,25 +306,24 @@ function reportOf(book: PaperBook, curve: BacktestPoint[], from: number, to: num
     bestTradeUsd: wins.length ? Math.max(...wins.map((f) => f.pnlUsd || 0)) : 0,
     worstTradeUsd: losses.length ? Math.min(...losses.map((f) => f.pnlUsd || 0)) : 0,
     sleeves: sleeveStats(book.fills),
-    monthly: monthlyStats(curve, book.fills),
-    daily: daily,
+    monthly,
+    daily,
     bestDayUsd: daily.length ? Math.max(...daily.map((d) => d.pnlUsd)) : 0,
     worstDayUsd: daily.length ? Math.min(...daily.map((d) => d.pnlUsd)) : 0,
     avgDayUsd: daily.length ? daily.reduce((s, d) => s + d.pnlUsd, 0) / daily.length : 0,
     daysGe2: daily.filter((d) => d.pnlUsd >= 2).length,
     curve: downsample(curve, 120),
     fills: book.fills
-      .filter((f) => f.symbol !== "USDC")
-      .slice(-40)
+      .filter((f) => isAssetFill(f))
       .map((f) => ({
         at: f.at,
         side: f.side,
         symbol: f.symbol,
         sizeUsd: Math.round(f.sizeUsd * 100) / 100,
         pnlUsd: f.pnlUsd != null ? Math.round(f.pnlUsd * 100) / 100 : undefined,
-        reason: f.reason.slice(0, 120),
+        reason: f.reason.slice(0, 140),
       })),
-    note: "Historical paper of this engine on SOL, SPY, QQQ, and gold. Same rules she runs now. Fees and the 0.1% clip are in the mark. Past days are not a promise she prints $2 every session.",
+    note: "Historical paper of this engine on SOL, SPY, QQQ, and gold. Same rules she runs now. Fees and the 0.1% clip are in the mark. Daily PnL is the marked book (open position included). Clips are entries and exits. A green day with 0 clips means she was holding. Past days are not a promise she prints $2 every session.",
   };
 }
 
@@ -265,7 +360,7 @@ export function runBacktest(tape: BacktestTape, startingUsd = PAPER_STARTING_USD
     d1: { sol: packDaily(tape.sol), spy: packDaily(tape.spy), qqq: packDaily(tape.qqq), gld: packDaily(tape.gld) },
   };
   const book = emptyBook(startingUsd);
-  const auto = { ...DEFAULT_AUTO, cooldownMin: 0, armed: true, mode: "paper" as const };
+  const auto = { ...DEFAULT_AUTO, armed: true, mode: "paper" as const };
   const curve: BacktestPoint[] = [{ t: clock[warmup]?.t || Date.now(), equity: startingUsd }];
   let peak = startingUsd;
   let maxDd = 0;

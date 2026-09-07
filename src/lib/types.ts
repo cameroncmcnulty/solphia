@@ -497,6 +497,9 @@ export type BacktestMonth = {
   ym: string;
   pnlUsd: number;
   trades: number;
+  entries?: number;
+  exits?: number;
+  realizedUsd?: number;
   endEquity: number;
 };
 
@@ -504,6 +507,9 @@ export type BacktestDay = {
   day: string;
   pnlUsd: number;
   trades: number;
+  entries?: number;
+  exits?: number;
+  realizedUsd?: number;
   endEquity: number;
 };
 
@@ -531,7 +537,9 @@ export type BacktestReport = {
   wins: number;
   losses: number;
   winRate: number;
-  profitFactor: number;
+  profitFactor: number | null;
+  realizedUsd?: number;
+  unrealizedUsd?: number;
   feesUsd: number;
   slippageUsd: number;
   avgWinUsd: number;

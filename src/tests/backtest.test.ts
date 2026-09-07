@@ -1,7 +1,15 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { latestBacktest, publicBacktest, runBacktest, type BacktestTape } from "../lib/pair/backtest";
+import {
+  dailyStats,
+  latestBacktest,
+  monthlyStats,
+  publicBacktest,
+  runBacktest,
+  type BacktestTape,
+} from "../lib/pair/backtest";
 import type { Candle } from "../lib/sol/indicators";
+import type { PaperFill } from "../lib/types";
 
 function climb(n: number, px: number, t0: number, dt: number, step: number): Candle[] {
   const out: Candle[] = [];
@@ -35,6 +43,14 @@ describe("backtest replay", () => {
     assert.match(report.horizon, /fees/i);
     assert.ok(Array.isArray(report.daily));
     assert.ok(typeof report.bestDayUsd === "number");
+    const again = runBacktest(tape, 1000);
+    assert.equal(again.pnlPct, report.pnlPct);
+    assert.equal(again.trades, report.trades);
+    assert.equal(again.endingUsd, report.endingUsd);
+    assert.deepEqual(
+      again.daily.map((d) => [d.day, d.pnlUsd, d.entries, d.exits]),
+      report.daily.map((d) => [d.day, d.pnlUsd, d.entries, d.exits]),
+    );
     const pub = publicBacktest(report);
     assert.equal(pub.ready, true);
     if (pub.ready) {
@@ -50,5 +66,61 @@ describe("backtest replay", () => {
       assert.ok((pub.curve?.length || 0) > 8);
       assert.ok((pub.trades || 0) >= 1);
     }
+    const seeded = latestBacktest(null);
+    if (seeded.losses === 0 && seeded.wins > 0) assert.equal(seeded.profitFactor, null);
+  });
+});
+
+function fill(at: number, side: "buy" | "sell", symbol: string, pnlUsd?: number): PaperFill {
+  return {
+    id: `${side}-${at}`,
+    mint: "mint",
+    symbol,
+    name: symbol,
+    strategy: "sol_spyx",
+    side,
+    at,
+    priceUsd: 100,
+    qty: 1,
+    sizeUsd: 100,
+    feeUsd: 0.1,
+    slippageUsd: 0.04,
+    pnlUsd,
+    reason: "test",
+    riskScore: 70,
+    venue: "unknown",
+  };
+}
+
+describe("backtest day ledger", () => {
+  it("counts asset entries and exits, and keeps hold-day mark PnL", () => {
+    const t0 = Date.UTC(2026, 7, 10, 14, 0, 0);
+    const t1 = t0 + 2 * 3_600_000;
+    const t2 = t0 + 86_400_000;
+    const curve = [
+      { t: t0, equity: 1000 },
+      { t: t1, equity: 990 },
+      { t: t2, equity: 1012 },
+    ];
+    const fills = [
+      fill(t0, "buy", "SOL"),
+      fill(t1, "sell", "SOL", 4.2),
+      fill(t1, "sell", "USDC", -0.2),
+    ];
+    const days = dailyStats(curve, fills, 1000);
+    assert.equal(days.length, 2);
+    assert.equal(days[0].entries, 1);
+    assert.equal(days[0].exits, 1);
+    assert.equal(days[0].trades, 2);
+    assert.equal(days[0].realizedUsd, 4.2);
+    assert.equal(days[0].pnlUsd, -10);
+    assert.equal(days[1].entries, 0);
+    assert.equal(days[1].exits, 0);
+    assert.equal(days[1].trades, 0);
+    assert.equal(days[1].pnlUsd, 22);
+    const months = monthlyStats(curve, fills);
+    assert.equal(months[0].exits, 1);
+    assert.equal(months[0].entries, 1);
+    assert.equal(months[0].trades, 2);
   });
 });

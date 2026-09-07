@@ -418,10 +418,27 @@ export default function AdminPage() {
               <Mini k="End" v={money(data.backtest.endingUsd)} />
               <Mini k="PnL" v={`${data.backtest.pnlUsd >= 0 ? "+" : "−"}${money(Math.abs(data.backtest.pnlUsd))}`} />
               <Mini k="Max DD" v={`−${(data.backtest.maxDdPct * 100).toFixed(1)}%`} />
-              <Mini k="Clips" v={String(data.backtest.trades)} />
+              <Mini k="Closed clips" v={String(data.backtest.trades)} />
               <Mini k="Win rate" v={`${Math.round(data.backtest.winRate * 100)}%`} />
               <Mini k="Wins / losses" v={`${data.backtest.wins} / ${data.backtest.losses}`} />
-              <Mini k="Profit factor" v={data.backtest.profitFactor.toFixed(2)} />
+              <Mini
+                k="Profit factor"
+                v={
+                  data.backtest.profitFactor == null
+                    ? data.backtest.wins
+                      ? "∞"
+                      : "—"
+                    : data.backtest.profitFactor.toFixed(2)
+                }
+              />
+              <Mini
+                k="Realized"
+                v={`${(data.backtest.realizedUsd || 0) >= 0 ? "+" : "−"}${money(Math.abs(data.backtest.realizedUsd || 0))}`}
+              />
+              <Mini
+                k="Open mark"
+                v={`${(data.backtest.unrealizedUsd || 0) >= 0 ? "+" : "−"}${money(Math.abs(data.backtest.unrealizedUsd || 0))}`}
+              />
               <Mini k="Fees" v={money(data.backtest.feesUsd)} />
               <Mini k="Slip" v={money(data.backtest.slippageUsd)} />
               <Mini k="Avg win" v={`+${money(Math.abs(data.backtest.avgWinUsd))}`} />
@@ -452,14 +469,19 @@ export default function AdminPage() {
             </div>
             {(data.backtest.daily || []).length > 0 && (
               <div>
-                <div className="font-mono text-[10px] tracking-[0.2em] text-mute">DAILY · $2–3 TARGET</div>
+                <div className="font-mono text-[10px] tracking-[0.2em] text-mute">DAILY · MARKED BOOK</div>
+                <p className="mt-1 text-xs text-mute">
+                  PnL is the book mark, including an open sleeve. Clips are buys in / sells out. “Held” means the
+                  position moved and she did not fire a clip that UTC day.
+                </p>
                 <div className="mt-2 max-h-56 overflow-auto">
-                  <table className="w-full min-w-[420px] text-left font-mono text-[12px]">
+                  <table className="w-full min-w-[520px] text-left font-mono text-[12px]">
                     <thead className="text-mute">
                       <tr>
                         <th className="py-2 font-normal">Day</th>
-                        <th className="py-2 font-normal">PnL</th>
-                        <th className="py-2 font-normal">Clips</th>
+                        <th className="py-2 font-normal">Mark</th>
+                        <th className="py-2 font-normal">Realized</th>
+                        <th className="py-2 font-normal">In / out</th>
                         <th className="py-2 font-normal">Equity</th>
                       </tr>
                     </thead>
@@ -467,17 +489,29 @@ export default function AdminPage() {
                       {(data.backtest.daily || [])
                         .slice()
                         .reverse()
-                        .map((d) => (
-                          <tr key={d.day} className="border-t border-line/60">
-                            <td className="py-2 text-ghost">{d.day}</td>
-                            <td className={d.pnlUsd >= 2 ? "text-acid" : d.pnlUsd < 0 ? "text-blood" : "text-mute"}>
-                              {d.pnlUsd >= 0 ? "+" : "−"}
-                              {money(Math.abs(d.pnlUsd))}
-                            </td>
-                            <td className="text-mute">{d.trades}</td>
-                            <td className="text-mute">{money(d.endEquity)}</td>
-                          </tr>
-                        ))}
+                        .map((d) => {
+                          const inn = d.entries ?? 0;
+                          const out = d.exits ?? d.trades ?? 0;
+                          const clips = inn + out;
+                          const held = clips === 0 && Math.abs(d.pnlUsd) >= 0.01;
+                          return (
+                            <tr key={d.day} className="border-t border-line/60">
+                              <td className="py-2 text-ghost">{d.day}</td>
+                              <td className={d.pnlUsd >= 2 ? "text-acid" : d.pnlUsd < 0 ? "text-blood" : "text-mute"}>
+                                {d.pnlUsd >= 0 ? "+" : "−"}
+                                {money(Math.abs(d.pnlUsd))}
+                              </td>
+                              <td className="text-mute">
+                                {(d.realizedUsd || 0) >= 0 ? "+" : "−"}
+                                {money(Math.abs(d.realizedUsd || 0))}
+                              </td>
+                              <td className={held ? "text-violet" : "text-mute"}>
+                                {held ? "held" : `${inn} / ${out}`}
+                              </td>
+                              <td className="text-mute">{money(d.endEquity)}</td>
+                            </tr>
+                          );
+                        })}
                     </tbody>
                   </table>
                 </div>
@@ -492,7 +526,7 @@ export default function AdminPage() {
                       <tr>
                         <th className="py-2 font-normal">Month</th>
                         <th className="py-2 font-normal">PnL</th>
-                        <th className="py-2 font-normal">Clips</th>
+                        <th className="py-2 font-normal">In / out</th>
                         <th className="py-2 font-normal">Equity</th>
                       </tr>
                     </thead>
@@ -504,7 +538,9 @@ export default function AdminPage() {
                             {m.pnlUsd >= 0 ? "+" : "−"}
                             {money(Math.abs(m.pnlUsd))}
                           </td>
-                          <td className="text-mute">{m.trades}</td>
+                          <td className="text-mute">
+                            {m.entries ?? 0} / {m.exits ?? m.trades ?? 0}
+                          </td>
                           <td className="text-mute">{money(m.endEquity)}</td>
                         </tr>
                       ))}
