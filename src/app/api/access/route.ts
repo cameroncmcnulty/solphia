@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isSolanaAddress } from "@/lib/security";
-import { loadState } from "@/lib/store";
+import { readyState } from "@/lib/store";
 import { isFounder, liveSeatOk } from "@/lib/access";
 import { treasuryAddress } from "@/lib/treasury";
 import { publicSeat, seatSol, SEAT_PERIOD_DAYS } from "@/lib/seat";
@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 export async function GET(req: NextRequest) {
   const pubkey = req.nextUrl.searchParams.get("pubkey") || "";
   if (!isSolanaAddress(pubkey)) return NextResponse.json({ founder: false, plan: null });
-  const s = loadState();
+  const s = await readyState();
   const user = s.users.find((u) => u.pubkey === pubkey);
   const founder = isFounder(s, pubkey);
   const seat = publicSeat(user);

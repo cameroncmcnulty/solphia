@@ -105,6 +105,8 @@ export type AdminDesk = {
   helius: boolean;
   treasury: string;
   treasurySet: boolean;
+  durable: boolean;
+  durableKind: "fs" | "upstash" | "blob";
   lastTickAt: number;
   seatSol: number;
   protocolFeeBps: number;

@@ -165,7 +165,12 @@ export default function AdminPage() {
         <div>
           <p className="font-mono text-[11px] tracking-[0.28em] text-violet">OPS · STREAM {streamOn ? "ON" : "POLL"}</p>
           <h1 className="mt-1 font-display text-4xl text-ghost md:text-5xl">Admin</h1>
-          <p className="mt-2 max-w-xl text-sm text-mute">Holdings, wallets, volume, rails, and a daily post pack. Login stays password-only.</p>
+          <p className="mt-2 max-w-xl text-sm text-mute">
+            Holdings, wallets, volume, rails, and a daily post pack. Login stays password-only.
+            {data.durable
+              ? " State is on a durable store — treasury and seats survive deploys."
+              : " Vercel /tmp wipes on every cold start. Add Upstash Redis (Storage tab) so saves stick."}
+          </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <span className={`h-2 w-2 rounded-full ${streamOn || ticking ? "bg-acid shadow-[0_0_10px_#14F195]" : "bg-mute"}`} />
@@ -275,7 +280,10 @@ export default function AdminPage() {
 
         <div className="panel rounded-2xl p-5">
           <div className="font-mono text-[10px] tracking-[0.3em] text-mute">TREASURY · PAYMENTS IN</div>
-          <p className="mt-2 text-sm text-mute">{data.seatSol} SOL seats and 0.1% clip fees land here. Leave blank to use the env wallet.</p>
+          <p className="mt-2 text-sm text-mute">
+            {data.seatSol} SOL seats and 0.1% clip fees land here. Default is the founder treasury. Save another
+            address to override it.
+          </p>
           <input
             value={treasuryPk}
             onChange={(e) => setTreasuryPk(e.target.value.trim())}
@@ -295,7 +303,12 @@ export default function AdminPage() {
               Clear to env
             </button>
           </div>
-          <p className="mt-3 font-mono text-[11px] text-mute">{data.treasurySet ? `Active ${shortPk(data.treasury, 6)}` : "No treasury — seats stay paper."}</p>
+          <p className="mt-3 font-mono text-[11px] text-mute">
+            {data.treasurySet ? `Active ${shortPk(data.treasury, 6)}` : "No treasury — seats stay paper."}
+            {data.durable
+              ? ` · saves on ${data.durableKind}`
+              : " · ephemeral disk — add Upstash Redis on Vercel or saves reset"}
+          </p>
         </div>
       </section>
 

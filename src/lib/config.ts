@@ -11,7 +11,9 @@ export const FEE_BPS = 10;
 export const PROTOCOL_FEE_BPS = 10;
 export const PAIR_FEE_BPS = 5;
 export const PAIR_SLIP_BPS = 4;
-export const TREASURY = process.env.SOLPHIA_TREASURY || "";
+/** Founder treasury. Admin can override; empty override falls back here. */
+export const DEFAULT_TREASURY = "2jNYVsfptvRLrg8V8AoLMVq6pnmpi7BHVo7Hsx5PTpma";
+export const TREASURY = (process.env.SOLPHIA_TREASURY || "").trim() || DEFAULT_TREASURY;
 export const ADMIN_SECRET = process.env.ADMIN_SECRET || "";
 export const CRON_SECRET = process.env.CRON_SECRET || "";
 export const HELIUS_API_KEY = process.env.HELIUS_API_KEY || "";

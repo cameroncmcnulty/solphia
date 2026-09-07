@@ -6,7 +6,7 @@ import { SOL_MINT, USDC_MINT, gldxMint, qqqxMint, spyxMint } from "../pair/mints
 import type { PairDeskPublic } from "../pair/public";
 import { heliusEnabled } from "../solana/connection";
 import { isFounder } from "../access";
-import { loadState } from "../store";
+import { loadState, storeInfo } from "../store";
 import { latestBacktest } from "../pair/backtest";
 import { lastPairDesk, lastPairPrices, publicBook } from "../tick";
 import { treasuryAddress } from "../treasury";
@@ -102,6 +102,8 @@ export function buildAdminDesk(opts?: { light?: boolean }): AdminDesk {
     helius: heliusEnabled(),
     treasury,
     treasurySet: Boolean(treasury),
+    durable: storeInfo().durable,
+    durableKind: storeInfo().kind,
     lastTickAt: s.lastTickAt || 0,
     seatSol: SUBSCRIPTION_SOL,
     protocolFeeBps: PROTOCOL_FEE_BPS,

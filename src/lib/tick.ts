@@ -9,7 +9,7 @@ import { quoteSolSpyx } from "./pair/jupiter";
 import { DEFAULT_STUDY } from "./pair/knowledge";
 import { loadShortTape } from "./pair/shortTape";
 import { loadScalpFrames } from "./pair/frames";
-import { loadState, saveState } from "./store";
+import { loadState, saveState, readyState } from "./store";
 import { liveSeatOk } from "./access";
 import { treasuryAddress } from "./treasury";
 import type { FeedHealth, PaperBook } from "./types";
@@ -116,7 +116,7 @@ export async function runMarketTick(): Promise<{
 }> {
   ensurePaperLoop();
   const run = lock.then(async () => {
-    const state = loadState();
+    const state = await readyState();
     const now = Date.now();
     const health: FeedHealth[] = [];
     const t0 = Date.now();

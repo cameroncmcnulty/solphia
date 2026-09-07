@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { clientIp, isSolanaAddress, rateLimit } from "@/lib/security";
-import { loadState, mutateState } from "@/lib/store";
+import { loadState, mutateState, readyState } from "@/lib/store";
 import { emptyTrader, bankrollUsd, maybeResizeBook, lockedAuto } from "@/lib/auto";
 import { publicBook } from "@/lib/tick";
 import { liveTradingEnabled } from "@/lib/liveFlag";
@@ -17,7 +17,7 @@ export const dynamic = "force-dynamic";
 export async function GET(req: NextRequest) {
   const owner = req.nextUrl.searchParams.get("owner") || "";
   if (!isSolanaAddress(owner)) return NextResponse.json({ error: "bad_owner" }, { status: 400 });
-  const state = loadState();
+  const state = await readyState();
   let trader = state.traders[owner];
   if (!trader) {
     trader = emptyTrader(owner);

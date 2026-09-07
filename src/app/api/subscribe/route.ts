@@ -6,7 +6,7 @@ import { liveTradingEnabled } from "@/lib/liveFlag";
 import { treasuryAddress } from "@/lib/treasury";
 import { PLANS, planById, lamportsForPlan, type PlanId } from "@/lib/plans";
 import { connection, confirmedSolTransfer } from "@/lib/solana/connection";
-import { loadState, mutateState } from "@/lib/store";
+import { loadState, mutateState, readyState } from "@/lib/store";
 import { isFounder, liveSeatOk } from "@/lib/access";
 import { queueEmail } from "@/lib/email/send";
 import { welcomeEmailHtml } from "@/lib/email/templates";
@@ -52,7 +52,7 @@ function seatPayload(extra: Record<string, unknown> = {}) {
 
 export async function GET(req: NextRequest) {
   const pubkey = req.nextUrl.searchParams.get("pubkey") || "";
-  const s = loadState();
+  const s = await readyState();
   const user = isSolanaAddress(pubkey) ? s.users.find((u) => u.pubkey === pubkey) : undefined;
   return NextResponse.json(
     seatPayload({
@@ -71,6 +71,7 @@ export async function POST(req: NextRequest) {
   if (!parsed.success || !isSolanaAddress(parsed.data.pubkey)) {
     return NextResponse.json({ error: "bad_request" }, { status: 400 });
   }
+  await readyState();
   const email = parsed.data.email && isEmail(parsed.data.email) ? sanitizeText(parsed.data.email, 120) : undefined;
   const action = parsed.data.action || "subscribe";
   const planId = (parsed.data.plan === "paper" ? "paper" : "live") as PlanId;

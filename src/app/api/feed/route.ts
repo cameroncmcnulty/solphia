@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { clientIp, rateLimit } from "@/lib/security";
-import { loadState } from "@/lib/store";
+import { loadState, readyState } from "@/lib/store";
 import { runMarketTick, publicBook, lastPairDesk, lastPairPrices } from "@/lib/tick";
 import { publicMind } from "@/lib/mind/engine";
 import { liveTradingEnabled } from "@/lib/liveFlag";
@@ -13,7 +13,7 @@ export async function GET(req: NextRequest) {
   if (!rateLimit(clientIp(req) + ":feed", 90, 60_000)) {
     return NextResponse.json({ error: "rate_limited" }, { status: 429 });
   }
-  const state = loadState();
+  const state = await readyState();
   const stale = Date.now() - (state.lastTickAt || 0) > 8_000;
   if (stale) {
     try {
