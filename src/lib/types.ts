@@ -198,6 +198,21 @@ export interface EquityPoint {
   equity: number;
 }
 
+export interface SleeveStop {
+  entryPx: number;
+  peakPx: number;
+  stopPx: number;
+  armed: boolean;
+}
+
+export interface SleeveLearn {
+  trades: number;
+  wins: number;
+  pnlUsd: number;
+  buyNeed: number;
+  trailK: number;
+}
+
 export interface PairHoldings {
   solQty: number;
   spyxQty: number;
@@ -209,6 +224,7 @@ export interface PairHoldings {
   qqqxCostUsd?: number;
   gldxCostUsd?: number;
   lastClipAt?: Record<string, number>;
+  stops?: Partial<Record<"SOL" | "SPYx" | "QQQx" | "GLDx", SleeveStop>>;
 }
 
 export interface PairIntent {
@@ -258,6 +274,7 @@ export interface PaperBook {
   pair?: PairHoldings;
   tape?: PairTape[];
   pendingIntent?: PairIntent | null;
+  pairLearn?: Record<string, SleeveLearn>;
 }
 
 export interface CreatorStat {

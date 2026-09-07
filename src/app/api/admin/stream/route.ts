@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
       const send = () => {
         if (closed) return;
         try {
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify(buildAdminDesk())}\n\n`));
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(buildAdminDesk({ light: true }))}\n\n`));
         } catch {
           closed = true;
         }

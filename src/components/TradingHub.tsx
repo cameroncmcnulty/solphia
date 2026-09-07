@@ -247,7 +247,7 @@ export function TradingHub() {
           <p className="font-mono text-[11px] tracking-[0.28em] text-violet">SOL · S&P 500 · NASDAQ · GOLD</p>
           <h1 className="mt-1 font-display text-3xl leading-none text-ghost sm:text-4xl md:text-6xl">Operate</h1>
           <p className="mt-3 max-w-xl text-base text-mute sm:text-lg">
-            Connect Phantom. Add SOL. She splits across SOL, USDC, S&P 500, Nasdaq-100, and gold — and trades whichever pair looks stretched. PnL is in USDC.
+            Connect Phantom. Add SOL. She sits in USDC, buys S&P 500, Nasdaq, gold, or SOL when her engine fires, then trails the stop back to cash. PnL is in USDC.
           </p>
         </div>
         <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-row sm:items-center sm:gap-3">

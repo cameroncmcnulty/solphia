@@ -51,7 +51,7 @@ export default function AdminPage() {
       throw new Error("denied");
     }
     const next = (await dash.json()) as AdminDesk;
-    setData(next);
+    setData((prev) => mergeDesk(prev, next));
     setTreasuryPk(next.treasury || "");
   }
 
@@ -93,7 +93,7 @@ export default function AdminPage() {
     es.onmessage = (e) => {
       try {
         const next = JSON.parse(e.data) as AdminDesk;
-        setData(next);
+        setData((prev) => mergeDesk(prev, next));
         live = true;
         setStreamOn(true);
       } catch {
@@ -460,7 +460,7 @@ export default function AdminPage() {
             <Row k="Wait" v={`${data.locked.cooldownMin} min`} />
             <Row k="Clip" v={`${(data.locked.clipPct * 100).toFixed(0)}%`} />
             <Row k="Stop" v={`${(data.locked.stopPct * 100).toFixed(0)}%`} />
-            <Row k="Sleeves" v={`${(data.locked.sleeveWeight * 100).toFixed(0)}% each`} />
+            <Row k="Home" v="USDC" />
             <Row k="Leverage" v="spot only" />
             <Row k="Seat" v={`${data.seatSol} SOL / 30d`} />
             <Row k="Clip fee" v={`${data.protocolFeeBps} bps`} />
@@ -483,6 +483,17 @@ export default function AdminPage() {
       </section>
     </main>
   );
+}
+
+function mergeDesk(prev: AdminDesk | null, next: AdminDesk): AdminDesk {
+  if (!prev) return next;
+  const prevMax = prev.promos.reduce((m, p) => Math.max(m, p.at), 0);
+  const nextMax = next.promos.reduce((m, p) => Math.max(m, p.at), 0);
+  const promos = (prevMax > nextMax ? prev.promos : next.promos).map((p) => {
+    const older = prev.promos.find((x) => x.id === p.id);
+    return { ...p, dataUrl: p.dataUrl || older?.dataUrl };
+  });
+  return { ...next, promos };
 }
 
 function Stat({ k, v, sub, good }: { k: string; v: string; sub: string; good?: boolean }) {

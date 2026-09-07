@@ -1,7 +1,6 @@
 import type { AutoSettings, PaperBook, PaperFill, PaperPosition, PairHoldings as BookHoldings } from "../types";
 
-import { SOL_HISTORY } from "./knowledge";
-import { cashOpenAuction, sessionBandMult, usEquitySession, type HistoryStudy } from "./knowledge";
+import { sessionBandMult, usEquitySession, type HistoryStudy } from "./knowledge";
 import { BAND_K, bumpBand, livePx, readPair, type BandName, type RatioRead } from "./ratio";
 import {
   GAS_RESERVE_SOL,
@@ -14,19 +13,10 @@ import {
 } from "./mints";
 import type { PairPrices } from "./prices";
 import type { RatioSample } from "./ratio";
-import {
-  SLEEVE_WEIGHT,
-  SLEEVES,
-  TRADE_PAIRS,
-  involvesEquity,
-  involvesSol,
-  sleeveName,
-  xstockIdOf,
-  type Sleeve,
-  type TradePair,
-} from "./catalog";
-import { enrichStudy, reviewTrade, sleeveReturn } from "./policy";
-import { relAt, type Horizon, type ShortTape } from "./shortTape";
+import { SLEEVE_WEIGHT, TRADE_PAIRS, xstockIdOf, type Sleeve, type TradePair } from "./catalog";
+import { enrichStudy } from "./policy";
+import type { ShortTape } from "./shortTape";
+import { DEFAULT_LEARN, RISK_SLEEVES, ROUND_TRIP, nextTrail, readAsset } from "./signals";
 
 export type { Sleeve, TradePair } from "./catalog";
 export { SLEEVE_WEIGHT, TRADE_PAIRS };
@@ -82,6 +72,7 @@ export function pairOf(book: PaperBook): PairHoldings {
       qqqxCostUsd: p.qqqxCostUsd || 0,
       gldxCostUsd: p.gldxCostUsd || 0,
       lastClipAt: p.lastClipAt || {},
+      stops: p.stops || {},
     };
   }
   return {
@@ -95,6 +86,7 @@ export function pairOf(book: PaperBook): PairHoldings {
     qqqxCostUsd: 0,
     gldxCostUsd: 0,
     lastClipAt: {},
+    stops: {},
   };
 }
 
@@ -259,7 +251,6 @@ export function decidePair(opts: {
   const userBand = (auto.band || "normal") as BandName;
   const band = bumpBand(userBand, opts.losses || 0);
   const bandK = BAND_K[band] * sessionBandMult(session);
-  const auction = cashOpenAuction(now);
   const reads = {} as Record<string, RatioRead>;
   for (const pair of TRADE_PAIRS) {
     const lp = livePx(prices, pair.left);
@@ -324,69 +315,46 @@ export function decidePair(opts: {
 
   const cooldownMs = (auto.cooldownMin ?? 2) * 60_000;
   const allocated = allocatedUsd(book, auto, prices.sol.usd, opts.depositedSol || 0);
-  const clipPct = clamp(auto.clipPct ?? 0.12, 0.05, 0.35);
-  const clipUsd = Math.max(PAIR_MIN_CLIP_USD, Math.min(allocated * clipPct, allocated * 0.35));
+  const learn = book.pairLearn || {};
   const usdOf = (s: Sleeve) => sleeveUsd(h, s, prices);
-  const solUsd = usdOf("SOL");
-  const deployedRisk = SLEEVES.filter((s) => s !== "USDC").reduce((n, s) => n + usdOf(s), 0);
+  if (!h.stops) h.stops = {};
 
-  if (deployedRisk < PAIR_MIN_CLIP_USD && h.usdcQty >= PAIR_MIN_CLIP_USD * 2) {
-    return {
-      action: "deploy",
-      reason: "Splitting USDC across SOL, S&P 500, Nasdaq-100, and gold so she can trade any pair.",
-      clipUsd: Math.min(h.usdcQty, allocated),
-      from: "USDC",
-      to: "SOL",
-      z7: primary.z7,
-      z24: primary.z24,
-      ratio: primary.ratio,
-      bandK,
-      session,
-      read: primary,
-      reads,
-      solPct: SLEEVE_WEIGHT,
-    };
-  }
+  const sigs = RISK_SLEEVES.map((s) =>
+    readAsset(s, samples, prices, study, now, opts.shortTape, learn[s] || DEFAULT_LEARN),
+  ).filter((s): s is NonNullable<typeof s> => Boolean(s));
 
-  const missing = SLEEVES.filter((s) => {
-    if (s === "USDC") return usdOf(s) < PAIR_MIN_CLIP_USD;
-    if (s === "SOL") return usdOf(s) < PAIR_MIN_CLIP_USD && prices.sol.usd > 0;
-    const id = xstockIdOf(s);
-    if (!id) return false;
-    const liq = prices.liquidities?.[id] ?? 0;
-    return livePx(prices, s) > 0 && liq >= MIN_XSTOCK_LIQUIDITY_USD && usdOf(s) < PAIR_MIN_CLIP_USD;
-  });
-  if (missing.length && deployedRisk >= PAIR_MIN_CLIP_USD) {
-    const target = missing[0];
-    const fat = SLEEVES.slice()
-      .filter((s) => s !== target)
-      .sort((a, b) => usdOf(b) - usdOf(a))[0];
-    if (target !== "USDC" && usdOf("USDC") >= PAIR_MIN_CLIP_USD) {
+  for (const sig of sigs) {
+    const pos = usdOf(sig.sleeve);
+    if (pos < PAIR_MIN_CLIP_USD) continue;
+    const qty =
+      sig.sleeve === "SOL" ? h.solQty : qtyOf(h, xstockIdOf(sig.sleeve) || "spyx");
+    const cost =
+      sig.sleeve === "SOL" ? h.solCostUsd || 0 : costOf(h, xstockIdOf(sig.sleeve) || "spyx");
+    const entryPx = h.stops?.[sig.sleeve]?.entryPx || (qty > 0 ? cost / qty : sig.px);
+    const prev = h.stops?.[sig.sleeve] || { entryPx, peakPx: sig.px, stopPx: 0, armed: false };
+    const trail = nextTrail({
+      entryPx: prev.entryPx || entryPx,
+      peakPx: prev.peakPx || sig.px,
+      stopPx: prev.stopPx || 0,
+      armed: prev.armed,
+      px: sig.px,
+      atrPct: sig.atrPct,
+      trailK: (learn[sig.sleeve] || DEFAULT_LEARN).trailK,
+    });
+    h.stops[sig.sleeve] = { ...trail, entryPx: prev.entryPx || entryPx };
+    book.pair = h;
+    const basis = prev.entryPx || entryPx;
+    const pnlPct = basis > 0 ? sig.px / basis - 1 : 0;
+    const tp = auto.takeProfitPct || 0.12;
+    if (trail.armed && sig.px <= trail.stopPx) {
       return {
-        action: "deploy",
-        reason: `Adding ${sleeveName(target)} so she can trade that pair too.`,
-        clipUsd: Math.min(h.usdcQty, clipUsd),
-        from: "USDC",
-        to: target,
-        asset: xstockIdOf(target) || undefined,
-        z7: primary.z7,
-        z24: primary.z24,
-        ratio: primary.ratio,
-        bandK,
-        session,
-        read: primary,
-        reads,
-        solPct: target === "SOL" ? 1 : 0,
-      };
-    }
-    if (fat && usdOf(fat) >= PAIR_MIN_CLIP_USD * 2) {
-      return {
-        action: actionFor(fat, target),
-        reason: `Moving a slice into ${sleeveName(target)} so every pair is ready.`,
-        clipUsd: Math.min(clipUsd, usdOf(fat) * 0.25),
-        from: fat,
-        to: target,
-        asset: xstockIdOf(target) || xstockIdOf(fat) || undefined,
+        action: "swap",
+        reason: `Trail hit on ${sig.sleeve} at ${sig.px.toFixed(2)} (stop ${trail.stopPx.toFixed(2)}). Back to USDC.`,
+        clipUsd: pos,
+        from: sig.sleeve,
+        to: "USDC",
+        asset: xstockIdOf(sig.sleeve) || undefined,
+        pairId: `usdc-${sig.sleeve.toLowerCase()}`,
         z7: primary.z7,
         z24: primary.z24,
         ratio: primary.ratio,
@@ -396,173 +364,15 @@ export function decidePair(opts: {
         reads,
       };
     }
-  }
-
-  const solExt = Math.max(SOL_HISTORY.noiseFloorPct * 0.8, (study.solAtr15mPct || SOL_HISTORY.atr15mPct) * 0.8);
-  const usdExt = 0.003;
-
-  type Cand = PairDecision & { score: number };
-  const cands: Cand[] = [];
-  let lastVeto = "";
-  for (const pair of TRADE_PAIRS) {
-    if (auction && involvesEquity(pair)) continue;
-    const read = reads[pair.id];
-    if (!read || read.n7 < 12) continue;
-    const lastPair = h.lastClipAt?.[pair.id] || 0;
-    if (cooldownMs > 0 && lastPair && now - lastPair < cooldownMs) continue;
-    if (cooldownMs > 0 && book.lastTradeAt && now - book.lastTradeAt < cooldownMs) continue;
-    const minExt = involvesSol(pair) ? solExt : usdExt;
-    const ext7 = Math.abs(read.logR - read.mean7);
-    if (ext7 < minExt) continue;
-    const high = read.z7 > bandK && read.z24 > bandK * 0.45;
-    const low = read.z7 < -bandK && read.z24 < -bandK * 0.45;
-    if (!high && !low) continue;
-    const from = high ? pair.left : pair.right;
-    const to = high ? pair.right : pair.left;
-    const fromUsd = usdOf(from);
-    if (fromUsd < PAIR_MIN_CLIP_USD) continue;
-    const verdict = reviewTrade({
-      pair,
-      from,
-      to,
-      high,
-      read,
-      ext7,
-      session,
-      study,
-      equity,
-      fromUsd,
-      toUsd: usdOf(to),
-      clipUsd: Math.min(clipUsd, fromUsd),
-      impactPct: opts.impactPct || 0,
-      samples,
-      now,
-    });
-    if (!verdict.ok) {
-      lastVeto = verdict.reason;
-      continue;
-    }
-    cands.push({
-      action: actionFor(from, to),
-      reason: verdict.reason,
-      clipUsd: Math.min(verdict.clipUsd, fromUsd),
-      from,
-      to,
-      asset: xstockIdOf(from) || xstockIdOf(to) || undefined,
-      pairId: pair.id,
-      z7: read.z7,
-      z24: read.z24,
-      ratio: read.ratio,
-      bandK,
-      session,
-      read,
-      reads,
-      score: verdict.score,
-    });
-  }
-
-  for (const pair of TRADE_PAIRS) {
-    if (auction && involvesEquity(pair)) continue;
-    const read = reads[pair.id];
-    if (!read) continue;
-    const lastPair = h.lastClipAt?.[pair.id] || 0;
-    if (cooldownMs > 0 && lastPair && now - lastPair < cooldownMs) continue;
-    if (cooldownMs > 0 && book.lastTradeAt && now - book.lastTradeAt < cooldownMs) continue;
-    const tape = opts.shortTape;
-    const windows: { h: Horizon; rel: number; min: number }[] = [
-      { h: "m1", rel: relAt(tape, pair.left, pair.right, "m1"), min: 0.006 },
-      { h: "m5", rel: relAt(tape, pair.left, pair.right, "m5"), min: 0.007 },
-      { h: "m15", rel: relAt(tape, pair.left, pair.right, "m15"), min: 0.007 },
-      {
-        h: "h1",
-        rel: sleeveReturn(samples, pair.left, now, 60 * 60 * 1000) - sleeveReturn(samples, pair.right, now, 60 * 60 * 1000),
-        min: 0.008,
-      },
-    ];
-    if (pair.id === "spyx-qqqx") {
-      for (const w of windows) w.min = 0.012;
-    }
-    if (pair.id === "usdc-gldx") {
-      for (const w of windows) w.min = Math.max(w.min, 0.009);
-    }
-    let bestWin = windows[0];
-    for (const w of windows) {
-      if (w.h === "m1" && Math.abs(w.rel) > 0.02) continue;
-      if (Math.abs(w.rel) < w.min) continue;
-      if (Math.abs(w.rel) > Math.abs(bestWin.rel)) bestWin = w;
-    }
-    const rel = bestWin.rel;
-    const minPulse = bestWin.min;
-    if (Math.abs(rel) < minPulse) continue;
-    const high = rel > 0;
-    const from = high ? pair.left : pair.right;
-    const to = high ? pair.right : pair.left;
-    const fromUsd = usdOf(from);
-    if (fromUsd < PAIR_MIN_CLIP_USD) continue;
-    const verdict = reviewTrade({
-      pair,
-      from,
-      to,
-      high,
-      read,
-      ext7: Math.abs(rel),
-      session,
-      study,
-      equity,
-      fromUsd,
-      toUsd: usdOf(to),
-      clipUsd: Math.min(clipUsd, fromUsd),
-      impactPct: opts.impactPct || 0,
-      samples,
-      now,
-      mode: "pulse",
-      rel1h: rel,
-      horizon: bestWin.h,
-    });
-    if (!verdict.ok) {
-      lastVeto = verdict.reason;
-      continue;
-    }
-    cands.push({
-      action: actionFor(from, to),
-      reason: verdict.reason,
-      clipUsd: Math.min(verdict.clipUsd, fromUsd),
-      from,
-      to,
-      asset: xstockIdOf(from) || xstockIdOf(to) || undefined,
-      pairId: pair.id,
-      z7: read.z7,
-      z24: read.z24,
-      ratio: read.ratio,
-      bandK,
-      session,
-      read,
-      reads,
-      score: verdict.score,
-    });
-  }
-  cands.sort((a, b) => b.score - a.score);
-  if (cands[0]) {
-    const { score: _s, ...best } = cands[0];
-    return best;
-  }
-
-  const tp = auto.takeProfitPct || 0.12;
-  const up = start > 0 ? (equity - start) / start : 0;
-  const cooling = cooldownMs > 0 && book.lastTradeAt && now - book.lastTradeAt < cooldownMs;
-  if (!cooling && up >= tp && deployedRisk > PAIR_MIN_CLIP_USD * 2) {
-    const ranked = SLEEVES.slice().sort((a, b) => usdOf(b) / Math.max(1, equity) - usdOf(a) / Math.max(1, equity));
-    const fat = ranked[0];
-    const thin = ranked[ranked.length - 1];
-    const fatW = equity > 0 ? usdOf(fat) / equity : 0;
-    if (fat !== thin && fatW - SLEEVE_WEIGHT > 0.08 && usdOf(fat) >= PAIR_MIN_CLIP_USD) {
+    if (pnlPct >= tp) {
       return {
-        action: "rebalance",
-        reason: `Up ${(up * 100).toFixed(1)}% in USDC. Trimming back toward an even mix.`,
-        clipUsd: Math.min(clipUsd, usdOf(fat)),
-        from: fat,
-        to: thin,
-        asset: xstockIdOf(thin) || xstockIdOf(fat) || undefined,
+        action: "swap",
+        reason: `${sig.sleeve} up ${(pnlPct * 100).toFixed(1)}%. Taking profit to USDC.`,
+        clipUsd: pos,
+        from: sig.sleeve,
+        to: "USDC",
+        asset: xstockIdOf(sig.sleeve) || undefined,
+        pairId: `usdc-${sig.sleeve.toLowerCase()}`,
         z7: primary.z7,
         z24: primary.z24,
         ratio: primary.ratio,
@@ -572,20 +382,72 @@ export function decidePair(opts: {
         reads,
       };
     }
+    if (sig.sell >= 0.55 && pnlPct > ROUND_TRIP) {
+      return {
+        action: "swap",
+        reason: `${sig.reason}. Selling back to USDC.`,
+        clipUsd: pos,
+        from: sig.sleeve,
+        to: "USDC",
+        asset: xstockIdOf(sig.sleeve) || undefined,
+        pairId: `usdc-${sig.sleeve.toLowerCase()}`,
+        z7: primary.z7,
+        z24: primary.z24,
+        ratio: primary.ratio,
+        bandK,
+        session,
+        read: primary,
+        reads,
+      };
+    }
+  }
+
+  const openRisk = RISK_SLEEVES.filter((s) => usdOf(s) >= PAIR_MIN_CLIP_USD);
+  if (openRisk.length) {
+    const s = openRisk[0];
+    const trail = h.stops?.[s];
+    const px = livePx(prices, s);
+    const pnl = trail && trail.entryPx > 0 ? ((px / trail.entryPx - 1) * 100).toFixed(1) : "0.0";
+    const stop = trail?.armed ? ` · trail ${trail.stopPx.toFixed(2)}` : " · arming stop once fees are covered";
+    return empty("hold", `In ${s} ${pnl}%${stop}. Sitting in USDC for the rest.`);
   }
 
   if (cooldownMs > 0 && book.lastTradeAt && now - book.lastTradeAt < cooldownMs) {
     const left = Math.ceil((cooldownMs - (now - book.lastTradeAt)) / 60000);
-    return empty("hold", `Waiting ${left}m before the next trade.`);
+    return empty("hold", `USDC. Waiting ${left}m before the next buy.`);
   }
 
-  const zParts = TRADE_PAIRS.filter((p) => (reads[p.id]?.n7 || 0) >= 12)
-    .sort((a, b) => Math.abs(reads[b.id].z7) - Math.abs(reads[a.id].z7))
+  const clipUsd = Math.max(PAIR_MIN_CLIP_USD, Math.min(allocated * 0.85, h.usdcQty * 0.9));
+  let best = sigs[0];
+  for (const s of sigs) if (!best || s.buy > best.buy) best = s;
+  if (best && h.usdcQty >= PAIR_MIN_CLIP_USD * 2) {
+    const need = (learn[best.sleeve] || DEFAULT_LEARN).buyNeed;
+    if (best.buy >= need && best.buy - (sigs.filter((s) => s !== best).reduce((m, s) => Math.max(m, s.buy), 0) || 0) >= -0.05) {
+      return {
+        action: "swap",
+        reason: best.reason,
+        clipUsd: Math.min(clipUsd, h.usdcQty),
+        from: "USDC",
+        to: best.sleeve,
+        asset: xstockIdOf(best.sleeve) || undefined,
+        pairId: `usdc-${best.sleeve.toLowerCase()}`,
+        z7: primary.z7,
+        z24: primary.z24,
+        ratio: primary.ratio,
+        bandK,
+        session,
+        read: primary,
+        reads,
+      };
+    }
+  }
+
+  const bits = sigs
+    .sort((a, b) => b.buy - a.buy)
     .slice(0, 3)
-    .map((p) => `${p.left}/${p.right} ${reads[p.id].z7.toFixed(1)}`);
-  if (!zParts.length) return empty("skip", "Need a bit more price history before she sizes a trade.");
-  if (lastVeto) return empty("hold", lastVeto);
-  return empty("hold", `Nothing cleared risk. Sitting. ${zParts.join(" · ")}`);
+    .map((s) => `${s.sleeve} ${(s.buy * 100).toFixed(0)}`);
+  return empty("hold", bits.length ? `USDC. No buy cleared. ${bits.join(" · ")}` : "USDC. Need more tape before she sizes a buy.");
+
 }
 
 export function id(prefix: string): string {

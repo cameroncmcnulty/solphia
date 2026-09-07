@@ -52,11 +52,11 @@ export const FAQS: { q: string; a: string }[] = [
   },
   {
     q: "What does she trade?",
-    a: "She holds SOL, USDC, and three official tokens: SPYx (S&P 500), QQQx (Nasdaq-100), and GLDx (gold). She trades whichever of those pairs is stretched — including USDC vs gold. Nothing else. No memecoins, no copy trading, no sniping new coins.",
+    a: "She sits in USDC. When her engine says so she buys official SPYx (S&P 500), QQQx (Nasdaq-100), GLDx (gold), or SOL. She sells back to USDC on take-profit or a trailing stop that only arms after fees are covered. Nothing else. No memecoins, no copy trading, no sniping.",
   },
   {
     q: "How does she decide?",
-    a: "She studies SOL, S&P 500, Nasdaq, and gold history — typical day ranges, crash knives, gold safe-haven spikes, cash-session vs overnight, and whether the move even covers fees. Stretch is one input. She skips knives, closed-market fake prints, and trades that fees would eat. PnL stays in USDC.",
+    a: "She reads RSI, MACD, EMA trend, ATR, short-tape pulses, and session (cash vs after hours vs weekend). She skips knives and fee-eaten noise. Once a trade is in profit after swap fees she arms a stop and walks it up as the peak grows. She learns from her own closed trades. PnL stays in USDC.",
   },
   {
     q: "Are these the same as the New York market?",

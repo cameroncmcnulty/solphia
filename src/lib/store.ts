@@ -10,6 +10,7 @@ export const DATA_DIR = process.env.DATA_DIR || (process.env.VERCEL ? "/tmp/solp
 const FILE = path.join(DATA_DIR, "state.json");
 
 let mem: AppState | null = null;
+let memMtime = 0;
 let writing = Promise.resolve();
 
 export function emptyState(): AppState {
@@ -50,13 +51,14 @@ function isLegacyBook(book: { fills?: { strategy: string }[] }) {
 }
 
 export function loadState(): AppState {
-  if (mem) {
-    if (isLegacyBook(mem.paper)) mem.paper = emptyBook();
-    return mem;
-  }
   try {
     ensureDir();
     if (fs.existsSync(FILE)) {
+      const mtime = fs.statSync(FILE).mtimeMs;
+      if (mem && mtime <= memMtime) {
+        if (isLegacyBook(mem.paper)) mem.paper = emptyBook();
+        return mem;
+      }
       const raw = JSON.parse(fs.readFileSync(FILE, "utf8")) as AppState;
       const rawPaper = raw.paper || emptyBook();
       mem = {
@@ -80,6 +82,7 @@ export function loadState(): AppState {
                     qqqxCostUsd: rawPaper.pair.qqqxCostUsd,
                     gldxCostUsd: rawPaper.pair.gldxCostUsd,
                     lastClipAt: rawPaper.pair.lastClipAt,
+                    stops: rawPaper.pair.stops || {},
                   }
                 : { solQty: 0, spyxQty: 0, qqqxQty: 0, gldxQty: 0, usdcQty: rawPaper.cashUsd ?? emptyBook().cashUsd },
               tape: rawPaper.tape || [],
@@ -96,12 +99,14 @@ export function loadState(): AppState {
         promoPending: raw.promoPending || null,
         lastPromoDay: raw.lastPromoDay || "",
       };
+      memMtime = mtime;
       return mem;
     }
   } catch {
     // fall through to empty
   }
   mem = emptyState();
+  memMtime = Date.now();
   return mem;
 }
 
@@ -112,6 +117,11 @@ export async function saveState(next: AppState): Promise<void> {
     const tmp = FILE + ".tmp";
     fs.writeFileSync(tmp, JSON.stringify(next, null, 2));
     fs.renameSync(tmp, FILE);
+    try {
+      memMtime = fs.statSync(FILE).mtimeMs;
+    } catch {
+      memMtime = Date.now();
+    }
   });
   await writing;
 }

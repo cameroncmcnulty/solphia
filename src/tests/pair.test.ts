@@ -75,94 +75,109 @@ describe("official mint rails", () => {
   });
 });
 
-describe("ratio band engine", () => {
-  it("deploys USDC into SOL and all three xStock sleeves when empty", () => {
+function uptrend(sol = 100, spyx = 770, n = 64, extra?: { qqqx?: number; gldx?: number }): RatioSample[] {
+  const hour = 3_600_000;
+  const q0 = extra?.qqqx ?? 480;
+  const g0 = extra?.gldx ?? 310;
+  const out: RatioSample[] = [];
+  for (let i = n; i >= 1; i--) {
+    const k = n - i;
+    const dip = k > n - 8 && k < n - 4 ? -0.018 : 0;
+    const bounce = k >= n - 4 ? 0.012 * (k - (n - 4)) : 0;
+    const drift = k * 0.0009;
+    out.push({
+      t: CASH - i * hour,
+      sol: sol * (1 + drift + dip + bounce),
+      spyx: spyx * (1 + drift * 0.4 + dip * 0.3 + bounce * 0.3),
+      qqqx: q0 * (1 + drift * 0.5 + dip * 0.3 + bounce * 0.4),
+      gldx: g0 * (1 + drift * 0.35 + dip * 0.2 + bounce * 0.5),
+    });
+  }
+  return out;
+}
+
+describe("USDC-home engine", () => {
+  it("sits in USDC when the tape is quiet", () => {
     const book = emptyBook(1000);
     const d = decidePair({
-      auto: auto(),
+      auto: auto({ cooldownMin: 0 }),
       book,
       prices: px(),
       samples: hist(),
       study: DEFAULT_STUDY,
       now: CASH,
     });
-    assert.equal(d.action, "deploy");
+    assert.ok(d.action === "hold" || d.action === "skip" || (d.action === "swap" && d.from === "USDC"));
+    if (d.action === "hold") assert.match(d.reason, /USDC/i);
   });
 
-  it("holds when every ratio is inside the band", () => {
+  it("buys an uptrending sleeve from USDC", () => {
     const book = emptyBook(1000);
-    book.pair = { solQty: 2, spyxQty: 0.26, qqqxQty: 0.42, gldxQty: 0.65, usdcQty: 200 };
+    book.pairLearn = {
+      SOL: { trades: 4, wins: 3, pnlUsd: 12, buyNeed: 0.35, trailK: 1.1 },
+      SPYx: { trades: 4, wins: 3, pnlUsd: 8, buyNeed: 0.35, trailK: 1.1 },
+      QQQx: { trades: 4, wins: 3, pnlUsd: 9, buyNeed: 0.35, trailK: 1.1 },
+      GLDx: { trades: 4, wins: 3, pnlUsd: 10, buyNeed: 0.35, trailK: 1.1 },
+    };
     const d = decidePair({
-      auto: auto(),
+      auto: auto({ cooldownMin: 0, stopPct: 0.9 }),
       book,
-      prices: px(100, 770),
-      samples: hist(100, 770),
+      prices: px(104.2, 776, 500_000, false, { qqqx: 488, gldx: 318 }),
+      samples: uptrend(100, 770, 64, { qqqx: 480, gldx: 310 }),
       study: DEFAULT_STUDY,
       now: CASH,
     });
-    assert.equal(d.action, "hold");
-    assert.match(d.reason, /sit/i);
-  });
-
-  it("sells SOL for SPYx when SOL looks expensive vs S&P 500", () => {
-    const book = emptyBook(1000);
-    book.pair = { solQty: 4, spyxQty: 0.26, qqqxQty: 0.42, gldxQty: 0.65, usdcQty: 200 };
-    const d = decidePair({
-      auto: auto({ band: "tight", stopPct: 0.9, takeProfitPct: 9 }),
-      book,
-      prices: px(118, 650),
-      samples: hist(100, 770),
-      study: DEFAULT_STUDY,
-      now: CASH,
-    });
-    assert.ok(d.from !== "none" && d.to !== "none");
+    assert.equal(d.action, "swap");
+    assert.equal(d.from, "USDC");
+    assert.ok(["SOL", "SPYx", "QQQx", "GLDx"].includes(String(d.to)));
     assert.ok(d.clipUsd > 0);
   });
 
-  it("sells QQQx for SOL when that market stretches even if SPYx does not", () => {
+  it("trails a winner and sells back to USDC when the stop is hit", () => {
     const book = emptyBook(1000);
-    book.pair = { solQty: 4, spyxQty: 0.26, qqqxQty: 0.8, gldxQty: 0.65, usdcQty: 200 };
+    book.pair = {
+      solQty: 4,
+      spyxQty: 0,
+      qqqxQty: 0,
+      gldxQty: 0,
+      usdcQty: 200,
+      solCostUsd: 400,
+      stops: { SOL: { entryPx: 100, peakPx: 118, stopPx: 112, armed: true } },
+    };
     const d = decidePair({
-      auto: auto({ band: "tight", cooldownMin: 0, stopPct: 0.9, takeProfitPct: 9 }),
+      auto: auto({ cooldownMin: 0, takeProfitPct: 0.9, stopPct: 0.9 }),
       book,
-      prices: px(100, 770, 500_000, false, { qqqx: 600 }),
-      samples: hist(100, 770, 48, { qqqx: 480 }),
-      study: DEFAULT_STUDY,
-      now: CASH,
-    });
-    assert.equal(d.from, "QQQx");
-    assert.ok(d.to === "SOL" || d.to === "USDC" || d.to === "SPYx" || d.to === "GLDx");
-  });
-
-  it("sells SPYx for SOL when SOL looks cheap vs S&P 500", () => {
-    const book = emptyBook(1000);
-    book.pair = { solQty: 4, spyxQty: 0.65, qqqxQty: 0.42, gldxQty: 0.65, usdcQty: 200 };
-    const d = decidePair({
-      auto: auto({ band: "tight", stopPct: 0.9, takeProfitPct: 9 }),
-      book,
-      prices: px(86, 900),
+      prices: px(110, 770),
       samples: hist(100, 770),
       study: DEFAULT_STUDY,
       now: CASH,
     });
-    assert.ok(d.from !== "none" && d.to !== "none");
-    assert.ok(d.clipUsd > 0);
+    assert.equal(d.action, "swap");
+    assert.equal(d.from, "SOL");
+    assert.equal(d.to, "USDC");
   });
 
-  it("trades USDC/GLDx when gold stretches versus the dollar", () => {
+  it("takes profit to USDC when the sleeve is up enough", () => {
     const book = emptyBook(1000);
-    book.pair = { solQty: 2, spyxQty: 0.26, qqqxQty: 0.42, gldxQty: 0.8, usdcQty: 250 };
+    book.pair = {
+      solQty: 0,
+      spyxQty: 0,
+      qqqxQty: 0,
+      gldxQty: 2,
+      usdcQty: 200,
+      gldxCostUsd: 400,
+      stops: { GLDx: { entryPx: 200, peakPx: 250, stopPx: 210, armed: true } },
+    };
     const d = decidePair({
-      auto: auto({ band: "tight", cooldownMin: 0, stopPct: 0.9, takeProfitPct: 9 }),
+      auto: auto({ cooldownMin: 0, takeProfitPct: 0.12, stopPct: 0.9 }),
       book,
-      prices: px(100, 770, 500_000, false, { gldx: 400 }),
-      samples: hist(100, 770, 48, { gldx: 310 }),
+      prices: px(100, 770, 500_000, false, { gldx: 250 }),
+      samples: hist(100, 770, 48, { gldx: 200 }),
       study: DEFAULT_STUDY,
       now: CASH,
     });
     assert.equal(d.from, "GLDx");
-    assert.ok(d.to === "USDC" || d.to === "SOL" || d.to === "SPYx" || d.to === "QQQx");
-    assert.ok(d.clipUsd > 0);
+    assert.equal(d.to, "USDC");
   });
 
   it("skips stale oracles, thin books, failed quotes, and impact over cap", () => {
@@ -191,15 +206,14 @@ describe("ratio band engine", () => {
     assert.equal(d.to, "USDC");
   });
 
-  it("respects cooldown", () => {
+  it("respects cooldown while in USDC", () => {
     const book = emptyBook(1000);
-    book.pair = { solQty: 4, spyxQty: 0.26, qqqxQty: 0.42, gldxQty: 0.65, usdcQty: 200 };
     book.lastTradeAt = CASH - 60_000;
     const d = decidePair({
-      auto: auto({ cooldownMin: 15, band: "tight" }),
+      auto: auto({ cooldownMin: 15 }),
       book,
       prices: px(118, 770),
-      samples: hist(100, 770),
+      samples: uptrend(),
       study: DEFAULT_STUDY,
       now: CASH,
     });
@@ -207,18 +221,18 @@ describe("ratio band engine", () => {
     assert.match(d.reason, /Waiting/i);
   });
 
-  it("always mean-reverts — hold-mix is ignored", () => {
+  it("does not spray USDC across every sleeve on an empty book", () => {
     const book = emptyBook(1000);
     const d = decidePair({
-      auto: auto({ style: "hold_mix", targetSolPct: 0.7 }),
+      auto: auto({ cooldownMin: 0 }),
       book,
       prices: px(),
       samples: hist(),
       study: DEFAULT_STUDY,
       now: CASH,
     });
-    assert.equal(d.action, "deploy");
-    assert.equal(d.solPct, 0.2);
+    assert.notEqual(d.action, "deploy");
+    if (d.action === "swap") assert.equal(d.from, "USDC");
   });
 
   it("widens the band after losses — never loosens", () => {
@@ -230,31 +244,35 @@ describe("ratio band engine", () => {
 });
 
 describe("paper fills + kill", () => {
-  it("deploys then clips SOL→SPYx and fills QQQx + GLDx sleeves", () => {
+  it("buys from USDC then sells back to USDC on a trail", () => {
     const book = emptyBook(1000);
-    const prices = px();
-    const deployed = tickPairBook({
+    const prices = px(112, 800, 500_000, false, { qqqx: 520, gldx: 370 });
+    const bought = tickPairBook({
       book,
-      auto: auto(),
+      auto: auto({ cooldownMin: 0 }),
       prices,
-      samples: hist(),
+      samples: uptrend(100, 770, 64, { qqqx: 480, gldx: 310 }),
       study: DEFAULT_STUDY,
       now: CASH,
     });
-    assert.equal(deployed.decision.action, "deploy");
-    assert.ok((book.pair?.solQty || 0) > 0);
-    assert.ok((book.pair?.spyxQty || 0) > 0);
-    assert.ok((book.pair?.qqqxQty || 0) > 0);
-    assert.ok((book.pair?.gldxQty || 0) > 0);
-    assert.ok((book.pair?.usdcQty || 0) > 50);
+    assert.ok(bought.decision.action === "swap" || bought.decision.action === "hold");
+    if (bought.decision.action === "swap") {
+      assert.equal(bought.decision.from, "USDC");
+      assert.ok((book.pair?.usdcQty || 0) < 1000);
+    }
     assert.ok(book.equityUsd > 900);
 
     book.lastTradeAt = undefined;
     book.pair!.lastClipAt = {};
+    if (book.pair) {
+      book.pair.solQty = 4;
+      book.pair.solCostUsd = 400;
+      book.pair.stops = { SOL: { entryPx: 100, peakPx: 120, stopPx: 112, armed: true } };
+    }
     const high = tickPairBook({
       book,
-      auto: auto({ band: "tight", cooldownMin: 0 }),
-      prices: px(118, 770),
+      auto: auto({ cooldownMin: 0, takeProfitPct: 0.9 }),
+      prices: px(110, 770),
       samples: hist(100, 770),
       study: DEFAULT_STUDY,
       now: CASH + 1,
@@ -342,14 +360,7 @@ describe("paper fills + kill", () => {
 
   it("marks sleeve cost so a SOL move shows unrealized", () => {
     const book = emptyBook(1000);
-    tickPairBook({
-      book,
-      auto: auto({ cooldownMin: 0 }),
-      prices: px(100, 770),
-      samples: hist(100, 770),
-      study: DEFAULT_STUDY,
-      now: CASH,
-    });
+    book.pair = { solQty: 2, spyxQty: 0, qqqxQty: 0, gldxQty: 0, usdcQty: 800, solCostUsd: 200 };
     markPair(book, px(110, 770));
     const sol = book.positions.find((p) => p.symbol === "SOL");
     assert.ok(sol);

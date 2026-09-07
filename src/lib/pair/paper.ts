@@ -19,6 +19,7 @@ import {
   type Sleeve,
 } from "./engine";
 import { liveTradingEnabled } from "../liveFlag";
+import { DEFAULT_LEARN, noteExit } from "./signals";
 import type { HistoryStudy } from "./knowledge";
 import { SOL_MINT, USDC_MINT, XSTOCKS, type XStockId, type XStockSymbol, xstockBySymbol, xstockMint } from "./mints";
 import type { PairPrices } from "./prices";
@@ -118,6 +119,9 @@ export function flattenToUsdc(book: PaperBook, prices: PairPrices, now: number, 
     h.usdcQty += net;
     h.solQty = 0;
     h.solCostUsd = 0;
+    if (h.stops) delete h.stops.SOL;
+    if (!book.pairLearn) book.pairLearn = {};
+    book.pairLearn.SOL = noteExit(book.pairLearn.SOL || DEFAULT_LEARN, fill.pnlUsd || 0);
   }
   for (const x of XSTOCKS) {
     const qty = qtyOf(h, x.id);
@@ -135,6 +139,9 @@ export function flattenToUsdc(book: PaperBook, prices: PairPrices, now: number, 
     pushFill(book, fill);
     h.usdcQty += net;
     setSleeve(h, x.id, 0, 0);
+    if (h.stops) delete h.stops[x.symbol as "SPYx" | "QQQx" | "GLDx"];
+    if (!book.pairLearn) book.pairLearn = {};
+    book.pairLearn[x.symbol] = noteExit(book.pairLearn[x.symbol] || DEFAULT_LEARN, fill.pnlUsd || 0);
     if (mind) learnFromFill(mind, xstockMint(x.id), 0, "sol_spyx", undefined, true);
   }
   book.pair = h;
@@ -264,6 +271,17 @@ function swapSleeves(
   pushFill(book, sell);
   pushFill(book, buy);
   touchClip(h, pairId, now);
+  if (!h.stops) h.stops = {};
+  if (!book.pairLearn) book.pairLearn = {};
+  if (from === "USDC" && to !== "USDC") {
+    const k = to as "SOL" | "SPYx" | "QQQx" | "GLDx";
+    h.stops[k] = { entryPx: toPx, peakPx: toPx, stopPx: 0, armed: false };
+  }
+  if (to === "USDC" && from !== "USDC") {
+    const k = from as "SOL" | "SPYx" | "QQQx" | "GLDx";
+    delete h.stops[k];
+    book.pairLearn[from] = noteExit(book.pairLearn[from] || DEFAULT_LEARN, sell.pnlUsd || 0);
+  }
   book.pair = h;
   book.lastTradeAt = now;
   if (mind) {

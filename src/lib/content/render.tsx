@@ -67,53 +67,78 @@ function Footer({ shot }: { shot: Shot }) {
   );
 }
 
-function Candles({ shot, height = 210, width = 720 }: { shot: Shot; height?: number; width?: number }) {
-  const px = candlePixels(shot.candles, height);
-  const w = Math.max(8, Math.floor(width / Math.max(1, px.length)) - 4);
+function Candles({ shot, height = 280, width = 960 }: { shot: Shot; height?: number; width?: number }) {
+  const plot = Math.round(height * 0.78);
+  const volH = height - plot - 8;
+  const px = candlePixels(shot.candles, plot);
+  const col = Math.max(6, Math.floor((width - 24) / Math.max(1, px.length)));
+  const bodyW = Math.max(4, col - 3);
+  const maxVol = Math.max(...px.map((c) => c.vol), 0.01);
   return (
     <div
       style={{
         display: "flex",
-        flexDirection: "row",
-        alignItems: "flex-end",
-        height,
+        flexDirection: "column",
         width,
-        background: "#0b0614",
-        borderRadius: 18,
+        height,
+        background: "#07040f",
+        borderRadius: 16,
         border: `1px solid ${LINE}`,
-        paddingLeft: 12,
-        paddingRight: 12,
-        paddingTop: 12,
-        paddingBottom: 12,
+        paddingLeft: 10,
+        paddingRight: 10,
+        paddingTop: 10,
+        paddingBottom: 8,
+        position: "relative",
       }}
     >
-      {px.map((c, i) => (
-        <div
-          key={i}
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "flex-start",
-            width: w,
-            height: height - 8,
-            marginRight: 3,
-          }}
-        >
-          <div style={{ display: "flex", height: c.pad, width: 2 }} />
-          <div style={{ display: "flex", width: 2, height: c.top, background: c.up ? ACID : BLOOD }} />
+      <div style={{ display: "flex", position: "absolute", left: 10, right: 10, top: 18, height: 1, background: LINE }} />
+      <div style={{ display: "flex", position: "absolute", left: 10, right: 10, top: 18 + plot * 0.33, height: 1, background: LINE }} />
+      <div style={{ display: "flex", position: "absolute", left: 10, right: 10, top: 18 + plot * 0.66, height: 1, background: LINE }} />
+      <div style={{ display: "flex", flexDirection: "row", alignItems: "flex-end", height: plot, width: width - 20 }}>
+        {px.map((c, i) => (
           <div
+            key={i}
             style={{
               display: "flex",
-              width: Math.max(8, w - 4),
-              height: c.body,
-              background: c.up ? ACID : BLOOD,
-              borderRadius: 2,
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "flex-start",
+              width: col,
+              height: plot,
+            }}
+          >
+            <div style={{ display: "flex", height: Math.max(0, c.emaPad - 2), width: 1 }} />
+            <div style={{ display: "flex", width: 3, height: 3, borderRadius: 99, background: CYAN, marginBottom: 1 }} />
+            <div style={{ display: "flex", height: Math.max(0, c.pad - c.emaPad), width: 1 }} />
+            <div style={{ display: "flex", width: 1, height: c.top, background: c.up ? ACID : BLOOD }} />
+            <div
+              style={{
+                display: "flex",
+                width: bodyW,
+                height: c.body,
+                background: c.up ? ACID : BLOOD,
+                borderRadius: 1,
+              }}
+            />
+            <div style={{ display: "flex", width: 1, height: c.bot, background: c.up ? ACID : BLOOD }} />
+          </div>
+        ))}
+      </div>
+      <div style={{ display: "flex", flexDirection: "row", alignItems: "flex-end", height: volH, width: width - 20, marginTop: 6 }}>
+        {px.map((c, i) => (
+          <div
+            key={i}
+            style={{
+              display: "flex",
+              width: Math.max(3, bodyW - 1),
+              height: Math.max(2, (c.vol / maxVol) * (volH - 2)),
+              background: c.up ? `${ACID}99` : `${BLOOD}99`,
+              marginRight: col - Math.max(3, bodyW - 1),
+              borderRadius: 1,
             }}
           />
-          <div style={{ display: "flex", width: 2, height: c.bot, background: c.up ? ACID : BLOOD }} />
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
   );
 }
@@ -246,16 +271,18 @@ export async function renderShot(shot: Shot): Promise<Buffer> {
   const story = shot.aspect === "9:16";
   const faceW = story ? 624 : wide ? 420 : 640;
   const faceH = story ? 560 : wide ? 520 : 520;
-  const chartW = wide ? 680 : story ? 620 : 960;
-  const chartH = wide ? 280 : story ? 280 : 320;
+  const chartW = wide ? 1180 : story ? 620 : 1000;
+  const chartH = wide ? 360 : story ? 420 : 520;
 
   let inner: ReactNode;
   if (shot.layout === "tape") {
     inner = (
-      <div style={{ display: "flex", flexDirection: "column", justifyContent: "space-between", flex: 1 }}>
-        <Title shot={shot} large />
-        <div style={{ display: "flex", flexDirection: "column", marginTop: 18 }}>
-          <div style={{ display: "flex", color: MUTE, fontSize: 18, marginBottom: 10 }}>{shot.pair} · 15m</div>
+      <div style={{ display: "flex", flexDirection: "column", flex: 1 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
+          <Title shot={shot} large />
+          <div style={{ display: "flex", color: MUTE, fontSize: 18 }}>{shot.pair} · 15m</div>
+        </div>
+        <div style={{ display: "flex", marginTop: 16, flex: 1 }}>
           <Candles shot={shot} width={chartW} height={chartH} />
         </div>
         <Chips shot={shot} color={color} />
@@ -291,16 +318,14 @@ export async function renderShot(shot: Shot): Promise<Buffer> {
     );
   } else if (shot.layout === "split") {
     inner = (
-      <div style={{ display: "flex", flexDirection: wide || !story ? "row" : "column", flex: 1 }}>
-        <div style={{ display: "flex", marginRight: 24 }}>
-          <Face src={portrait} w={wide ? 380 : 360} h={wide ? 500 : 420} />
-        </div>
-        <div style={{ display: "flex", flexDirection: "column", flex: 1, justifyContent: "space-between" }}>
+      <div style={{ display: "flex", flexDirection: "column", flex: 1 }}>
+        <div style={{ display: "flex", flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
           <Title shot={shot} />
-          <div style={{ display: "flex", flexDirection: "column" }}>
-            <div style={{ display: "flex", color: MUTE, fontSize: 16, marginBottom: 8 }}>{shot.pair}</div>
-            <Candles shot={shot} width={wide ? 740 : 560} height={220} />
-          </div>
+          <Face src={portrait} w={160} h={160} />
+        </div>
+        <div style={{ display: "flex", color: MUTE, fontSize: 16, marginTop: 8 }}>{shot.pair} · 15m</div>
+        <div style={{ display: "flex", marginTop: 10, flex: 1 }}>
+          <Candles shot={shot} width={chartW} height={wide ? 380 : 440} />
         </div>
       </div>
     );

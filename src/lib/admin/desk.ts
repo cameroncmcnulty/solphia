@@ -15,7 +15,7 @@ import type { AdminDesk, AdminPromo, AdminSeat, AdminSleeve, AdminTrader } from 
 
 export type { AdminDesk, AdminSeat, AdminSleeve, AdminTrader } from "./types";
 
-export function buildAdminDesk(): AdminDesk {
+export function buildAdminDesk(opts?: { light?: boolean }): AdminDesk {
   const s = loadState();
   const paper = publicBook(s.paper);
   const pair = (lastPairDesk() || (s.lastPair as PairDeskPublic | null) || null) as PairDeskPublic | null;
@@ -91,7 +91,7 @@ export function buildAdminDesk(): AdminDesk {
         pnlLabel: p.pnlLabel,
         mime: p.mime,
         url,
-        dataUrl: i < 12 && p.file && p.kind === "image" ? promoDataUrl(p.file, p.mime) : undefined,
+        dataUrl: !opts?.light && i < 12 && p.file && p.kind === "image" ? promoDataUrl(p.file, p.mime) : undefined,
       };
     });
 

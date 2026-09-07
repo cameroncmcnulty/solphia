@@ -1,5 +1,5 @@
-export type Candle = { o: number; h: number; l: number; c: number; up: boolean };
-export type CandlePx = { top: number; body: number; bot: number; up: boolean; pad: number };
+export type Candle = { o: number; h: number; l: number; c: number; up: boolean; v: number };
+export type CandlePx = { top: number; body: number; bot: number; up: boolean; pad: number; vol: number; emaPad: number };
 export type SleeveBar = { name: string; tag: string; pct: number };
 export type CurveBar = { h: number; up: boolean };
 export type Step = { n: string; t: string; d: string };
@@ -19,21 +19,23 @@ export function pick<T>(rng: () => number, xs: T[], avoid?: T): T {
   return pool[Math.floor(rng() * pool.length)] || xs[0];
 }
 
-/** Aesthetic tape: quiet range, a stretch, a clip back. Not a live book. */
-export function fakeCandles(rng: () => number, n = 16): Candle[] {
-  let px = 42 + rng() * 16;
+/** Aesthetic 15m tape: range, a dip, a clip back. Not a live book. */
+export function fakeCandles(rng: () => number, n = 52): Candle[] {
+  let px = 48 + rng() * 8;
   const out: Candle[] = [];
-  const stretchAt = Math.floor(n * 0.55);
+  const dip = Math.floor(n * 0.62);
   for (let i = 0; i < n; i++) {
-    let drift = (rng() - 0.48) * 2.4;
-    if (i === stretchAt) drift = -5 - rng() * 4;
-    if (i === stretchAt + 1) drift = 3 + rng() * 3;
-    if (i > stretchAt + 1) drift = Math.abs(drift) * 0.6;
+    const noise = (rng() - 0.5) * 1.15;
+    let drift = noise;
+    if (i > dip && i < dip + 4) drift = -0.9 - rng() * 0.8;
+    if (i >= dip + 4 && i < dip + 10) drift = 0.55 + rng() * 0.45;
     const o = px;
-    const c = clamp(px + drift, 8, 92);
-    const h = Math.max(o, c) + rng() * 2.2;
-    const l = Math.min(o, c) - rng() * 2.2;
-    out.push({ o, h, l, c, up: c >= o });
+    const c = clamp(px + drift, 12, 88);
+    const wick = 0.25 + rng() * 0.7;
+    const h = Math.max(o, c) + wick * (0.4 + rng());
+    const l = Math.min(o, c) - wick * (0.3 + rng());
+    const v = 0.35 + rng() * 0.65 + (Math.abs(c - o) > 1.2 ? 0.3 : 0);
+    out.push({ o, h, l, c, up: c >= o, v });
     px = c;
   }
   return out;
@@ -42,19 +44,24 @@ export function fakeCandles(rng: () => number, n = 16): Candle[] {
 export function candlePixels(candles: Candle[], height = 200): CandlePx[] {
   const min = Math.min(...candles.map((c) => c.l));
   const max = Math.max(...candles.map((c) => c.h));
-  const span = max - min || 1;
-  const y = (v: number) => ((v - min) / span) * height;
+  const span = (max - min) * 1.08 || 1;
+  const floor = min - span * 0.04;
+  const y = (v: number) => ((v - floor) / span) * height;
+  let ema = candles[0]?.c || 0;
   return candles.map((c) => {
+    ema = ema * 0.85 + c.c * 0.15;
     const hi = y(c.h);
     const lo = y(c.l);
     const topBody = y(Math.max(c.o, c.c));
     const botBody = y(Math.min(c.o, c.c));
     return {
       pad: Math.max(0, height - hi),
-      top: Math.max(2, hi - topBody),
-      body: Math.max(5, topBody - botBody),
-      bot: Math.max(2, botBody - lo),
+      top: Math.max(1, hi - topBody),
+      body: Math.max(3, topBody - botBody),
+      bot: Math.max(1, botBody - lo),
       up: c.up,
+      vol: c.v,
+      emaPad: Math.max(0, height - y(ema)),
     };
   });
 }
