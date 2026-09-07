@@ -16,7 +16,7 @@ import type { RatioSample } from "./ratio";
 import { SLEEVE_WEIGHT, TRADE_PAIRS, xstockIdOf, type Sleeve, type TradePair } from "./catalog";
 import { enrichStudy } from "./policy";
 import type { ShortTape } from "./shortTape";
-import { CLIP_HARD, DEFAULT_LEARN, RISK_SLEEVES, ROUND_TRIP, needOf, nextTrail, readAsset } from "./signals";
+import { DEFAULT_LEARN, RISK_SLEEVES, needOf, nextTrail, readAsset } from "./signals";
 
 export type { Sleeve, TradePair } from "./catalog";
 export { SLEEVE_WEIGHT, TRADE_PAIRS };
@@ -344,47 +344,11 @@ export function decidePair(opts: {
     h.stops[sig.sleeve] = { ...trail, entryPx: prev.entryPx || entryPx };
     book.pair = h;
     const basis = prev.entryPx || entryPx;
-    const pnlPct = basis > 0 ? sig.px / basis - 1 : 0;
+    const locked = basis > 0 ? trail.stopPx / basis - 1 : 0;
     if (trail.armed && sig.px <= trail.stopPx) {
       return {
         action: "swap",
-        reason: `Trail hit on ${sig.sleeve} at ${sig.px.toFixed(2)} (stop ${trail.stopPx.toFixed(2)}). Back to USDC.`,
-        clipUsd: pos,
-        from: sig.sleeve,
-        to: "USDC",
-        asset: xstockIdOf(sig.sleeve) || undefined,
-        pairId: `usdc-${sig.sleeve.toLowerCase()}`,
-        z7: primary.z7,
-        z24: primary.z24,
-        ratio: primary.ratio,
-        bandK,
-        session,
-        read: primary,
-        reads,
-      };
-    }
-    if (pnlPct >= CLIP_HARD) {
-      return {
-        action: "swap",
-        reason: `${sig.sleeve} up ${(pnlPct * 100).toFixed(1)}%. Taking the 1.5% clip to USDC.`,
-        clipUsd: pos,
-        from: sig.sleeve,
-        to: "USDC",
-        asset: xstockIdOf(sig.sleeve) || undefined,
-        pairId: `usdc-${sig.sleeve.toLowerCase()}`,
-        z7: primary.z7,
-        z24: primary.z24,
-        ratio: primary.ratio,
-        bandK,
-        session,
-        read: primary,
-        reads,
-      };
-    }
-    if (sig.sell >= 0.55 && pnlPct > ROUND_TRIP) {
-      return {
-        action: "swap",
-        reason: `${sig.reason}. Selling back to USDC.`,
+        reason: `Trail hit on ${sig.sleeve} at ${sig.px.toFixed(2)} (stop ${trail.stopPx.toFixed(2)}, locked ${(locked * 100).toFixed(1)}%). Back to USDC.`,
         clipUsd: pos,
         from: sig.sleeve,
         to: "USDC",
@@ -407,8 +371,10 @@ export function decidePair(opts: {
     const trail = h.stops?.[s];
     const px = livePx(prices, s);
     const pnl = trail && trail.entryPx > 0 ? ((px / trail.entryPx - 1) * 100).toFixed(1) : "0.0";
-    const stop = trail?.armed ? ` · trail ${trail.stopPx.toFixed(2)}` : " · arming stop once fees are covered";
-    return empty("hold", `In ${s} ${pnl}%${stop}. Sitting in USDC for the rest.`);
+    const locked =
+      trail?.armed && trail.entryPx > 0 ? ` · locked +${((trail.stopPx / trail.entryPx - 1) * 100).toFixed(1)}%` : "";
+    const stop = trail?.armed ? ` · trail ${trail.stopPx.toFixed(2)}${locked}` : " · arming stop once fees are covered";
+    return empty("hold", `In ${s} ${pnl}%${stop}. Riding it.`);
   }
 
   if (cooldownMs > 0 && book.lastTradeAt && now - book.lastTradeAt < cooldownMs) {

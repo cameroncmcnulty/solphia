@@ -227,6 +227,18 @@ export function readAsset(
   };
 }
 
+/** How far below the peak the stop sits. Tightens as the run extends. Never used to lower a stop. */
+export function trailGiveback(peakProfit: number, atrPct: number, trailK: number): number {
+  const atr = Math.max(atrPct, 0.004);
+  const base = Math.max(0.003, Math.min(0.008, (trailK || 0.55) * atr));
+  if (peakProfit >= 0.04) return Math.min(base * 0.35, 0.003);
+  if (peakProfit >= 0.025) return Math.min(base * 0.42, 0.0035);
+  if (peakProfit >= CLIP_HARD) return Math.min(base * 0.5, 0.004);
+  if (peakProfit >= CLIP_AIM) return Math.min(base * 0.62, 0.005);
+  if (peakProfit >= CLIP_MIN) return Math.min(base * 0.75, 0.006);
+  return base;
+}
+
 export function nextTrail(opts: {
   entryPx: number;
   peakPx: number;
@@ -241,16 +253,15 @@ export function nextTrail(opts: {
   let { peakPx, stopPx, armed } = opts;
   peakPx = Math.max(peakPx, opts.px);
   const profit = opts.entryPx > 0 ? opts.px / opts.entryPx - 1 : 0;
+  const peakProfit = opts.entryPx > 0 ? peakPx / opts.entryPx - 1 : 0;
   if (!armed && profit >= round + 0.001) {
     armed = true;
-    stopPx = breakeven;
+    stopPx = Math.max(stopPx, breakeven);
   }
   if (armed) {
-    let k = Math.max(0.0035, Math.min(0.007, (opts.trailK || 0.55) * Math.max(opts.atrPct, 0.004)));
-    if (profit >= CLIP_MIN) k *= 0.85;
+    const k = trailGiveback(peakProfit, opts.atrPct, opts.trailK);
     const raw = peakPx * (1 - k);
-    const floor = profit >= CLIP_AIM ? peakPx * (1 - 0.004) : breakeven;
-    stopPx = Math.max(stopPx, raw, floor);
+    stopPx = Math.max(stopPx, raw, breakeven);
   }
   return { peakPx, stopPx, armed };
 }

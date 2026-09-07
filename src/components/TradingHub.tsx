@@ -247,7 +247,7 @@ export function TradingHub() {
           <p className="font-mono text-[11px] tracking-[0.28em] text-violet">SOL · S&P 500 · NASDAQ · GOLD</p>
           <h1 className="mt-1 font-display text-3xl leading-none text-ghost sm:text-4xl md:text-6xl">Operate</h1>
           <p className="mt-3 max-w-xl text-base text-mute sm:text-lg">
-            Connect Phantom. Add SOL. She sits in USDC and clips 0.8–1.5% swings in SOL, S&P 500, Nasdaq, and gold, 24/7. PnL is in USDC.
+            Connect Phantom. Add SOL. She sits in USDC, buys 0.8%+ dips in SOL, S&P 500, Nasdaq, and gold, then trails the stop up until it hits. PnL is in USDC.
           </p>
         </div>
         <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-row sm:items-center sm:gap-3">
@@ -400,9 +400,9 @@ export function TradingHub() {
           <div className="font-mono text-[10px] tracking-[0.22em] text-violet">HOW SHE TRADES</div>
           <h3 className="font-display text-2xl text-ghost">Every pair. USDC PnL.</h3>
           <p className="text-sm leading-relaxed text-mute">
-            She sits in USDC and buys the sleeve that just dipped ~0.8%+, then takes 0.8–1.5% back to cash. SOL
-            trades around the clock. She skips crash knives and anything fees would eat. 0.1% on each clip. 2 minutes
-            between trades. An 8% drop sells everything back to USDC and pauses.
+            She sits in USDC and buys the sleeve that just dipped ~0.8%+. After fees are covered she only moves the
+            stop up, tighter as the peak runs, and sells when it hits — so winners can keep going. SOL trades around
+            the clock. 0.1% on each clip. 2 minutes between trades. An 8% drop sells everything back to USDC and pauses.
           </p>
           <div className="grid grid-cols-3 gap-2">
             <Mini k="S&P 500" v={spyxUsd ? `$${Number(spyxUsd).toFixed(0)}` : "—"} />

@@ -19,6 +19,7 @@ import { bumpBand, logRatio } from "../lib/pair/ratio";
 import type { PairPrices } from "../lib/pair/prices";
 import type { RatioSample } from "../lib/pair/ratio";
 import type { AutoSettings } from "../lib/types";
+import { nextTrail } from "../lib/pair/signals";
 
 const CASH = Date.UTC(2026, 8, 3, 18, 0, 0); // Thu 14:00 ET
 
@@ -171,30 +172,7 @@ describe("USDC-home engine", () => {
     assert.equal(d.to, "USDC");
   });
 
-  it("takes profit to USDC when the sleeve is up enough", () => {
-    const book = emptyBook(1000);
-    book.pair = {
-      solQty: 0,
-      spyxQty: 0,
-      qqqxQty: 0,
-      gldxQty: 2,
-      usdcQty: 200,
-      gldxCostUsd: 400,
-      stops: { GLDx: { entryPx: 200, peakPx: 250, stopPx: 210, armed: true } },
-    };
-    const d = decidePair({
-      auto: auto({ cooldownMin: 0, stopPct: 0.9 }),
-      book,
-      prices: px(100, 770, 500_000, false, { gldx: 250 }),
-      samples: hist(100, 770, 48, { gldx: 200 }),
-      study: DEFAULT_STUDY,
-      now: CASH,
-    });
-    assert.equal(d.from, "GLDx");
-    assert.equal(d.to, "USDC");
-  });
-
-  it("takes a 1.6% SOL clip back to USDC", () => {
+  it("rides a winner — no hard take-profit, stop only moves up", () => {
     const book = emptyBook(1000);
     book.pair = {
       solQty: 4,
@@ -203,19 +181,47 @@ describe("USDC-home engine", () => {
       gldxQty: 0,
       usdcQty: 200,
       solCostUsd: 400,
-      stops: { SOL: { entryPx: 100, peakPx: 101.6, stopPx: 100.4, armed: true } },
+      stops: { SOL: { entryPx: 100, peakPx: 101.2, stopPx: 100.4, armed: true } },
     };
     const d = decidePair({
       auto: auto({ cooldownMin: 0, stopPct: 0.9 }),
       book,
-      prices: px(101.7, 770),
+      prices: px(103, 770),
       samples: hist(100, 770),
       study: DEFAULT_STUDY,
       now: CASH,
     });
-    assert.equal(d.action, "swap");
-    assert.equal(d.from, "SOL");
+    assert.equal(d.action, "hold");
+    assert.match(d.reason, /Riding it/i);
+    const stop = book.pair?.stops?.SOL;
+    assert.ok(stop?.armed);
+    assert.ok((stop?.peakPx || 0) >= 103);
+    assert.ok((stop?.stopPx || 0) > 100.4);
+    assert.ok((stop?.stopPx || 0) < 103);
+  });
+
+  it("sells only when price falls through the ratcheted trail", () => {
+    const book = emptyBook(1000);
+    book.pair = {
+      solQty: 0,
+      spyxQty: 0,
+      qqqxQty: 0,
+      gldxQty: 2,
+      usdcQty: 200,
+      gldxCostUsd: 400,
+      stops: { GLDx: { entryPx: 200, peakPx: 250, stopPx: 248, armed: true } },
+    };
+    const d = decidePair({
+      auto: auto({ cooldownMin: 0, stopPct: 0.9 }),
+      book,
+      prices: px(100, 770, 500_000, false, { gldx: 247 }),
+      samples: hist(100, 770, 48, { gldx: 200 }),
+      study: DEFAULT_STUDY,
+      now: CASH,
+    });
+    assert.equal(d.from, "GLDx");
     assert.equal(d.to, "USDC");
+    assert.match(d.reason, /Trail hit/i);
   });
 
   it("skips stale oracles, thin books, failed quotes, and impact over cap", () => {
@@ -412,5 +418,36 @@ describe("paper fills + kill", () => {
 describe("log-ratio", () => {
   it("R = P_SOL / P_asset", () => {
     assert.ok(Math.abs(logRatio(100, 770) - Math.log(100 / 770)) < 1e-12);
+  });
+});
+
+describe("trailing stop ratchet", () => {
+  it("arms at breakeven, only ratchets up, and tightens as the peak runs", () => {
+    let t = nextTrail({
+      entryPx: 100,
+      peakPx: 100,
+      stopPx: 0,
+      armed: false,
+      px: 100.5,
+      atrPct: 0.01,
+      trailK: 0.55,
+    });
+    assert.equal(t.armed, true);
+    assert.ok(t.stopPx >= 100.3);
+    assert.ok(t.stopPx < 100.5);
+    const first = t.stopPx;
+
+    t = nextTrail({ ...t, entryPx: 100, px: 102, atrPct: 0.01, trailK: 0.55 });
+    assert.ok(t.peakPx >= 102);
+    assert.ok(t.stopPx > first);
+    const second = t.stopPx;
+
+    t = nextTrail({ ...t, entryPx: 100, px: 101.9, atrPct: 0.01, trailK: 0.55 });
+    assert.equal(t.stopPx, second);
+
+    t = nextTrail({ ...t, entryPx: 100, px: 104, atrPct: 0.01, trailK: 0.55 });
+    assert.ok(t.stopPx > second);
+    const locked = t.stopPx / 100 - 1;
+    assert.ok(locked > 0.02);
   });
 });
