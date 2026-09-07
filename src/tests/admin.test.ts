@@ -1,8 +1,12 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
 import { describe, it } from "node:test";
+import { PNG } from "pngjs";
 import { bookHoldingUsd, sumWindows, windowClip } from "../lib/admin/stats";
 import { prunePromos, PROMO_CAP } from "../lib/admin/promo";
 import { localPack } from "../lib/content/copy";
+import { coverBlit, loadPng } from "../lib/content/crop";
 import { emptyBook } from "../lib/auto";
 import { emptyState } from "../lib/store";
 import type { PromoItem } from "../lib/types";
@@ -114,5 +118,25 @@ describe("content bot", () => {
   it("leans gold when asked", () => {
     const shots = localPack(42, "gold this week");
     assert.ok(shots.some((s) => /gold/i.test(s.headline + s.caption)));
+  });
+
+  it("cover-crops the face with uniform scale — no stretch", () => {
+    const face = path.join(process.cwd(), "public", "solphia-face.png");
+    assert.equal(fs.existsSync(face), true);
+    const src = loadPng("solphia-face.png");
+    assert.equal(src.width, 864);
+    assert.equal(src.height, 1152);
+    const dest = new PNG({ width: 864, height: 864, colorType: 6 });
+    const { scale } = coverBlit(src, dest, { x: 0, y: 0, w: 864, h: 864 }, 50, 8);
+    assert.equal(scale, 1);
+    const oy = Math.round(0.08 * (1152 - 864));
+    const sx = 120;
+    const sy = 80;
+    const si = (sy * src.width + sx) * 4;
+    const di = ((sy - oy) * dest.width + sx) * 4;
+    if (sy >= oy) {
+      assert.ok(Math.abs(dest.data[di] - src.data[si]) < 8);
+      assert.ok(Math.abs(dest.data[di + 1] - src.data[si + 1]) < 8);
+    }
   });
 });

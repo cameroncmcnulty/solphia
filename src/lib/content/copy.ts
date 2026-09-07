@@ -168,7 +168,7 @@ function directArt(layout: Layout, aspect: Aspect, rng: () => number, used: Comp
     fit,
     asset: pick(rng, ASSETS),
     cropX: 42 + rng() * 16,
-    cropY: aspect === "9:16" ? 6 + rng() * 16 : rng() * 14,
+    cropY: aspect === "9:16" ? 0 : 6 + rng() * 12,
     shiftX: 0,
     shiftY: 0,
     fade: aspect === "16:9" ? (fit === "left" ? "right" : "left") : pick(rng, ["bottom", "bottom", "top", "center"] as Art["fade"][]),

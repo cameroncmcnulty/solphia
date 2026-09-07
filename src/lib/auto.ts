@@ -11,7 +11,7 @@ export const DEFAULT_AUTO: AutoSettings = {
   clipPct: 0.12,
   cooldownMin: 2,
   stopPct: 0.08,
-  takeProfitPct: 0.12,
+  takeProfitPct: 0.012,
   targetSolPct: 0.2,
   slippageBps: 50,
   maxImpactPct: 0.004,

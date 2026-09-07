@@ -96,6 +96,25 @@ function uptrend(sol = 100, spyx = 770, n = 64, extra?: { qqqx?: number; gldx?: 
   return out;
 }
 
+/** Last hour SOL is ~1.2% cheap. The 0.8–1.5% clip she is built for. */
+function dipSol(sol = 100, spyx = 770, n = 48, extra?: { qqqx?: number; gldx?: number }): RatioSample[] {
+  const hour = 3_600_000;
+  const q0 = extra?.qqqx ?? 480;
+  const g0 = extra?.gldx ?? 310;
+  const out: RatioSample[] = [];
+  for (let i = n; i >= 1; i--) {
+    const last = i === 1;
+    out.push({
+      t: CASH - i * hour,
+      sol: last ? sol * 0.988 : sol,
+      spyx,
+      qqqx: q0,
+      gldx: g0,
+    });
+  }
+  return out;
+}
+
 describe("USDC-home engine", () => {
   it("sits in USDC when the tape is quiet", () => {
     const book = emptyBook(1000);
@@ -107,30 +126,25 @@ describe("USDC-home engine", () => {
       study: DEFAULT_STUDY,
       now: CASH,
     });
-    assert.ok(d.action === "hold" || d.action === "skip" || (d.action === "swap" && d.from === "USDC"));
-    if (d.action === "hold") assert.match(d.reason, /USDC/i);
+    assert.equal(d.action, "hold");
+    assert.match(d.reason, /USDC/i);
   });
 
-  it("buys an uptrending sleeve from USDC", () => {
+  it("buys SOL from USDC on a ~1.2% dip — the 0.8–1.5% clip", () => {
     const book = emptyBook(1000);
-    book.pairLearn = {
-      SOL: { trades: 4, wins: 3, pnlUsd: 12, buyNeed: 0.35, trailK: 1.1 },
-      SPYx: { trades: 4, wins: 3, pnlUsd: 8, buyNeed: 0.35, trailK: 1.1 },
-      QQQx: { trades: 4, wins: 3, pnlUsd: 9, buyNeed: 0.35, trailK: 1.1 },
-      GLDx: { trades: 4, wins: 3, pnlUsd: 10, buyNeed: 0.35, trailK: 1.1 },
-    };
     const d = decidePair({
       auto: auto({ cooldownMin: 0, stopPct: 0.9 }),
       book,
-      prices: px(104.2, 776, 500_000, false, { qqqx: 488, gldx: 318 }),
-      samples: uptrend(100, 770, 64, { qqqx: 480, gldx: 310 }),
+      prices: px(98.8, 770),
+      samples: dipSol(),
       study: DEFAULT_STUDY,
       now: CASH,
     });
     assert.equal(d.action, "swap");
     assert.equal(d.from, "USDC");
-    assert.ok(["SOL", "SPYx", "QQQx", "GLDx"].includes(String(d.to)));
+    assert.equal(d.to, "SOL");
     assert.ok(d.clipUsd > 0);
+    assert.match(d.reason, /Buy SOL/i);
   });
 
   it("trails a winner and sells back to USDC when the stop is hit", () => {
@@ -169,7 +183,7 @@ describe("USDC-home engine", () => {
       stops: { GLDx: { entryPx: 200, peakPx: 250, stopPx: 210, armed: true } },
     };
     const d = decidePair({
-      auto: auto({ cooldownMin: 0, takeProfitPct: 0.12, stopPct: 0.9 }),
+      auto: auto({ cooldownMin: 0, stopPct: 0.9 }),
       book,
       prices: px(100, 770, 500_000, false, { gldx: 250 }),
       samples: hist(100, 770, 48, { gldx: 200 }),
@@ -177,6 +191,30 @@ describe("USDC-home engine", () => {
       now: CASH,
     });
     assert.equal(d.from, "GLDx");
+    assert.equal(d.to, "USDC");
+  });
+
+  it("takes a 1.6% SOL clip back to USDC", () => {
+    const book = emptyBook(1000);
+    book.pair = {
+      solQty: 4,
+      spyxQty: 0,
+      qqqxQty: 0,
+      gldxQty: 0,
+      usdcQty: 200,
+      solCostUsd: 400,
+      stops: { SOL: { entryPx: 100, peakPx: 101.6, stopPx: 100.4, armed: true } },
+    };
+    const d = decidePair({
+      auto: auto({ cooldownMin: 0, stopPct: 0.9 }),
+      book,
+      prices: px(101.7, 770),
+      samples: hist(100, 770),
+      study: DEFAULT_STUDY,
+      now: CASH,
+    });
+    assert.equal(d.action, "swap");
+    assert.equal(d.from, "SOL");
     assert.equal(d.to, "USDC");
   });
 
@@ -246,12 +284,11 @@ describe("USDC-home engine", () => {
 describe("paper fills + kill", () => {
   it("buys from USDC then sells back to USDC on a trail", () => {
     const book = emptyBook(1000);
-    const prices = px(112, 800, 500_000, false, { qqqx: 520, gldx: 370 });
     const bought = tickPairBook({
       book,
       auto: auto({ cooldownMin: 0 }),
-      prices,
-      samples: uptrend(100, 770, 64, { qqqx: 480, gldx: 310 }),
+      prices: px(98.8, 770),
+      samples: dipSol(),
       study: DEFAULT_STUDY,
       now: CASH,
     });
@@ -263,15 +300,19 @@ describe("paper fills + kill", () => {
     assert.ok(book.equityUsd > 900);
 
     book.lastTradeAt = undefined;
-    book.pair!.lastClipAt = {};
-    if (book.pair) {
-      book.pair.solQty = 4;
-      book.pair.solCostUsd = 400;
-      book.pair.stops = { SOL: { entryPx: 100, peakPx: 120, stopPx: 112, armed: true } };
-    }
+    book.pair = {
+      solQty: 4,
+      spyxQty: 0,
+      qqqxQty: 0,
+      gldxQty: 0,
+      usdcQty: 200,
+      solCostUsd: 400,
+      lastClipAt: {},
+      stops: { SOL: { entryPx: 100, peakPx: 120, stopPx: 112, armed: true } },
+    };
     const high = tickPairBook({
       book,
-      auto: auto({ cooldownMin: 0, takeProfitPct: 0.9 }),
+      auto: auto({ cooldownMin: 0, stopPct: 0.9 }),
       prices: px(110, 770),
       samples: hist(100, 770),
       study: DEFAULT_STUDY,

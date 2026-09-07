@@ -52,11 +52,11 @@ export const FAQS: { q: string; a: string }[] = [
   },
   {
     q: "What does she trade?",
-    a: "She sits in USDC. When her engine says so she buys official SPYx (S&P 500), QQQx (Nasdaq-100), GLDx (gold), or SOL. She sells back to USDC on take-profit or a trailing stop that only arms after fees are covered. Nothing else. No memecoins, no copy trading, no sniping.",
+    a: "She sits in USDC. She buys official SPYx (S&P 500), QQQx (Nasdaq-100), GLDx (gold), or SOL when a sleeve is ~0.8% cheap, then sells back to USDC on a 0.8–1.5% clip or a trailing stop that only arms after fees. SOL runs 24/7. Nothing else. No memecoins, no copy trading, no sniping.",
   },
   {
     q: "How does she decide?",
-    a: "She reads RSI, MACD, EMA trend, ATR, short-tape pulses, and session (cash vs after hours vs weekend). She skips knives and fee-eaten noise. Once a trade is in profit after swap fees she arms a stop and walks it up as the peak grows. She learns from her own closed trades. PnL stays in USDC.",
+    a: "Mean-revert clips, not trend-chasing. She buys a 0.5–2.5% dip (after fees still leave 0.8%+), skips crash knives and dead tape, takes 0.8–1.5% back to USDC, and trails once the clip is in. SOL is the 24/7 sleeve. Equities sit more on weekends. She learns from closed trades. PnL stays in USDC.",
   },
   {
     q: "Are these the same as the New York market?",

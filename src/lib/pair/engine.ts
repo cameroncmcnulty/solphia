@@ -16,7 +16,7 @@ import type { RatioSample } from "./ratio";
 import { SLEEVE_WEIGHT, TRADE_PAIRS, xstockIdOf, type Sleeve, type TradePair } from "./catalog";
 import { enrichStudy } from "./policy";
 import type { ShortTape } from "./shortTape";
-import { DEFAULT_LEARN, RISK_SLEEVES, ROUND_TRIP, nextTrail, readAsset } from "./signals";
+import { CLIP_HARD, DEFAULT_LEARN, RISK_SLEEVES, ROUND_TRIP, needOf, nextTrail, readAsset } from "./signals";
 
 export type { Sleeve, TradePair } from "./catalog";
 export { SLEEVE_WEIGHT, TRADE_PAIRS };
@@ -345,7 +345,6 @@ export function decidePair(opts: {
     book.pair = h;
     const basis = prev.entryPx || entryPx;
     const pnlPct = basis > 0 ? sig.px / basis - 1 : 0;
-    const tp = auto.takeProfitPct || 0.12;
     if (trail.armed && sig.px <= trail.stopPx) {
       return {
         action: "swap",
@@ -364,10 +363,10 @@ export function decidePair(opts: {
         reads,
       };
     }
-    if (pnlPct >= tp) {
+    if (pnlPct >= CLIP_HARD) {
       return {
         action: "swap",
-        reason: `${sig.sleeve} up ${(pnlPct * 100).toFixed(1)}%. Taking profit to USDC.`,
+        reason: `${sig.sleeve} up ${(pnlPct * 100).toFixed(1)}%. Taking the 1.5% clip to USDC.`,
         clipUsd: pos,
         from: sig.sleeve,
         to: "USDC",
@@ -419,10 +418,14 @@ export function decidePair(opts: {
 
   const clipUsd = Math.max(PAIR_MIN_CLIP_USD, Math.min(allocated * 0.85, h.usdcQty * 0.9));
   let best = sigs[0];
-  for (const s of sigs) if (!best || s.buy > best.buy) best = s;
+  for (const s of sigs) {
+    const adj = s.buy + (s.sleeve === "SOL" ? 0.04 : 0);
+    const bestAdj = best ? best.buy + (best.sleeve === "SOL" ? 0.04 : 0) : -1;
+    if (!best || adj > bestAdj) best = s;
+  }
   if (best && h.usdcQty >= PAIR_MIN_CLIP_USD * 2) {
-    const need = (learn[best.sleeve] || DEFAULT_LEARN).buyNeed;
-    if (best.buy >= need && best.buy - (sigs.filter((s) => s !== best).reduce((m, s) => Math.max(m, s.buy), 0) || 0) >= -0.05) {
+    const need = needOf(learn[best.sleeve] || DEFAULT_LEARN);
+    if (best.buy >= need) {
       return {
         action: "swap",
         reason: best.reason,
