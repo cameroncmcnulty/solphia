@@ -123,10 +123,12 @@ export function WalletConnect({ compact: _compact = false }: { compact?: boolean
       disabled={busy}
       onClick={connect}
       title={addr ? "Switch Phantom wallet" : "Connect Phantom"}
-      className="btn-ghost inline-flex min-h-[40px] items-center gap-2 rounded-full px-3 py-2 font-mono text-[11px] tracking-widest sm:min-h-[44px] sm:px-4"
+      className="btn-ghost inline-flex h-10 shrink-0 items-center gap-1.5 rounded-full px-2.5 py-2 font-mono text-[10px] tracking-widest sm:h-11 sm:gap-2 sm:px-4 sm:text-[11px]"
     >
-      <PhantomMark className="h-5 w-5 shrink-0 text-white" />
-      {busy ? "CONNECTING…" : addr ? `${addr.slice(0, 4)}…${addr.slice(-4)}` : "CONNECT"}
+      <PhantomMark className="h-4 w-4 shrink-0 text-white sm:h-5 sm:w-5" />
+      <span className="whitespace-nowrap">
+        {busy ? "…" : addr ? `${addr.slice(0, 4)}…${addr.slice(-4)}` : "CONNECT"}
+      </span>
     </button>
   );
 }

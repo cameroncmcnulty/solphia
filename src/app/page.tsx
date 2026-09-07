@@ -3,42 +3,38 @@
 import Link from "next/link";
 import { SolphiaFace } from "@/components/SolphiaFace";
 import { LiveStats } from "@/components/LiveStats";
+import { TickerCharts } from "@/components/TickerCharts";
 import { FaqList } from "@/components/FaqList";
-import { useMarket } from "@/lib/hooks";
 
 export default function Home() {
-  const { data } = useMarket(8000);
-  const pair = data?.pair;
-  const tape = (data?.paper?.tape || []).slice(0, 8);
-
   return (
     <main className="relative">
       <section className="relative">
-        <div className="mx-auto grid max-w-6xl items-center gap-6 px-4 pt-2 md:px-12 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] lg:min-h-[78vh] lg:gap-10 lg:py-8">
-          <div className="order-1 mx-auto w-full max-w-[240px] sm:max-w-[340px] lg:order-2 lg:max-w-[480px]">
+        <div className="mx-auto grid max-w-6xl items-center gap-4 px-4 pt-2 md:gap-6 md:px-12 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] lg:min-h-[72vh] lg:gap-10 lg:py-8">
+          <div className="order-1 mx-auto w-full max-w-[200px] sm:max-w-[340px] lg:order-2 lg:max-w-[480px]">
             <SolphiaFace mode="hero" />
           </div>
-          <div className="order-2 pb-16 pt-2 lg:order-1 lg:pb-8 lg:pt-8">
-            <p className="text-lg font-medium tracking-wide text-mute sm:text-2xl">Meet</p>
-            <h1 className="solphia-flow mt-1 font-display text-[clamp(2.5rem,11vw,5.75rem)] font-bold leading-[0.9] tracking-[-0.04em]">
+          <div className="order-2 pb-8 pt-1 lg:order-1 lg:pb-8 lg:pt-8">
+            <p className="text-base font-medium tracking-wide text-mute sm:text-2xl">Meet</p>
+            <h1 className="solphia-flow mt-1 font-display text-[clamp(2.4rem,12vw,5.75rem)] font-bold leading-[0.9] tracking-[-0.04em]">
               SOLPHIA
             </h1>
-            <p className="mt-5 max-w-xl text-xl leading-snug text-ghost sm:text-3xl sm:leading-tight">
+            <p className="mt-4 max-w-xl text-lg leading-snug text-ghost sm:text-3xl sm:leading-tight">
               She splits SOL across USDC, S&P 500, Nasdaq-100, and gold — and trades whichever pair is stretched.
             </p>
-            <p className="mt-3 max-w-lg text-base leading-relaxed text-mute sm:text-xl">
+            <p className="mt-3 max-w-lg text-sm leading-relaxed text-mute sm:text-xl">
               Connect Phantom. Add SOL. She handles the rest. Practice first. Your keys stay in your wallet.
             </p>
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+            <div className="mt-6 flex flex-col gap-3 sm:mt-8 sm:flex-row">
               <Link
                 href="/trading"
-                className="btn-acid inline-flex min-h-[52px] items-center justify-center rounded-full px-8 py-3 text-center text-base sm:min-h-[56px] sm:text-lg"
+                className="btn-acid inline-flex min-h-[48px] w-full items-center justify-center rounded-full px-6 py-3 text-center text-base sm:min-h-[56px] sm:w-auto sm:px-8 sm:text-lg"
               >
                 LAUNCH BOT
               </Link>
               <Link
                 href="/faq"
-                className="btn-ghost inline-flex min-h-[52px] items-center justify-center rounded-full px-8 py-3 text-center text-base sm:min-h-[56px] sm:text-lg"
+                className="btn-ghost inline-flex min-h-[48px] w-full items-center justify-center rounded-full px-6 py-3 text-center text-base sm:min-h-[56px] sm:w-auto sm:px-8 sm:text-lg"
               >
                 How she trades
               </Link>
@@ -48,35 +44,9 @@ export default function Home() {
       </section>
 
       <LiveStats />
+      <TickerCharts />
 
-      <section className="px-4 py-6 md:px-12">
-        <div className="mb-3 text-sm text-mute">Last moves</div>
-        <div className="flex gap-3 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {tape.map((row: any) => (
-            <Link
-              key={row.id}
-              href="/trading"
-              className="btn-ghost flex shrink-0 items-center gap-3 rounded-full px-5 py-3 text-base"
-            >
-              <span className="font-display text-xl text-ghost">
-                {row.action === "trade" || row.action === "deploy"
-                  ? "traded"
-                  : row.action === "skip" || row.action === "hold"
-                    ? "waiting"
-                    : String(row.action || "waiting")}
-              </span>
-              <span className={row.action === "trade" || row.action === "deploy" ? "text-acid" : "text-mute"}>
-                {row.from && row.to && row.from !== "none" ? `${row.from} → ${row.to}` : "sitting"}
-              </span>
-            </Link>
-          ))}
-          {!tape.length && (
-            <span className="text-base text-mute">{pair?.reason || "Waiting on prices…"}</span>
-          )}
-        </div>
-      </section>
-
-      <section className="px-4 py-12 md:px-12 md:py-16">
+      <section className="px-4 py-10 md:px-12 md:py-16">
         <p className="text-base text-acid sm:text-lg">How it works</p>
         <h2 className="mt-2 max-w-3xl font-display text-3xl leading-tight text-ghost sm:text-4xl md:text-6xl">
           Connect. Add SOL. She trades.
@@ -106,7 +76,7 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="px-4 py-12 md:px-12 md:py-16">
+      <section className="px-4 py-10 md:px-12 md:py-16">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <h2 className="font-display text-3xl text-ghost sm:text-4xl md:text-5xl">Questions</h2>
           <Link href="/faq" className="text-base text-violet sm:text-lg">
@@ -118,8 +88,8 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="px-4 pb-24 md:px-12">
-        <div className="panel rounded-3xl p-6 sm:p-8 md:flex md:items-center md:justify-between md:p-14">
+      <section className="px-4 pb-8 md:px-12">
+        <div className="panel rounded-3xl p-5 sm:p-8 md:flex md:items-center md:justify-between md:p-14">
           <div>
             <p className="text-base text-mute sm:text-lg">Ready</p>
             <h2 className="mt-2 font-display text-3xl text-ghost sm:text-4xl md:text-6xl">Turn her on.</h2>
@@ -128,13 +98,13 @@ export default function Home() {
           <div className="mt-6 flex flex-col gap-3 sm:flex-row md:mt-0">
             <Link
               href="/trading"
-              className="btn-acid inline-flex min-h-[52px] items-center justify-center rounded-full px-8 py-3 text-base sm:text-lg"
+              className="btn-acid inline-flex min-h-[48px] w-full items-center justify-center rounded-full px-6 py-3 text-base sm:w-auto sm:px-8 sm:text-lg"
             >
               LAUNCH BOT
             </Link>
             <Link
               href="/pricing"
-              className="btn-ghost inline-flex min-h-[52px] items-center justify-center rounded-full px-8 py-3 text-base sm:text-lg"
+              className="btn-ghost inline-flex min-h-[48px] w-full items-center justify-center rounded-full px-6 py-3 text-base sm:w-auto sm:px-8 sm:text-lg"
             >
               See pricing
             </Link>
@@ -147,7 +117,7 @@ export default function Home() {
 
 function Step({ n, t, d, href, c }: { n: string; t: string; d: string; href: string; c: string }) {
   return (
-    <Link href={href} className="panel rounded-3xl p-6 sm:p-7">
+    <Link href={href} className="panel rounded-3xl p-5 sm:p-7">
       <div className="text-base text-acid sm:text-lg">{n}</div>
       <div className="mt-3 font-display text-2xl text-ghost sm:text-3xl">{t}</div>
       <p className="mt-3 text-base leading-relaxed text-mute">{d}</p>
@@ -158,7 +128,7 @@ function Step({ n, t, d, href, c }: { n: string; t: string; d: string; href: str
 
 function Feature({ t, d, href }: { t: string; d: string; href: string }) {
   return (
-    <Link href={href} className="panel rounded-3xl p-6 sm:p-7">
+    <Link href={href} className="panel rounded-3xl p-5 sm:p-7">
       <div className="font-display text-2xl leading-tight text-ghost sm:text-3xl">{t}</div>
       <p className="mt-3 text-base leading-relaxed text-mute">{d}</p>
       <div className="mt-6 text-base text-acid">Open →</div>

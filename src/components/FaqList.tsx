@@ -17,8 +17,8 @@ export function FaqList({ limit }: { limit?: number }) {
             className="panel w-full rounded-2xl p-4 text-left"
           >
             <div className="flex items-center justify-between gap-3">
-              <span className="font-display text-base text-ghost">{f.q}</span>
-              <span className="font-mono text-acid">{on ? "−" : "+"}</span>
+              <span className="min-w-0 pr-2 font-display text-base leading-snug text-ghost">{f.q}</span>
+              <span className="shrink-0 font-mono text-acid">{on ? "−" : "+"}</span>
             </div>
             {on && <p className="mt-3 text-sm leading-relaxed text-mute">{f.a}</p>}
           </button>

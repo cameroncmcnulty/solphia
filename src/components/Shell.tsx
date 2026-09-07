@@ -7,7 +7,7 @@ import { LiveRunner } from "./LiveRunner";
 
 export function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="relative min-h-screen overflow-x-hidden pb-24 md:pb-8">
+    <div className="relative min-h-screen overflow-x-hidden pb-28 md:pb-8">
       <ParticleField />
       <div className="vignette" />
       <div className="relative z-10">

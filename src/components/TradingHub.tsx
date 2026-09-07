@@ -241,7 +241,7 @@ export function TradingHub() {
   const gldxUsd = pair?.gldxUsd || 0;
 
   return (
-    <main className="mx-auto max-w-7xl px-4 pb-10 pt-2 md:px-8">
+    <main className="mx-auto max-w-7xl px-4 pb-6 pt-2 md:px-8">
       <header className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <p className="font-mono text-[11px] tracking-[0.28em] text-violet">SOL · S&P 500 · NASDAQ · GOLD</p>
@@ -250,18 +250,20 @@ export function TradingHub() {
             Connect Phantom. Add SOL. She splits across SOL, USDC, S&P 500, Nasdaq-100, and gold — and trades whichever pair looks stretched. PnL is in USDC.
           </p>
         </div>
-        <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center">
-          <WalletConnect />
+        <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-row sm:items-center sm:gap-3">
+          <div className="col-span-2 sm:col-auto [&_button]:w-full sm:[&_button]:w-auto">
+            <WalletConnect />
+          </div>
           {book?.killed ? (
             <button
               type="button"
               onClick={() => patch({ armed: true })}
-              className="btn-acid inline-flex min-h-[52px] w-full items-center justify-center rounded-full px-8 py-3 text-base sm:min-h-[56px] sm:w-auto sm:text-lg"
+              className="btn-acid col-span-1 inline-flex min-h-[48px] w-full items-center justify-center rounded-full px-4 py-3 text-sm sm:min-h-[56px] sm:w-auto sm:px-8 sm:text-lg"
             >
               RESUME
             </button>
           ) : (
-            <div className="btn-on inline-flex min-h-[52px] w-full items-center justify-center rounded-full px-8 py-3 text-base sm:min-h-[56px] sm:w-auto sm:text-lg">
+            <div className="btn-on col-span-1 inline-flex min-h-[48px] w-full items-center justify-center rounded-full px-4 py-3 text-sm sm:min-h-[56px] sm:w-auto sm:px-8 sm:text-lg">
               PAPER ON
             </div>
           )}
@@ -269,7 +271,7 @@ export function TradingHub() {
             type="button"
             onClick={kill}
             disabled={busy}
-            className="inline-flex min-h-[52px] items-center justify-center rounded-full border-2 border-blood px-6 py-3 text-base text-blood sm:min-h-[56px]"
+            className="inline-flex min-h-[48px] w-full items-center justify-center rounded-full border-2 border-blood px-4 py-3 text-sm text-blood sm:min-h-[56px] sm:w-auto sm:px-6 sm:text-base"
           >
             KILL
           </button>
@@ -336,7 +338,7 @@ export function TradingHub() {
             TRADING WALLET · {tradePk ? `${tradePk.slice(0, 4)}…${tradePk.slice(-4)}` : "connect first"} · keys never leave
             this device
           </div>
-          <div className="mt-3 grid grid-cols-4 gap-2">
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
             {[0.1, 0.5, 1, 2].map((n) => (
               <button
                 key={n}
@@ -366,8 +368,8 @@ export function TradingHub() {
           </div>
         </div>
 
-        <div className="mt-6 flex items-center justify-between gap-3 rounded-2xl border border-violet/20 p-4">
-          <div>
+        <div className="mt-6 flex flex-col gap-3 rounded-2xl border border-violet/20 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
             <div className="font-display text-xl text-ghost">{auto?.mode === "live" ? "Real trades" : "Practice mode"}</div>
             <p className="mt-1 text-sm text-mute">
               {liveTrading
@@ -381,7 +383,7 @@ export function TradingHub() {
             type="button"
             disabled={!liveTrading}
             onClick={() => patch({ mode: auto?.mode === "live" ? "paper" : "live" })}
-            className={`min-h-[44px] shrink-0 rounded-full px-5 font-mono text-[12px] ${
+            className={`min-h-[44px] w-full shrink-0 rounded-full px-5 font-mono text-[12px] sm:w-auto ${
               auto?.mode === "live" ? "btn-on" : "btn-ghost"
             } disabled:opacity-40`}
           >
