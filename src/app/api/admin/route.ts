@@ -27,6 +27,7 @@ const Patch = z.object({
   treasuryWallet: z.string().nullable().optional(),
   liveTrading: z.boolean().optional(),
   generatePromo: z.boolean().optional(),
+  contentHint: z.string().max(280).optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -66,11 +67,11 @@ export async function POST(req: NextRequest) {
     });
   }
   if (body.generatePromo) {
-    const result = await generatePromoPack({ force: true, includeVideo: true });
+    const result = await generatePromoPack({ force: true, hint: body.contentHint });
     if (result.error && result.made === 0) {
-      return NextResponse.json({ error: result.error, desk: buildAdminDesk() }, { status: 400 });
+      return NextResponse.json({ error: result.error, note: result.note, desk: buildAdminDesk() }, { status: 400 });
     }
-    return NextResponse.json({ ok: true, made: result.made, desk: buildAdminDesk() });
+    return NextResponse.json({ ok: true, made: result.made, note: result.note, desk: buildAdminDesk() });
   }
   return NextResponse.json({ ok: true, desk: buildAdminDesk() });
 }

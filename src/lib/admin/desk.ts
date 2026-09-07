@@ -126,6 +126,7 @@ export function buildAdminDesk(): AdminDesk {
     promos,
     promoPending: Boolean(s.promoPending),
     lastPromoDay: s.lastPromoDay || "",
+    contentBot: true,
     xai: Boolean(XAI_API_KEY),
     audit: (s.audit || []).slice(-40).reverse(),
     locked: {

@@ -119,6 +119,7 @@ export type AdminDesk = {
   promos: AdminPromo[];
   promoPending: boolean;
   lastPromoDay: string;
+  contentBot: boolean;
   xai: boolean;
   audit: AuditEvent[];
   locked: {

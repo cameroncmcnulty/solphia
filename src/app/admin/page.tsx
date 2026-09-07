@@ -17,6 +17,7 @@ export default function AdminPage() {
   const [adminPk, setAdminPk] = useState("");
   const [treasuryPk, setTreasuryPk] = useState("");
   const [copied, setCopied] = useState("");
+  const [hint, setHint] = useState("");
   const owner = useOwner();
 
   async function login() {
@@ -76,7 +77,8 @@ export default function AdminPage() {
         return;
       }
       if (j.desk) setData(j.desk as AdminDesk);
-      if (j.made != null) setNote(j.made ? `Made ${j.made} new post${j.made === 1 ? "" : "s"}.` : "Pack already ran today.");
+      if (j.note) setNote(j.note);
+      else if (j.made != null) setNote(j.made ? `Made ${j.made} new post${j.made === 1 ? "" : "s"}.` : "Pack already ran today.");
     } finally {
       setBusy(false);
     }
@@ -267,25 +269,34 @@ export default function AdminPage() {
       </section>
 
       <section className="panel mt-6 rounded-2xl p-5">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <div className="font-mono text-[10px] tracking-[0.3em] text-mute">POST PACK · MAX 24</div>
-            <h2 className="mt-1 font-display text-2xl text-ghost">Social images & clips</h2>
+            <div className="font-mono text-[10px] tracking-[0.3em] text-mute">CONTENT BOT · IN HOUSE · MAX 24</div>
+            <h2 className="mt-1 font-display text-2xl text-ghost">She writes and paints the posts</h2>
             <p className="mt-2 max-w-2xl text-sm text-mute">
-              A few new posts every day from her face, logo, and solphia.io. PnL on the cards is aesthetic — for the feed, not the live book. Oldest drop when we hit 24.
+              A bot that lives here — not an outside image shop. She writes the caption, then paints square / wide / story frames from her face, the wordmark, and solphia.io. PnL on the card is aesthetic. Oldest drop at 24. Daily cron runs her too.
             </p>
           </div>
-          <button type="button" disabled={busy} onClick={() => patch({ generatePromo: true })} className="btn-acid rounded-full px-5 py-3 text-sm disabled:opacity-40">
-            {busy ? "Making…" : "Make posts now"}
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => patch({ generatePromo: true, contentHint: hint || undefined })}
+            className="btn-acid rounded-full px-5 py-3 text-sm disabled:opacity-40"
+          >
+            {busy ? "She’s painting…" : "Run the content bot"}
           </button>
         </div>
+        <input
+          value={hint}
+          onChange={(e) => setHint(e.target.value)}
+          placeholder="Optional angle — gold, weekend, paper first…"
+          className="mt-4 w-full rounded-full border border-violet/30 bg-void px-4 py-3 font-mono text-xs outline-none"
+        />
         {note && <p className="mt-3 text-sm text-acid">{note}</p>}
-        {!data.xai && <p className="mt-3 text-sm text-blood">Set XAI_API_KEY to generate. Cron still tries once a day.</p>}
-        {data.promoPending && <p className="mt-2 font-mono text-[11px] text-cyan">A video is still rendering. It lands here when ready.</p>}
         <p className="mt-2 font-mono text-[11px] text-mute">
-          {data.promos.length}/24 · last auto {data.lastPromoDay || "never"}
+          {data.promos.length}/24 · last auto {data.lastPromoDay || "never"} · in-house renderer
         </p>
-        {data.promos.length === 0 && <p className="mt-4 text-sm text-mute">Empty. Hit make posts, or wait for the daily cron.</p>}
+        {data.promos.length === 0 && <p className="mt-4 text-sm text-mute">Empty. Run the content bot, or wait for the daily cron.</p>}
         <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {data.promos.map((item) => (
             <article key={item.id} className="overflow-hidden rounded-2xl border border-line bg-void/60">

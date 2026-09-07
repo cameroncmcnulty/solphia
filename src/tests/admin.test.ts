@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { bookHoldingUsd, sumWindows, windowClip } from "../lib/admin/stats";
 import { prunePromos, PROMO_CAP } from "../lib/admin/promo";
+import { localPack } from "../lib/content/copy";
 import { emptyBook } from "../lib/auto";
 import { emptyState } from "../lib/store";
 import type { PromoItem } from "../lib/types";
@@ -80,5 +81,27 @@ describe("promo cap", () => {
     prunePromos(s);
     assert.equal(s.promos?.length, PROMO_CAP);
     assert.equal(s.promos?.[0].id, "p2");
+  });
+});
+
+describe("content bot", () => {
+  it("writes three in-house shots with solphia.io and no memecoins", () => {
+    const shots = localPack(1_700_000_000_000, "");
+    assert.equal(shots.length, 3);
+    assert.deepEqual(
+      shots.map((s) => s.aspect),
+      ["1:1", "16:9", "9:16"],
+    );
+    for (const s of shots) {
+      assert.match(s.caption, /solphia\.io/i);
+      assert.match(s.caption, /illustrative/i);
+      assert.match(s.caption, /No memecoins/);
+      assert.ok(s.headline.length > 4);
+    }
+  });
+
+  it("leans gold when asked", () => {
+    const shots = localPack(42, "gold this week");
+    assert.ok(shots.some((s) => /gold/i.test(s.headline + s.caption)));
   });
 });
