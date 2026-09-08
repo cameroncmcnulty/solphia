@@ -52,9 +52,19 @@ export type SleeveLearn = {
 export const DEFAULT_LEARN: SleeveLearn = { trades: 0, wins: 0, pnlUsd: 0, buyNeed: 0.32, trailK: 0.55 };
 
 /** A 15m reclaim / momentum clip — not RSI alone. */
-export function needOf(learn?: SleeveLearn): number {
-  const n = learn?.buyNeed ?? DEFAULT_LEARN.buyNeed;
-  return Math.min(0.5, Math.max(0.28, n));
+export function needOf(learn?: SleeveLearn, sleeve?: Exclude<Sleeve, "USDC">): number {
+  const fallback = sleeve === "SOL" ? DEFAULT_LEARN.buyNeed : 0.24;
+  const n = learn?.buyNeed ?? fallback;
+  const floor = sleeve === "SOL" ? 0.28 : 0.2;
+  const cap = sleeve === "SOL" ? 0.5 : 0.34;
+  return Math.min(cap, Math.max(floor, n));
+}
+
+/** SOL aims ~1.2%. Equities/gold bank a fee-cleared scalp (~58–75 bps), not a SOL-sized run. */
+export function clipAimOf(sleeve: Exclude<Sleeve, "USDC">, atrPct = 0.01): number {
+  const floor = ROUND_TRIP + 0.002;
+  if (sleeve === "SOL") return Math.max(CLIP_AIM, floor);
+  return Math.max(floor, Math.min(0.0075, Math.max(0.0055, atrPct * 1.15)));
 }
 
 export function bucketCandles(samples: RatioSample[], sleeve: Sleeve, ms = 15 * 60 * 1000): Candle[] {
@@ -141,7 +151,7 @@ export function readAsset(
   const trend: AssetSignal["trend"] = fast > slow * 1.001 ? "up" : fast < slow * 0.999 ? "down" : "flat";
   const session = usEquitySession(now);
   const auction = cashOpenAuction(now);
-  const need = needOf(learn);
+  const need = needOf(learn, sleeve);
   const equity = sleeve === "SPYx" || sleeve === "QQQx";
   const scalp = frames ? scoreScalp(sleeve, frames[sleeve], live, now) : null;
 

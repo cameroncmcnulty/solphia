@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import { DEFAULT_SETTINGS } from "./config";
 import { emptyBook, emptyTrader } from "./auto";
+import { emptyLaunchBook } from "./launch/engine";
 import { emptyLab, mergeLab } from "./desk/shadow";
 import { emptyMind, mergeMind } from "./mind/engine";
 import {
@@ -59,6 +60,8 @@ export function emptyState(): AppState {
     backtest: null,
     backtestLev2: null,
     backtestLev3: null,
+    launch: emptyLaunchBook(),
+    ownerWallet: "",
   };
 }
 
@@ -104,6 +107,8 @@ function hydrateFromRaw(raw: AppState): AppState {
     backtest: raw.backtest || null,
     backtestLev2: raw.backtestLev2 || null,
     backtestLev3: raw.backtestLev3 || null,
+    launch: raw.launch && Array.isArray(raw.launch.coins) ? raw.launch : emptyLaunchBook(),
+    ownerWallet: raw.ownerWallet || raw.launch?.ownerWallet || "",
   };
 }
 

@@ -183,11 +183,12 @@ const PANEL_FADE = [
   `radial-gradient(ellipse 80% 85% at 50% 42%, transparent 50%, ${VOID} 100%)`,
 ].join(", ");
 
-export function SolphiaFace({ mode = "panel" }: { mode?: "hero" | "panel" }) {
+export function SolphiaFace({ mode = "panel" }: { mode?: "hero" | "panel" | "launch" }) {
   const wrap = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const photo = useRef<HTMLImageElement>(null);
   const hero = mode === "hero";
+  const launch = mode === "launch";
 
   useEffect(() => {
     const c = canvas.current;
@@ -220,7 +221,7 @@ export function SolphiaFace({ mode = "panel" }: { mode?: "hero" | "panel" }) {
     const boot = () => {
       if (!pic.naturalWidth) return;
       ready = true;
-      const out = analyze(pic, hero);
+      const out = analyze(pic, hero || launch);
       nodes = out.nodes;
       eyes = out.eyes;
     };
@@ -460,15 +461,17 @@ export function SolphiaFace({ mode = "panel" }: { mode?: "hero" | "panel" }) {
       host.removeEventListener("pointerdown", onDown);
       host.removeEventListener("pointerleave", onLeave);
     };
-  }, [hero]);
+  }, [hero, launch]);
 
   return (
     <div
       ref={wrap}
       className={`relative touch-none select-none outline-none ${
-        hero
-          ? "mx-auto aspect-[3/4] w-full overflow-visible"
-          : "h-[240px] w-full overflow-hidden md:h-[300px]"
+        launch
+          ? "h-full w-full overflow-hidden"
+          : hero
+            ? "mx-auto aspect-[3/4] w-full overflow-visible"
+            : "h-[240px] w-full overflow-hidden md:h-[300px]"
       }`}
       style={{
         isolation: "isolate",
@@ -489,14 +492,17 @@ export function SolphiaFace({ mode = "panel" }: { mode?: "hero" | "panel" }) {
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         ref={photo}
-        src={hero ? "/solphia-hero.png?v=2" : "/solphia-face.png?v=5"}
+        src={launch ? "/solphia-launch.jpg" : hero ? "/solphia-hero.png?v=2" : "/solphia-face.png?v=5"}
         alt=""
         draggable={false}
         className={`pointer-events-none absolute inset-0 h-full w-full outline-none ${
           hero ? "object-contain object-top" : "object-cover"
         }`}
         style={{
-          filter: "brightness(1.18) saturate(1.12) contrast(1.08)",
+          filter: launch
+            ? "brightness(0.7) saturate(1.35) contrast(1.2)"
+            : "brightness(1.18) saturate(1.12) contrast(1.08)",
+          opacity: launch ? 0.42 : 1,
           outline: "none",
           userSelect: "none",
         }}

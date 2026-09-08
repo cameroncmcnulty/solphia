@@ -140,7 +140,8 @@ export function scoreScalp(
   const ret5m = ret(m5, 1);
   const disc = discount(h4, live);
   const trending = dmi.adx >= 14;
-  const room = atr4Pct >= CLIP_MIN * 0.45 || atrPct * 3 >= CLIP_MIN * 0.7;
+  const clipFloor = equity ? 0.004 : CLIP_MIN;
+  const room = atr4Pct >= clipFloor * 0.45 || atrPct * 3 >= clipFloor * 0.7;
   const pullback =
     taggedThenReclaim(m15, e9) ||
     taggedThenReclaim(m5, vw) ||
@@ -228,9 +229,16 @@ export function scoreScalp(
   if (setup === "none" && rsiN > 70) buy -= 0.4;
   if (setup === "momentum" && ret1h > 0.012) buy -= 0.18;
   if (ret15m < -0.022 || ret1h < -0.035) buy -= 0.5;
-  if (equity && auction) buy -= 0.28;
+  if (equity && auction) buy -= 0.18;
   if (equity && session === "weekend") buy -= 0.45;
-  if (equity && session === "after_hours") buy -= 0.08;
+  if (equity && session === "after_hours") buy -= 0.04;
+  if (equity && session === "cash" && setup === "none" && pullback && rsiN <= 60 && st.dir !== -1) {
+    setup = "trend_pullback";
+    buy = Math.max(buy, 0.26);
+    why.push("cash 15m reclaim");
+    if (green) buy += 0.06;
+    if (macdUp) buy += 0.05;
+  }
   buy = Math.max(0, Math.min(1, buy));
 
   let sell = 0;

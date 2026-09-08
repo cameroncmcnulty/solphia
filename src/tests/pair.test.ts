@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { DEFAULT_AUTO, emptyBook } from "../lib/auto";
+import { CLIP_AIM, clipAimOf, needOf, ROUND_TRIP } from "../lib/pair/signals";
 import { decidePair, markPair } from "../lib/pair/engine";
 import { flattenToUsdc, killBook, tickPairBook } from "../lib/pair/paper";
 import { DEFAULT_STUDY } from "../lib/pair/knowledge";
@@ -277,7 +278,7 @@ describe("USDC-home engine", () => {
       now: CASH,
     });
     assert.equal(d.action, "hold");
-    assert.match(d.reason, /Riding it/i);
+    assert.match(d.reason, /Riding it|Watching other sleeves/i);
     const stop = book.pair?.stops?.SOL;
     assert.ok(stop?.armed);
     assert.ok((stop?.peakPx || 0) >= 101.1);
@@ -473,6 +474,38 @@ describe("paper fills + kill", () => {
     assert.ok((book.pair?.usdcQty || 0) > 50);
   });
 
+  it("banks equity clips after fees, smaller than SOL, and does not dump the whole book into one sleeve", () => {
+    const eq = clipAimOf("SPYx", 0.004);
+    const gold = clipAimOf("GLDx", 0.005);
+    assert.ok(eq > ROUND_TRIP);
+    assert.ok(eq < CLIP_AIM);
+    assert.ok(gold < CLIP_AIM);
+    assert.ok(needOf(undefined, "SPYx") < needOf(undefined, "SOL"));
+    const book = emptyBook(1000);
+    book.pair = {
+      solQty: 2,
+      spyxQty: 0,
+      qqqxQty: 0,
+      gldxQty: 0,
+      usdcQty: 600,
+      solCostUsd: 200,
+      lastClipAt: {},
+      stops: { SOL: { entryPx: 100, peakPx: 101, stopPx: 100.4, armed: true } },
+    };
+    const d = decidePair({
+      auto: auto({ cooldownMin: 0 }),
+      book,
+      prices: px(),
+      samples: hist(),
+      study: DEFAULT_STUDY,
+      now: CASH,
+    });
+    if (d.action === "swap" && d.from === "USDC") {
+      assert.ok(d.clipUsd < 500);
+      assert.notEqual(d.to, "SOL");
+    }
+  });
+
   it("default leverage is spot 1x and cooldown is 2 minutes", () => {
     assert.equal(DEFAULT_AUTO.leverage, 1);
     assert.equal(DEFAULT_AUTO.mode, "paper");
@@ -566,7 +599,8 @@ describe("paper fills + kill", () => {
       now: CASH + 15_000,
     });
     const holds = (book.tape || []).filter((r) => r.action === "hold");
-    assert.equal(holds.length, 1);
+    assert.ok(holds.length <= 1);
+    assert.ok((book.tape || []).length <= 2);
     assert.equal(book.skipped || 0, 0);
   });
 

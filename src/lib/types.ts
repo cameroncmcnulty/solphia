@@ -502,6 +502,8 @@ export interface AppState {
   backtest?: BacktestReport | null;
   backtestLev2?: BacktestReport | null;
   backtestLev3?: BacktestReport | null;
+  launch?: import("./launch/engine").LaunchBook;
+  ownerWallet?: string;
 }
 
 export type BacktestPoint = { t: number; equity: number };

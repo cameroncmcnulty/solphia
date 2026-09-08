@@ -17,7 +17,7 @@ import { SLEEVE_WEIGHT, TRADE_PAIRS, xstockIdOf, type Sleeve, type TradePair } f
 import { enrichStudy } from "./policy";
 import type { ShortTape } from "./shortTape";
 import type { ScalpFrames } from "./frames";
-import { CLIP_AIM, DEFAULT_LEARN, RISK_SLEEVES, needOf, nextTrail, readAsset } from "./signals";
+import { DEFAULT_LEARN, RISK_SLEEVES, clipAimOf, needOf, nextTrail, readAsset } from "./signals";
 import { borrowUsd, clampLev, liqPrice } from "../leverage";
 
 export type { Sleeve, TradePair } from "./catalog";
@@ -393,6 +393,7 @@ export function decidePair(opts: {
     const basis = prev.entryPx || entryPx;
     const pnlPct = basis > 0 ? sig.px / basis - 1 : 0;
     const locked = basis > 0 ? trail.stopPx / basis - 1 : 0;
+    const aim = clipAimOf(sig.sleeve, sig.atrPct);
     if (trail.armed && sig.px <= trail.stopPx) {
       return {
         action: "swap",
@@ -411,10 +412,10 @@ export function decidePair(opts: {
         reads,
       };
     }
-    if (pnlPct >= CLIP_AIM) {
+    if (pnlPct >= aim) {
       return {
         action: "swap",
-        reason: `${sig.sleeve} up ${(pnlPct * 100).toFixed(1)}%. Banking the 1.2% clip to USDC and looking for the next one.`,
+        reason: `${sig.sleeve} up ${(pnlPct * 100).toFixed(1)}%. Banking the ${(aim * 100).toFixed(1)}% clip to USDC and looking for the next one.`,
         clipUsd: pos,
         from: sig.sleeve,
         to: "USDC",
@@ -431,29 +432,17 @@ export function decidePair(opts: {
     }
   }
 
-  const openRisk = RISK_SLEEVES.filter((s) => usdOf(s) >= PAIR_MIN_CLIP_USD);
-  if (openRisk.length) {
-    const s = openRisk[0];
-    const trail = h.stops?.[s];
-    const px = livePx(prices, s);
-    const pnl = trail && trail.entryPx > 0 ? ((px / trail.entryPx - 1) * 100).toFixed(1) : "0.0";
-    const locked =
-      trail?.armed && trail.entryPx > 0 ? ` · locked +${((trail.stopPx / trail.entryPx - 1) * 100).toFixed(1)}%` : "";
-    const stop = trail?.armed ? ` · trail ${trail.stopPx.toFixed(2)}${locked}` : " · arming stop once fees are covered";
-    return empty("hold", `In ${s} ${pnl}%${stop}. Riding it.`);
-  }
-
-  if (cooldownMs > 0 && book.lastTradeAt && now - book.lastTradeAt < cooldownMs) {
-    const left = Math.ceil((cooldownMs - (now - book.lastTradeAt)) / 60000);
-    return empty("hold", `USDC. Waiting ${left}m before the next buy.`);
-  }
-
-  const clipUsd = Math.max(PAIR_MIN_CLIP_USD, Math.min(allocated * 0.9, h.usdcQty * 0.92));
-  let best = sigs[0];
-  for (const s of sigs) if (!best || s.buy > best.buy) best = s;
-  if (best && h.usdcQty >= PAIR_MIN_CLIP_USD * 2) {
-    const need = needOf(learn[best.sleeve] || DEFAULT_LEARN);
-    if (best.buy >= need && best.setup !== "none") {
+  const openSet = new Set(RISK_SLEEVES.filter((s) => usdOf(s) >= PAIR_MIN_CLIP_USD));
+  const clipUsd = Math.max(PAIR_MIN_CLIP_USD, Math.min(allocated * SLEEVE_WEIGHT, h.usdcQty * 0.38));
+  const ranked = [...sigs].sort((a, b) => b.buy - a.buy);
+  for (const best of ranked) {
+    if (openSet.has(best.sleeve)) continue;
+    const pairId = `usdc-${best.sleeve.toLowerCase()}`;
+    const lastThis = h.lastClipAt?.[pairId] || 0;
+    if (cooldownMs > 0 && lastThis && now - lastThis < cooldownMs) continue;
+    if (h.usdcQty < PAIR_MIN_CLIP_USD * 2) break;
+    const need = needOf(learn[best.sleeve] || DEFAULT_LEARN, best.sleeve);
+    if (best.buy >= need && best.setup && best.setup !== "none") {
       return {
         action: "swap",
         reason: best.reason,
@@ -461,7 +450,7 @@ export function decidePair(opts: {
         from: "USDC",
         to: best.sleeve,
         asset: xstockIdOf(best.sleeve) || undefined,
-        pairId: `usdc-${best.sleeve.toLowerCase()}`,
+        pairId,
         z7: primary.z7,
         z24: primary.z24,
         ratio: primary.ratio,
@@ -471,6 +460,17 @@ export function decidePair(opts: {
         reads,
       };
     }
+  }
+
+  if (openSet.size) {
+    const s = [...openSet][0];
+    const trail = h.stops?.[s];
+    const px = livePx(prices, s);
+    const pnl = trail && trail.entryPx > 0 ? ((px / trail.entryPx - 1) * 100).toFixed(1) : "0.0";
+    const locked =
+      trail?.armed && trail.entryPx > 0 ? ` · locked +${((trail.stopPx / trail.entryPx - 1) * 100).toFixed(1)}%` : "";
+    const stop = trail?.armed ? ` · trail ${trail.stopPx.toFixed(2)}${locked}` : " · arming stop once fees are covered";
+    return empty("hold", `In ${s} ${pnl}%${stop}. Watching other sleeves.`);
   }
 
   const bits = sigs

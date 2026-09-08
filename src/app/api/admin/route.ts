@@ -9,6 +9,7 @@ import { emptyBook } from "@/lib/auto";
 import { runBacktest } from "@/lib/pair/backtest";
 import { loadBacktestTape } from "@/lib/pair/backtestTape";
 import { mutateState, audit, pushBounded, readyState, loadAllTraders } from "@/lib/store";
+import { emptyLaunchBook } from "@/lib/launch/engine";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -30,6 +31,7 @@ const Patch = z.object({
   adminWallet: z.string().optional(),
   removeAdminWallet: z.string().optional(),
   treasuryWallet: z.string().nullable().optional(),
+  ownerWallet: z.string().nullable().optional(),
   liveTrading: z.boolean().optional(),
   generatePromo: z.boolean().optional(),
   contentHint: z.string().max(280).optional(),
@@ -65,6 +67,16 @@ export async function POST(req: NextRequest) {
     await mutateState((s) => {
       s.treasuryWallet = next;
       pushBounded(s.audit, audit("admin", "treasury", next ? next : "cleared", ip), 400);
+    });
+  }
+  if (body.ownerWallet !== undefined) {
+    const next = (body.ownerWallet || "").trim();
+    if (next && !isSolanaAddress(next)) return NextResponse.json({ error: "bad_owner_wallet" }, { status: 400 });
+    await mutateState((s) => {
+      if (!s.launch) s.launch = emptyLaunchBook();
+      s.ownerWallet = next;
+      s.launch.ownerWallet = next;
+      pushBounded(s.audit, audit("admin", "owner_wallet", next ? next : "cleared", ip), 400);
     });
   }
   if (typeof body.liveTrading === "boolean") {

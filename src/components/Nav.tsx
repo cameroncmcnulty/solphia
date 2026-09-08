@@ -6,9 +6,9 @@ import { WalletConnect } from "./WalletConnect";
 
 const LINKS = [
   ["/", "Home"],
-  ["/trading", "Launch"],
-  ["/pricing", "Pricing"],
-  ["/faq", "FAQ"],
+  ["/launch", "Launch"],
+  ["/trading", "Trade"],
+  ["/token", "Token"],
 ];
 
 export function Nav() {
@@ -34,10 +34,10 @@ export function Nav() {
       </nav>
       <div className="flex shrink-0 items-center gap-2">
         <Link
-          href="/trading"
+          href="/launch"
           className="btn-acid hidden min-h-[40px] items-center rounded-full px-4 py-2 text-sm sm:inline-flex sm:min-h-[44px] sm:px-5"
         >
-          LAUNCH BOT
+          LAUNCH
         </Link>
         <WalletConnect compact />
       </div>

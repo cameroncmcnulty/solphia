@@ -17,6 +17,7 @@ export default function AdminPage() {
   const [note, setNote] = useState("");
   const [adminPk, setAdminPk] = useState("");
   const [treasuryPk, setTreasuryPk] = useState("");
+  const [ownerPk, setOwnerPk] = useState("");
   const [copied, setCopied] = useState("");
   const [saved, setSaved] = useState("");
   const [hint, setHint] = useState("");
@@ -56,6 +57,7 @@ export default function AdminPage() {
     const next = (await dash.json()) as AdminDesk;
     setData((prev) => mergeDesk(prev, next));
     setTreasuryPk(next.treasury || "");
+    setOwnerPk(next.ownerWallet || "");
   }
 
   async function logout() {
@@ -313,6 +315,34 @@ export default function AdminPage() {
               : " · ephemeral disk — add Upstash Redis on Vercel or saves reset"}
           </p>
         </div>
+      </section>
+
+      <section className="panel mt-6 rounded-2xl p-5">
+        <div className="font-mono text-[10px] tracking-[0.3em] text-mute">OWNER EARNINGS · 25% OF LAUNCH SWAPS</div>
+        <p className="mt-2 text-sm text-mute">
+          Your pay bubble. 25% of every launch-curve swap lands here so you do not dip into project treasury. Creator
+          keeps 50%. Treasury keeps 25%. {data.launchCount} coins on the pad.
+        </p>
+        <div className="mt-3 font-display text-3xl text-acid">{data.ownerEarningsSol.toFixed(4)} SOL</div>
+        <input
+          value={ownerPk}
+          onChange={(e) => setOwnerPk(e.target.value.trim())}
+          placeholder="Owner Solana address"
+          className="mt-3 w-full rounded-full border border-violet/30 bg-void px-4 py-3 font-mono text-xs outline-none"
+        />
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => patch({ ownerWallet: ownerPk || null })}
+            className="btn-acid rounded-full px-5 py-2 text-sm disabled:opacity-40"
+          >
+            Save owner wallet
+          </button>
+        </div>
+        <p className="mt-3 font-mono text-[11px] text-mute">
+          {data.ownerWallet ? `Pays to ${shortPk(data.ownerWallet, 6)}` : "No owner wallet set."}
+        </p>
       </section>
 
       <section className="panel mt-6 rounded-2xl p-5">
