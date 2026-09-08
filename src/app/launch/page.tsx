@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { CopyCa } from "@/components/CopyCa";
 import { SolphiaConstellation } from "@/components/SolphiaConstellation";
 import { SparkCandles } from "@/components/SparkCandles";
 import { WalletConnect } from "@/components/WalletConnect";
@@ -24,6 +25,7 @@ const PRESETS = [0.1, 0.25, 0.5, 1];
 type Spark = { t: number; o: number; h: number; l: number; c: number };
 type Coin = {
   id: string;
+  mint?: string;
   name: string;
   symbol: string;
   image?: string;
@@ -104,8 +106,8 @@ function fmtTok(n: number) {
 }
 
 function tick(symbol?: string) {
-  const s = (symbol || "").replace(/^\$+/, "").trim();
-  return s ? `$${s}` : "";
+  const s = (symbol || "").replace(/^\$+/, "").replace(/\*+$/, "").trim();
+  return s ? `$${s}*` : "";
 }
 
 function pctClass(n?: number) {
@@ -460,10 +462,17 @@ function CoinCard({ c, solUsd, active, onOpen }: { c: Coin; solUsd: number; acti
   const age = fmtAge(Date.now() - c.createdAt);
   const up = (c.change5m || 0) >= 0;
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onOpen}
-      className={`w-full rounded-2xl border px-3 py-3 text-left transition ${
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onOpen();
+        }
+      }}
+      className={`w-full cursor-pointer rounded-2xl border px-3 py-3 text-left transition ${
         active ? "border-acid/50 bg-void/50" : "border-violet/20 hover:border-acid/40"
       }`}
     >
@@ -478,6 +487,7 @@ function CoinCard({ c, solUsd, active, onOpen }: { c: Coin; solUsd: number; acti
           <div className="flex items-center gap-2">
             <span className="truncate font-display text-lg text-ghost">{tick(c.symbol)}</span>
             <span className="truncate font-mono text-[11px] text-mute">{c.name}</span>
+            {c.mint ? <CopyCa ca={c.mint} compact /> : null}
             <span className="ml-auto font-mono text-[10px] text-mute">{age}</span>
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[10px]">
@@ -505,7 +515,7 @@ function CoinCard({ c, solUsd, active, onOpen }: { c: Coin; solUsd: number; acti
           {c.priceSol.toExponential(2)} SOL · ${((c.priceSol || 0) * solUsd).toExponential(2)}
         </div>
       )}
-    </button>
+    </div>
   );
 }
 
@@ -567,9 +577,12 @@ function CoinDesk({
             <p className="mt-1 text-sm text-mute">{open.blurb || "Fair launch. Mint and freeze locked."}</p>
           </div>
         </div>
-        <button type="button" onClick={onClose} className="btn-ghost rounded-full px-4 py-2 text-sm">
-          Close
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          {open.mint ? <CopyCa ca={open.mint} /> : null}
+          <button type="button" onClick={onClose} className="btn-ghost rounded-full px-4 py-2 text-sm">
+            Close
+          </button>
+        </div>
       </div>
       <div className="mt-3 flex flex-wrap gap-3 font-mono text-[11px] text-mute">
         {open.links?.website && (

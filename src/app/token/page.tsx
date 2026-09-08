@@ -2,9 +2,11 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { CopyCa } from "@/components/CopyCa";
 
 type Coin = {
   id: string;
+  mint?: string;
   name: string;
   symbol: string;
   status: string;
@@ -13,6 +15,11 @@ type Coin = {
   progress: number;
   holders: number;
 };
+
+function tick(symbol?: string) {
+  const s = (symbol || "").replace(/^\$+/, "").replace(/\*+$/, "").trim();
+  return s ? `$${s}*` : "";
+}
 
 export default function TokenPage() {
   const [coins, setCoins] = useState<Coin[]>([]);
@@ -30,23 +37,22 @@ export default function TokenPage() {
       <div className="mt-8 space-y-2">
         {coins.length === 0 && <p className="text-sm text-mute">Nothing launched yet.</p>}
         {coins.map((c) => (
-          <Link
-            key={c.id}
-            href="/launch"
-            className="panel flex items-center justify-between rounded-2xl p-4"
-          >
-            <div>
+          <div key={c.id} className="panel flex items-center justify-between gap-3 rounded-2xl p-4">
+            <Link href="/launch" className="min-w-0 flex-1">
               <div className="font-display text-xl text-ghost">
-                {c.name} <span className="font-mono text-sm text-mute">${c.symbol.replace(/^\$+/, "")}</span>
+                {c.name} <span className="font-mono text-sm text-mute">{tick(c.symbol)}</span>
               </div>
-              <div className="font-mono text-[11px] text-mute">
+              <div className="mt-1 font-mono text-[11px] text-mute">
                 {c.status} · {c.holders} holders · {Math.round(c.progress * 100)}%
               </div>
+            </Link>
+            <div className="flex shrink-0 items-center gap-2">
+              {c.mint ? <CopyCa ca={c.mint} compact /> : null}
+              <div className="font-mono text-acid">
+                {c.marketCapUsd ? `$${c.marketCapUsd.toFixed(0)}` : `${c.marketCapSol.toFixed(1)} SOL`}
+              </div>
             </div>
-            <div className="font-mono text-acid">
-              {c.marketCapUsd ? `$${c.marketCapUsd.toFixed(0)}` : `${c.marketCapSol.toFixed(1)} SOL`}
-            </div>
-          </Link>
+          </div>
         ))}
       </div>
     </main>
