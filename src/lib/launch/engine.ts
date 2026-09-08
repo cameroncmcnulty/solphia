@@ -7,6 +7,7 @@ import {
   emptyCurve,
   graduatePool,
   marketCapSol,
+  maxBuySol,
   MAX_WALLET_BPS,
   MIN_TRADE_SOL,
   progressPct,
@@ -16,6 +17,8 @@ import {
   TOKEN_SUPPLY,
   type CurveState,
 } from "./curve";
+
+export { launchError, LAUNCH_ERRORS } from "./errors";
 
 export type LaunchStatus = "curve" | "graduated";
 
@@ -121,12 +124,94 @@ function imageOk(raw?: string): string {
   const s = (raw || "").trim();
   if (!s) return "";
   if (!/^data:image\/(png|jpeg|jpg|webp);base64,/i.test(s)) return "";
-  if (s.length > 280_000) return "";
+  if (s.length > 90_000) return "";
   return s;
+}
+
+export type SparkCandle = { t: number; o: number; h: number; l: number; c: number; v: number };
+
+export function sparkCandles(fills: LaunchFill[], createdAt: number, startPx: number, now = Date.now()): SparkCandle[] {
+  const span = Math.max(60_000, now - createdAt);
+  const buckets = 24;
+  const w = span / buckets;
+  const start = now - w * buckets;
+  const out: SparkCandle[] = [];
+  let last = startPx;
+  for (let i = 0; i < buckets; i++) {
+    const a = start + i * w;
+    const b = a + w;
+    const xs = fills.filter((f) => f.at >= a && f.at < b);
+    if (!xs.length) {
+      out.push({ t: a, o: last, h: last, l: last, c: last, v: 0 });
+      continue;
+    }
+    const o = last;
+    const close = xs[xs.length - 1].priceSol;
+    const h = Math.max(o, ...xs.map((f) => f.priceSol));
+    const l = Math.min(o, ...xs.map((f) => f.priceSol));
+    const v = xs.reduce((s, f) => s + f.sol, 0);
+    out.push({ t: a, o, h, l, c: close, v });
+    last = close;
+  }
+  return out;
+}
+
+function pxAt(fills: LaunchFill[], before: number, fallback: number): number {
+  for (let i = fills.length - 1; i >= 0; i--) {
+    if (fills[i].at <= before) return fills[i].priceSol;
+  }
+  return fills[0]?.priceSol || fallback;
+}
+
+export function slimLaunch(book: LaunchBook): LaunchBook {
+  return {
+    ...book,
+    coins: (book.coins || []).slice(0, 120).map((c) => ({
+      ...c,
+      image: (c.image || "").length > 90_000 ? "" : c.image,
+      fills: (c.fills || []).slice(-200),
+    })),
+  };
+}
+
+export function mergeLaunch(local: LaunchBook, remote: LaunchBook): LaunchBook {
+  const map = new Map<string, LaunchCoin>();
+  for (const c of remote.coins || []) map.set(c.id, c);
+  for (const c of local.coins || []) {
+    const r = map.get(c.id);
+    if (!r) {
+      map.set(c.id, c);
+      continue;
+    }
+    const localF = c.fills?.length || 0;
+    const remoteF = r.fills?.length || 0;
+    const localSol = c.curve?.realSol || 0;
+    const remoteSol = r.curve?.realSol || 0;
+    if (localF > remoteF || (localF === remoteF && localSol >= remoteSol)) map.set(c.id, c);
+  }
+  const coins = [...map.values()].sort((a, b) => b.createdAt - a.createdAt).slice(0, 120);
+  return {
+    coins,
+    ownerWallet: local.ownerWallet || remote.ownerWallet,
+    ownerEarningsSol: Math.max(local.ownerEarningsSol || 0, remote.ownerEarningsSol || 0),
+    treasuryFeesSol: Math.max(local.treasuryFeesSol || 0, remote.treasuryFeesSol || 0),
+  };
 }
 
 export function publicCoin(c: LaunchCoin, solUsd = 0, viewer?: string) {
   const px = spotPriceSol(c.curve);
+  const mc = marketCapSol(c.curve);
+  const now = Date.now();
+  const fills = c.fills || [];
+  const startPx = fills[0]?.priceSol || px;
+  const volBuy = fills.filter((f) => f.side === "buy").reduce((s, f) => s + f.sol, 0);
+  const volSell = fills.filter((f) => f.side === "sell").reduce((s, f) => s + f.sol, 0);
+  const liveHolders = Object.values(c.holders).filter((h) => h.tokens > 1e-9);
+  const mine = viewer ? c.holders[viewer] : undefined;
+  const ch = (ms: number) => {
+    const base = pxAt(fills, now - ms, startPx);
+    return base > 0 ? px / base - 1 : 0;
+  };
   return {
     id: c.id,
     mint: c.mint,
@@ -141,16 +226,38 @@ export function publicCoin(c: LaunchCoin, solUsd = 0, viewer?: string) {
     createdAt: c.createdAt,
     status: c.status,
     priceSol: px,
-    marketCapSol: marketCapSol(c.curve),
-    marketCapUsd: solUsd > 0 ? marketCapSol(c.curve) * solUsd : 0,
+    marketCapSol: mc,
+    marketCapUsd: solUsd > 0 ? mc * solUsd : 0,
     progress: progressPct(c.curve),
     realSol: c.curve.realSol,
+    liqSol: c.curve.realSol,
     tokensSold: c.curve.tokensSold,
-    holders: Object.keys(c.holders).length,
-    fills: c.fills.slice(-24).reverse(),
+    holders: liveHolders.length,
+    fills: fills.slice(-48).reverse(),
+    spark: sparkCandles(fills, c.createdAt, startPx, now),
+    volSol: volBuy + volSell,
+    volBuySol: volBuy,
+    volSellSol: volSell,
+    txns: fills.length,
+    buys: fills.filter((f) => f.side === "buy").length,
+    sells: fills.filter((f) => f.side === "sell").length,
+    ageMs: Math.max(0, now - c.createdAt),
+    change5m: ch(5 * 60_000),
+    change1h: ch(60 * 60_000),
+    change6h: ch(6 * 60 * 60_000),
+    change24h: ch(24 * 60 * 60_000),
     devRewardsSol: c.devRewardsSol,
     graduatedAt: c.graduatedAt || null,
-    myTokens: viewer ? c.holders[viewer]?.tokens || 0 : 0,
+    myTokens: mine?.tokens || 0,
+    mySpentSol: mine?.spentSol || 0,
+    maxBuySol: maxBuySol(c.curve, mine?.tokens || 0),
+    curve: {
+      virtualSol: c.curve.virtualSol,
+      virtualTokens: c.curve.virtualTokens,
+      realSol: c.curve.realSol,
+      tokensSold: c.curve.tokensSold,
+      phase: c.curve.phase,
+    },
   };
 }
 
@@ -252,7 +359,8 @@ export function buyCoin(
   if (!coin) return { ok: false, error: "not_found" };
   if (coin.status !== "curve") return { ok: false, error: "graduated" };
   const now = opts.now || Date.now();
-  if (!opts.skipSnipe && now - coin.createdAt < ANTI_SNIPE_MS && opts.sol > ANTI_SNIPE_SOL) {
+  const creator = coin.creator === opts.owner;
+  if (!opts.skipSnipe && !creator && now - coin.createdAt < ANTI_SNIPE_MS && opts.sol > ANTI_SNIPE_SOL) {
     return { ok: false, error: "anti_snipe" };
   }
   const q = quoteBuy(coin.curve, opts.sol);

@@ -168,3 +168,24 @@ export function graduatePool(c: CurveState): { sol: number; tokens: number } | n
   const tokens = LP_RESERVE + Math.max(0, CURVE_SALE - c.tokensSold);
   return { sol, tokens };
 }
+
+/** Largest SOL buy that stays under the 2% wallet cap from this curve state. */
+export function maxBuySol(c: CurveState, heldTokens = 0): number {
+  if (c.phase !== "curve") return 0;
+  const cap = Math.min((TOKEN_SUPPLY * MAX_WALLET_BPS) / 10_000, Math.max(0, CURVE_SALE - c.tokensSold));
+  const room = Math.max(0, cap - heldTokens);
+  if (room <= 0) return 0;
+  const floor = quoteBuy(c, MIN_TRADE_SOL);
+  if (!floor.ok || (floor.tokensOut || 0) > room) return 0;
+  let lo = MIN_TRADE_SOL;
+  let hi = MAX_TRADE_SOL;
+  const top = quoteBuy(c, hi);
+  if (top.ok && (top.tokensOut || 0) <= room) return hi;
+  for (let i = 0; i < 32; i++) {
+    const mid = (lo + hi) / 2;
+    const q = quoteBuy(c, mid);
+    if (q.ok && (q.tokensOut || 0) <= room) lo = mid;
+    else hi = mid;
+  }
+  return Math.floor(lo * 1000) / 1000;
+}

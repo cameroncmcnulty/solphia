@@ -2,7 +2,7 @@ import fs from "fs";
 import path from "path";
 import { DEFAULT_SETTINGS } from "./config";
 import { emptyBook, emptyTrader } from "./auto";
-import { emptyLaunchBook } from "./launch/engine";
+import { emptyLaunchBook, mergeLaunch, slimLaunch, type LaunchBook } from "./launch/engine";
 import { emptyLab, mergeLab } from "./desk/shadow";
 import { emptyMind, mergeMind } from "./mind/engine";
 import {
@@ -143,7 +143,25 @@ function opsView(state: AppState): AppState {
     backtest: null,
     backtestLev2: null,
     backtestLev3: null,
+    launch: slimLaunch(state.launch || emptyLaunchBook()),
   };
+}
+
+async function overlayLaunch(state: AppState) {
+  if (!durableConfigured()) return;
+  try {
+    const raw = await kvGetJson(KEYS.launch);
+    if (raw && typeof raw === "object" && Array.isArray((raw as LaunchBook).coins)) {
+      state.launch = mergeLaunch(state.launch || emptyLaunchBook(), raw as LaunchBook);
+    }
+  } catch {
+    /* keep mem */
+  }
+}
+
+async function persistLaunch(state: AppState) {
+  if (!durableConfigured()) return;
+  await kvSetJson(KEYS.launch, slimLaunch(state.launch || emptyLaunchBook()));
 }
 
 export function touchHot(state: AppState, owner: string, at = Date.now()) {
@@ -230,6 +248,7 @@ async function overlayBacktests(state: AppState) {
 
 async function persistShards(next: AppState, owners: string[]) {
   await persistBacktests(next);
+  await persistLaunch(next);
   await kvSetJson(KEYS.ops, opsView(next));
   const uniq = [...new Set(owners.filter(Boolean))];
   await Promise.all(
@@ -266,6 +285,7 @@ export async function saveOps(next: AppState): Promise<void> {
     if (durableConfigured()) {
       try {
         await persistBacktests(next);
+        await persistLaunch(next);
         await kvSetJson(KEYS.ops, opsView(next));
       } catch {
         /* ignore */
@@ -361,6 +381,7 @@ async function hydrate(): Promise<AppState> {
         mem = hydrateFromRaw(ops as AppState);
         mem.traders = mem.traders || {};
         await overlayBacktests(mem);
+        await overlayLaunch(mem);
         knownTraderOwners = await kvSmembers(KEYS.traders);
         memMtime = Date.now();
         hydrated = true;
@@ -372,6 +393,7 @@ async function hydrate(): Promise<AppState> {
         const owners = Object.keys(mem.traders || {});
         knownTraderOwners = owners;
         await overlayBacktests(mem);
+        await overlayLaunch(mem);
         await persistShards(mem, owners);
         memMtime = Date.now();
         hydrated = true;
@@ -386,6 +408,7 @@ async function hydrate(): Promise<AppState> {
   if (durableConfigured()) {
     try {
       await overlayBacktests(local);
+      await overlayLaunch(local);
     } catch {
       /* disk still usable */
     }
@@ -405,6 +428,16 @@ export async function mutateState<T>(fn: (state: AppState) => T | Promise<T>): P
   const state = await readyState();
   const result = await fn(state);
   await saveState(state);
+  return result;
+}
+
+/** Launch tape is its own shard so coins survive across serverless instances. */
+export async function withLaunch<T>(fn: (state: AppState) => T | Promise<T>, write = false): Promise<T> {
+  const state = await readyState();
+  await overlayLaunch(state);
+  if (!state.launch) state.launch = emptyLaunchBook();
+  const result = await fn(state);
+  if (write) await saveState(state);
   return result;
 }
 

@@ -16,12 +16,14 @@ import {
   VIRTUAL_TOKENS,
   emptyCurve,
   feeOn,
+  maxBuySol,
   quoteBuy,
   quoteSell,
   splitFee,
   spotPriceSol,
 } from "../lib/launch/curve";
-import { buyCoin, createCoin, emptyLaunchBook, sellCoin, withdrawDev, withdrawOwner, setOwnerWallet } from "../lib/launch/engine";
+import { buyCoin, createCoin, emptyLaunchBook, mergeLaunch, publicCoin, sellCoin, sparkCandles, withdrawDev, withdrawOwner, setOwnerWallet } from "../lib/launch/engine";
+import { launchError } from "../lib/launch/errors";
 
 const A = "CyaE1VxvBrahnPWkqm5VsdCvyS2QmNht2UFrKJHga54o";
 const B = "D4uCNcBKAbG9NAkmhQg7pBiztuejNzbWrZDcZmFGut81";
@@ -172,6 +174,7 @@ describe("fair launch book", () => {
     if (!made.ok) return;
     const sniper = buyCoin(book, { id: made.coin.id, owner: B, sol: 2, now: made.coin.createdAt + 1_000 });
     assert.equal(sniper.ok, false);
+    if (!sniper.ok) assert.equal(sniper.error, "anti_snipe");
     const ok = buyCoin(book, { id: made.coin.id, owner: B, sol: 0.5, now: made.coin.createdAt + 1_000 });
     assert.equal(ok.ok, true);
     const later = buyCoin(book, { id: made.coin.id, owner: B, sol: 40, now: made.coin.createdAt + 70_000 });
@@ -239,5 +242,44 @@ describe("fair launch book", () => {
       return b.fill.tokens;
     }
     assert.equal(run(), run());
+  });
+
+  it("rejects a 10 SOL open buy as wallet_cap and explains the 2% rule", () => {
+    const book = emptyLaunchBook();
+    const made = createCoin(book, { creator: A, name: "Cap", symbol: "CAPX" });
+    assert.ok(made.ok);
+    if (!made.ok) return;
+    const missing = buyCoin(book, { id: "nope", owner: A, sol: 10 });
+    assert.equal(missing.ok, false);
+    if (!missing.ok) {
+      assert.equal(missing.error, "not_found");
+      assert.match(launchError(missing.error), /tape/i);
+    }
+    const big = buyCoin(book, { id: made.coin.id, owner: A, sol: 10, now: made.coin.createdAt + 70_000 });
+    assert.equal(big.ok, false);
+    if (!big.ok) {
+      assert.equal(big.error, "wallet_cap");
+      assert.match(launchError(big.error), /2%/);
+    }
+    const cap = maxBuySol(emptyCurve(), 0);
+    assert.ok(cap > 0.4 && cap < 0.8, `open cap should be ~0.58 SOL, got ${cap}`);
+  });
+
+  it("builds candles and public stats, and merge keeps a local coin the remote dropped", () => {
+    const book = emptyLaunchBook();
+    const made = createCoin(book, { creator: A, name: "Spark", symbol: "SPK" });
+    assert.ok(made.ok);
+    if (!made.ok) return;
+    buyCoin(book, { id: made.coin.id, owner: B, sol: 0.4, now: made.coin.createdAt + 70_000 });
+    const pub = publicCoin(made.coin, 150, B);
+    assert.equal(pub.spark.length, 24);
+    assert.ok(pub.volSol > 0);
+    assert.ok(pub.txns >= 1);
+    assert.ok(pub.maxBuySol > 0);
+    const candles = sparkCandles(made.coin.fills, made.coin.createdAt, made.coin.fills[0].priceSol);
+    assert.equal(candles.length, 24);
+    const merged = mergeLaunch(book, emptyLaunchBook());
+    assert.equal(merged.coins.length, 1);
+    assert.equal(merged.coins[0].symbol, "SPK");
   });
 });

@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { clientIp, isSolanaAddress, rateLimit, sanitizeText } from "@/lib/security";
-import { mutateState, readyState } from "@/lib/store";
+import { withLaunch } from "@/lib/store";
 import { emptyLaunchBook } from "@/lib/launch/engine";
 import {
   buyCoin,
   createCoin,
+  launchError,
   publicCoin,
   quotePreview,
   sellCoin,
@@ -24,7 +25,7 @@ const Body = z.object({
   name: z.string().optional(),
   symbol: z.string().optional(),
   blurb: z.string().optional(),
-  image: z.string().max(280_000).optional(),
+  image: z.string().max(90_000).optional(),
   website: z.string().optional(),
   x: z.string().optional(),
   telegram: z.string().optional(),
@@ -36,25 +37,29 @@ const Body = z.object({
   adminSecret: z.string().optional(),
 });
 
-function bookOf(s: Awaited<ReturnType<typeof readyState>>) {
+function bookOf(s: { launch?: ReturnType<typeof emptyLaunchBook>; ownerWallet?: string }) {
   if (!s.launch) s.launch = emptyLaunchBook();
   if (s.ownerWallet && !s.launch.ownerWallet) s.launch.ownerWallet = s.ownerWallet;
   return s.launch;
 }
 
+function fail(code: string, status = 400) {
+  return NextResponse.json({ error: code, message: launchError(code) }, { status });
+}
+
 export async function GET(req: NextRequest) {
   const id = req.nextUrl.searchParams.get("id") || "";
   const viewer = req.nextUrl.searchParams.get("pubkey") || "";
-  const s = await readyState();
+  const s = await withLaunch((st) => st, false);
   const book = bookOf(s);
   const solUsd = lastPairPrices().solUsd || 0;
   if (id) {
     const coin = book.coins.find((c) => c.id === id);
-    if (!coin) return NextResponse.json({ error: "not_found" }, { status: 404 });
+    if (!coin) return fail("not_found", 404);
     return NextResponse.json({ coin: publicCoin(coin, solUsd, viewer), solUsd });
   }
   return NextResponse.json({
-    coins: book.coins.slice(0, 48).map((c) => publicCoin(c, solUsd, viewer)),
+    coins: book.coins.slice(0, 80).map((c) => publicCoin(c, solUsd, viewer)),
     solUsd,
     ownerWallet: book.ownerWallet || null,
     ownerEarningsSol: book.ownerEarningsSol,
@@ -64,24 +69,24 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   if (!rateLimit(clientIp(req) + ":launch", 20, 60_000)) {
-    return NextResponse.json({ error: "rate_limited" }, { status: 429 });
+    return fail("rate_limited", 429);
   }
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success || !isSolanaAddress(parsed.data.pubkey)) {
-    return NextResponse.json({ error: "bad_request" }, { status: 400 });
+    return fail("bad_request");
   }
   const b = parsed.data;
   const solUsd = lastPairPrices().solUsd || 0;
 
   if (b.action === "quote") {
-    const s = await readyState();
+    const s = await withLaunch((st) => st, false);
     const coin = bookOf(s).coins.find((c) => c.id === b.id);
-    if (!coin) return NextResponse.json({ error: "not_found" }, { status: 404 });
+    if (!coin) return fail("not_found", 404);
     const q = quotePreview(coin, b.tokens ? "sell" : "buy", b.tokens || b.sol || 0);
-    return NextResponse.json({ quote: q, coin: publicCoin(coin, solUsd) });
+    return NextResponse.json({ quote: q, coin: publicCoin(coin, solUsd, b.pubkey) });
   }
 
-  const out = await mutateState((s) => {
+  const out = await withLaunch((s) => {
     const book = bookOf(s);
     if (b.action === "create") {
       return createCoin(book, {
@@ -109,13 +114,17 @@ export async function POST(req: NextRequest) {
       return r;
     }
     return { ok: false as const, error: "bad_action" };
-  });
+  }, true);
 
   if (!out || !("ok" in out) || !out.ok) {
-    return NextResponse.json({ error: (out as { error?: string })?.error || "failed" }, { status: 400 });
+    return fail((out as { error?: string })?.error || "failed");
   }
   if ("coin" in out && out.coin) {
-    return NextResponse.json({ ok: true, coin: publicCoin(out.coin, solUsd), fill: "fill" in out ? out.fill : undefined });
+    return NextResponse.json({
+      ok: true,
+      coin: publicCoin(out.coin, solUsd, b.pubkey),
+      fill: "fill" in out ? out.fill : undefined,
+    });
   }
   return NextResponse.json(out);
 }
