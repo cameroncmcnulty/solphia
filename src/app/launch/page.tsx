@@ -103,6 +103,11 @@ function fmtTok(n: number) {
   return n.toFixed(0);
 }
 
+function tick(symbol?: string) {
+  const s = (symbol || "").replace(/^\$+/, "").trim();
+  return s ? `$${s}` : "";
+}
+
 function pctClass(n?: number) {
   if (n == null || Math.abs(n) < 1e-8) return "text-mute";
   return n >= 0 ? "text-acid" : "text-blood";
@@ -313,13 +318,16 @@ export default function LaunchPage() {
                   placeholder="name"
                   className="mt-4 w-full rounded-2xl border border-violet/30 bg-void px-4 py-3 text-ghost"
                 />
-                <input
-                  value={symbol}
-                  onChange={(e) => setSymbol(e.target.value.toUpperCase())}
-                  placeholder="TICKER"
-                  maxLength={10}
-                  className="mt-3 w-full rounded-2xl border border-violet/30 bg-void px-4 py-3 font-mono text-ghost"
-                />
+                <label className="mt-3 flex w-full items-center rounded-2xl border border-violet/30 bg-void px-4 py-3 font-mono text-ghost">
+                  <span className="pr-1 text-acid">$</span>
+                  <input
+                    value={symbol}
+                    onChange={(e) => setSymbol(e.target.value.replace(/^\$+/, "").toUpperCase())}
+                    placeholder="TICKER"
+                    maxLength={10}
+                    className="w-full bg-transparent outline-none"
+                  />
+                </label>
                 <textarea
                   value={blurb}
                   onChange={(e) => setBlurb(e.target.value)}
@@ -468,7 +476,7 @@ function CoinCard({ c, solUsd, active, onOpen }: { c: Coin; solUsd: number; acti
         )}
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <span className="truncate font-display text-lg text-ghost">{c.symbol}</span>
+            <span className="truncate font-display text-lg text-ghost">{tick(c.symbol)}</span>
             <span className="truncate font-mono text-[11px] text-mute">{c.name}</span>
             <span className="ml-auto font-mono text-[10px] text-mute">{age}</span>
           </div>
@@ -554,7 +562,7 @@ function CoinDesk({
             <img src={open.image} alt="" className="h-14 w-14 rounded-2xl object-cover" />
           ) : null}
           <div>
-            <div className="font-mono text-[10px] tracking-[0.22em] text-acid">{open.symbol}</div>
+            <div className="font-mono text-[10px] tracking-[0.22em] text-acid">{tick(open.symbol)}</div>
             <h2 className="font-display text-3xl text-ghost">{open.name}</h2>
             <p className="mt-1 text-sm text-mute">{open.blurb || "Fair launch. Mint and freeze locked."}</p>
           </div>
@@ -686,14 +694,14 @@ function CoinDesk({
       {blocked && owner && <p className="mt-3 font-mono text-sm text-blood">{blocked}</p>}
       {quote && quote.ok && !blocked && (
         <p className="mt-3 font-mono text-[11px] text-mute">
-          You get ~{fmtTok(quote.tokensOut || 0)} {open.symbol} · impact {fmtPct(quote.impactPct)} · fee{" "}
+          You get ~{fmtTok(quote.tokensOut || 0)} {tick(open.symbol)} · impact {fmtPct(quote.impactPct)} · fee{" "}
           {fmtSol(quote.feeSol, 4)} SOL · 50% of that fee is paid to the dev
           {solUsd ? ` · ~${fmtUsd((sol || 0) * solUsd)}` : ""}
         </p>
       )}
       {sellQ && sellQ.ok && (open.myTokens || 0) > 0 && (
         <p className="mt-1 font-mono text-[11px] text-mute">
-          Your bag {fmtTok(open.myTokens || 0)} {open.symbol} → ~{fmtSol(sellQ.solOut || 0, 4)} SOL if you sell all.
+          Your bag {fmtTok(open.myTokens || 0)} {tick(open.symbol)} → ~{fmtSol(sellQ.solOut || 0, 4)} SOL if you sell all.
         </p>
       )}
       <p className="mt-2 font-mono text-[11px] text-mute">
@@ -703,7 +711,7 @@ function CoinDesk({
       <div className="mt-4 max-h-40 space-y-1 overflow-auto font-mono text-[11px] text-mute">
         {open.fills.map((f, i) => (
           <div key={`${f.at}-${i}`} className={f.side === "buy" ? "text-acid" : "text-ghost"}>
-            {f.side.toUpperCase()} {fmtSol(f.sol, 3)} SOL · {fmtTok(f.tokens)} {open.symbol}
+            {f.side.toUpperCase()} {fmtSol(f.sol, 3)} SOL · {fmtTok(f.tokens)} {tick(open.symbol)}
           </div>
         ))}
       </div>

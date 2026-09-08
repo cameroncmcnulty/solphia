@@ -37,7 +37,7 @@ export default function TokenPage() {
           >
             <div>
               <div className="font-display text-xl text-ghost">
-                {c.name} <span className="font-mono text-sm text-mute">{c.symbol}</span>
+                {c.name} <span className="font-mono text-sm text-mute">${c.symbol.replace(/^\$+/, "")}</span>
               </div>
               <div className="font-mono text-[11px] text-mute">
                 {c.status} · {c.holders} holders · {Math.round(c.progress * 100)}%
