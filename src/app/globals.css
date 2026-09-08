@@ -87,6 +87,10 @@ body {
   backdrop-filter: blur(18px);
 }
 
+.panel-glass {
+  background: linear-gradient(180deg, rgba(38, 22, 62, 0.58), rgba(16, 10, 28, 0.64));
+}
+
 .sol-swirl {
   background-image: linear-gradient(
     90deg,

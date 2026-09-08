@@ -492,19 +492,21 @@ export function SolphiaFace({ mode = "panel" }: { mode?: "hero" | "panel" | "lau
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         ref={photo}
-        src={launch ? "/solphia-launch.jpg" : hero ? "/solphia-hero.png?v=2" : "/solphia-face.png?v=5"}
+        src={launch ? "/solphia-launch.jpg?v=3" : hero ? "/solphia-hero.png?v=2" : "/solphia-face.png?v=5"}
         alt=""
         draggable={false}
         className={`pointer-events-none absolute inset-0 h-full w-full outline-none ${
-          hero ? "object-contain object-top" : "object-cover"
+          hero ? "object-contain object-top" : launch ? "object-cover object-[78%_16%]" : "object-cover"
         }`}
         style={{
           filter: launch
-            ? "brightness(0.7) saturate(1.35) contrast(1.2)"
+            ? "brightness(1.06) saturate(1.22) contrast(1.12)"
             : "brightness(1.18) saturate(1.12) contrast(1.08)",
-          opacity: launch ? 0.42 : 1,
+          opacity: launch ? 0.94 : 1,
           outline: "none",
           userSelect: "none",
+          transform: launch ? "scale(1.28)" : undefined,
+          transformOrigin: launch ? "78% 16%" : undefined,
         }}
       />
       <canvas
@@ -522,9 +524,17 @@ export function SolphiaFace({ mode = "panel" }: { mode?: "hero" | "panel" | "lau
             : {}),
         }}
       />
-      {!hero && (
+      {launch ? (
+        <div
+          className="pointer-events-none absolute inset-0"
+          style={{
+            background:
+              "linear-gradient(to right, rgba(4,0,10,0.58) 0%, rgba(4,0,10,0.22) 36%, transparent 62%), linear-gradient(to bottom, transparent 52%, rgba(4,0,10,0.7) 100%)",
+          }}
+        />
+      ) : !hero ? (
         <div className="pointer-events-none absolute inset-0" style={{ background: PANEL_FADE }} />
-      )}
+      ) : null}
     </div>
   );
 }

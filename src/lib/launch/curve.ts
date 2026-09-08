@@ -31,6 +31,9 @@ export const ANTI_SNIPE_MS = 60_000;
 export const ANTI_SNIPE_SOL = 1;
 export const MIN_TRADE_SOL = 0.01;
 export const MAX_TRADE_SOL = 40;
+/** Square token art used by Pump, X, Telegram, Discord, Dexscreener. */
+export const TOKEN_IMAGE_PX = 1000;
+export const DEV_BUY_MAX_SOL = 2;
 
 export const K = VIRTUAL_SOL * VIRTUAL_TOKENS;
 

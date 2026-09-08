@@ -3,6 +3,7 @@ import {
   ANTI_SNIPE_MS,
   ANTI_SNIPE_SOL,
   CURVE_SALE,
+  DEV_BUY_MAX_SOL,
   emptyCurve,
   graduatePool,
   marketCapSol,
@@ -36,6 +37,13 @@ export type LaunchFill = {
   priceSol: number;
 };
 
+export type LaunchLinks = {
+  website?: string;
+  x?: string;
+  telegram?: string;
+  discord?: string;
+};
+
 export type LaunchCoin = {
   id: string;
   mint: string;
@@ -43,6 +51,9 @@ export type LaunchCoin = {
   symbol: string;
   image?: string;
   blurb: string;
+  links: LaunchLinks;
+  mintAuthority: "revoked";
+  freezeAuthority: "revoked";
   creator: string;
   createdAt: number;
   curve: CurveState;
@@ -79,6 +90,41 @@ function nameOk(s: string): boolean {
   return s.trim().length >= 2 && s.trim().length <= 24;
 }
 
+function cleanLink(raw?: string, kind?: "website" | "x" | "telegram" | "discord"): string {
+  const s = (raw || "").trim().slice(0, 160);
+  if (!s) return "";
+  if (kind === "x") {
+    const h = s.replace(/^https?:\/\/(www\.)?(x|twitter)\.com\//i, "").replace(/^@/, "");
+    if (!/^[A-Za-z0-9_]{1,15}$/.test(h)) return "";
+    return `https://x.com/${h}`;
+  }
+  if (kind === "telegram") {
+    const h = s.replace(/^https?:\/\/(t\.me|telegram\.me)\//i, "").replace(/^@/, "");
+    if (!/^[A-Za-z0-9_]{3,32}$/.test(h)) return "";
+    return `https://t.me/${h}`;
+  }
+  if (kind === "discord") {
+    if (/^https?:\/\/(discord\.gg|discord\.com\/invite)\//i.test(s)) return s.split("?")[0];
+    if (/^[A-Za-z0-9-]{3,32}$/.test(s)) return `https://discord.gg/${s}`;
+    return "";
+  }
+  try {
+    const u = new URL(s.startsWith("http") ? s : `https://${s}`);
+    if (u.protocol !== "https:" && u.protocol !== "http:") return "";
+    return u.toString().slice(0, 160);
+  } catch {
+    return "";
+  }
+}
+
+function imageOk(raw?: string): string {
+  const s = (raw || "").trim();
+  if (!s) return "";
+  if (!/^data:image\/(png|jpeg|jpg|webp);base64,/i.test(s)) return "";
+  if (s.length > 280_000) return "";
+  return s;
+}
+
 export function publicCoin(c: LaunchCoin, solUsd = 0, viewer?: string) {
   const px = spotPriceSol(c.curve);
   return {
@@ -88,6 +134,9 @@ export function publicCoin(c: LaunchCoin, solUsd = 0, viewer?: string) {
     symbol: c.symbol,
     image: c.image || "",
     blurb: c.blurb,
+    links: c.links || {},
+    mintAuthority: "revoked" as const,
+    freezeAuthority: "revoked" as const,
     creator: c.creator,
     createdAt: c.createdAt,
     status: c.status,
@@ -107,7 +156,19 @@ export function publicCoin(c: LaunchCoin, solUsd = 0, viewer?: string) {
 
 export function createCoin(
   book: LaunchBook,
-  opts: { creator: string; name: string; symbol: string; blurb?: string; image?: string; now?: number },
+  opts: {
+    creator: string;
+    name: string;
+    symbol: string;
+    blurb?: string;
+    image?: string;
+    website?: string;
+    x?: string;
+    telegram?: string;
+    discord?: string;
+    launchBuySol?: number;
+    now?: number;
+  },
 ): { ok: true; coin: LaunchCoin } | { ok: false; error: string } {
   if (!isSolanaAddress(opts.creator)) return { ok: false, error: "bad_wallet" };
   const name = opts.name.trim();
@@ -117,6 +178,10 @@ export function createCoin(
   if (book.coins.some((c) => c.symbol === symbol && c.status === "curve")) {
     return { ok: false, error: "ticker_taken" };
   }
+  const img = imageOk(opts.image);
+  if (opts.image && !img) return { ok: false, error: "bad_image" };
+  const launchBuy = Math.max(0, Number(opts.launchBuySol) || 0);
+  if (launchBuy && launchBuy > DEV_BUY_MAX_SOL) return { ok: false, error: "dev_buy_cap" };
   const now = opts.now || Date.now();
   const mint = `curve:${symbol}:${now.toString(36)}`;
   const coin: LaunchCoin = {
@@ -124,8 +189,16 @@ export function createCoin(
     mint,
     name,
     symbol,
-    image: (opts.image || "").slice(0, 400),
+    image: img,
     blurb: (opts.blurb || "").slice(0, 280),
+    links: {
+      website: cleanLink(opts.website, "website") || undefined,
+      x: cleanLink(opts.x, "x") || undefined,
+      telegram: cleanLink(opts.telegram, "telegram") || undefined,
+      discord: cleanLink(opts.discord, "discord") || undefined,
+    },
+    mintAuthority: "revoked",
+    freezeAuthority: "revoked",
     creator: opts.creator,
     createdAt: now,
     curve: emptyCurve(),
@@ -138,6 +211,11 @@ export function createCoin(
   };
   book.coins.unshift(coin);
   if (book.coins.length > 120) book.coins.length = 120;
+  if (launchBuy >= MIN_TRADE_SOL) {
+    const bought = buyCoin(book, { id: coin.id, owner: opts.creator, sol: launchBuy, now, skipSnipe: true });
+    if (!bought.ok) return bought;
+    return { ok: true, coin: bought.coin };
+  }
   return { ok: true, coin };
 }
 
@@ -167,14 +245,14 @@ function maybeGraduate(coin: LaunchCoin, now: number) {
 
 export function buyCoin(
   book: LaunchBook,
-  opts: { id: string; owner: string; sol: number; now?: number },
+  opts: { id: string; owner: string; sol: number; now?: number; skipSnipe?: boolean },
 ): { ok: true; fill: LaunchFill; coin: LaunchCoin } | { ok: false; error: string } {
   if (!isSolanaAddress(opts.owner)) return { ok: false, error: "bad_wallet" };
   const coin = book.coins.find((c) => c.id === opts.id);
   if (!coin) return { ok: false, error: "not_found" };
   if (coin.status !== "curve") return { ok: false, error: "graduated" };
   const now = opts.now || Date.now();
-  if (now - coin.createdAt < ANTI_SNIPE_MS && opts.sol > ANTI_SNIPE_SOL) {
+  if (!opts.skipSnipe && now - coin.createdAt < ANTI_SNIPE_MS && opts.sol > ANTI_SNIPE_SOL) {
     return { ok: false, error: "anti_snipe" };
   }
   const q = quoteBuy(coin.curve, opts.sol);

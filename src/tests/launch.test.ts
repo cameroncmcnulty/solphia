@@ -2,12 +2,14 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   CURVE_SALE,
+  DEV_BUY_MAX_SOL,
   DEV_FEE_BPS,
   GRADUATE_SOL,
   K,
   MAX_WALLET_BPS,
   OWNER_FEE_BPS,
   SWAP_FEE_BPS,
+  TOKEN_IMAGE_PX,
   TOKEN_SUPPLY,
   TREAS_FEE_BPS,
   VIRTUAL_SOL,
@@ -91,6 +93,8 @@ describe("launch curve math", () => {
     assert.equal(VIRTUAL_TOKENS, 1_073_000_191);
     assert.equal(TOKEN_SUPPLY, 1_000_000_000);
     assert.equal(CURVE_SALE, 800_000_000);
+    assert.equal(TOKEN_IMAGE_PX, 1000);
+    assert.equal(DEV_BUY_MAX_SOL, 2);
   });
 });
 
@@ -103,6 +107,38 @@ describe("fair launch book", () => {
     assert.equal(r.coin.curve.tokensSold, 0);
     assert.equal(r.coin.holders[A], undefined);
     assert.equal(r.coin.devRewardsSol, 0);
+    assert.equal(r.coin.mintAuthority, "revoked");
+    assert.equal(r.coin.freezeAuthority, "revoked");
+  });
+
+  it("locks authorities, stores socials, and lets the creator buy at launch", () => {
+    const book = emptyLaunchBook();
+    const r = createCoin(book, {
+      creator: A,
+      name: "Neon Fox",
+      symbol: "FOX2",
+      x: "solphia",
+      website: "https://solphia.io",
+      telegram: "solphia",
+      discord: "solphia",
+      launchBuySol: 0.4,
+      now: 1_700_000_000_000,
+    });
+    assert.equal(r.ok, true);
+    if (!r.ok) return;
+    assert.equal(r.coin.mintAuthority, "revoked");
+    assert.equal(r.coin.freezeAuthority, "revoked");
+    assert.equal(r.coin.links.x, "https://x.com/solphia");
+    assert.ok((r.coin.links.website || "").includes("solphia.io"));
+    assert.equal(r.coin.links.telegram, "https://t.me/solphia");
+    assert.equal(r.coin.links.discord, "https://discord.gg/solphia");
+    assert.ok((r.coin.holders[A]?.tokens || 0) > 0);
+    const bad = createCoin(book, { creator: A, name: "Bad", symbol: "BADX", image: "https://evil.example/x.png" });
+    assert.equal(bad.ok, false);
+    const noWallet = createCoin(book, { creator: "not-a-wallet", name: "Nope", symbol: "NOPE" });
+    assert.equal(noWallet.ok, false);
+    const over = createCoin(book, { creator: A, name: "Over", symbol: "OVER", launchBuySol: DEV_BUY_MAX_SOL + 0.1 });
+    assert.equal(over.ok, false);
   });
 
   it("credits the buyer and splits fees, then lets the creator withdraw", () => {

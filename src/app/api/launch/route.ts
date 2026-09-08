@@ -24,7 +24,12 @@ const Body = z.object({
   name: z.string().optional(),
   symbol: z.string().optional(),
   blurb: z.string().optional(),
-  image: z.string().optional(),
+  image: z.string().max(280_000).optional(),
+  website: z.string().optional(),
+  x: z.string().optional(),
+  telegram: z.string().optional(),
+  discord: z.string().optional(),
+  launchBuySol: z.number().optional(),
   sol: z.number().optional(),
   tokens: z.number().optional(),
   ownerWallet: z.string().optional(),
@@ -53,7 +58,7 @@ export async function GET(req: NextRequest) {
     solUsd,
     ownerWallet: book.ownerWallet || null,
     ownerEarningsSol: book.ownerEarningsSol,
-    fee: { swapBps: 100, split: "50% creator · 25% owner · 25% treasury", createSol: 0 },
+    fee: { swapBps: 100, devShare: "50% of swap fees paid to the dev", createSol: 0 },
   });
 }
 
@@ -84,7 +89,12 @@ export async function POST(req: NextRequest) {
         name: sanitizeText(b.name || "", 24),
         symbol: sanitizeText(b.symbol || "", 10),
         blurb: sanitizeText(b.blurb || "", 280),
-        image: sanitizeText(b.image || "", 400),
+        image: b.image,
+        website: sanitizeText(b.website || "", 160),
+        x: sanitizeText(b.x || "", 80),
+        telegram: sanitizeText(b.telegram || "", 80),
+        discord: sanitizeText(b.discord || "", 120),
+        launchBuySol: Number(b.launchBuySol) || 0,
       });
     }
     if (b.action === "buy") return buyCoin(book, { id: b.id || "", owner: b.pubkey, sol: Number(b.sol) || 0 });
