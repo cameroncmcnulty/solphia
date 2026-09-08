@@ -1,5 +1,7 @@
 "use client";
 
+import { TokenSocials } from "@/components/TokenSocials";
+
 export function TokenTable({
   rows,
   openMints,
@@ -40,6 +42,7 @@ export function TokenTable({
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <span className="font-display text-lg text-ghost">{t.symbol}</span>
+                  <TokenSocials links={t.socials || t.links} />
                   <span
                     className={`rounded-full px-2 py-0.5 font-mono text-[10px] tracking-[0.14em] ${
                       take ? "bg-acid/15 text-acid" : r.verdict === "wait" ? "text-cyan" : "text-blood"

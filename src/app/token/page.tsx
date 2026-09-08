@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { CopyCa } from "@/components/CopyCa";
+import { TokenSocials } from "@/components/TokenSocials";
 
 type Coin = {
   id: string;
@@ -14,6 +15,7 @@ type Coin = {
   marketCapSol: number;
   progress: number;
   holders: number;
+  links?: { website?: string; x?: string; telegram?: string; discord?: string };
 };
 
 function tick(symbol?: string) {
@@ -47,6 +49,7 @@ export default function TokenPage() {
               </div>
             </Link>
             <div className="flex shrink-0 items-center gap-2">
+              <TokenSocials links={c.links} />
               {c.mint ? <CopyCa ca={c.mint} compact /> : null}
               <div className="font-mono text-acid">
                 {c.marketCapUsd ? `$${c.marketCapUsd.toFixed(0)}` : `${c.marketCapSol.toFixed(1)} SOL`}

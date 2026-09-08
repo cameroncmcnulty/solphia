@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { CopyCa } from "@/components/CopyCa";
 import { SolphiaConstellation } from "@/components/SolphiaConstellation";
 import { SparkCandles } from "@/components/SparkCandles";
+import { SocialInput, TokenSocials } from "@/components/TokenSocials";
 import { WalletConnect } from "@/components/WalletConnect";
 import { useOwner } from "@/lib/hooks";
 import {
@@ -337,10 +338,10 @@ export default function LaunchPage() {
                   className="mt-3 h-20 w-full rounded-2xl border border-violet/30 bg-void px-4 py-3 text-ghost"
                 />
                 <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                  <input value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="website (optional)" className="rounded-2xl border border-violet/30 bg-void px-4 py-2 text-sm text-ghost" />
-                  <input value={x} onChange={(e) => setX(e.target.value)} placeholder="X / twitter (optional)" className="rounded-2xl border border-violet/30 bg-void px-4 py-2 text-sm text-ghost" />
-                  <input value={telegram} onChange={(e) => setTelegram(e.target.value)} placeholder="telegram (optional)" className="rounded-2xl border border-violet/30 bg-void px-4 py-2 text-sm text-ghost" />
-                  <input value={discord} onChange={(e) => setDiscord(e.target.value)} placeholder="discord (optional)" className="rounded-2xl border border-violet/30 bg-void px-4 py-2 text-sm text-ghost" />
+                  <SocialInput kind="website" value={website} onChange={setWebsite} placeholder="website (optional)" />
+                  <SocialInput kind="x" value={x} onChange={setX} placeholder="X / twitter (optional)" />
+                  <SocialInput kind="telegram" value={telegram} onChange={setTelegram} placeholder="telegram (optional)" />
+                  <SocialInput kind="discord" value={discord} onChange={setDiscord} placeholder="discord (optional)" />
                 </div>
                 <label className="mt-4 block">
                   <div className="flex justify-between font-mono text-[11px] text-mute">
@@ -488,6 +489,7 @@ function CoinCard({ c, solUsd, active, onOpen }: { c: Coin; solUsd: number; acti
             <span className="truncate font-display text-lg text-ghost">{tick(c.symbol)}</span>
             <span className="truncate font-mono text-[11px] text-mute">{c.name}</span>
             {c.mint ? <CopyCa ca={c.mint} compact /> : null}
+            <TokenSocials links={c.links} />
             <span className="ml-auto font-mono text-[10px] text-mute">{age}</span>
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[10px]">
@@ -584,27 +586,8 @@ function CoinDesk({
           </button>
         </div>
       </div>
-      <div className="mt-3 flex flex-wrap gap-3 font-mono text-[11px] text-mute">
-        {open.links?.website && (
-          <a href={open.links.website} target="_blank" rel="noreferrer" className="text-acid">
-            web
-          </a>
-        )}
-        {open.links?.x && (
-          <a href={open.links.x} target="_blank" rel="noreferrer" className="text-acid">
-            X
-          </a>
-        )}
-        {open.links?.telegram && (
-          <a href={open.links.telegram} target="_blank" rel="noreferrer" className="text-acid">
-            telegram
-          </a>
-        )}
-        {open.links?.discord && (
-          <a href={open.links.discord} target="_blank" rel="noreferrer" className="text-acid">
-            discord
-          </a>
-        )}
+      <div className="mt-3 flex flex-wrap items-center gap-3 font-mono text-[11px] text-mute">
+        <TokenSocials links={open.links} size="md" />
         <span>age {age}</span>
         <span>mint locked · freeze locked</span>
       </div>
