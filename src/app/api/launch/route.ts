@@ -15,6 +15,7 @@ import {
   withdrawOwner,
 } from "@/lib/launch/engine";
 import { lastPairPrices } from "@/lib/tick";
+import { IMAGE_DATA_MAX } from "@/lib/launch/validate";
 
 export const dynamic = "force-dynamic";
 
@@ -25,7 +26,7 @@ const Body = z.object({
   name: z.string().optional(),
   symbol: z.string().optional(),
   blurb: z.string().optional(),
-  image: z.string().max(90_000).optional(),
+  image: z.string().max(IMAGE_DATA_MAX).optional(),
   website: z.string().optional(),
   x: z.string().optional(),
   telegram: z.string().optional(),
@@ -72,8 +73,12 @@ export async function POST(req: NextRequest) {
     return fail("rate_limited", 429);
   }
   const parsed = Body.safeParse(await req.json().catch(() => null));
-  if (!parsed.success || !isSolanaAddress(parsed.data.pubkey)) {
-    return fail("bad_request");
+  if (!parsed.success) {
+    const img = parsed.error.issues.some((i) => i.path.includes("image"));
+    return fail(img ? "bad_image" : "bad_request");
+  }
+  if (!isSolanaAddress(parsed.data.pubkey)) {
+    return fail("bad_wallet");
   }
   const b = parsed.data;
   const solUsd = lastPairPrices().solUsd || 0;

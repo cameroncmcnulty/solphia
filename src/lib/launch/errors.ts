@@ -7,6 +7,8 @@ export const LAUNCH_ERRORS: Record<string, string> = {
   bad_ticker: "Ticker must be 2–10 letters or numbers.",
   ticker_taken: "That ticker is already live on the curve.",
   bad_image: "Use a PNG or JPEG. We store a 512px square so it stays on the tape.",
+  bad_link: "Check the social link you entered.",
+  image_too_heavy: "Image is too heavy. Try a simpler square PNG or JPEG.",
   dev_buy_cap: `Dev buy at launch is capped at ${DEV_BUY_MAX_SOL} SOL.`,
   anti_snipe: "First 60 seconds: max 1 SOL per buy (sniper cap).",
   wallet_cap: "That buy would put this wallet over the 5% supply cap.",

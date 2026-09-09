@@ -14,6 +14,7 @@ import {
 } from "@/lib/wallet/trading";
 import { unsubscribeSeat } from "@/lib/wallet/seatPay";
 import { WalletConnect } from "./WalletConnect";
+import { FieldError, FormAlert, useConfirmErrors } from "./form/confirm";
 import { useMarket, useOwner } from "@/lib/hooks";
 import { SOL_MINT, USDC_MINT, XSTOCKS, xstockMint } from "@/lib/pair/mints";
 
@@ -85,6 +86,7 @@ export function TradingHub() {
     levSeat?: boolean;
   } | null>(null);
   const [restore, setRestore] = useState("");
+  const fundErr = useConfirmErrors<"wallet" | "amount" | "restore">();
 
   const demoPaper = data?.paper;
   const book = paper || demoPaper;
@@ -221,7 +223,19 @@ export function TradingHub() {
 
   async function deposit() {
     const provider = pickProvider();
-    if (!provider || !owner) return setMsg("Open this page in Phantom (browser or in-app).");
+    if (!owner) {
+      fundErr.fail({ wallet: "Connect Phantom first." });
+      return;
+    }
+    if (!provider) {
+      fundErr.fail({ wallet: "Open this page in Phantom (browser or in-app)." });
+      return;
+    }
+    if (!(solAmt > 0)) {
+      fundErr.fail({ amount: "Pick how much SOL to add." });
+      return;
+    }
+    fundErr.ok();
     setBusy(true);
     try {
       const tpk = tradingPubkey();
@@ -230,7 +244,7 @@ export function TradingHub() {
       setMsg(`Added ${solAmt} SOL · ${String(sent.signature || sent).slice(0, 16)}…`);
       setTimeout(() => refreshAuto(owner), 2500);
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : "deposit rejected");
+      fundErr.fail({}, e instanceof Error ? e.message : "deposit rejected");
     } finally {
       setBusy(false);
     }
@@ -287,7 +301,10 @@ export function TradingHub() {
           </p>
         </div>
         <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-row sm:items-center sm:gap-3">
-          <div className="col-span-2 sm:col-auto [&_button]:w-full sm:[&_button]:w-auto">
+          <div
+            data-field="wallet"
+            className={`col-span-2 sm:col-auto [&_button]:w-full sm:[&_button]:w-auto ${fundErr.errors.wallet ? "rounded-full ring-1 ring-blood/70" : ""}`}
+          >
             <WalletConnect />
           </div>
           {book?.killed ? (
@@ -386,21 +403,25 @@ export function TradingHub() {
             TRADING WALLET · {tradePk ? `${tradePk.slice(0, 4)}…${tradePk.slice(-4)}` : "connect first"} · keys never leave
             this device
           </div>
-          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div data-field="amount" className={`mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4 ${fundErr.errors.amount ? "rounded-2xl p-1 ring-1 ring-blood/60" : ""}`}>
             {[0.1, 0.5, 1, 2].map((n) => (
               <button
                 key={n}
                 type="button"
-                onClick={() => setSolAmt(n)}
+                onClick={() => {
+                  setSolAmt(n);
+                  fundErr.clear("amount");
+                }}
                 className={`min-h-[40px] rounded-full py-2 font-mono text-[12px] ${solAmt === n ? "btn-on" : "btn-ghost"}`}
               >
                 {n} SOL
               </button>
             ))}
           </div>
+          <FieldError error={fundErr.errors.amount} />
           <div className="mt-3 grid grid-cols-2 gap-2">
             <button
-              disabled={busy || !owner}
+              disabled={busy}
               onClick={deposit}
               className="btn-acid min-h-[48px] rounded-full py-3 font-mono text-[12px] disabled:opacity-40"
             >
@@ -547,7 +568,13 @@ export function TradingHub() {
       </section>
 
       {halted && <p className="mt-3 font-mono text-sm text-blood">{book.haltReason}</p>}
-      {msg && <p className="mt-3 font-mono text-sm text-acid">{msg}</p>}
+      {fundErr.banner && (
+        <div className="mt-3">
+          <FormAlert error={fundErr.banner} />
+        </div>
+      )}
+      {msg && !fundErr.banner && <p className="mt-3 font-mono text-sm text-acid">{msg}</p>}
+      <FieldError error={fundErr.errors.wallet} />
 
       <div className="mt-6 grid gap-4 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.2fr)]">
         <div className="panel space-y-4 rounded-2xl p-5">

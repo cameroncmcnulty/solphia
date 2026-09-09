@@ -3,7 +3,6 @@ import {
   ANTI_SNIPE_MS,
   ANTI_SNIPE_SOL,
   CURVE_SALE,
-  DEV_BUY_MAX_SOL,
   emptyCurve,
   graduatePool,
   launchDevBuyCap,
@@ -19,8 +18,10 @@ import {
   type CurveState,
 } from "./curve";
 import { socialHref } from "./links";
+import { imageOk, validateLaunchCreate } from "./validate";
 
 export { launchError, LAUNCH_ERRORS } from "./errors";
+export { imageOk, nameOk, tickerOk, validateLaunchCreate } from "./validate";
 
 export type LaunchStatus = "curve" | "graduated";
 
@@ -87,24 +88,8 @@ function id(prefix: string) {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
-function tickerOk(s: string): boolean {
-  return /^[A-Z0-9]{2,10}$/.test(s);
-}
-
-function nameOk(s: string): boolean {
-  return s.trim().length >= 2 && s.trim().length <= 24;
-}
-
 function cleanLink(raw?: string, kind?: "website" | "x" | "telegram" | "discord"): string {
   return socialHref(kind || "website", raw);
-}
-
-function imageOk(raw?: string): string {
-  const s = (raw || "").trim();
-  if (!s) return "";
-  if (!/^data:image\/(png|jpeg|jpg|webp);base64,/i.test(s)) return "";
-  if (s.length > 90_000) return "";
-  return s;
 }
 
 export type SparkCandle = { t: number; o: number; h: number; l: number; c: number; v: number };
@@ -256,18 +241,21 @@ export function createCoin(
     now?: number;
   },
 ): { ok: true; coin: LaunchCoin } | { ok: false; error: string } {
-  if (!isSolanaAddress(opts.creator)) return { ok: false, error: "bad_wallet" };
+  const issues = validateLaunchCreate(opts);
+  if (issues.wallet) return { ok: false, error: "bad_wallet" };
+  if (issues.name) return { ok: false, error: "bad_name" };
+  if (issues.symbol) return { ok: false, error: "bad_ticker" };
+  if (issues.image) return { ok: false, error: "bad_image" };
+  if (issues.launchBuySol) return { ok: false, error: "dev_buy_cap" };
+  if (issues.website || issues.x || issues.telegram || issues.discord) return { ok: false, error: "bad_link" };
   const name = opts.name.trim();
   const symbol = opts.symbol.trim().toUpperCase();
-  if (!nameOk(name)) return { ok: false, error: "bad_name" };
-  if (!tickerOk(symbol)) return { ok: false, error: "bad_ticker" };
   if (book.coins.some((c) => c.symbol === symbol && c.status === "curve")) {
     return { ok: false, error: "ticker_taken" };
   }
   const img = imageOk(opts.image);
   if (opts.image && !img) return { ok: false, error: "bad_image" };
   const launchBuy = Math.min(launchDevBuyCap(), Math.max(0, Number(opts.launchBuySol) || 0));
-  if ((Number(opts.launchBuySol) || 0) > DEV_BUY_MAX_SOL) return { ok: false, error: "dev_buy_cap" };
   const now = opts.now || Date.now();
   const mint = `curve:${symbol}:${now.toString(36)}`;
   const coin: LaunchCoin = {

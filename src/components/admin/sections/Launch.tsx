@@ -1,10 +1,13 @@
 "use client";
 
+import { FieldError, useConfirmErrors } from "@/components/form/confirm";
+import { walletOk } from "@/lib/launch/validate";
 import { useAdmin } from "../AdminProvider";
 import { Field, Mini, shortPk } from "../ui";
 
 export function LaunchSection() {
   const { data, busy, patch, ownerPk, setOwnerPk } = useAdmin();
+  const err = useConfirmErrors<"ownerPk">();
   if (!data) return null;
 
   return (
@@ -21,12 +24,30 @@ export function LaunchSection() {
           Treasury keeps 25%. {data.launchCount} coins on the pad.
         </p>
         <div className="mt-3 font-display text-3xl text-acid">{data.ownerEarningsSol.toFixed(4)} SOL</div>
-        <Field value={ownerPk} onChange={(v) => setOwnerPk(v.trim())} placeholder="Owner Solana address" className="mt-3" />
+        <Field
+          field="ownerPk"
+          value={ownerPk}
+          error={err.errors.ownerPk}
+          onChange={(v) => {
+            setOwnerPk(v.trim());
+            err.clear("ownerPk");
+          }}
+          placeholder="Owner Solana address"
+          className="mt-3"
+        />
+        <FieldError error={err.errors.ownerPk} />
         <div className="mt-3 flex flex-wrap gap-2">
           <button
             type="button"
             disabled={busy}
-            onClick={() => patch({ ownerWallet: ownerPk || null })}
+            onClick={() => {
+              if (ownerPk && !walletOk(ownerPk)) {
+                err.fail({ ownerPk: "That is not a valid Solana address." });
+                return;
+              }
+              err.ok();
+              patch({ ownerWallet: ownerPk || null });
+            }}
             className="btn-acid rounded-full px-5 py-2 text-sm disabled:opacity-40"
           >
             Save owner wallet

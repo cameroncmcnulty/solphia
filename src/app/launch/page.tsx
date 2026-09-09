@@ -19,6 +19,13 @@ import {
   quoteSell,
 } from "@/lib/launch/curve";
 import { launchError } from "@/lib/launch/errors";
+import {
+  IMAGE_DATA_MAX,
+  launchCodeToField,
+  validateLaunchCreate,
+  type LaunchField,
+} from "@/lib/launch/validate";
+import { FieldError, FormAlert, fieldClass, useConfirmErrors } from "@/components/form/confirm";
 import { loadOwner } from "@/lib/wallet/trading";
 
 const TOKEN_PX = TOKEN_IMAGE_PX;
@@ -118,10 +125,26 @@ async function squareTokenImage(file: File): Promise<string> {
     store.width = STORE_PX;
     store.height = STORE_PX;
     store.getContext("2d")?.drawImage(full, 0, 0, STORE_PX, STORE_PX);
-    return store.toDataURL("image/jpeg", 0.78);
+    return jpegFit(store);
   } finally {
     URL.revokeObjectURL(url);
   }
+}
+
+function jpegFit(canvas: HTMLCanvasElement, max = IMAGE_DATA_MAX): string {
+  for (const q of [0.72, 0.6, 0.48, 0.36, 0.24]) {
+    const data = canvas.toDataURL("image/jpeg", q);
+    if (data.length <= max) return data;
+  }
+  const small = document.createElement("canvas");
+  small.width = 384;
+  small.height = 384;
+  small.getContext("2d")?.drawImage(canvas, 0, 0, 384, 384);
+  for (const q of [0.55, 0.4, 0.28]) {
+    const data = small.toDataURL("image/jpeg", q);
+    if (data.length <= max) return data;
+  }
+  throw new Error("Image is too heavy. Use a simpler square PNG or JPEG.");
 }
 
 function mergeCoins(remote: Coin[], prev: Coin[]): Coin[] {
@@ -147,6 +170,7 @@ export default function LaunchPage() {
   const [sol, setSol] = useState(0.25);
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
+  const createErr = useConfirmErrors<LaunchField>();
   const [busy, setBusy] = useState(false);
   const [solUsd, setSolUsd] = useState(0);
   const [tab, setTab] = useState<"tape" | "mine">("tape");
@@ -170,9 +194,43 @@ export default function LaunchPage() {
     return () => clearInterval(t);
   }, [owner]);
 
+  function launchToken() {
+    const issues = validateLaunchCreate({
+      creator: owner || "",
+      name,
+      symbol,
+      blurb,
+      image,
+      website,
+      x,
+      telegram,
+      discord,
+      launchBuySol: devBuy,
+    });
+    if (Object.keys(issues).length) {
+      createErr.fail(issues);
+      setErr("");
+      return;
+    }
+    createErr.ok();
+    act({
+      action: "create",
+      name,
+      symbol,
+      blurb,
+      image,
+      website,
+      x,
+      telegram,
+      discord,
+      launchBuySol: devBuy,
+    });
+  }
+
   async function act(body: Record<string, unknown>) {
     if (!owner) {
-      setErr("Connect Phantom to launch or swap.");
+      if (body.action === "create") createErr.fail({ wallet: "Connect Phantom to launch." });
+      else setErr("Connect Phantom to launch or swap.");
       return;
     }
     setBusy(true);
@@ -185,13 +243,23 @@ export default function LaunchPage() {
         body: JSON.stringify({ ...body, pubkey: owner }),
       });
       const j = await r.json();
-      if (!r.ok) throw new Error(j.message || launchError(j.error) || "failed");
+      if (!r.ok) {
+        const code = typeof j.error === "string" ? j.error : "";
+        const message = j.message || launchError(code) || "failed";
+        if (body.action === "create") {
+          const field = launchCodeToField(code);
+          if (field !== "form") createErr.fail({ [field]: message } as Partial<Record<LaunchField, string>>, message);
+          else createErr.fail({}, message);
+        }
+        throw new Error(message);
+      }
       if (j.coin) {
         setOpen(j.coin);
         setCoins((prev) => [j.coin, ...prev.filter((c) => c.id !== j.coin.id)]);
       }
       await refresh();
       if (body.action === "create") {
+        createErr.ok();
         setName("");
         setSymbol("");
         setBlurb("");
@@ -206,7 +274,7 @@ export default function LaunchPage() {
       } else if (body.action === "withdraw_dev") setMsg("Dev rewards booked.");
       else setMsg("Filled.");
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "failed");
+      if (body.action !== "create") setErr(e instanceof Error ? e.message : "failed");
     } finally {
       setBusy(false);
     }
@@ -235,8 +303,9 @@ export default function LaunchPage() {
                 <div className="mt-4 flex items-center gap-3">
                   <button
                     type="button"
+                    data-field="image"
                     onClick={() => fileRef.current?.click()}
-                    className="relative h-20 w-20 shrink-0 overflow-hidden rounded-2xl border border-violet/40 bg-void"
+                    className={`relative h-20 w-20 shrink-0 overflow-hidden rounded-2xl border bg-void ${fieldClass(createErr.errors.image, "border-violet/40")}`}
                   >
                     {image ? (
                       // eslint-disable-next-line @next/next/no-img-element
@@ -245,7 +314,10 @@ export default function LaunchPage() {
                       <span className="flex h-full items-center justify-center font-mono text-[10px] text-mute">art</span>
                     )}
                   </button>
-                  <p className="text-sm text-mute">Square art, 512px min. We crop 1000×1000 for X, Telegram, Discord.</p>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm text-mute">Square art, 512px min. We crop 1000×1000 for X, Telegram, Discord. Optional.</p>
+                    <FieldError error={createErr.errors.image} />
+                  </div>
                   <input
                     ref={fileRef}
                     type="file"
@@ -257,44 +329,115 @@ export default function LaunchPage() {
                       if (!f) return;
                       try {
                         setImage(await squareTokenImage(f));
+                        createErr.clear("image");
                         setErr("");
                       } catch (er) {
-                        setErr(er instanceof Error ? er.message : "image failed");
+                        const message = er instanceof Error ? er.message : "image failed";
+                        setImage("");
+                        createErr.fail({ image: message }, message);
                       }
                     }}
                   />
                 </div>
                 <input
                   value={name}
-                  onChange={(e) => setName(e.target.value)}
+                  data-field="name"
+                  onChange={(e) => {
+                    setName(e.target.value);
+                    createErr.clear("name");
+                  }}
                   placeholder="Name"
-                  className="mt-4 w-full rounded-2xl border border-violet/30 bg-void px-4 py-3 text-ghost"
+                  aria-invalid={Boolean(createErr.errors.name)}
+                  className={`mt-4 w-full rounded-2xl border bg-void px-4 py-3 text-ghost ${fieldClass(createErr.errors.name)}`}
                 />
-                <label className="mt-3 flex w-full items-center rounded-2xl border border-violet/30 bg-void px-4 py-3 font-mono text-ghost">
+                <FieldError error={createErr.errors.name} />
+                <label
+                  data-field="symbol"
+                  className={`mt-3 flex w-full items-center rounded-2xl border bg-void px-4 py-3 font-mono text-ghost ${fieldClass(createErr.errors.symbol)}`}
+                >
                   <span className="pr-1 text-acid">$</span>
                   <input
                     value={symbol}
-                    onChange={(e) => setSymbol(e.target.value.replace(/^\$+/, "").toUpperCase())}
+                    onChange={(e) => {
+                      setSymbol(e.target.value.replace(/^\$+/, "").toUpperCase());
+                      createErr.clear("symbol");
+                    }}
                     placeholder="TICKER"
                     maxLength={10}
+                    aria-invalid={Boolean(createErr.errors.symbol)}
                     className="w-full bg-transparent outline-none"
                   />
                 </label>
+                <FieldError error={createErr.errors.symbol} />
                 <input
                   value={blurb}
-                  onChange={(e) => setBlurb(e.target.value)}
+                  data-field="blurb"
+                  onChange={(e) => {
+                    setBlurb(e.target.value);
+                    createErr.clear("blurb");
+                  }}
                   placeholder="One line (optional)"
-                  className="mt-3 w-full rounded-2xl border border-violet/30 bg-void px-4 py-3 text-ghost"
+                  aria-invalid={Boolean(createErr.errors.blurb)}
+                  className={`mt-3 w-full rounded-2xl border bg-void px-4 py-3 text-ghost ${fieldClass(createErr.errors.blurb)}`}
                 />
+                <FieldError error={createErr.errors.blurb} />
                 <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                  <SocialInput kind="website" value={website} onChange={setWebsite} placeholder="website.com" />
-                  <SocialInput kind="x" value={x} onChange={setX} placeholder="@handle or x.com/…" />
-                  <SocialInput kind="telegram" value={telegram} onChange={setTelegram} placeholder="t.me/…" />
-                  <SocialInput kind="discord" value={discord} onChange={setDiscord} placeholder="discord.gg/…" />
+                  <div>
+                    <SocialInput
+                      kind="website"
+                      value={website}
+                      onChange={(v) => {
+                        setWebsite(v);
+                        createErr.clear("website");
+                      }}
+                      placeholder="website.com"
+                      error={createErr.errors.website}
+                    />
+                    <FieldError error={createErr.errors.website} />
+                  </div>
+                  <div>
+                    <SocialInput
+                      kind="x"
+                      value={x}
+                      onChange={(v) => {
+                        setX(v);
+                        createErr.clear("x");
+                      }}
+                      placeholder="@handle or x.com/…"
+                      error={createErr.errors.x}
+                    />
+                    <FieldError error={createErr.errors.x} />
+                  </div>
+                  <div>
+                    <SocialInput
+                      kind="telegram"
+                      value={telegram}
+                      onChange={(v) => {
+                        setTelegram(v);
+                        createErr.clear("telegram");
+                      }}
+                      placeholder="t.me/…"
+                      error={createErr.errors.telegram}
+                    />
+                    <FieldError error={createErr.errors.telegram} />
+                  </div>
+                  <div>
+                    <SocialInput
+                      kind="discord"
+                      value={discord}
+                      onChange={(v) => {
+                        setDiscord(v);
+                        createErr.clear("discord");
+                      }}
+                      placeholder="discord.gg/…"
+                      error={createErr.errors.discord}
+                    />
+                    <FieldError error={createErr.errors.discord} />
+                  </div>
                 </div>
-                <label className="mt-4 block">
+                <label data-field="launchBuySol" className="mt-4 block">
                   <div className="flex justify-between text-sm">
-                    <span className="text-mute">Dev buy</span>
+                    <span className={createErr.errors.launchBuySol ? "text-blood" : "text-mute"}>Dev buy</span>
                     <span className="font-mono text-acid">
                       {devBuy.toFixed(2)} SOL · {(devPct * 100).toFixed(2)}% of supply
                     </span>
@@ -305,37 +448,34 @@ export default function LaunchPage() {
                     max={DEV_CAP}
                     step={0.05}
                     value={Math.min(devBuy, DEV_CAP)}
-                    onChange={(e) => setDevBuy(Number(e.target.value))}
+                    onChange={(e) => {
+                      setDevBuy(Number(e.target.value));
+                      createErr.clear("launchBuySol");
+                    }}
                     className="mt-2 w-full accent-[#14f195]"
                   />
+                  <FieldError error={createErr.errors.launchBuySol} />
                   <p className="mt-1 text-xs text-mute">
                     Optional first buy. Capped at 5% of supply ({fmtSol(DEV_CAP, 2)} SOL at open) so a 2 SOL slide cannot
                     overbuy.
                   </p>
                 </label>
                 <div className="mt-4 flex flex-wrap items-center gap-3">
-                  <WalletConnect />
+                  <div data-field="wallet" className={createErr.errors.wallet ? "rounded-full ring-1 ring-blood/70" : undefined}>
+                    <WalletConnect />
+                  </div>
                   <button
                     type="button"
                     disabled={busy}
-                    onClick={() =>
-                      act({
-                        action: "create",
-                        name,
-                        symbol,
-                        blurb,
-                        image,
-                        website,
-                        x,
-                        telegram,
-                        discord,
-                        launchBuySol: devBuy,
-                      })
-                    }
+                    onClick={launchToken}
                     className="btn-acid min-h-[48px] rounded-full px-6 disabled:opacity-40"
                   >
-                    Launch
+                    {busy ? "Launching…" : "Launch"}
                   </button>
+                </div>
+                <FieldError error={createErr.errors.wallet} />
+                <div className="mt-3">
+                  <FormAlert error={createErr.banner} />
                 </div>
               </>
             )}
@@ -449,6 +589,7 @@ function CoinDesk({
   onAct: (body: Record<string, unknown>) => void;
 }) {
   const [side, setSide] = useState<"buy" | "sell">("buy");
+  const tradeErr = useConfirmErrors<"wallet" | "amount">();
   const creator = Boolean(owner && open.creator === owner);
   const snipeLeft = Math.max(0, ANTI_SNIPE_MS - (Date.now() - open.createdAt));
   const cap = open.maxBuySol ?? 0;
@@ -527,14 +668,21 @@ function CoinDesk({
         ) : (
           <>
             <p className="mt-5 text-xs tracking-wide text-mute">{side === "buy" ? "You pay" : "You sell"}</p>
-            <div className="mt-2 flex items-center justify-between rounded-2xl border border-violet/30 bg-void px-4 py-4">
+            <div
+              data-field="amount"
+              className={`mt-2 flex items-center justify-between rounded-2xl border bg-void px-4 py-4 ${fieldClass(tradeErr.errors.amount)}`}
+            >
               {side === "buy" ? (
                 <input
                   type="number"
                   min={0.01}
                   step={0.01}
                   value={sol}
-                  onChange={(e) => setSol(Number(e.target.value))}
+                  onChange={(e) => {
+                    setSol(Number(e.target.value));
+                    tradeErr.clear("amount");
+                  }}
+                  aria-invalid={Boolean(tradeErr.errors.amount)}
                   className="w-full bg-transparent font-display text-3xl text-ghost outline-none"
                 />
               ) : (
@@ -542,6 +690,7 @@ function CoinDesk({
               )}
               <span className="shrink-0 font-mono text-sm text-mute">{side === "buy" ? "SOL" : tick(open.symbol)}</span>
             </div>
+            <FieldError error={tradeErr.errors.amount} />
             {side === "buy" && (
               <div className="mt-2 flex flex-wrap gap-2">
                 {PRESETS.map((p) => (
@@ -570,19 +719,29 @@ function CoinDesk({
               </div>
               <span className="font-mono text-sm text-mute">{side === "buy" ? tick(open.symbol) : "SOL"}</span>
             </div>
-            {blocked && <p className="mt-3 text-sm text-blood">{blocked}</p>}
             <button
               type="button"
-              disabled={busy || Boolean(blocked)}
-              onClick={() =>
-                side === "buy"
-                  ? onAct({ action: "buy", id: open.id, sol })
-                  : onAct({ action: "sell", id: open.id, tokens: open.myTokens || 0 })
-              }
+              disabled={busy}
+              onClick={() => {
+                if (!owner) {
+                  tradeErr.fail({ wallet: "Connect Phantom to swap." });
+                  return;
+                }
+                if (blocked) {
+                  tradeErr.fail({ amount: blocked });
+                  return;
+                }
+                tradeErr.ok();
+                if (side === "buy") onAct({ action: "buy", id: open.id, sol });
+                else onAct({ action: "sell", id: open.id, tokens: open.myTokens || 0 });
+              }}
               className="btn-acid mt-5 min-h-[52px] w-full rounded-full disabled:opacity-40"
             >
               {side === "buy" ? `Buy ${tick(open.symbol)}` : `Sell ${tick(open.symbol)}`}
             </button>
+            <div className="mt-3">
+              <FormAlert error={tradeErr.banner} />
+            </div>
             <p className="mt-3 text-center font-mono text-[11px] text-mute">
               1% fee · 50% to the dev · protocol share: listings, buybacks, burns
               {solUsd ? ` · SOL $${solUsd.toFixed(0)}` : ""}

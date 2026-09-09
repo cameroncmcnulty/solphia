@@ -1,10 +1,13 @@
 "use client";
 
 import { SphaMark } from "@/components/SphaMark";
+import { FieldError, FormAlert, fieldClass, useConfirmErrors } from "@/components/form/confirm";
 import { useAdmin } from "./AdminProvider";
 
 export function AdminLogin() {
   const { secret, setSecret, login, busy, err } = useAdmin();
+  const local = useConfirmErrors<"secret">();
+  const secretErr = local.errors.secret || err;
   return (
     <main className="mx-auto flex min-h-[70vh] max-w-md flex-col justify-center px-5 py-16">
       <div className="mb-6 flex items-center gap-3">
@@ -19,23 +22,36 @@ export function AdminLogin() {
         className="mt-6 space-y-3"
         onSubmit={(e) => {
           e.preventDefault();
+          if (!secret.trim()) {
+            local.fail({ secret: "Enter the admin password." });
+            return;
+          }
+          local.ok();
           login();
         }}
       >
         <input
           type="password"
+          data-field="secret"
           value={secret}
-          onChange={(e) => setSecret(e.target.value)}
+          onChange={(e) => {
+            setSecret(e.target.value);
+            local.clear("secret");
+          }}
           placeholder="Password"
           autoComplete="current-password"
           autoFocus
-          className="w-full rounded-full border border-violet/30 bg-void px-4 py-3 font-mono text-sm outline-none"
+          aria-invalid={Boolean(secretErr)}
+          className={`w-full rounded-full border bg-void px-4 py-3 font-mono text-sm outline-none ${fieldClass(secretErr)}`}
         />
-        <button type="submit" disabled={busy || !secret} className="btn-acid w-full rounded-full py-3 text-sm disabled:opacity-40">
+        <FieldError error={local.errors.secret} />
+        <button type="submit" disabled={busy} className="btn-acid w-full rounded-full py-3 text-sm disabled:opacity-40">
           {busy ? "Signing in…" : "Log in"}
         </button>
       </form>
-      {err && <p className="mt-3 text-sm text-blood">{err}</p>}
+      <div className="mt-3">
+        <FormAlert error={err && !local.errors.secret ? err : ""} />
+      </div>
     </main>
   );
 }

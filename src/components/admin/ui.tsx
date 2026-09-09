@@ -100,18 +100,26 @@ export function Field({
   onChange,
   placeholder,
   className = "",
+  error,
+  field,
 }: {
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
   className?: string;
+  error?: string;
+  field?: string;
 }) {
   return (
     <input
+      data-field={field}
       value={value}
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
-      className={`w-full rounded-full border border-violet/30 bg-void px-4 py-3 font-mono text-xs outline-none ${className}`}
+      aria-invalid={Boolean(error)}
+      className={`w-full rounded-full border bg-void px-4 py-3 font-mono text-xs outline-none ${
+        error ? "border-blood ring-1 ring-blood/60" : "border-violet/30"
+      } ${className}`}
     />
   );
 }

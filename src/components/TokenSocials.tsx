@@ -81,22 +81,30 @@ export function SocialInput({
   value,
   onChange,
   placeholder,
+  error,
 }: {
   kind: "website" | "x" | "telegram" | "discord";
   value: string;
   onChange: (v: string) => void;
   placeholder: string;
+  error?: string;
 }) {
   const Icon = kind === "website" ? Globe : kind === "x" ? XLogo : kind === "telegram" ? Telegram : Discord;
   return (
-    <label className="flex items-center gap-2 rounded-2xl border border-violet/30 bg-void px-3 py-2 text-sm text-ghost">
-      <span className="h-4 w-4 shrink-0 text-mute">
+    <label
+      data-field={kind}
+      className={`flex items-center gap-2 rounded-2xl border bg-void px-3 py-2 text-sm text-ghost ${
+        error ? "border-blood ring-1 ring-blood/60" : "border-violet/30"
+      }`}
+    >
+      <span className={`h-4 w-4 shrink-0 ${error ? "text-blood" : "text-mute"}`}>
         <Icon />
       </span>
       <input
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
+        aria-invalid={Boolean(error)}
         className="w-full bg-transparent outline-none"
       />
     </label>

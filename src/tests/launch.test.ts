@@ -25,6 +25,7 @@ import {
 } from "../lib/launch/curve";
 import { buyCoin, createCoin, emptyLaunchBook, mergeLaunch, publicCoin, sellCoin, sparkCandles, withdrawDev, withdrawOwner, setOwnerWallet } from "../lib/launch/engine";
 import { launchError } from "../lib/launch/errors";
+import { IMAGE_DATA_MAX, firstErrorKey, validateLaunchCreate } from "../lib/launch/validate";
 
 const A = "CyaE1VxvBrahnPWkqm5VsdCvyS2QmNht2UFrKJHga54o";
 const B = "D4uCNcBKAbG9NAkmhQg7pBiztuejNzbWrZDcZmFGut81";
@@ -163,6 +164,9 @@ describe("fair launch book", () => {
     assert.equal(noWallet.ok, false);
     const over = createCoin(book, { creator: A, name: "Over", symbol: "OVER", launchBuySol: DEV_BUY_MAX_SOL + 0.1 });
     assert.equal(over.ok, false);
+    const junkX = createCoin(book, { creator: A, name: "Junk", symbol: "JUNK", x: "???" });
+    assert.equal(junkX.ok, false);
+    if (!junkX.ok) assert.equal(junkX.error, "bad_link");
   });
 
   it("credits the buyer and splits fees, then lets the creator withdraw", () => {
@@ -303,5 +307,38 @@ describe("fair launch book", () => {
     const merged = mergeLaunch(book, emptyLaunchBook());
     assert.equal(merged.coins.length, 1);
     assert.equal(merged.coins[0].symbol, "SPK");
+  });
+});
+
+describe("launch create validation", () => {
+  it("flags missing name and ticker so the form can paint those fields red", () => {
+    const e = validateLaunchCreate({ creator: A });
+    assert.equal(firstErrorKey(e), "name");
+    assert.ok(e.name);
+    assert.ok(e.symbol);
+    assert.equal(e.wallet, undefined);
+  });
+
+  it("flags a remote image URL and an oversized data URL", () => {
+    const remote = validateLaunchCreate({ creator: A, name: "Ok", symbol: "OKAY", image: "https://evil.example/x.png" });
+    assert.ok(remote.image);
+    const heavy = validateLaunchCreate({
+      creator: A,
+      name: "Ok",
+      symbol: "OKAY",
+      image: `data:image/jpeg;base64,${"a".repeat(IMAGE_DATA_MAX)}`,
+    });
+    assert.ok(heavy.image);
+  });
+
+  it("flags junk socials and a ticker with spaces", () => {
+    const e = validateLaunchCreate({ creator: A, name: "Ok", symbol: "NO PE", x: "???" });
+    assert.ok(e.symbol);
+    assert.ok(e.x);
+  });
+
+  it("accepts a minimal valid create", () => {
+    const e = validateLaunchCreate({ creator: A, name: "Test Coin", symbol: "TEST" });
+    assert.deepEqual(e, {});
   });
 });

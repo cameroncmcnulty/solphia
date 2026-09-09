@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { loadOwner, saveOwner, tradingPubkey, buildTransfer, withdrawToOwner } from "@/lib/wallet/trading";
 import { ConfigDesk, type ConfigShape } from "./ConfigDesk";
+import { FieldError, FormAlert, useConfirmErrors } from "./form/confirm";
 
 function pickProvider() {
   if (typeof window === "undefined") return null;
@@ -20,6 +21,7 @@ export function AutoPilot({ owner }: { owner: string | null }) {
   const [solAmt, setSolAmt] = useState(0.5);
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
+  const fundErr = useConfirmErrors<"wallet" | "amount">();
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function cfgFrom(a: any): ConfigShape {
@@ -98,7 +100,19 @@ export function AutoPilot({ owner }: { owner: string | null }) {
 
   async function deposit() {
     const provider = pickProvider();
-    if (!provider || !owner) return setMsg("Open this page inside Phantom.");
+    if (!owner) {
+      fundErr.fail({ wallet: "Connect Phantom first." });
+      return;
+    }
+    if (!provider) {
+      fundErr.fail({ wallet: "Open this page inside Phantom." });
+      return;
+    }
+    if (!(solAmt > 0)) {
+      fundErr.fail({ amount: "Pick how much SOL to deposit." });
+      return;
+    }
+    fundErr.ok();
     setBusy(true);
     try {
       const tpk = tradingPubkey();
@@ -107,7 +121,7 @@ export function AutoPilot({ owner }: { owner: string | null }) {
       setMsg(`Deposited ${solAmt} SOL · ${String(sent.signature || sent).slice(0, 16)}…`);
       setTimeout(() => refresh(owner), 2500);
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : "deposit rejected");
+      fundErr.fail({}, e instanceof Error ? e.message : "deposit rejected");
     } finally {
       setBusy(false);
     }
@@ -157,25 +171,33 @@ export function AutoPilot({ owner }: { owner: string | null }) {
             <div className="font-display text-2xl text-ghost">{bal.toFixed(3)} SOL</div>
           </div>
         </div>
-        <div className="mt-4 grid grid-cols-4 gap-2">
+        <div data-field="amount" className={`mt-4 grid grid-cols-4 gap-2 ${fundErr.errors.amount ? "rounded-2xl p-1 ring-1 ring-blood/60" : ""}`}>
           {[0.1, 0.5, 1, 2].map((n) => (
             <button
               key={n}
-              onClick={() => setSolAmt(n)}
+              onClick={() => {
+                setSolAmt(n);
+                fundErr.clear("amount");
+              }}
               className={`rounded-full py-2 font-mono text-[11px] ${solAmt === n ? "bg-violet text-white" : "btn-ghost"}`}
             >
               {n} SOL
             </button>
           ))}
         </div>
+        <FieldError error={fundErr.errors.amount} />
         <div className="mt-3 grid grid-cols-2 gap-2">
-          <button disabled={busy || !owner} onClick={deposit} className="btn-acid rounded-full py-3 font-mono text-[11px] disabled:opacity-40">
+          <button disabled={busy} onClick={deposit} className="btn-acid rounded-full py-3 font-mono text-[11px] disabled:opacity-40">
             Deposit
           </button>
           <button disabled={busy || bal < 0.01} onClick={withdraw} className="btn-ghost rounded-full py-3 font-mono text-[11px] disabled:opacity-40">
             Withdraw
           </button>
         </div>
+        <div className="mt-3">
+          <FormAlert error={fundErr.banner} />
+        </div>
+        <FieldError error={fundErr.errors.wallet} />
       </div>
 
       {paper && (

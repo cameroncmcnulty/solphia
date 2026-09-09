@@ -10,6 +10,7 @@ import { BacktestBrochure } from "@/components/BacktestBrochure";
 import { useOwner } from "@/lib/hooks";
 import { loadOwner } from "@/lib/wallet/trading";
 import { subscribeWithPhantom, unsubscribeSeat } from "@/lib/wallet/seatPay";
+import { FieldError, FormAlert, useConfirmErrors } from "@/components/form/confirm";
 
 type SeatInfo = {
   treasury?: string | null;
@@ -31,6 +32,7 @@ export default function PricingPage() {
   const [busy, setBusy] = useState(false);
   const [seat, setSeat] = useState<SeatInfo | null>(null);
   const [planId, setPlanId] = useState<"live" | "lev">("lev");
+  const checkout = useConfirmErrors<"wallet" | "tos" | "plan">();
   const selected = PLANS.find((p) => p.id === planId) || PLANS[1] || PLANS[0];
 
   async function refreshSeat(pk = owner) {
@@ -48,17 +50,26 @@ export default function PricingPage() {
   }, [owner]);
 
   async function subscribe() {
-    if (!owner) return setMsg("Connect Phantom first.");
-    if (!tos) return setMsg("Agree to the terms to start a live seat.");
+    const issues: Partial<Record<"wallet" | "tos" | "plan", string>> = {};
+    if (!owner) issues.wallet = "Connect Phantom first.";
+    if (!planId) issues.plan = "Pick a live plan.";
+    if (!tos) issues.tos = "Agree to the terms to start a live seat.";
+    if (Object.keys(issues).length) {
+      checkout.fail(issues);
+      setMsg("");
+      return;
+    }
+    checkout.ok();
     setBusy(true);
     try {
-      const j = await subscribeWithPhantom({ owner, email: email || undefined, plan: planId });
+      const j = await subscribeWithPhantom({ owner: owner!, email: email || undefined, plan: planId });
       setMsg(
         `${selected.name} on until ${new Date(j.subscribedUntil).toLocaleDateString()}. ${selected.sol} SOL left Phantom for the treasury.`,
       );
       await refreshSeat(owner);
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : "subscribe failed");
+      checkout.fail({}, e instanceof Error ? e.message : "subscribe failed");
+      setMsg("");
     } finally {
       setBusy(false);
     }
@@ -110,7 +121,7 @@ export default function PricingPage() {
               type="button"
               onClick={() => setPlanId(p.id === "lev" ? "lev" : "live")}
               className={`panel rounded-3xl p-5 text-left ${
-                planId === p.id ? "ring-2 ring-acid shadow-[0_0_40px_rgba(20,241,149,0.18)]" : ""
+                planId === p.id ? "ring-2 ring-acid shadow-[0_0_40px_rgba(20,241,149,0.18)]" : checkout.errors.plan ? "ring-1 ring-blood/60" : ""
               }`}
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -154,11 +165,19 @@ export default function PricingPage() {
               placeholder="email (optional)"
               className="mt-4 w-full rounded-2xl border border-violet/30 bg-void px-4 py-3 text-ghost"
             />
-            <label className="mt-4 flex items-start gap-3 text-sm text-mute">
+            <label
+              data-field="tos"
+              className={`mt-4 flex items-start gap-3 rounded-2xl px-3 py-2 text-sm ${
+                checkout.errors.tos ? "bg-blood/10 text-blood ring-1 ring-blood/60" : "text-mute"
+              }`}
+            >
               <input
                 type="checkbox"
                 checked={tos}
-                onChange={(e) => setTos(e.target.checked)}
+                onChange={(e) => {
+                  setTos(e.target.checked);
+                  checkout.clear("tos");
+                }}
                 className="mt-1 h-4 w-4 accent-[#14f195]"
               />
               <span>
@@ -170,16 +189,23 @@ export default function PricingPage() {
                 liquidated. I can lose SOL.
               </span>
             </label>
+            <FieldError error={checkout.errors.tos} />
             <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
-              <WalletConnect />
+              <div data-field="wallet" className={checkout.errors.wallet ? "rounded-full ring-1 ring-blood/70" : undefined}>
+                <WalletConnect />
+              </div>
               <button
                 type="button"
                 onClick={subscribe}
-                disabled={busy || !tos}
+                disabled={busy}
                 className="btn-acid min-h-[48px] rounded-full px-6 disabled:opacity-40"
               >
                 {paid && seat?.due ? "Pay this month" : paid ? "Extend 30 days" : `Pay ${selected.sol} SOL`}
               </button>
+            </div>
+            <FieldError error={checkout.errors.wallet} />
+            <div className="mt-3">
+              <FormAlert error={checkout.banner} />
             </div>
             {paid && seat?.autoRenew && !seat?.founder && (
               <button
@@ -191,7 +217,7 @@ export default function PricingPage() {
                 Unsubscribe
               </button>
             )}
-            {msg && <p className="mt-3 font-mono text-sm text-acid">{msg}</p>}
+            {msg && !checkout.banner && <p className="mt-3 font-mono text-sm text-acid">{msg}</p>}
             {!seat?.treasury && (
               <p className="mt-3 text-sm text-mute">Treasury is not set yet. Live payments cannot land until admin saves one.</p>
             )}

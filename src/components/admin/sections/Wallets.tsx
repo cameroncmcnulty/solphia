@@ -1,11 +1,15 @@
 "use client";
 
 import { WalletConnect } from "@/components/WalletConnect";
+import { FieldError, useConfirmErrors } from "@/components/form/confirm";
+import { walletOk } from "@/lib/launch/validate";
 import { useAdmin } from "../AdminProvider";
 import { Field, shortPk } from "../ui";
 
 export function WalletsSection() {
   const { data, busy, patch, adminPk, setAdminPk, treasuryPk, setTreasuryPk, owner } = useAdmin();
+  const adminErr = useConfirmErrors<"adminPk">();
+  const treasErr = useConfirmErrors<"treasuryPk">();
   if (!data) return null;
 
   return (
@@ -19,12 +23,34 @@ export function WalletsSection() {
         <div className="mt-3">
           <WalletConnect />
         </div>
-        <Field value={adminPk} onChange={(v) => setAdminPk(v.trim())} placeholder="Solana address" className="mt-3" />
+        <Field
+          field="adminPk"
+          value={adminPk}
+          error={adminErr.errors.adminPk}
+          onChange={(v) => {
+            setAdminPk(v.trim());
+            adminErr.clear("adminPk");
+          }}
+          placeholder="Solana address"
+          className="mt-3"
+        />
+        <FieldError error={adminErr.errors.adminPk} />
         <div className="mt-3 flex flex-wrap gap-2">
           <button
             type="button"
-            disabled={busy || !adminPk}
-            onClick={() => patch({ adminWallet: adminPk })}
+            disabled={busy}
+            onClick={() => {
+              if (!adminPk) {
+                adminErr.fail({ adminPk: "Paste a Solana address or connect Phantom." });
+                return;
+              }
+              if (!walletOk(adminPk)) {
+                adminErr.fail({ adminPk: "That is not a valid Solana address." });
+                return;
+              }
+              adminErr.ok();
+              patch({ adminWallet: adminPk });
+            }}
             className="btn-acid rounded-full px-5 py-2 text-sm disabled:opacity-40"
           >
             Save admin wallet
@@ -54,12 +80,30 @@ export function WalletsSection() {
           {data.seatSol} SOL (spot) and {data.seatSolLev} SOL (2×/3×) seats plus 0.1% clip fees land here. Default is the founder
           treasury. Save another address to override it.
         </p>
-        <Field value={treasuryPk} onChange={(v) => setTreasuryPk(v.trim())} placeholder="Treasury Solana address" className="mt-3" />
+        <Field
+          field="treasuryPk"
+          value={treasuryPk}
+          error={treasErr.errors.treasuryPk}
+          onChange={(v) => {
+            setTreasuryPk(v.trim());
+            treasErr.clear("treasuryPk");
+          }}
+          placeholder="Treasury Solana address"
+          className="mt-3"
+        />
+        <FieldError error={treasErr.errors.treasuryPk} />
         <div className="mt-3 flex flex-wrap gap-2">
           <button
             type="button"
             disabled={busy}
-            onClick={() => patch({ treasuryWallet: treasuryPk || null })}
+            onClick={() => {
+              if (treasuryPk && !walletOk(treasuryPk)) {
+                treasErr.fail({ treasuryPk: "That is not a valid Solana address." });
+                return;
+              }
+              treasErr.ok();
+              patch({ treasuryWallet: treasuryPk || null });
+            }}
             className="btn-acid rounded-full px-5 py-2 text-sm disabled:opacity-40"
           >
             Save treasury
