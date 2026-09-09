@@ -16,7 +16,7 @@ export function SparkCandles({
   className?: string;
 }) {
   if (!candles.length) {
-    return <div className={className || "h-11 w-28 rounded bg-void/40"} />;
+    return <div className={className || "h-11 w-28 rounded-xl bg-void/40"} />;
   }
   const pad = 2;
   const highs = candles.map((c) => c.h);

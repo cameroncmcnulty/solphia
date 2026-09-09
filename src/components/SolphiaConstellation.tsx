@@ -159,18 +159,25 @@ export function SolphiaConstellation() {
   }, []);
 
   return (
-    <div ref={wrap} className="pointer-events-none fixed inset-0 z-0 overflow-hidden" aria-hidden="true">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        ref={photo}
-        src="/solphia-constellation.jpg?v=2"
-        alt=""
-        draggable={false}
-        className="absolute inset-0 h-full w-full object-contain object-right"
-        style={{ opacity: 0.26 }}
-      />
-      <canvas ref={canvas} className="pointer-events-none absolute inset-0 h-full w-full" />
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_28%_18%,rgba(153,69,255,0.10),transparent_42%),linear-gradient(to_right,rgba(4,0,10,0.72)_0%,rgba(4,0,10,0.28)_46%,transparent_72%),linear-gradient(to_bottom,transparent_58%,rgba(4,0,10,0.78)_100%)]" />
+    <div ref={wrap} className="pointer-events-none fixed inset-0 z-0 isolate overflow-hidden bg-void" aria-hidden="true">
+      <div
+        className="absolute inset-0 mix-blend-screen"
+        style={{
+          WebkitMaskImage: "linear-gradient(to right, transparent 0%, rgba(0,0,0,0.2) 22%, black 48%)",
+          maskImage: "linear-gradient(to right, transparent 0%, rgba(0,0,0,0.2) 22%, black 48%)",
+        }}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          ref={photo}
+          src="/solphia-constellation.jpg?v=3"
+          alt=""
+          draggable={false}
+          className="absolute inset-0 h-full w-full object-contain object-right opacity-40"
+        />
+        <canvas ref={canvas} className="pointer-events-none absolute inset-0 h-full w-full" />
+      </div>
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_78%_42%,rgba(20,241,149,0.05),transparent_36%),radial-gradient(ellipse_at_22%_16%,rgba(153,69,255,0.08),transparent_44%),linear-gradient(to_right,rgba(4,0,10,0.55)_0%,rgba(4,0,10,0.12)_52%,transparent_78%),linear-gradient(to_bottom,transparent_62%,rgba(4,0,10,0.72)_100%)]" />
     </div>
   );
 }

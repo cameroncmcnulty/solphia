@@ -327,7 +327,7 @@ export default function LaunchPage() {
         <h1 className="mt-2 font-display text-4xl text-ghost sm:text-5xl">Fair launch. Swap like Phantom.</h1>
 
         <div className="mt-8 grid gap-5 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
-          <section className="panel-bubble rounded-3xl p-5">
+          <section className="panel-bubble overflow-hidden rounded-3xl p-5">
             <h2 className="font-display text-2xl text-ghost">Create</h2>
             {!owner ? (
               <div className="mt-6 space-y-3">
@@ -517,7 +517,7 @@ export default function LaunchPage() {
             )}
           </section>
 
-          <section className="panel-bubble rounded-3xl p-5">
+          <section className="panel-bubble overflow-hidden rounded-3xl p-5">
             <div className="flex items-center justify-between">
               <h2 className="font-display text-2xl text-ghost">{tab === "mine" ? "Yours" : "Tape"}</h2>
               {owner && (
@@ -534,7 +534,7 @@ export default function LaunchPage() {
             <div className="mt-3 space-y-2">
               <div>
                 <div className="font-mono text-[10px] tracking-[0.22em] text-mute">WHEN</div>
-                <div className="mt-1 flex flex-wrap gap-1 rounded-full border border-violet/30 p-0.5">
+                <div className="mt-1 flex flex-wrap gap-1 rounded-2xl border border-violet/25 p-1">
                   {(["newest", "1h", "6h", "24h"] as const).map((k) => (
                     <button
                       key={k}
@@ -549,7 +549,7 @@ export default function LaunchPage() {
               </div>
               <div>
                 <div className="font-mono text-[10px] tracking-[0.22em] text-mute">VOLUME</div>
-                <div className={`mt-1 flex flex-wrap gap-1 rounded-full border border-violet/30 p-0.5 ${ranked ? "opacity-40" : ""}`}>
+                <div className={`mt-1 flex flex-wrap gap-1 rounded-2xl border border-violet/25 p-1 ${ranked ? "opacity-40" : ""}`}>
                   {(["5m", "30m", "1h", "6h", "24h"] as const).map((k) => (
                     <button
                       key={k}
@@ -583,7 +583,7 @@ export default function LaunchPage() {
                 </p>
               )}
             </div>
-            <div className={`mt-4 space-y-2 pr-1 ${ranked ? "overflow-hidden" : "max-h-[28rem] overflow-y-auto"}`}>
+            <div className={`mt-4 space-y-2 ${ranked ? "" : "max-h-[28rem] overflow-y-auto overflow-x-hidden"}`}>
               {rows.length === 0 && (
                 <p className="text-sm text-mute">
                   {tab === "mine" ? "Nothing launched yet." : ranked ? "Nothing in this window ranks yet." : "No coins in this window."}
@@ -632,39 +632,46 @@ export default function LaunchPage() {
 function RankMark({ n }: { n: number }) {
   if (n === 1) {
     return (
-      <span className="relative inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-acid font-display text-sm text-void shadow-[0_0_18px_rgba(20,241,149,0.7)]">
+      <span className="relative z-[1] inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-acid font-display text-sm text-void shadow-[inset_0_0_10px_rgba(255,255,255,0.35)]">
         1
-        <span className="absolute -top-1.5 text-[9px] leading-none">▲</span>
+        <span className="pointer-events-none absolute inset-x-0 -top-px text-center text-[8px] leading-none text-void/70">▴</span>
       </span>
     );
   }
   if (n === 2) {
     return (
-      <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-cyan font-display text-sm text-void shadow-[0_0_14px_rgba(128,234,255,0.55)]">
+      <span className="relative z-[1] inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-cyan font-display text-sm text-void shadow-[inset_0_0_10px_rgba(255,255,255,0.28)]">
         2
       </span>
     );
   }
   if (n === 3) {
     return (
-      <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-warn font-display text-sm text-void shadow-[0_0_14px_rgba(255,176,32,0.5)]">
+      <span className="relative z-[1] inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-warn font-display text-sm text-void shadow-[inset_0_0_10px_rgba(255,255,255,0.22)]">
         3
       </span>
     );
   }
   return (
-    <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-violet/40 font-mono text-[11px] text-mute">
+    <span className="relative z-[1] inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-violet/40 font-mono text-[11px] text-mute">
       {n}
     </span>
   );
 }
 
 function eliteClass(rank: number, active: boolean) {
-  if (rank === 1) return "border-acid/80 bg-acid/10 shadow-[0_0_28px_rgba(20,241,149,0.22)]";
-  if (rank === 2) return "border-cyan/70 bg-cyan/10 shadow-[0_0_20px_rgba(128,234,255,0.16)]";
-  if (rank === 3) return "border-warn/70 bg-warn/10 shadow-[0_0_20px_rgba(255,176,32,0.14)]";
-  if (active) return "border-acid/50 bg-void/40";
-  return "border-violet/20 hover:border-acid/40";
+  if (rank === 1) return "border-acid/65 bg-acid/[0.07]";
+  if (rank === 2) return "border-cyan/55 bg-cyan/[0.07]";
+  if (rank === 3) return "border-warn/55 bg-warn/[0.07]";
+  if (active) return "border-acid/40 bg-void/45";
+  return "border-violet/20 bg-void/20 hover:border-acid/35 hover:bg-void/35";
+}
+
+function eliteGlow(rank: number) {
+  if (rank === 1) return "inset 0 0 28px rgba(20,241,149,0.28), inset 0 0 0 1px rgba(20,241,149,0.4)";
+  if (rank === 2) return "inset 0 0 24px rgba(128,234,255,0.22), inset 0 0 0 1px rgba(128,234,255,0.35)";
+  if (rank === 3) return "inset 0 0 24px rgba(255,176,32,0.2), inset 0 0 0 1px rgba(255,176,32,0.32)";
+  return undefined;
 }
 
 function CoinCard({
@@ -696,16 +703,17 @@ function CoinCard({
           onOpen();
         }
       }}
-      className={`flex w-full cursor-pointer items-center gap-3 rounded-2xl border px-3 py-3 text-left ${eliteClass(rank, active)}`}
+      className={`relative isolate flex w-full cursor-pointer items-center gap-3 overflow-hidden rounded-2xl border px-3 py-3 text-left ${eliteClass(rank, active)}`}
     >
+      {elite && <span aria-hidden className="pointer-events-none absolute inset-0 rounded-2xl" style={{ boxShadow: eliteGlow(rank) }} />}
       {rank > 0 && <RankMark n={rank} />}
       {c.image ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={c.image} alt="" className={`rounded-xl object-cover ${elite ? "h-14 w-14" : "h-12 w-12"}`} />
+        <img src={c.image} alt="" className={`relative z-[1] rounded-xl object-cover ${elite ? "h-14 w-14" : "h-12 w-12"}`} />
       ) : (
-        <span className={`rounded-xl bg-violet/20 ${elite ? "h-14 w-14" : "h-12 w-12"}`} />
+        <span className={`relative z-[1] rounded-xl bg-violet/20 ${elite ? "h-14 w-14" : "h-12 w-12"}`} />
       )}
-      <div className="min-w-0 flex-1">
+      <div className="relative z-[1] min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span className={`truncate font-display text-ghost ${elite ? "text-xl" : "text-lg"}`}>{tick(c.symbol)}</span>
           <span className="truncate text-sm text-mute">{c.name}</span>
@@ -738,7 +746,9 @@ function CoinCard({
         </div>
         {audit && elite && <p className="mt-1 truncate font-mono text-[10px] text-mute">{audit.why}</p>}
       </div>
-      <SparkCandles candles={c.spark || []} up={(c.spark?.at(-1)?.c || 0) >= (c.spark?.[0]?.c || 0)} />
+      <div className="relative z-[1] overflow-hidden rounded-xl">
+        <SparkCandles candles={c.spark || []} up={(c.spark?.at(-1)?.c || 0) >= (c.spark?.[0]?.c || 0)} />
+      </div>
     </div>
   );
 }
@@ -792,7 +802,7 @@ function CoinDesk({
             : "";
 
   return (
-    <section className="panel-bubble mt-6 grid gap-5 rounded-3xl p-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
+    <section className="panel-bubble mt-6 grid gap-5 overflow-hidden rounded-3xl p-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
       <div>
         <div className="flex items-start justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
