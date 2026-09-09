@@ -18,15 +18,15 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   metadataBase: new URL("https://solphia.io"),
   title: {
-    default: "SOLPHIA — Solana aggregator for SOL vs S&P 500, Nasdaq, and gold",
+    default: "SOLPHIA — auto-trades tokenized S&P 500, Nasdaq, and gold",
     template: "%s · SOLPHIA",
   },
   description:
-    "Solphia is a Solana ecosystem: aggregator desk, fair launch pad, and $SPHA. Every swap funds listings, buybacks, and burns. Jupiter routes. She picks the market.",
+    "The Solphia ecosystem: she auto-trades tokenized S&P 500, Nasdaq-100, and gold for profit. Fair launch pad and $SPHA. Every swap funds listings, buybacks, and burns.",
   applicationName: "SOLPHIA",
   openGraph: {
     title: "SOLPHIA",
-    description: "Solphia ecosystem: aggregator, launch pad, $SPHA. Every swap funds listings, buybacks, and burns.",
+    description: "The Solphia ecosystem. She auto-trades tokenized S&P, Nasdaq, and gold for profit. $SPHA.",
     url: "https://solphia.io",
     siteName: "SOLPHIA",
     images: [{ url: "/og.jpg", width: 1376, height: 768 }],
@@ -35,7 +35,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "SOLPHIA",
-    description: "Solphia ecosystem: aggregator, launch pad, $SPHA. Every swap funds listings, buybacks, and burns.",
+    description: "The Solphia ecosystem. She auto-trades tokenized S&P, Nasdaq, and gold for profit. $SPHA.",
     images: ["/og.jpg"],
   },
   icons: {

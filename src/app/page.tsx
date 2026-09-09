@@ -14,16 +14,17 @@ export default function Home() {
             <SolphiaFace mode="hero" />
           </div>
           <div className="order-2 pb-10 lg:order-1 lg:pb-4">
-            <p className="text-sm tracking-[0.22em] text-acid sm:text-base">THE SOLANA ECOSYSTEM · $SPHA</p>
+            <p className="text-sm tracking-[0.22em] text-acid sm:text-base">THE SOLPHIA ECOSYSTEM · $SPHA</p>
             <h1 className="solphia-flow mt-3 font-display text-[clamp(2.6rem,11vw,5.8rem)] font-bold leading-[0.9] tracking-[-0.04em]">
               SOLPHIA
             </h1>
             <p className="mt-6 max-w-xl text-xl leading-snug text-ghost sm:text-3xl sm:leading-tight">
-              Aggregator. Launch pad. $SPHA. Every swap funds listings, buybacks, and burns.
+              She auto-trades tokenized S&amp;P 500, Nasdaq-100, and gold — for profit.
             </p>
             <p className="mt-4 max-w-lg text-base leading-relaxed text-mute sm:text-lg">
-              Jupiter finds the route. She picks the market. A portion of every swap is set aside for future listings,
-              market buybacks, and $SPHA burns. Use the stack — the token gets the remainder of the work.
+              Connect Phantom. She clips SOL against official SPYx, QQQx, and GLDx when a book is stretched. Jupiter
+              finds the route. You sign. Launch pad and $SPHA sit around that desk. Every swap funds listings,
+              buybacks, and burns.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <Link href="/trading" className="btn-acid inline-flex min-h-[52px] items-center justify-center rounded-full px-8 text-base">
@@ -45,14 +46,14 @@ export default function Home() {
           Products that actually run.
         </h2>
         <p className="mt-4 max-w-2xl text-lg text-mute">
-          Floki built a universe around a token. Solphia does the same on Solana — with a desk, a launch pad, and a
-          token that only gets scarcer as those products are used.
+          The Solphia ecosystem is the desk, the launch pad, and $SPHA. She auto-trades tokenized stocks for profit.
+          The other products feed the token.
         </p>
         <div className="mt-12 grid gap-4 lg:grid-cols-3">
           <Eco
             n="01"
-            t="Aggregator"
-            d="Four official books. One clip. SOL versus SPYx, QQQx, and GLDx. Jupiter quotes. Phantom signs. Paper first."
+            t="Auto-trade"
+            d="She watches SOL vs tokenized S&P 500, Nasdaq-100, and gold — and clips for profit when a pair stretches. Jupiter quotes. Phantom signs. Paper first."
             href="/trading"
             c="Trade"
           />
@@ -92,11 +93,11 @@ export default function Home() {
       <section className="px-4 py-16 md:px-12 md:py-24">
         <p className="text-sm tracking-[0.2em] text-acid">AGGREGATOR</p>
         <h2 className="mt-3 max-w-3xl font-display text-4xl leading-tight text-ghost sm:text-5xl md:text-6xl">
-          Jupiter-class routing. Next job up.
+          Auto-trades the tokenized books.
         </h2>
         <p className="mt-4 max-w-2xl text-lg text-mute">
-          Jupiter is how Solana finds the cheapest hop. Solphia sits on that rail: she watches SOL against official
-          xStocks, takes the stretched sleeve, then asks Jupiter for the quote. Junk routes never print.
+          She sits in SOL and USDC and auto-trades official SPYx, QQQx, and GLDx for profit. When a sleeve stretches,
+          she clips. Jupiter finds the cheapest hop. Junk, stale, and thin routes never print. You approve in Phantom.
         </p>
         <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Chip t="Jupiter quotes" d="Live route, impact, and out-amount before she clips." />
@@ -113,7 +114,7 @@ export default function Home() {
         <h2 className="mt-3 font-display text-4xl text-ghost sm:text-5xl">Three steps.</h2>
         <div className="mt-12 grid gap-4 md:grid-cols-3">
           <Chip t="01 · Connect" d="Phantom only. That wallet is login. She never holds a key." />
-          <Chip t="02 · Use a product" d="Trade the books. Launch a coin. Both feed $SPHA." />
+          <Chip t="02 · She trades" d="Auto-clips tokenized S&P, Nasdaq, and gold for profit. Launch sits beside that desk." />
           <Chip t="03 · Swap proceeds work" d="A portion of every swap is reserved for listings, buybacks, and burns." />
         </div>
       </section>
@@ -122,8 +123,10 @@ export default function Home() {
         <div className="rounded-3xl border border-violet/25 bg-void/40 px-6 py-12 md:flex md:items-center md:justify-between md:px-14 md:py-16">
           <div>
             <p className="text-sm tracking-[0.2em] text-mute">$SPHA</p>
-            <h2 className="mt-3 font-display text-4xl text-ghost sm:text-5xl md:text-6xl">Enter the ecosystem.</h2>
-            <p className="mt-4 max-w-lg text-lg text-mute">Keys in Phantom. Every swap: listings, buybacks, burns.</p>
+            <h2 className="mt-3 font-display text-4xl text-ghost sm:text-5xl md:text-6xl">Turn her on.</h2>
+            <p className="mt-4 max-w-lg text-lg text-mute">
+              She auto-trades tokenized stocks for profit. Keys in Phantom. Every swap: listings, buybacks, burns.
+            </p>
           </div>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row md:mt-0">
             <Link href="/trading" className="btn-acid inline-flex min-h-[52px] items-center justify-center rounded-full px-8">
