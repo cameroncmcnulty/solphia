@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { CopyCa } from "@/components/CopyCa";
+import { SphaMark } from "@/components/SphaMark";
 import { SolphiaConstellation } from "@/components/SolphiaConstellation";
 import { TokenSocials } from "@/components/TokenSocials";
 import { solphiaTokenDesk } from "@/lib/token/solphia";
@@ -19,7 +20,10 @@ export default function TokenPage() {
       <SolphiaConstellation />
       <div className="relative z-10 mx-auto max-w-6xl px-4 pt-8 md:px-8 md:pt-14">
         <p className="font-mono text-[11px] tracking-[0.28em] text-acid">PROTOCOL TOKEN</p>
-        <h1 className="mt-3 font-display text-5xl text-ghost sm:text-7xl">{tick(t.symbol)}</h1>
+        <div className="mt-3 flex items-center gap-4">
+          <SphaMark className="h-14 w-14 sm:h-16 sm:w-16" />
+          <h1 className="font-display text-5xl text-ghost sm:text-7xl">{tick(t.symbol)}</h1>
+        </div>
         <p className="mt-5 max-w-2xl text-lg text-mute sm:text-xl">
           Every swap in the stack sets aside a portion of proceeds for three jobs: future listing fees, market
           buybacks, and {tick(t.symbol)} burns. Automatic by design. The router ships after mint. CA coming soon.

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { SolphiaFace } from "@/components/SolphiaFace";
+import { SphaMark } from "@/components/SphaMark";
 import { LiveStats } from "@/components/LiveStats";
 import { BacktestBrochure } from "@/components/BacktestBrochure";
 
@@ -14,7 +15,10 @@ export default function Home() {
             <SolphiaFace mode="hero" />
           </div>
           <div className="order-2 pb-10 lg:order-1 lg:pb-4">
-            <p className="text-sm tracking-[0.22em] text-acid sm:text-base">THE SOLPHIA ECOSYSTEM · $SPHA</p>
+            <p className="flex items-center gap-2 text-sm tracking-[0.22em] text-acid sm:text-base">
+              <SphaMark className="h-5 w-5" />
+              THE SOLPHIA ECOSYSTEM · $SPHA
+            </p>
             <h1 className="solphia-flow mt-3 font-display text-[clamp(2.6rem,11vw,5.8rem)] font-bold leading-[0.9] tracking-[-0.04em]">
               SOLPHIA
             </h1>
@@ -75,7 +79,10 @@ export default function Home() {
       </section>
 
       <section className="px-4 py-16 md:px-12 md:py-24">
-        <p className="text-sm tracking-[0.2em] text-acid">$SPHA</p>
+        <p className="flex items-center gap-2 text-sm tracking-[0.2em] text-acid">
+          <SphaMark className="h-5 w-5" />
+          $SPHA
+        </p>
         <h2 className="mt-3 max-w-3xl font-display text-4xl leading-tight text-ghost sm:text-5xl md:text-6xl">
           Every swap has a job after the fill.
         </h2>
@@ -122,7 +129,10 @@ export default function Home() {
       <section className="px-4 pb-16 md:px-12 md:pb-24">
         <div className="rounded-3xl border border-violet/25 bg-void/40 px-6 py-12 md:flex md:items-center md:justify-between md:px-14 md:py-16">
           <div>
-            <p className="text-sm tracking-[0.2em] text-mute">$SPHA</p>
+            <p className="flex items-center gap-2 text-sm tracking-[0.2em] text-mute">
+              <SphaMark className="h-5 w-5" />
+              $SPHA
+            </p>
             <h2 className="mt-3 font-display text-4xl text-ghost sm:text-5xl md:text-6xl">Turn her on.</h2>
             <p className="mt-4 max-w-lg text-lg text-mute">
               She auto-trades tokenized stocks for profit. Keys in Phantom. Every swap: listings, buybacks, burns.

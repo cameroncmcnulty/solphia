@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { SphaMark } from "./SphaMark";
 import { WalletConnect } from "./WalletConnect";
 
 const LINKS = [
@@ -16,7 +17,7 @@ export function Nav() {
   return (
     <header className="relative z-30 flex items-center justify-between gap-3 px-4 py-3 md:px-12 md:py-5">
       <Link href="/" className="flex min-w-0 items-center gap-2 md:gap-3">
-        <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-acid shadow-[0_0_14px_#14F195]" />
+        <SphaMark className="h-7 w-7" />
         <span className="solphia-flow truncate font-display text-lg font-bold tracking-tight sm:text-xl md:text-2xl">
           SOLPHIA
         </span>
