@@ -1,7 +1,7 @@
 /** Protocol token. Fill `mint` when the CA is live; the Token page reads this. */
 export const SOLPHIA_TOKEN = {
   name: "Solphia",
-  symbol: "SOLPHIA",
+  symbol: "SPHA",
   mint: "",
   decimals: 9,
   website: "https://solphia.io",

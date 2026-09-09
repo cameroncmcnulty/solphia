@@ -7,7 +7,7 @@ const TABS = [
   ["/", "Home"],
   ["/launch", "Launch"],
   ["/trading", "Trade"],
-  ["/token", "Token"],
+  ["/token", "$SPHA"],
 ];
 
 export function BottomNav() {

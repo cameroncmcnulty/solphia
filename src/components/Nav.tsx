@@ -8,7 +8,7 @@ const LINKS = [
   ["/", "Home"],
   ["/launch", "Launch"],
   ["/trading", "Trade"],
-  ["/token", "Token"],
+  ["/token", "$SPHA"],
 ];
 
 export function Nav() {

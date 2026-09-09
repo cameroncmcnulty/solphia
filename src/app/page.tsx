@@ -3,42 +3,34 @@
 import Link from "next/link";
 import { SolphiaFace } from "@/components/SolphiaFace";
 import { LiveStats } from "@/components/LiveStats";
-import { TickerCharts } from "@/components/TickerCharts";
-import { FaqList } from "@/components/FaqList";
 import { BacktestBrochure } from "@/components/BacktestBrochure";
 
 export default function Home() {
   return (
     <main className="relative">
       <section className="relative">
-        <div className="mx-auto grid max-w-6xl items-center gap-4 px-4 pt-2 md:gap-6 md:px-12 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] lg:min-h-[72vh] lg:gap-10 lg:py-8">
-          <div className="order-1 mx-auto w-full max-w-[200px] sm:max-w-[340px] lg:order-2 lg:max-w-[480px]">
+        <div className="mx-auto grid max-w-6xl items-center gap-8 px-4 pt-4 md:px-12 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] lg:min-h-[78vh] lg:py-10">
+          <div className="order-1 mx-auto w-full max-w-[220px] sm:max-w-[360px] lg:order-2 lg:max-w-[500px]">
             <SolphiaFace mode="hero" />
           </div>
-          <div className="order-2 pb-8 pt-1 lg:order-1 lg:pb-8 lg:pt-8">
-            <p className="text-base font-medium tracking-wide text-acid sm:text-2xl">Solana aggregator</p>
-            <h1 className="solphia-flow mt-1 font-display text-[clamp(2.4rem,12vw,5.75rem)] font-bold leading-[0.9] tracking-[-0.04em]">
+          <div className="order-2 pb-10 lg:order-1 lg:pb-4">
+            <p className="text-sm tracking-[0.22em] text-acid sm:text-base">THE SOLANA ECOSYSTEM · $SPHA*</p>
+            <h1 className="solphia-flow mt-3 font-display text-[clamp(2.6rem,11vw,5.8rem)] font-bold leading-[0.9] tracking-[-0.04em]">
               SOLPHIA
             </h1>
-            <p className="mt-4 max-w-xl text-lg leading-snug text-ghost sm:text-3xl sm:leading-tight">
-              Jupiter finds the best route. She picks the best market — then takes it.
+            <p className="mt-6 max-w-xl text-xl leading-snug text-ghost sm:text-3xl sm:leading-tight">
+              Aggregator. Launch pad. $SPHA*. One stack — and every product tightens the token.
             </p>
-            <p className="mt-3 max-w-lg text-sm leading-relaxed text-mute sm:text-xl">
-              Four official books, one clip: SOL vs S&amp;P 500, Nasdaq-100, and gold. Quotes on Jupiter. You sign in
-              Phantom. Built at that scale — a routing layer, not a gadget.
+            <p className="mt-4 max-w-lg text-base leading-relaxed text-mute sm:text-lg">
+              Jupiter finds the route. She picks the market. Desk volume and launch fees buy $SPHA* off the market and
+              retire it. Use the utilities; supply does the rest.
             </p>
-            <div className="mt-6 flex flex-col gap-3 sm:mt-8 sm:flex-row">
-              <Link
-                href="/trading"
-                className="btn-acid inline-flex min-h-[48px] w-full items-center justify-center rounded-full px-6 py-3 text-center text-base sm:min-h-[56px] sm:w-auto sm:px-8 sm:text-lg"
-              >
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+              <Link href="/trading" className="btn-acid inline-flex min-h-[52px] items-center justify-center rounded-full px-8 text-base">
                 Open the desk
               </Link>
-              <Link
-                href="/launch"
-                className="btn-ghost inline-flex min-h-[48px] w-full items-center justify-center rounded-full px-6 py-3 text-center text-base sm:min-h-[56px] sm:w-auto sm:px-8 sm:text-lg"
-              >
-                Launch a coin
+              <Link href="/token" className="btn-ghost inline-flex min-h-[52px] items-center justify-center rounded-full px-8 text-base">
+                $SPHA*
               </Link>
             </div>
           </div>
@@ -47,114 +39,99 @@ export default function Home() {
 
       <LiveStats />
 
-      <section className="px-4 py-10 md:px-12 md:py-16">
-        <p className="text-base text-acid sm:text-lg">The aggregator</p>
-        <h2 className="mt-2 max-w-3xl font-display text-3xl leading-tight text-ghost sm:text-4xl md:text-6xl">
-          Same class as Jupiter. Next job up the stack.
+      <section className="px-4 py-16 md:px-12 md:py-24">
+        <p className="text-sm tracking-[0.2em] text-acid">ECOSYSTEM</p>
+        <h2 className="mt-3 max-w-3xl font-display text-4xl leading-tight text-ghost sm:text-5xl md:text-6xl">
+          Products that actually run.
         </h2>
-        <p className="mt-4 max-w-2xl text-base text-mute sm:text-xl">
-          Jupiter is how Solana finds the cheapest hop across AMMs. Solphia sits on that rail: she watches SOL against
-          official SPYx, QQQx, and GLDx, takes the sleeve that’s stretched, then asks Jupiter for the quote. Stale,
-          thin, or junk routes are skipped. Intermediate hops stay on liquid official mints. You approve the swap.
-          She never holds the key.
+        <p className="mt-4 max-w-2xl text-lg text-mute">
+          Floki built a universe around a token. Solphia does the same on Solana — with a desk, a launch pad, and a
+          token that only gets scarcer as those products are used.
         </p>
-        <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Tech t="Jupiter quotes" d="Live swap routes. Impact and out-amount before she clips." />
-          <Tech t="Official mints only" d="SOL, USDC, SPYx, QQQx, GLDx. Fake tickers are refused." />
-          <Tech t="Clean hops" d="Restricts intermediates. Drops stale, thin, or junk paths." />
-          <Tech t="Four sleeves, one clip" d="She sizes ~20% into the pair that’s actually stretched." />
-        </div>
-      </section>
-
-      <section className="px-4 py-10 md:px-12 md:py-16">
-        <p className="text-base text-acid sm:text-lg">The stack</p>
-        <h2 className="mt-2 max-w-3xl font-display text-3xl leading-tight text-ghost sm:text-4xl md:text-6xl">
-          Three products. One ecosystem.
-        </h2>
-        <div className="mt-8 grid gap-3 lg:grid-cols-3">
-          <Pillar
-            k="01"
-            t="Trade"
-            d="The aggregator desk. SOL vs official SPYx, QQQx, GLDx. Jupiter for the route. Paper first. Optional 2×/3× on SOL. Phantom signs."
+        <div className="mt-12 grid gap-4 lg:grid-cols-3">
+          <Eco
+            n="01"
+            t="Aggregator"
+            d="Four official books. One clip. SOL versus SPYx, QQQx, and GLDx. Jupiter quotes. Phantom signs. Paper first."
             href="/trading"
-            c="Open desk"
+            c="Trade"
           />
-          <Pillar
-            k="02"
+          <Eco
+            n="02"
             t="Launch"
-            d="Fair bonding curve. 1B supply, mint and freeze locked, 1% swap, 50% of fees to the creator. Swap like you would in Phantom."
+            d="Fair bonding curve. 1B supply. Mint and freeze locked. 1% swap. 50% of fees to the creator."
             href="/launch"
             c="Launch"
           />
-          <Pillar
-            k="03"
-            t="$SOLPHIA*"
-            d="The protocol token. CA coming soon. Burned supply, holders, and liquidity live on Token the moment the mint is public."
+          <Eco
+            n="03"
+            t="$SPHA*"
+            d="The protocol token. CA coming soon. Burns, holders, and liquidity live here the moment the mint is public."
             href="/token"
-            c="Token desk"
+            c="Token"
           />
+        </div>
+      </section>
+
+      <section className="px-4 py-16 md:px-12 md:py-24">
+        <p className="text-sm tracking-[0.2em] text-acid">$SPHA*</p>
+        <h2 className="mt-3 max-w-3xl font-display text-4xl leading-tight text-ghost sm:text-5xl md:text-6xl">
+          The utilities write the tokenomics.
+        </h2>
+        <p className="mt-4 max-w-2xl text-lg text-mute">
+          $SPHA* is not a sticker on the ecosystem. It is what the ecosystem pays. Protocol revenue from the desk and
+          the launch pad is used to buy $SPHA* and take it out of circulation — automatically. More flow through the
+          products means a smaller float.
+        </p>
+        <div className="mt-12 grid gap-4 sm:grid-cols-3">
+          <Note t="Desk" d="Clips on official markets generate protocol take. A slice buys $SPHA* and burns it." />
+          <Note t="Launch" d="Every 1% swap on the curve feeds the same engine. Creators get paid. Supply tightens." />
+          <Note t="Token" d="The burn ledger, holders, and CA live on the $SPHA* desk. No data until mint is live — the rails are ready." />
+        </div>
+      </section>
+
+      <section className="px-4 py-16 md:px-12 md:py-24">
+        <p className="text-sm tracking-[0.2em] text-acid">AGGREGATOR</p>
+        <h2 className="mt-3 max-w-3xl font-display text-4xl leading-tight text-ghost sm:text-5xl md:text-6xl">
+          Jupiter-class routing. Next job up.
+        </h2>
+        <p className="mt-4 max-w-2xl text-lg text-mute">
+          Jupiter is how Solana finds the cheapest hop. Solphia sits on that rail: she watches SOL against official
+          xStocks, takes the stretched sleeve, then asks Jupiter for the quote. Junk routes never print.
+        </p>
+        <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <Chip t="Jupiter quotes" d="Live route, impact, and out-amount before she clips." />
+          <Chip t="Official mints" d="SOL, USDC, SPYx, QQQx, GLDx. Lookalikes are refused." />
+          <Chip t="Clean hops" d="Liquid intermediates only. Stale and thin paths drop." />
+          <Chip t="One clip" d="About 20% into the pair that’s actually stretched." />
         </div>
       </section>
 
       <BacktestBrochure />
-      <TickerCharts />
 
-      <section className="px-4 py-10 md:px-12 md:py-16">
-        <p className="text-base text-acid sm:text-lg">Why it holds together</p>
-        <h2 className="mt-2 max-w-3xl font-display text-3xl leading-tight text-ghost sm:text-4xl md:text-6xl">
-          Built like a chain, not a gadget.
-        </h2>
-        <div className="mt-8 grid gap-3 sm:grid-cols-2">
-          <Feature
-            t="Jupiter under the hood"
-            d="Every live clip is a Jupiter quote with official endpoints. She chooses the market; the aggregator finds the hop. PnL is marked in USDC."
-          />
-          <Feature
-            t="Keys never leave Phantom"
-            d="Connect is login. She never asks for a seed. Practice on live prices with paper, then size in when you are ready."
-          />
-          <Feature
-            t="Fair launches, not team bags"
-            d="Create is free. 800M on a constant-product curve, 200M into LP at 85 SOL. 5% wallet cap. 50% of the 1% swap is paid to the dev."
-          />
-          <Feature
-            t="A token with a home"
-            d="$SOLPHIA* is the protocol asset — not a side meme. The Token page is its desk: burns, holders, liquidity, CA when it is live."
-          />
+      <section className="px-4 py-16 md:px-12 md:py-24">
+        <p className="text-sm tracking-[0.2em] text-acid">HOW IT WORKS</p>
+        <h2 className="mt-3 font-display text-4xl text-ghost sm:text-5xl">Three steps.</h2>
+        <div className="mt-12 grid gap-4 md:grid-cols-3">
+          <Chip t="01 · Connect" d="Phantom only. That wallet is login. She never holds a key." />
+          <Chip t="02 · Use a product" d="Trade the books. Launch a coin. Both feed $SPHA*." />
+          <Chip t="03 · Supply tightens" d="Protocol revenue buys $SPHA* and retires it. The stack is the buyback." />
         </div>
       </section>
 
-      <section className="px-4 py-10 md:px-12 md:py-16">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-          <h2 className="font-display text-3xl text-ghost sm:text-4xl md:text-5xl">Questions</h2>
-          <Link href="/faq" className="text-base text-violet sm:text-lg">
-            All FAQ →
-          </Link>
-        </div>
-        <div className="mt-6 max-w-3xl">
-          <FaqList limit={4} />
-        </div>
-      </section>
-
-      <section className="px-4 pb-8 md:px-12">
-        <div className="panel rounded-3xl p-5 sm:p-8 md:flex md:items-center md:justify-between md:p-14">
+      <section className="px-4 pb-16 md:px-12 md:pb-24">
+        <div className="rounded-3xl border border-violet/25 bg-void/40 px-6 py-12 md:flex md:items-center md:justify-between md:px-14 md:py-16">
           <div>
-            <p className="text-base text-mute sm:text-lg">Ready</p>
-            <h2 className="mt-2 font-display text-3xl text-ghost sm:text-4xl md:text-6xl">Enter the stack.</h2>
-            <p className="mt-3 text-base text-mute sm:text-xl">Trade. Launch. $SOLPHIA*. Keys in Phantom.</p>
+            <p className="text-sm tracking-[0.2em] text-mute">$SPHA*</p>
+            <h2 className="mt-3 font-display text-4xl text-ghost sm:text-5xl md:text-6xl">Enter the ecosystem.</h2>
+            <p className="mt-4 max-w-lg text-lg text-mute">Keys in Phantom. Utilities on chain. Burns from use.</p>
           </div>
-          <div className="mt-6 flex flex-col gap-3 sm:flex-row md:mt-0">
-            <Link
-              href="/trading"
-              className="btn-acid inline-flex min-h-[48px] w-full items-center justify-center rounded-full px-6 py-3 text-base sm:w-auto sm:px-8 sm:text-lg"
-            >
+          <div className="mt-8 flex flex-col gap-3 sm:flex-row md:mt-0">
+            <Link href="/trading" className="btn-acid inline-flex min-h-[52px] items-center justify-center rounded-full px-8">
               Open the desk
             </Link>
-            <Link
-              href="/token"
-              className="btn-ghost inline-flex min-h-[48px] w-full items-center justify-center rounded-full px-6 py-3 text-base sm:w-auto sm:px-8 sm:text-lg"
-            >
-              $SOLPHIA*
+            <Link href="/token" className="btn-ghost inline-flex min-h-[52px] items-center justify-center rounded-full px-8">
+              $SPHA*
             </Link>
           </div>
         </div>
@@ -163,30 +140,30 @@ export default function Home() {
   );
 }
 
-function Pillar({ k, t, d, href, c }: { k: string; t: string; d: string; href: string; c: string }) {
+function Eco({ n, t, d, href, c }: { n: string; t: string; d: string; href: string; c: string }) {
   return (
-    <Link href={href} className="panel rounded-3xl p-5 sm:p-7">
-      <div className="text-base text-acid sm:text-lg">{k}</div>
-      <div className="mt-3 font-display text-2xl text-ghost sm:text-3xl">{t}</div>
-      <p className="mt-3 text-base leading-relaxed text-mute">{d}</p>
-      <div className="mt-6 text-base text-acid">{c} →</div>
+    <Link href={href} className="group flex flex-col rounded-3xl border border-violet/20 bg-void/35 p-8 transition hover:border-acid/40">
+      <div className="font-mono text-sm text-acid">{n}</div>
+      <div className="mt-6 font-display text-3xl text-ghost">{t}</div>
+      <p className="mt-4 flex-1 text-base leading-relaxed text-mute">{d}</p>
+      <div className="mt-8 text-base text-acid group-hover:underline">{c} →</div>
     </Link>
   );
 }
 
-function Feature({ t, d }: { t: string; d: string }) {
+function Note({ t, d }: { t: string; d: string }) {
   return (
-    <div className="panel rounded-3xl p-5 sm:p-7">
-      <div className="font-display text-2xl leading-tight text-ghost sm:text-3xl">{t}</div>
+    <div className="rounded-3xl border border-violet/20 bg-void/30 p-7">
+      <div className="font-display text-2xl text-ghost">{t}</div>
       <p className="mt-3 text-base leading-relaxed text-mute">{d}</p>
     </div>
   );
 }
 
-function Tech({ t, d }: { t: string; d: string }) {
+function Chip({ t, d }: { t: string; d: string }) {
   return (
-    <div className="panel rounded-3xl p-5">
-      <div className="font-display text-xl text-ghost sm:text-2xl">{t}</div>
+    <div className="rounded-3xl border border-violet/15 p-6">
+      <div className="font-display text-xl text-ghost">{t}</div>
       <p className="mt-2 text-sm leading-relaxed text-mute sm:text-base">{d}</p>
     </div>
   );

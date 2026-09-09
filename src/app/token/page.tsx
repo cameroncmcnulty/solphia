@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { CopyCa } from "@/components/CopyCa";
 import { SolphiaConstellation } from "@/components/SolphiaConstellation";
 import { TokenSocials } from "@/components/TokenSocials";
@@ -16,30 +17,38 @@ export default function TokenPage() {
   return (
     <main className="relative min-h-[calc(100vh-4rem)] overflow-x-hidden pb-24">
       <SolphiaConstellation />
-      <div className="relative z-10 mx-auto max-w-6xl px-4 pt-6 md:px-8 md:pt-10">
-        <p className="font-mono text-[11px] tracking-[0.28em] text-acid">PROTOCOL TOKEN · {tick(t.symbol)}</p>
-        <h1 className="mt-2 max-w-3xl font-display text-4xl leading-tight text-ghost sm:text-6xl">{t.name}</h1>
-        <p className="mt-4 max-w-2xl text-base text-mute sm:text-lg">
-          The Solphia token. Contract address coming soon — these bubbles fill with live stats the moment the mint is
-          public. Burned supply, holders, liquidity, and lock status sit here.
+      <div className="relative z-10 mx-auto max-w-6xl px-4 pt-8 md:px-8 md:pt-14">
+        <p className="font-mono text-[11px] tracking-[0.28em] text-acid">PROTOCOL TOKEN</p>
+        <h1 className="mt-3 font-display text-5xl text-ghost sm:text-7xl">{tick(t.symbol)}</h1>
+        <p className="mt-5 max-w-2xl text-lg text-mute sm:text-xl">
+          The utilities are the engine. Desk volume and launch fees buy {tick(t.symbol)} and take it off the market —
+          automatically. CA coming soon. These numbers fill the moment the mint is public.
         </p>
 
-        <div className="mt-6 flex flex-wrap items-center gap-3">
+        <div className="mt-8 flex flex-wrap items-center gap-3">
           <CopyCa ca={t.mint || undefined} />
           <TokenSocials links={t.links} size="md" />
         </div>
 
-        <div className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="mt-12 grid gap-4 sm:grid-cols-3">
+          <Story
+            t="Desk"
+            d="Every official-market clip takes protocol revenue. A share is used to acquire $SPHA* and retire it."
+          />
+          <Story
+            t="Launch"
+            d="The 1% swap on the curve pays creators and feeds the same buy-and-burn. Use of the pad tightens supply."
+          />
+          <Story
+            t="Ledger"
+            d="Burned, circulating, holders, and locks will read from chain here. Until then the desk is empty on purpose."
+          />
+        </div>
+
+        <div className="mt-10 grid grid-cols-2 gap-3 sm:grid-cols-4">
           {t.stats.map((s) => (
             <Bubble key={s.k} k={s.k} v={s.v} hint={s.hint} />
           ))}
-        </div>
-
-        <div className="panel-bubble mt-6 rounded-3xl p-5">
-          <div className="font-mono text-[10px] tracking-[0.22em] text-violet">TAPE</div>
-          <div className="mt-6 flex h-40 items-center justify-center font-mono text-sm text-mute">
-            Candles live after CA.
-          </div>
         </div>
 
         <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -48,17 +57,25 @@ export default function TokenPage() {
           ))}
         </div>
 
-        <section className="panel-bubble mt-6 rounded-3xl p-5">
-          <div className="font-mono text-[10px] tracking-[0.22em] text-violet">ABOUT</div>
-          <h2 className="mt-1 font-display text-2xl text-ghost">Built to sit beside the bot.</h2>
-          <p className="mt-3 max-w-2xl text-sm text-mute sm:text-base">
-            When the mint is live this desk will read the chain: price, market cap, burned tokens, circulating supply,
-            holders, and whether mint and freeze stay locked. Fair-launch coins you create live on Launch. This page is
-            only {tick(t.symbol)}.
-          </p>
-        </section>
+        <div className="mt-10 flex flex-col gap-3 sm:flex-row">
+          <Link href="/trading" className="btn-acid inline-flex min-h-[48px] items-center justify-center rounded-full px-8">
+            Open the desk
+          </Link>
+          <Link href="/launch" className="btn-ghost inline-flex min-h-[48px] items-center justify-center rounded-full px-8">
+            Launch
+          </Link>
+        </div>
       </div>
     </main>
+  );
+}
+
+function Story({ t, d }: { t: string; d: string }) {
+  return (
+    <div className="panel-bubble rounded-3xl p-6">
+      <div className="font-display text-2xl text-ghost">{t}</div>
+      <p className="mt-3 text-sm leading-relaxed text-mute sm:text-base">{d}</p>
+    </div>
   );
 }
 

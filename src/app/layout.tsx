@@ -22,11 +22,11 @@ export const metadata: Metadata = {
     template: "%s · SOLPHIA",
   },
   description:
-    "Solphia is a Solana aggregator: Jupiter routes the swap, she picks the market — SOL vs official SPYx, QQQx, and GLDx. Fair launch pad and $SOLPHIA*. Phantom only.",
+    "Solphia is a Solana ecosystem: aggregator desk, fair launch pad, and $SPHA*. Jupiter routes the swap. She picks the market. Utilities feed the burn.",
   applicationName: "SOLPHIA",
   openGraph: {
     title: "SOLPHIA",
-    description: "Jupiter finds the route. She picks the market. SOL vs official S&P 500, Nasdaq-100, and gold.",
+    description: "Solphia ecosystem: aggregator desk, fair launch, and $SPHA*. Utilities feed the burn.",
     url: "https://solphia.io",
     siteName: "SOLPHIA",
     images: [{ url: "/og.jpg", width: 1376, height: 768 }],
@@ -35,7 +35,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "SOLPHIA",
-    description: "Jupiter finds the route. She picks the market. SOL vs official S&P 500, Nasdaq-100, and gold.",
+    description: "Solphia ecosystem: aggregator desk, fair launch, and $SPHA*. Utilities feed the burn.",
     images: ["/og.jpg"],
   },
   icons: {
