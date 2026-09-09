@@ -8,7 +8,7 @@ import { solphiaTokenDesk } from "@/lib/token/solphia";
 
 function tick(symbol: string) {
   const s = symbol.replace(/^\$+/, "").replace(/\*+$/, "").trim();
-  return s ? `$${s}*` : "";
+  return s ? `$${s}` : "";
 }
 
 export default function TokenPage() {
@@ -33,11 +33,11 @@ export default function TokenPage() {
         <div className="mt-12 grid gap-4 sm:grid-cols-3">
           <Story
             t="Listings"
-            d="A share of every swap is reserved for future exchange listing fees — so $SPHA* can list without a surprise raise."
+            d="A share of every swap is reserved for future exchange listing fees — so $SPHA can list without a surprise raise."
           />
           <Story
             t="Buybacks"
-            d="A share buys $SPHA* on the open market. Desk clips and launch swaps are the bid."
+            d="A share buys $SPHA on the open market. Desk clips and launch swaps are the bid."
           />
           <Story
             t="Burns"

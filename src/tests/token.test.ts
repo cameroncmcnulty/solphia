@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 import { SOLPHIA_TOKEN, solphiaTokenDesk } from "../lib/token/solphia";
 
 describe("solphia token desk", () => {
-  it("is $SPHA* with CA pending until mint is set", () => {
+  it("is $SPHA with CA pending until mint is set", () => {
     const d = solphiaTokenDesk();
     assert.equal(d.symbol, "SPHA");
     assert.equal(SOLPHIA_TOKEN.mint, "");

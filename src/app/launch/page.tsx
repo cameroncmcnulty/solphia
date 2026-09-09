@@ -93,7 +93,7 @@ function fmtTok(n: number) {
 
 function tick(symbol?: string) {
   const s = (symbol || "").replace(/^\$+/, "").replace(/\*+$/, "").trim();
-  return s ? `$${s}*` : "";
+  return s ? `$${s}` : "";
 }
 
 async function squareTokenImage(file: File): Promise<string> {
@@ -279,7 +279,6 @@ export default function LaunchPage() {
                     maxLength={10}
                     className="w-full bg-transparent outline-none"
                   />
-                  <span className="text-mute">*</span>
                 </label>
                 <input
                   value={blurb}

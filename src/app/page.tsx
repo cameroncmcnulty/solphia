@@ -14,23 +14,23 @@ export default function Home() {
             <SolphiaFace mode="hero" />
           </div>
           <div className="order-2 pb-10 lg:order-1 lg:pb-4">
-            <p className="text-sm tracking-[0.22em] text-acid sm:text-base">THE SOLANA ECOSYSTEM · $SPHA*</p>
+            <p className="text-sm tracking-[0.22em] text-acid sm:text-base">THE SOLANA ECOSYSTEM · $SPHA</p>
             <h1 className="solphia-flow mt-3 font-display text-[clamp(2.6rem,11vw,5.8rem)] font-bold leading-[0.9] tracking-[-0.04em]">
               SOLPHIA
             </h1>
             <p className="mt-6 max-w-xl text-xl leading-snug text-ghost sm:text-3xl sm:leading-tight">
-              Aggregator. Launch pad. $SPHA*. Every swap funds listings, buybacks, and burns.
+              Aggregator. Launch pad. $SPHA. Every swap funds listings, buybacks, and burns.
             </p>
             <p className="mt-4 max-w-lg text-base leading-relaxed text-mute sm:text-lg">
               Jupiter finds the route. She picks the market. A portion of every swap is set aside for future listings,
-              market buybacks, and $SPHA* burns. Use the stack — the token gets the remainder of the work.
+              market buybacks, and $SPHA burns. Use the stack — the token gets the remainder of the work.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <Link href="/trading" className="btn-acid inline-flex min-h-[52px] items-center justify-center rounded-full px-8 text-base">
                 Open the desk
               </Link>
               <Link href="/token" className="btn-ghost inline-flex min-h-[52px] items-center justify-center rounded-full px-8 text-base">
-                $SPHA*
+                $SPHA
               </Link>
             </div>
           </div>
@@ -65,7 +65,7 @@ export default function Home() {
           />
           <Eco
             n="03"
-            t="$SPHA*"
+            t="$SPHA"
             d="The protocol token. CA coming soon. Burns, holders, and liquidity live here the moment the mint is public."
             href="/token"
             c="Token"
@@ -74,7 +74,7 @@ export default function Home() {
       </section>
 
       <section className="px-4 py-16 md:px-12 md:py-24">
-        <p className="text-sm tracking-[0.2em] text-acid">$SPHA*</p>
+        <p className="text-sm tracking-[0.2em] text-acid">$SPHA</p>
         <h2 className="mt-3 max-w-3xl font-display text-4xl leading-tight text-ghost sm:text-5xl md:text-6xl">
           Every swap has a job after the fill.
         </h2>
@@ -83,8 +83,8 @@ export default function Home() {
           burns — automatically, by design. The on-chain router ships after the mint. The rule is the product now.
         </p>
         <div className="mt-12 grid gap-4 sm:grid-cols-3">
-          <Note t="Listings" d="A share of swap proceeds is earmarked for future exchange listing fees so $SPHA* can show up where it should." />
-          <Note t="Buybacks" d="A share is used to buy $SPHA* on the open market. Demand from the products, not from a promise." />
+          <Note t="Listings" d="A share of swap proceeds is earmarked for future exchange listing fees so $SPHA can show up where it should." />
+          <Note t="Buybacks" d="A share is used to buy $SPHA on the open market. Demand from the products, not from a promise." />
           <Note t="Burns" d="A share is retired forever. More volume through the utilities, smaller circulating supply." />
         </div>
       </section>
@@ -113,7 +113,7 @@ export default function Home() {
         <h2 className="mt-3 font-display text-4xl text-ghost sm:text-5xl">Three steps.</h2>
         <div className="mt-12 grid gap-4 md:grid-cols-3">
           <Chip t="01 · Connect" d="Phantom only. That wallet is login. She never holds a key." />
-          <Chip t="02 · Use a product" d="Trade the books. Launch a coin. Both feed $SPHA*." />
+          <Chip t="02 · Use a product" d="Trade the books. Launch a coin. Both feed $SPHA." />
           <Chip t="03 · Swap proceeds work" d="A portion of every swap is reserved for listings, buybacks, and burns." />
         </div>
       </section>
@@ -121,7 +121,7 @@ export default function Home() {
       <section className="px-4 pb-16 md:px-12 md:pb-24">
         <div className="rounded-3xl border border-violet/25 bg-void/40 px-6 py-12 md:flex md:items-center md:justify-between md:px-14 md:py-16">
           <div>
-            <p className="text-sm tracking-[0.2em] text-mute">$SPHA*</p>
+            <p className="text-sm tracking-[0.2em] text-mute">$SPHA</p>
             <h2 className="mt-3 font-display text-4xl text-ghost sm:text-5xl md:text-6xl">Enter the ecosystem.</h2>
             <p className="mt-4 max-w-lg text-lg text-mute">Keys in Phantom. Every swap: listings, buybacks, burns.</p>
           </div>
@@ -130,7 +130,7 @@ export default function Home() {
               Open the desk
             </Link>
             <Link href="/token" className="btn-ghost inline-flex min-h-[52px] items-center justify-center rounded-full px-8">
-              $SPHA*
+              $SPHA
             </Link>
           </div>
         </div>
