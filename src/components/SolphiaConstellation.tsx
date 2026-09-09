@@ -40,8 +40,8 @@ function sampleStars(img: HTMLImageElement): Star[] {
       const g = data[i + 1];
       const b = data[i + 2];
       const lum = r * 0.2 + g * 0.55 + b * 0.25;
-      if (lum < 88) continue;
-      if (!(g > 90 || b > 110)) continue;
+      if (lum < 140) continue;
+      if (!(g > 150 || b > 160)) continue;
       cand.push({
         x: x / w,
         y: y / h,
@@ -52,7 +52,7 @@ function sampleStars(img: HTMLImageElement): Star[] {
   }
   cand.sort((a, b) => b.lum - a.lum);
   const kept: Star[] = [];
-  const minD2 = 0.00055;
+  const minD2 = 0.0016;
   for (const c of cand) {
     let ok = true;
     for (const s of kept) {
@@ -72,7 +72,7 @@ function sampleStars(img: HTMLImageElement): Star[] {
       phase: Math.random() * Math.PI * 2,
       speed: 0.018 + Math.random() * 0.042,
     });
-    if (kept.length >= 220) break;
+    if (kept.length >= 70) break;
   }
   return kept;
 }
@@ -132,20 +132,18 @@ export function SolphiaConstellation() {
       t += reduce ? 0 : 1;
       ctx.globalCompositeOperation = "screen";
       for (const s of stars) {
-        const twinkle = reduce ? 0.55 : 0.22 + 0.78 * (0.5 + 0.5 * Math.sin(t * s.speed + s.phase)) ** 2;
+        const twinkle = reduce ? 0.28 : 0.12 + 0.32 * (0.5 + 0.5 * Math.sin(t * s.speed + s.phase));
         const a = s.lum * twinkle;
         const sx = box.dx + s.x * box.dw;
         const sy = box.dy + s.y * box.dh;
-        const rad = (s.lum > 0.72 ? 2.4 : 1.15) * (0.65 + a);
-        if (a > 0.55) {
-          ctx.fillStyle = s.cyan ? `rgba(20,241,149,${a * 0.28})` : `rgba(201,168,255,${a * 0.26})`;
-          ctx.beginPath();
-          ctx.arc(sx, sy, rad * 3.2, 0, Math.PI * 2);
-          ctx.fill();
-        }
+        const rad = s.lum > 0.8 ? 1.15 : 0.7;
+        ctx.fillStyle = s.cyan ? `rgba(20,241,149,${a * 0.35})` : `rgba(201,168,255,${a * 0.32})`;
+        ctx.beginPath();
+        ctx.arc(sx, sy, rad * 2.1, 0, Math.PI * 2);
+        ctx.fill();
         ctx.fillStyle = s.cyan
-          ? `rgba(180,255,230,${Math.min(0.95, 0.2 + a * 0.8)})`
-          : `rgba(230,210,255,${Math.min(0.92, 0.18 + a * 0.75)})`;
+          ? `rgba(180,255,230,${Math.min(0.45, 0.08 + a * 0.4)})`
+          : `rgba(230,210,255,${Math.min(0.4, 0.06 + a * 0.36)})`;
         ctx.beginPath();
         ctx.arc(sx, sy, rad, 0, Math.PI * 2);
         ctx.fill();
@@ -169,10 +167,10 @@ export function SolphiaConstellation() {
         alt=""
         draggable={false}
         className="absolute inset-0 h-full w-full object-contain object-right"
-        style={{ opacity: 0.4 }}
+        style={{ opacity: 0.26 }}
       />
       <canvas ref={canvas} className="pointer-events-none absolute inset-0 h-full w-full" />
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_28%_18%,rgba(153,69,255,0.08),transparent_42%),linear-gradient(to_right,rgba(4,0,10,0.58)_0%,rgba(4,0,10,0.18)_42%,transparent_70%),linear-gradient(to_bottom,transparent_62%,rgba(4,0,10,0.62)_100%)]" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_28%_18%,rgba(153,69,255,0.10),transparent_42%),linear-gradient(to_right,rgba(4,0,10,0.72)_0%,rgba(4,0,10,0.28)_46%,transparent_72%),linear-gradient(to_bottom,transparent_58%,rgba(4,0,10,0.78)_100%)]" />
     </div>
   );
 }
