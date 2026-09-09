@@ -105,6 +105,11 @@ export function buildAdminDesk(opts?: { light?: boolean }): AdminDesk {
     treasury,
     treasurySet: Boolean(treasury),
     ownerWallet: s.ownerWallet || s.launch?.ownerWallet || "",
+    sphaSocials: {
+      x: s.sphaSocials?.x || "",
+      telegram: s.sphaSocials?.telegram || "",
+      discord: s.sphaSocials?.discord || "",
+    },
     ownerEarningsSol: s.launch?.ownerEarningsSol || 0,
     launchCount: s.launch?.coins?.length || 0,
     durable: storeInfo().durable,

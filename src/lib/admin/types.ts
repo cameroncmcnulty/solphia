@@ -107,6 +107,7 @@ export type AdminDesk = {
   treasury: string;
   treasurySet: boolean;
   ownerWallet: string;
+  sphaSocials: { x: string; telegram: string; discord: string };
   ownerEarningsSol: number;
   launchCount: number;
   durable: boolean;

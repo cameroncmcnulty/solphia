@@ -1,10 +1,11 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { CopyCa } from "@/components/CopyCa";
 import { SphaMark } from "@/components/SphaMark";
+import { SphaSocials } from "@/components/SphaSocials";
 import { SolphiaConstellation } from "@/components/SolphiaConstellation";
-import { TokenSocials } from "@/components/TokenSocials";
 import { solphiaTokenDesk } from "@/lib/token/solphia";
 
 function tick(symbol: string) {
@@ -14,6 +15,16 @@ function tick(symbol: string) {
 
 export default function TokenPage() {
   const t = solphiaTokenDesk();
+  const [socials, setSocials] = useState({ x: "", telegram: "", discord: "" });
+
+  useEffect(() => {
+    fetch("/api/spha", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => {
+        if (j?.socials) setSocials({ x: j.socials.x || "", telegram: j.socials.telegram || "", discord: j.socials.discord || "" });
+      })
+      .catch(() => {});
+  }, []);
 
   return (
     <main className="relative min-h-[calc(100vh-4rem)] overflow-x-hidden pb-24">
@@ -29,9 +40,9 @@ export default function TokenPage() {
           buybacks, and {tick(t.symbol)} burns. Automatic by design. The router ships after mint. CA coming soon.
         </p>
 
-        <div className="mt-8 flex flex-wrap items-center gap-3">
+        <div className="mt-8 flex flex-wrap items-center gap-5">
+          <SphaSocials x={socials.x} telegram={socials.telegram} discord={socials.discord} />
           <CopyCa ca={t.mint || undefined} />
-          <TokenSocials links={t.links} size="md" />
         </div>
 
         <div className="mt-12 grid gap-4 sm:grid-cols-3">

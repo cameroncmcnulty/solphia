@@ -504,6 +504,7 @@ export interface AppState {
   backtestLev3?: BacktestReport | null;
   launch?: import("./launch/engine").LaunchBook;
   ownerWallet?: string;
+  sphaSocials?: { x?: string; telegram?: string; discord?: string };
 }
 
 export type BacktestPoint = { t: number; equity: number };

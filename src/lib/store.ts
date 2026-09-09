@@ -62,6 +62,7 @@ export function emptyState(): AppState {
     backtestLev3: null,
     launch: emptyLaunchBook(),
     ownerWallet: "",
+    sphaSocials: { x: "", telegram: "", discord: "" },
   };
 }
 
@@ -109,6 +110,11 @@ function hydrateFromRaw(raw: AppState): AppState {
     backtestLev3: raw.backtestLev3 || null,
     launch: raw.launch && Array.isArray(raw.launch.coins) ? raw.launch : emptyLaunchBook(),
     ownerWallet: raw.ownerWallet || raw.launch?.ownerWallet || "",
+    sphaSocials: {
+      x: raw.sphaSocials?.x || "",
+      telegram: raw.sphaSocials?.telegram || "",
+      discord: raw.sphaSocials?.discord || "",
+    },
   };
 }
 

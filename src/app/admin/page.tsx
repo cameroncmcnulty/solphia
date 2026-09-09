@@ -18,6 +18,9 @@ export default function AdminPage() {
   const [adminPk, setAdminPk] = useState("");
   const [treasuryPk, setTreasuryPk] = useState("");
   const [ownerPk, setOwnerPk] = useState("");
+  const [sphaX, setSphaX] = useState("");
+  const [sphaTg, setSphaTg] = useState("");
+  const [sphaDc, setSphaDc] = useState("");
   const [copied, setCopied] = useState("");
   const [saved, setSaved] = useState("");
   const [hint, setHint] = useState("");
@@ -58,6 +61,9 @@ export default function AdminPage() {
     setData((prev) => mergeDesk(prev, next));
     setTreasuryPk(next.treasury || "");
     setOwnerPk(next.ownerWallet || "");
+    setSphaX(next.sphaSocials?.x || "");
+    setSphaTg(next.sphaSocials?.telegram || "");
+    setSphaDc(next.sphaSocials?.discord || "");
   }
 
   async function logout() {
@@ -343,6 +349,42 @@ export default function AdminPage() {
         <p className="mt-3 font-mono text-[11px] text-mute">
           {data.ownerWallet ? `Pays to ${shortPk(data.ownerWallet, 6)}` : "No owner wallet set."}
         </p>
+      </section>
+
+      <section className="panel mt-6 rounded-2xl p-5">
+        <div className="font-mono text-[10px] tracking-[0.3em] text-mute">$SPHA · SOCIALS</div>
+        <p className="mt-2 text-sm text-mute">
+          Icons always show on the token page in Solphia teal. Empty fields stay decorative — they do not link until you
+          save a URL or handle.
+        </p>
+        <div className="mt-4 grid gap-2 sm:grid-cols-3">
+          <input
+            value={sphaX}
+            onChange={(e) => setSphaX(e.target.value)}
+            placeholder="X / @handle"
+            className="rounded-full border border-violet/30 bg-void px-4 py-3 font-mono text-xs outline-none"
+          />
+          <input
+            value={sphaTg}
+            onChange={(e) => setSphaTg(e.target.value)}
+            placeholder="Telegram / t.me/…"
+            className="rounded-full border border-violet/30 bg-void px-4 py-3 font-mono text-xs outline-none"
+          />
+          <input
+            value={sphaDc}
+            onChange={(e) => setSphaDc(e.target.value)}
+            placeholder="Discord / discord.gg/…"
+            className="rounded-full border border-violet/30 bg-void px-4 py-3 font-mono text-xs outline-none"
+          />
+        </div>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => patch({ sphaSocials: { x: sphaX, telegram: sphaTg, discord: sphaDc } })}
+          className="btn-acid mt-3 rounded-full px-5 py-2 text-sm disabled:opacity-40"
+        >
+          Save $SPHA socials
+        </button>
       </section>
 
       <section className="panel mt-6 rounded-2xl p-5">

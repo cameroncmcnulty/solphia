@@ -10,6 +10,7 @@ import { runBacktest } from "@/lib/pair/backtest";
 import { loadBacktestTape } from "@/lib/pair/backtestTape";
 import { mutateState, audit, pushBounded, readyState, loadAllTraders } from "@/lib/store";
 import { emptyLaunchBook } from "@/lib/launch/engine";
+import { socialHref } from "@/lib/launch/links";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -32,6 +33,13 @@ const Patch = z.object({
   removeAdminWallet: z.string().optional(),
   treasuryWallet: z.string().nullable().optional(),
   ownerWallet: z.string().nullable().optional(),
+  sphaSocials: z
+    .object({
+      x: z.string().max(160).optional(),
+      telegram: z.string().max(160).optional(),
+      discord: z.string().max(160).optional(),
+    })
+    .optional(),
   liveTrading: z.boolean().optional(),
   generatePromo: z.boolean().optional(),
   contentHint: z.string().max(280).optional(),
@@ -77,6 +85,16 @@ export async function POST(req: NextRequest) {
       s.ownerWallet = next;
       s.launch.ownerWallet = next;
       pushBounded(s.audit, audit("admin", "owner_wallet", next ? next : "cleared", ip), 400);
+    });
+  }
+  if (body.sphaSocials) {
+    await mutateState((s) => {
+      s.sphaSocials = {
+        x: socialHref("x", body.sphaSocials?.x),
+        telegram: socialHref("telegram", body.sphaSocials?.telegram),
+        discord: socialHref("discord", body.sphaSocials?.discord),
+      };
+      pushBounded(s.audit, audit("admin", "spha_socials", "updated", ip), 400);
     });
   }
   if (typeof body.liveTrading === "boolean") {
