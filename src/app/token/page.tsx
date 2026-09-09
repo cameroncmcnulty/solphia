@@ -21,8 +21,8 @@ export default function TokenPage() {
         <p className="font-mono text-[11px] tracking-[0.28em] text-acid">PROTOCOL TOKEN</p>
         <h1 className="mt-3 font-display text-5xl text-ghost sm:text-7xl">{tick(t.symbol)}</h1>
         <p className="mt-5 max-w-2xl text-lg text-mute sm:text-xl">
-          The utilities are the engine. Desk volume and launch fees buy {tick(t.symbol)} and take it off the market —
-          automatically. CA coming soon. These numbers fill the moment the mint is public.
+          Every swap in the stack sets aside a portion of proceeds for three jobs: future listing fees, market
+          buybacks, and {tick(t.symbol)} burns. Automatic by design. The router ships after mint. CA coming soon.
         </p>
 
         <div className="mt-8 flex flex-wrap items-center gap-3">
@@ -32,16 +32,16 @@ export default function TokenPage() {
 
         <div className="mt-12 grid gap-4 sm:grid-cols-3">
           <Story
-            t="Desk"
-            d="Every official-market clip takes protocol revenue. A share is used to acquire $SPHA* and retire it."
+            t="Listings"
+            d="A share of every swap is reserved for future exchange listing fees — so $SPHA* can list without a surprise raise."
           />
           <Story
-            t="Launch"
-            d="The 1% swap on the curve pays creators and feeds the same buy-and-burn. Use of the pad tightens supply."
+            t="Buybacks"
+            d="A share buys $SPHA* on the open market. Desk clips and launch swaps are the bid."
           />
           <Story
-            t="Ledger"
-            d="Burned, circulating, holders, and locks will read from chain here. Until then the desk is empty on purpose."
+            t="Burns"
+            d="A share is taken out of circulation. Volume in the utilities is what tightens the float."
           />
         </div>
 

@@ -19,11 +19,11 @@ export default function Home() {
               SOLPHIA
             </h1>
             <p className="mt-6 max-w-xl text-xl leading-snug text-ghost sm:text-3xl sm:leading-tight">
-              Aggregator. Launch pad. $SPHA*. One stack — and every product tightens the token.
+              Aggregator. Launch pad. $SPHA*. Every swap funds listings, buybacks, and burns.
             </p>
             <p className="mt-4 max-w-lg text-base leading-relaxed text-mute sm:text-lg">
-              Jupiter finds the route. She picks the market. Desk volume and launch fees buy $SPHA* off the market and
-              retire it. Use the utilities; supply does the rest.
+              Jupiter finds the route. She picks the market. A portion of every swap is set aside for future listings,
+              market buybacks, and $SPHA* burns. Use the stack — the token gets the remainder of the work.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <Link href="/trading" className="btn-acid inline-flex min-h-[52px] items-center justify-center rounded-full px-8 text-base">
@@ -76,17 +76,16 @@ export default function Home() {
       <section className="px-4 py-16 md:px-12 md:py-24">
         <p className="text-sm tracking-[0.2em] text-acid">$SPHA*</p>
         <h2 className="mt-3 max-w-3xl font-display text-4xl leading-tight text-ghost sm:text-5xl md:text-6xl">
-          The utilities write the tokenomics.
+          Every swap has a job after the fill.
         </h2>
         <p className="mt-4 max-w-2xl text-lg text-mute">
-          $SPHA* is not a sticker on the ecosystem. It is what the ecosystem pays. Protocol revenue from the desk and
-          the launch pad is used to buy $SPHA* and take it out of circulation — automatically. More flow through the
-          products means a smaller float.
+          Desk clips and launch swaps take a protocol cut. That cut is reserved three ways: listings, buybacks, and
+          burns — automatically, by design. The on-chain router ships after the mint. The rule is the product now.
         </p>
         <div className="mt-12 grid gap-4 sm:grid-cols-3">
-          <Note t="Desk" d="Clips on official markets generate protocol take. A slice buys $SPHA* and burns it." />
-          <Note t="Launch" d="Every 1% swap on the curve feeds the same engine. Creators get paid. Supply tightens." />
-          <Note t="Token" d="The burn ledger, holders, and CA live on the $SPHA* desk. No data until mint is live — the rails are ready." />
+          <Note t="Listings" d="A share of swap proceeds is earmarked for future exchange listing fees so $SPHA* can show up where it should." />
+          <Note t="Buybacks" d="A share is used to buy $SPHA* on the open market. Demand from the products, not from a promise." />
+          <Note t="Burns" d="A share is retired forever. More volume through the utilities, smaller circulating supply." />
         </div>
       </section>
 
@@ -115,7 +114,7 @@ export default function Home() {
         <div className="mt-12 grid gap-4 md:grid-cols-3">
           <Chip t="01 · Connect" d="Phantom only. That wallet is login. She never holds a key." />
           <Chip t="02 · Use a product" d="Trade the books. Launch a coin. Both feed $SPHA*." />
-          <Chip t="03 · Supply tightens" d="Protocol revenue buys $SPHA* and retires it. The stack is the buyback." />
+          <Chip t="03 · Swap proceeds work" d="A portion of every swap is reserved for listings, buybacks, and burns." />
         </div>
       </section>
 
@@ -124,7 +123,7 @@ export default function Home() {
           <div>
             <p className="text-sm tracking-[0.2em] text-mute">$SPHA*</p>
             <h2 className="mt-3 font-display text-4xl text-ghost sm:text-5xl md:text-6xl">Enter the ecosystem.</h2>
-            <p className="mt-4 max-w-lg text-lg text-mute">Keys in Phantom. Utilities on chain. Burns from use.</p>
+            <p className="mt-4 max-w-lg text-lg text-mute">Keys in Phantom. Every swap: listings, buybacks, burns.</p>
           </div>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row md:mt-0">
             <Link href="/trading" className="btn-acid inline-flex min-h-[52px] items-center justify-center rounded-full px-8">

@@ -585,7 +585,8 @@ function CoinDesk({
               {side === "buy" ? `Buy ${tick(open.symbol)}` : `Sell ${tick(open.symbol)}`}
             </button>
             <p className="mt-3 text-center font-mono text-[11px] text-mute">
-              1% fee · 50% to the dev{solUsd ? ` · SOL $${solUsd.toFixed(0)}` : ""}
+              1% fee · 50% to the dev · protocol share: listings, buybacks, burns
+              {solUsd ? ` · SOL $${solUsd.toFixed(0)}` : ""}
             </p>
             {creator && (
               <button

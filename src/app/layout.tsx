@@ -22,11 +22,11 @@ export const metadata: Metadata = {
     template: "%s · SOLPHIA",
   },
   description:
-    "Solphia is a Solana ecosystem: aggregator desk, fair launch pad, and $SPHA*. Jupiter routes the swap. She picks the market. Utilities feed the burn.",
+    "Solphia is a Solana ecosystem: aggregator desk, fair launch pad, and $SPHA*. Every swap funds listings, buybacks, and burns. Jupiter routes. She picks the market.",
   applicationName: "SOLPHIA",
   openGraph: {
     title: "SOLPHIA",
-    description: "Solphia ecosystem: aggregator desk, fair launch, and $SPHA*. Utilities feed the burn.",
+    description: "Solphia ecosystem: aggregator, launch pad, $SPHA*. Every swap funds listings, buybacks, and burns.",
     url: "https://solphia.io",
     siteName: "SOLPHIA",
     images: [{ url: "/og.jpg", width: 1376, height: 768 }],
@@ -35,7 +35,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "SOLPHIA",
-    description: "Solphia ecosystem: aggregator desk, fair launch, and $SPHA*. Utilities feed the burn.",
+    description: "Solphia ecosystem: aggregator, launch pad, $SPHA*. Every swap funds listings, buybacks, and burns.",
     images: ["/og.jpg"],
   },
   icons: {
