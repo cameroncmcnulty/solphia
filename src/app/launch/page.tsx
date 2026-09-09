@@ -565,23 +565,26 @@ export default function LaunchPage() {
                   ))}
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setRanked((v) => !v);
-                  if (!ranked) setVol(null);
-                }}
-                className={`w-full rounded-full px-4 py-2 font-mono text-[11px] tracking-[0.16em] ${
-                  ranked ? "btn-on" : "btn-ghost"
-                }`}
-              >
-                RANKED · FULL AUDIT
-              </button>
-              {ranked && (
-                <p className="text-[11px] leading-relaxed text-mute">
-                  Risk engine plus socials, art, deployer history, wash, and the curve. Top {TAPE_BOARD} fill the board.
-                </p>
-              )}
+              <div>
+                <div className="font-mono text-[10px] tracking-[0.22em] text-mute">RANKED BY</div>
+                <div className="mt-1 flex flex-wrap gap-1 rounded-full border border-violet/30 p-0.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRanked((v) => !v);
+                      if (!ranked) setVol(null);
+                    }}
+                    className={`rounded-full px-3 py-1 font-mono text-[10px] ${ranked ? "bg-acid/20 text-acid" : "text-mute hover:text-ghost"}`}
+                  >
+                    AUDIT
+                  </button>
+                </div>
+                {ranked && (
+                  <p className="mt-1.5 text-[11px] leading-relaxed text-mute">
+                    Risk engine plus socials, art, deployer history, wash, and the curve. Top {TAPE_BOARD} fill the board.
+                  </p>
+                )}
+              </div>
             </div>
             <div className={`mt-4 space-y-2 pr-1 ${ranked ? "overflow-hidden" : "max-h-[28rem] overflow-y-auto"}`}>
               {rows.length === 0 && (
