@@ -33,16 +33,33 @@ export function CopyCa({
   ca,
   compact = false,
 }: {
-  ca: string;
+  ca?: string;
   compact?: boolean;
 }) {
   const [ok, setOk] = useState(false);
-  if (!ca) return null;
+  if (!ca) {
+    if (compact) {
+      return (
+        <span className="shrink-0 rounded-full border border-violet/40 px-2 py-0.5 font-mono text-[10px] tracking-wide text-mute">
+          CA soon
+        </span>
+      );
+    }
+    return (
+      <div className="flex min-h-[44px] w-full items-center justify-between gap-3 rounded-2xl border border-violet/40 px-4 py-3 font-mono text-sm text-mute sm:w-auto">
+        <span>
+          <span className="block text-[10px] tracking-[0.2em]">CA</span>
+          <span className="text-ghost">Coming soon</span>
+        </span>
+      </div>
+    );
+  }
+  const address = ca;
 
   async function copy(e: MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
-    const wrote = await writeClipboard(ca);
+    const wrote = await writeClipboard(address);
     if (!wrote) return;
     setOk(true);
     window.setTimeout(() => setOk(false), 1600);
@@ -58,7 +75,7 @@ export function CopyCa({
           ok ? "border-acid text-acid" : "border-violet/40 text-mute hover:border-acid hover:text-acid"
         }`}
       >
-        {ok ? "copied" : `CA ${shortCa(ca)}`}
+        {ok ? "copied" : `CA ${shortCa(address)}`}
       </button>
     );
   }
@@ -74,7 +91,7 @@ export function CopyCa({
     >
       <span className="min-w-0">
         <span className="block text-[10px] tracking-[0.2em] text-mute">CA</span>
-        <span className="block truncate">{ca}</span>
+        <span className="block truncate">{address}</span>
       </span>
       <span className="shrink-0 rounded-full bg-acid px-3 py-1 text-[11px] font-semibold tracking-wide text-void">
         {ok ? "COPIED" : "COPY"}
