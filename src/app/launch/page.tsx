@@ -27,6 +27,8 @@ import {
 } from "@/lib/launch/validate";
 import { FieldError, FormAlert, fieldClass, useConfirmErrors } from "@/components/form/confirm";
 import { loadOwner } from "@/lib/wallet/trading";
+import { auditLaunchCoin, rankTape, type LaunchAudit } from "@/lib/launch/audit";
+import { TAPE_BOARD, filterTape, sortTape, volumeIn, type AgeFilter, type VolWindow } from "@/lib/launch/tape";
 
 const TOKEN_PX = TOKEN_IMAGE_PX;
 const STORE_PX = 512;
@@ -56,9 +58,34 @@ type Coin = {
   maxBuySol?: number;
   devRewardsSol: number;
   volSol?: number;
+  vol5m?: number;
+  vol30m?: number;
+  vol1h?: number;
+  vol6h?: number;
+  vol24h?: number;
   txns?: number;
+  txns5m?: number;
+  txns1h?: number;
+  buys?: number;
+  sells?: number;
+  buys1h?: number;
+  sells1h?: number;
+  unique1h?: number;
+  uniqueAll?: number;
+  top10HolderPct?: number;
+  creatorHoldPct?: number;
+  largestWalletPct?: number;
+  bundleRatio?: number;
+  devSoldPct?: number;
+  deployerTokenCount?: number;
+  deployerDeathRate?: number;
+  creatorRecentLaunches?: number;
+  change5m?: number;
+  change1h?: number;
+  change6h?: number;
+  change24h?: number;
   spark?: Spark[];
-  fills: { at: number; side: "buy" | "sell"; sol: number; tokens: number }[];
+  fills: { at: number; side: "buy" | "sell"; sol: number; tokens: number; owner?: string }[];
   curve?: {
     virtualSol: number;
     virtualTokens: number;
@@ -174,6 +201,9 @@ export default function LaunchPage() {
   const [busy, setBusy] = useState(false);
   const [solUsd, setSolUsd] = useState(0);
   const [tab, setTab] = useState<"tape" | "mine">("tape");
+  const [age, setAge] = useState<AgeFilter>("newest");
+  const [vol, setVol] = useState<VolWindow | null>(null);
+  const [ranked, setRanked] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const devPct = buySupplyPct(emptyCurve(), devBuy);
 
@@ -281,7 +311,13 @@ export default function LaunchPage() {
   }
 
   const mine = owner ? coins.filter((c) => c.creator === owner) : [];
-  const rows = owner && tab === "mine" ? mine : coins;
+  const pool = owner && tab === "mine" ? mine : coins;
+  const board = useMemo(() => {
+    const aged = filterTape(pool, age);
+    if (ranked) return rankTape(aged, solUsd);
+    return sortTape(aged, vol).map((coin, i) => ({ coin, audit: null as LaunchAudit | null, rank: i + 1 }));
+  }, [pool, age, vol, ranked, solUsd]);
+  const rows = board.map((r) => r.coin);
 
   return (
     <main className="relative min-h-[calc(100vh-4rem)] overflow-x-hidden pb-24">
@@ -495,10 +531,75 @@ export default function LaunchPage() {
                 </div>
               )}
             </div>
-            <div className="mt-4 max-h-[36rem] space-y-2 overflow-y-auto pr-1">
-              {rows.length === 0 && <p className="text-sm text-mute">{tab === "mine" ? "Nothing launched yet." : "No coins yet."}</p>}
-              {rows.map((c) => (
-                <CoinCard key={c.id} c={c} solUsd={solUsd} active={open?.id === c.id} onOpen={() => setOpen(c)} />
+            <div className="mt-3 space-y-2">
+              <div>
+                <div className="font-mono text-[10px] tracking-[0.22em] text-mute">WHEN</div>
+                <div className="mt-1 flex flex-wrap gap-1 rounded-full border border-violet/30 p-0.5">
+                  {(["newest", "1h", "6h", "24h"] as const).map((k) => (
+                    <button
+                      key={k}
+                      type="button"
+                      onClick={() => setAge(k)}
+                      className={`rounded-full px-3 py-1 font-mono text-[10px] ${age === k ? "bg-acid/20 text-acid" : "text-mute hover:text-ghost"}`}
+                    >
+                      {k === "newest" ? "NEWEST" : k === "1h" ? "1 HR" : k === "6h" ? "6 HR" : "24 HR"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <div className="font-mono text-[10px] tracking-[0.22em] text-mute">VOLUME</div>
+                <div className={`mt-1 flex flex-wrap gap-1 rounded-full border border-violet/30 p-0.5 ${ranked ? "opacity-40" : ""}`}>
+                  {(["5m", "30m", "1h", "6h", "24h"] as const).map((k) => (
+                    <button
+                      key={k}
+                      type="button"
+                      onClick={() => {
+                        setRanked(false);
+                        setVol((cur) => (cur === k ? null : k));
+                      }}
+                      className={`rounded-full px-3 py-1 font-mono text-[10px] ${!ranked && vol === k ? "bg-acid/20 text-acid" : "text-mute hover:text-ghost"}`}
+                    >
+                      {k === "5m" ? "5 M" : k === "30m" ? "30 M" : k === "1h" ? "1 HR" : k === "6h" ? "6 HR" : "24 HR"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setRanked((v) => !v);
+                  if (!ranked) setVol(null);
+                }}
+                className={`w-full rounded-full px-4 py-2 font-mono text-[11px] tracking-[0.16em] ${
+                  ranked ? "btn-on" : "btn-ghost"
+                }`}
+              >
+                RANKED · FULL AUDIT
+              </button>
+              {ranked && (
+                <p className="text-[11px] leading-relaxed text-mute">
+                  Risk engine plus socials, art, deployer history, wash, and the curve. Top {TAPE_BOARD} fill the board.
+                </p>
+              )}
+            </div>
+            <div className={`mt-4 space-y-2 pr-1 ${ranked ? "overflow-hidden" : "max-h-[28rem] overflow-y-auto"}`}>
+              {rows.length === 0 && (
+                <p className="text-sm text-mute">
+                  {tab === "mine" ? "Nothing launched yet." : ranked ? "Nothing in this window ranks yet." : "No coins in this window."}
+                </p>
+              )}
+              {board.map((row) => (
+                <CoinCard
+                  key={row.coin.id}
+                  c={row.coin}
+                  solUsd={solUsd}
+                  active={open?.id === row.coin.id}
+                  onOpen={() => setOpen(row.coin)}
+                  rank={ranked ? row.rank : 0}
+                  audit={row.audit}
+                  vol={ranked ? null : vol}
+                />
               ))}
             </div>
           </section>
@@ -528,7 +629,62 @@ export default function LaunchPage() {
   );
 }
 
-function CoinCard({ c, solUsd, active, onOpen }: { c: Coin; solUsd: number; active: boolean; onOpen: () => void }) {
+function RankMark({ n }: { n: number }) {
+  if (n === 1) {
+    return (
+      <span className="relative inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-acid font-display text-sm text-void shadow-[0_0_18px_rgba(20,241,149,0.7)]">
+        1
+        <span className="absolute -top-1.5 text-[9px] leading-none">▲</span>
+      </span>
+    );
+  }
+  if (n === 2) {
+    return (
+      <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-cyan font-display text-sm text-void shadow-[0_0_14px_rgba(128,234,255,0.55)]">
+        2
+      </span>
+    );
+  }
+  if (n === 3) {
+    return (
+      <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-warn font-display text-sm text-void shadow-[0_0_14px_rgba(255,176,32,0.5)]">
+        3
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-violet/40 font-mono text-[11px] text-mute">
+      {n}
+    </span>
+  );
+}
+
+function eliteClass(rank: number, active: boolean) {
+  if (rank === 1) return "border-acid/80 bg-acid/10 shadow-[0_0_28px_rgba(20,241,149,0.22)]";
+  if (rank === 2) return "border-cyan/70 bg-cyan/10 shadow-[0_0_20px_rgba(128,234,255,0.16)]";
+  if (rank === 3) return "border-warn/70 bg-warn/10 shadow-[0_0_20px_rgba(255,176,32,0.14)]";
+  if (active) return "border-acid/50 bg-void/40";
+  return "border-violet/20 hover:border-acid/40";
+}
+
+function CoinCard({
+  c,
+  solUsd,
+  active,
+  onOpen,
+  rank,
+  audit,
+  vol,
+}: {
+  c: Coin;
+  solUsd: number;
+  active: boolean;
+  onOpen: () => void;
+  rank: number;
+  audit: LaunchAudit | null;
+  vol: VolWindow | null;
+}) {
+  const elite = rank > 0 && rank <= 3;
   return (
     <div
       role="button"
@@ -540,29 +696,47 @@ function CoinCard({ c, solUsd, active, onOpen }: { c: Coin; solUsd: number; acti
           onOpen();
         }
       }}
-      className={`flex w-full cursor-pointer items-center gap-3 rounded-2xl border px-3 py-3 text-left ${
-        active ? "border-acid/50 bg-void/40" : "border-violet/20 hover:border-acid/40"
-      }`}
+      className={`flex w-full cursor-pointer items-center gap-3 rounded-2xl border px-3 py-3 text-left ${eliteClass(rank, active)}`}
     >
+      {rank > 0 && <RankMark n={rank} />}
       {c.image ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={c.image} alt="" className="h-12 w-12 rounded-xl object-cover" />
+        <img src={c.image} alt="" className={`rounded-xl object-cover ${elite ? "h-14 w-14" : "h-12 w-12"}`} />
       ) : (
-        <span className="h-12 w-12 rounded-xl bg-violet/20" />
+        <span className={`rounded-xl bg-violet/20 ${elite ? "h-14 w-14" : "h-12 w-12"}`} />
       )}
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <span className="truncate font-display text-lg text-ghost">{tick(c.symbol)}</span>
+          <span className={`truncate font-display text-ghost ${elite ? "text-xl" : "text-lg"}`}>{tick(c.symbol)}</span>
           <span className="truncate text-sm text-mute">{c.name}</span>
+          {audit && (
+            <span
+              className={`shrink-0 rounded-full px-2 py-0.5 font-mono text-[10px] ${
+                audit.grade === "S" || audit.grade === "A"
+                  ? "bg-acid/20 text-acid"
+                  : audit.grade === "B"
+                    ? "bg-cyan/20 text-cyan"
+                    : "bg-white/10 text-mute"
+              }`}
+            >
+              {audit.grade} {audit.score}
+            </span>
+          )}
         </div>
         <div className="mt-1 flex flex-wrap items-center gap-2">
           <span className="font-mono text-[11px] text-ghost">
             {c.marketCapUsd ? fmtUsd(c.marketCapUsd) : `${fmtSol(c.marketCapSol, 1)} SOL`}
           </span>
           <span className="font-mono text-[11px] text-mute">{fmtAge(Date.now() - c.createdAt)}</span>
+          {vol && (
+            <span className="font-mono text-[11px] text-acid">
+              {fmtSol(volumeIn(c, vol), 2)} SOL {vol}
+            </span>
+          )}
           <TokenSocials links={c.links} />
           {c.mint ? <CopyCa ca={c.mint} compact /> : null}
         </div>
+        {audit && elite && <p className="mt-1 truncate font-mono text-[10px] text-mute">{audit.why}</p>}
       </div>
       <SparkCandles candles={c.spark || []} up={(c.spark?.at(-1)?.c || 0) >= (c.spark?.[0]?.c || 0)} />
     </div>
@@ -590,6 +764,7 @@ function CoinDesk({
 }) {
   const [side, setSide] = useState<"buy" | "sell">("buy");
   const tradeErr = useConfirmErrors<"wallet" | "amount">();
+  const audit = useMemo(() => auditLaunchCoin(open, solUsd), [open, solUsd]);
   const creator = Boolean(owner && open.creator === owner);
   const snipeLeft = Math.max(0, ANTI_SNIPE_MS - (Date.now() - open.createdAt));
   const cap = open.maxBuySol ?? 0;
@@ -649,6 +824,40 @@ function CoinDesk({
           <Stat k="Liq" v={`${fmtSol(open.liqSol || open.realSol, 2)} SOL`} />
           <Stat k="Vol" v={`${fmtSol(open.volSol || 0, 2)} SOL`} />
           <Stat k="Holders" v={String(open.holders)} />
+        </div>
+        <div className="mt-3 rounded-2xl border border-violet/20 bg-void/40 p-3">
+          <div className="flex items-center justify-between gap-2">
+            <div className="font-mono text-[10px] tracking-[0.22em] text-mute">FULL AUDIT</div>
+            <span
+              className={`rounded-full px-2 py-0.5 font-mono text-[11px] ${
+                audit.grade === "S" || audit.grade === "A"
+                  ? "bg-acid/20 text-acid"
+                  : audit.grade === "B"
+                    ? "bg-cyan/20 text-cyan"
+                    : audit.vetoed
+                      ? "bg-blood/20 text-blood"
+                      : "bg-white/10 text-mute"
+              }`}
+            >
+              {audit.grade} {audit.score} · {audit.verdict.toUpperCase()}
+            </span>
+          </div>
+          <p className="mt-2 text-sm text-ghost">{audit.why}</p>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {audit.factors
+              .slice()
+              .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
+              .slice(0, 6)
+              .map((f) => (
+                <span
+                  key={f.id}
+                  className={`rounded-full px-2 py-0.5 font-mono text-[10px] ${f.delta >= 0 ? "bg-acid/10 text-acid" : "bg-blood/10 text-blood"}`}
+                >
+                  {f.delta >= 0 ? "+" : ""}
+                  {f.delta} {f.label}
+                </span>
+              ))}
+          </div>
         </div>
       </div>
 

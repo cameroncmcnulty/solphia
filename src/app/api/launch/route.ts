@@ -57,10 +57,10 @@ export async function GET(req: NextRequest) {
   if (id) {
     const coin = book.coins.find((c) => c.id === id);
     if (!coin) return fail("not_found", 404);
-    return NextResponse.json({ coin: publicCoin(coin, solUsd, viewer), solUsd });
+    return NextResponse.json({ coin: publicCoin(coin, solUsd, viewer, book), solUsd });
   }
   return NextResponse.json({
-    coins: book.coins.slice(0, 80).map((c) => publicCoin(c, solUsd, viewer)),
+    coins: book.coins.slice(0, 80).map((c) => publicCoin(c, solUsd, viewer, book)),
     solUsd,
     ownerWallet: book.ownerWallet || null,
     ownerEarningsSol: book.ownerEarningsSol,
@@ -88,11 +88,13 @@ export async function POST(req: NextRequest) {
     const coin = bookOf(s).coins.find((c) => c.id === b.id);
     if (!coin) return fail("not_found", 404);
     const q = quotePreview(coin, b.tokens ? "sell" : "buy", b.tokens || b.sol || 0);
-    return NextResponse.json({ quote: q, coin: publicCoin(coin, solUsd, b.pubkey) });
+    return NextResponse.json({ quote: q, coin: publicCoin(coin, solUsd, b.pubkey, bookOf(s)) });
   }
 
+  let bookSnap: ReturnType<typeof emptyLaunchBook> | undefined;
   const out = await withLaunch((s) => {
     const book = bookOf(s);
+    bookSnap = book;
     if (b.action === "create") {
       return createCoin(book, {
         creator: b.pubkey,
@@ -127,7 +129,7 @@ export async function POST(req: NextRequest) {
   if ("coin" in out && out.coin) {
     return NextResponse.json({
       ok: true,
-      coin: publicCoin(out.coin, solUsd, b.pubkey),
+      coin: publicCoin(out.coin, solUsd, b.pubkey, bookSnap),
       fill: "fill" in out ? out.fill : undefined,
     });
   }

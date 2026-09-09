@@ -162,16 +162,84 @@ export function mergeLaunch(local: LaunchBook, remote: LaunchBook): LaunchBook {
   };
 }
 
-export function publicCoin(c: LaunchCoin, solUsd = 0, viewer?: string) {
+function windowFlow(fills: LaunchFill[], now: number, ms: number) {
+  let sol = 0;
+  let buys = 0;
+  let sells = 0;
+  let txns = 0;
+  const uniq = new Set<string>();
+  for (const f of fills) {
+    if (now - f.at > ms) continue;
+    sol += f.sol;
+    txns += 1;
+    if (f.side === "buy") buys += 1;
+    else sells += 1;
+    if (f.owner) uniq.add(f.owner);
+  }
+  return { sol, buys, sells, txns, unique: uniq.size };
+}
+
+function holderMix(c: LaunchCoin) {
+  const live = Object.values(c.holders).filter((h) => h.tokens > 1e-9);
+  const sold = Math.max(c.curve.tokensSold, live.reduce((s, h) => s + h.tokens, 0), 1);
+  const ranked = live.slice().sort((a, b) => b.tokens - a.tokens);
+  const top10 = ranked.slice(0, 10).reduce((s, h) => s + h.tokens, 0);
+  const biggest = ranked[0]?.tokens || 0;
+  const creatorTok = c.holders[c.creator]?.tokens || 0;
+  const nonDev = ranked.find((h) => h.owner !== c.creator);
+  return {
+    holders: live.length,
+    top10HolderPct: (top10 / sold) * 100,
+    largestWalletPct: (biggest / sold) * 100,
+    creatorHoldPct: (creatorTok / sold) * 100,
+    bundleRatio: nonDev ? nonDev.tokens / sold : 0,
+  };
+}
+
+function creatorDump(c: LaunchCoin) {
+  const fills = c.fills || [];
+  let bought = 0;
+  let sold = 0;
+  for (const f of fills) {
+    if (f.owner !== c.creator) continue;
+    if (f.side === "buy") bought += f.tokens;
+    else sold += f.tokens;
+  }
+  if (bought <= 0) return 0;
+  return Math.min(1, sold / bought);
+}
+
+function deployerMeta(book: LaunchBook | undefined, creator: string, now: number) {
+  const theirs = (book?.coins || []).filter((c) => c.creator === creator);
+  if (!theirs.length) return { deployerTokenCount: 1, deployerDeathRate: 0, creatorRecentLaunches: 1 };
+  const dead = theirs.filter((c) => {
+    const live = Object.values(c.holders || {}).filter((h) => h.tokens > 1e-9);
+    return now - c.createdAt > 2 * 60 * 60_000 && (c.curve?.realSol || 0) < 0.2 && live.length <= 1;
+  });
+  return {
+    deployerTokenCount: theirs.length,
+    deployerDeathRate: dead.length / theirs.length,
+    creatorRecentLaunches: theirs.filter((c) => now - c.createdAt < 24 * 60 * 60_000).length,
+  };
+}
+
+export function publicCoin(c: LaunchCoin, solUsd = 0, viewer?: string, book?: LaunchBook, now = Date.now()) {
   const px = spotPriceSol(c.curve);
   const mc = marketCapSol(c.curve);
-  const now = Date.now();
   const fills = c.fills || [];
   const startPx = fills[0]?.priceSol || px;
   const volBuy = fills.filter((f) => f.side === "buy").reduce((s, f) => s + f.sol, 0);
   const volSell = fills.filter((f) => f.side === "sell").reduce((s, f) => s + f.sol, 0);
   const liveHolders = Object.values(c.holders).filter((h) => h.tokens > 1e-9);
   const mine = viewer ? c.holders[viewer] : undefined;
+  const mix = holderMix(c);
+  const w5 = windowFlow(fills, now, 5 * 60_000);
+  const w30 = windowFlow(fills, now, 30 * 60_000);
+  const w1 = windowFlow(fills, now, 60 * 60_000);
+  const w6 = windowFlow(fills, now, 6 * 60 * 60_000);
+  const w24 = windowFlow(fills, now, 24 * 60 * 60_000);
+  const allUniq = new Set(fills.map((f) => f.owner).filter(Boolean));
+  const dep = deployerMeta(book, c.creator, now);
   const ch = (ms: number) => {
     const base = pxAt(fills, now - ms, startPx);
     return base > 0 ? px / base - 1 : 0;
@@ -197,14 +265,39 @@ export function publicCoin(c: LaunchCoin, solUsd = 0, viewer?: string) {
     liqSol: c.curve.realSol,
     tokensSold: c.curve.tokensSold,
     holders: liveHolders.length,
-    fills: fills.slice(-48).reverse(),
+    fills: fills.slice(-48).reverse().map((f) => ({
+      at: f.at,
+      side: f.side,
+      sol: f.sol,
+      tokens: f.tokens,
+      owner: f.owner,
+    })),
     spark: sparkCandles(fills, c.createdAt, startPx, now),
     volSol: volBuy + volSell,
     volBuySol: volBuy,
     volSellSol: volSell,
+    vol5m: w5.sol,
+    vol30m: w30.sol,
+    vol1h: w1.sol,
+    vol6h: w6.sol,
+    vol24h: w24.sol,
     txns: fills.length,
+    txns5m: w5.txns,
+    txns1h: w1.txns,
     buys: fills.filter((f) => f.side === "buy").length,
     sells: fills.filter((f) => f.side === "sell").length,
+    buys1h: w1.buys,
+    sells1h: w1.sells,
+    unique1h: w1.unique,
+    uniqueAll: allUniq.size || liveHolders.length,
+    top10HolderPct: mix.top10HolderPct,
+    largestWalletPct: mix.largestWalletPct,
+    creatorHoldPct: mix.creatorHoldPct,
+    bundleRatio: mix.bundleRatio,
+    devSoldPct: creatorDump(c),
+    deployerTokenCount: dep.deployerTokenCount,
+    deployerDeathRate: dep.deployerDeathRate,
+    creatorRecentLaunches: dep.creatorRecentLaunches,
     ageMs: Math.max(0, now - c.createdAt),
     change5m: ch(5 * 60_000),
     change1h: ch(60 * 60_000),

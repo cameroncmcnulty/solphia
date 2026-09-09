@@ -26,6 +26,7 @@ export interface Socials {
   twitter?: string;
   telegram?: string;
   website?: string;
+  discord?: string;
 }
 
 export interface TokenSnapshot {
