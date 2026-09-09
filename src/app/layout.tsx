@@ -18,15 +18,15 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   metadataBase: new URL("https://solphia.io"),
   title: {
-    default: "SOLPHIA — SOL vs S&P 500, Nasdaq, and gold",
+    default: "SOLPHIA — Solana aggregator for SOL vs S&P 500, Nasdaq, and gold",
     template: "%s · SOLPHIA",
   },
   description:
-    "Solphia is a Solana project: a non-custodial trading desk, a fair launch pad, and $SOLPHIA*. Phantom only. Practice first.",
+    "Solphia is a Solana aggregator: Jupiter routes the swap, she picks the market — SOL vs official SPYx, QQQx, and GLDx. Fair launch pad and $SOLPHIA*. Phantom only.",
   applicationName: "SOLPHIA",
   openGraph: {
     title: "SOLPHIA",
-    description: "Add SOL. She trades official S&P 500, Nasdaq-100, and gold — or she sits.",
+    description: "Jupiter finds the route. She picks the market. SOL vs official S&P 500, Nasdaq-100, and gold.",
     url: "https://solphia.io",
     siteName: "SOLPHIA",
     images: [{ url: "/og.jpg", width: 1376, height: 768 }],
@@ -35,7 +35,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "SOLPHIA",
-    description: "Add SOL. She trades official S&P 500, Nasdaq-100, and gold — or she sits.",
+    description: "Jupiter finds the route. She picks the market. SOL vs official S&P 500, Nasdaq-100, and gold.",
     images: ["/og.jpg"],
   },
   icons: {
