@@ -579,11 +579,9 @@ export default function LaunchPage() {
                     AUDIT
                   </button>
                 </div>
-                {ranked && (
-                  <p className="mt-1.5 text-[11px] leading-relaxed text-mute">
-                    Risk engine plus socials, art, deployer history, wash, and the curve. Top {TAPE_BOARD} fill the board.
-                  </p>
-                )}
+                <p className="mt-1.5 text-[11px] leading-relaxed text-mute">
+                  Solphia-born tokens are ranked by Solphia’s risk engine. Top {TAPE_BOARD} fill the board.
+                </p>
               </div>
             </div>
             <div className={`mt-4 space-y-2 pr-1 ${ranked ? "overflow-hidden" : "max-h-[28rem] overflow-y-auto"}`}>
