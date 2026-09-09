@@ -22,7 +22,7 @@ export const metadata: Metadata = {
     template: "%s · SOLPHIA",
   },
   description:
-    "Non-custodial bot that trades SOL against official SPYx, QQQx, and GLDx. Practice first. Kill switch on. Keys stay in Phantom.",
+    "Solphia is a Solana project: a non-custodial trading desk, a fair launch pad, and $SOLPHIA*. Phantom only. Practice first.",
   applicationName: "SOLPHIA",
   openGraph: {
     title: "SOLPHIA",

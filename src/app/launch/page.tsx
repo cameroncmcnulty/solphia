@@ -10,9 +10,11 @@ import { useOwner } from "@/lib/hooks";
 import {
   ANTI_SNIPE_MS,
   ANTI_SNIPE_SOL,
-  DEV_BUY_MAX_SOL,
   MIN_TRADE_SOL,
   TOKEN_IMAGE_PX,
+  buySupplyPct,
+  emptyCurve,
+  launchDevBuyCap,
   quoteBuy,
   quoteSell,
 } from "@/lib/launch/curve";
@@ -22,6 +24,7 @@ import { loadOwner } from "@/lib/wallet/trading";
 const TOKEN_PX = TOKEN_IMAGE_PX;
 const STORE_PX = 512;
 const PRESETS = [0.1, 0.25, 0.5, 1];
+const DEV_CAP = launchDevBuyCap();
 
 type Spark = { t: number; o: number; h: number; l: number; c: number };
 type Coin = {
@@ -43,22 +46,12 @@ type Coin = {
   liqSol?: number;
   holders: number;
   myTokens?: number;
-  mySpentSol?: number;
   maxBuySol?: number;
   devRewardsSol: number;
   volSol?: number;
-  volBuySol?: number;
-  volSellSol?: number;
   txns?: number;
-  buys?: number;
-  sells?: number;
-  ageMs?: number;
-  change5m?: number;
-  change1h?: number;
-  change6h?: number;
-  change24h?: number;
   spark?: Spark[];
-  fills: { at: number; side: "buy" | "sell"; sol: number; tokens: number; priceSol?: number }[];
+  fills: { at: number; side: "buy" | "sell"; sol: number; tokens: number }[];
   curve?: {
     virtualSol: number;
     virtualTokens: number;
@@ -78,23 +71,15 @@ function fmtAge(ms: number) {
   return `${Math.floor(h / 24)}d`;
 }
 
-function fmtPct(n?: number) {
-  if (n == null || !Number.isFinite(n)) return "0.00%";
-  const s = `${n >= 0 ? "+" : ""}${(n * 100).toFixed(2)}%`;
-  return s;
-}
-
 function fmtUsd(n: number) {
   if (!(n > 0)) return "—";
   if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(2)}M`;
   if (n >= 1_000) return `$${(n / 1_000).toFixed(1)}K`;
-  if (n >= 1) return `$${n.toFixed(2)}`;
-  return `$${n.toFixed(4)}`;
+  return `$${n.toFixed(2)}`;
 }
 
 function fmtSol(n: number, d = 3) {
   if (!(n > 0)) return "0";
-  if (n >= 1000) return n.toFixed(1);
   if (n >= 1) return n.toFixed(Math.min(d, 2));
   return n.toFixed(d);
 }
@@ -111,11 +96,6 @@ function tick(symbol?: string) {
   return s ? `$${s}*` : "";
 }
 
-function pctClass(n?: number) {
-  if (n == null || Math.abs(n) < 1e-8) return "text-mute";
-  return n >= 0 ? "text-acid" : "text-blood";
-}
-
 async function squareTokenImage(file: File): Promise<string> {
   if (file.size > 4_000_000) throw new Error("Image must be under 4 MB.");
   const url = URL.createObjectURL(file);
@@ -127,23 +107,17 @@ async function squareTokenImage(file: File): Promise<string> {
       el.src = url;
     });
     const side = Math.min(img.naturalWidth, img.naturalHeight);
-    if (side < 512) {
-      throw new Error("Use a square-ish image at least 512×512. We crop 1000×1000 for X, Telegram, Discord, and Dexscreener.");
-    }
+    if (side < 512) throw new Error("Use a square image at least 512×512.");
     const full = document.createElement("canvas");
     full.width = TOKEN_PX;
     full.height = TOKEN_PX;
     const fctx = full.getContext("2d");
     if (!fctx) throw new Error("Could not crop image.");
-    const sx = (img.naturalWidth - side) / 2;
-    const sy = (img.naturalHeight - side) / 2;
-    fctx.drawImage(img, sx, sy, side, side, 0, 0, TOKEN_PX, TOKEN_PX);
+    fctx.drawImage(img, (img.naturalWidth - side) / 2, (img.naturalHeight - side) / 2, side, side, 0, 0, TOKEN_PX, TOKEN_PX);
     const store = document.createElement("canvas");
     store.width = STORE_PX;
     store.height = STORE_PX;
-    const sctx = store.getContext("2d");
-    if (!sctx) throw new Error("Could not compress image.");
-    sctx.drawImage(full, 0, 0, STORE_PX, STORE_PX);
+    store.getContext("2d")?.drawImage(full, 0, 0, STORE_PX, STORE_PX);
     return store.toDataURL("image/jpeg", 0.78);
   } finally {
     URL.revokeObjectURL(url);
@@ -153,8 +127,7 @@ async function squareTokenImage(file: File): Promise<string> {
 function mergeCoins(remote: Coin[], prev: Coin[]): Coin[] {
   if (!remote.length) return prev;
   const seen = new Set(remote.map((c) => c.id));
-  const extras = prev.filter((c) => !seen.has(c.id));
-  return [...remote, ...extras];
+  return [...remote, ...prev.filter((c) => !seen.has(c.id))];
 }
 
 export default function LaunchPage() {
@@ -178,6 +151,7 @@ export default function LaunchPage() {
   const [solUsd, setSolUsd] = useState(0);
   const [tab, setTab] = useState<"tape" | "mine">("tape");
   const fileRef = useRef<HTMLInputElement>(null);
+  const devPct = buySupplyPct(emptyCurve(), devBuy);
 
   async function refresh() {
     const q = owner ? `pubkey=${encodeURIComponent(owner)}` : "";
@@ -186,11 +160,7 @@ export default function LaunchPage() {
     if (j.solUsd) setSolUsd(j.solUsd);
     if (Array.isArray(j.coins)) {
       setCoins((prev) => mergeCoins(j.coins, prev));
-      setOpen((cur) => {
-        if (!cur) return cur;
-        const fresh = j.coins.find((c: Coin) => c.id === cur.id);
-        return fresh || cur;
-      });
+      setOpen((cur) => (cur ? j.coins.find((c: Coin) => c.id === cur.id) || cur : cur));
     }
   }
 
@@ -202,7 +172,7 @@ export default function LaunchPage() {
 
   async function act(body: Record<string, unknown>) {
     if (!owner) {
-      setErr("Connect Phantom to launch or trade. That wallet is your login.");
+      setErr("Connect Phantom to launch or swap.");
       return;
     }
     setBusy(true);
@@ -218,10 +188,7 @@ export default function LaunchPage() {
       if (!r.ok) throw new Error(j.message || launchError(j.error) || "failed");
       if (j.coin) {
         setOpen(j.coin);
-        setCoins((prev) => {
-          const rest = prev.filter((c) => c.id !== j.coin.id);
-          return [j.coin, ...rest];
-        });
+        setCoins((prev) => [j.coin, ...prev.filter((c) => c.id !== j.coin.id)]);
       }
       await refresh();
       if (body.action === "create") {
@@ -235,8 +202,8 @@ export default function LaunchPage() {
         setDiscord("");
         setDevBuy(0);
         setTab("tape");
-        setMsg("Live on the curve. Mint and freeze authority are locked.");
-      } else if (body.action === "withdraw_dev") setMsg("Dev rewards sent to your book.");
+        setMsg("Live. Mint and freeze are locked.");
+      } else if (body.action === "withdraw_dev") setMsg("Dev rewards booked.");
       else setMsg("Filled.");
     } catch (e) {
       setErr(e instanceof Error ? e.message : "failed");
@@ -251,52 +218,34 @@ export default function LaunchPage() {
   return (
     <main className="relative min-h-[calc(100vh-4rem)] overflow-x-hidden pb-24">
       <SolphiaConstellation />
-
       <div className="relative z-10 mx-auto max-w-6xl px-4 pt-6 md:px-8 md:pt-10">
-        <p className="font-mono text-[11px] tracking-[0.28em] text-acid">FAIR LAUNCH · 1B SUPPLY · 1% SWAP · 50% TO DEV</p>
-        <h1 className="mt-2 max-w-3xl font-display text-4xl leading-tight text-ghost sm:text-6xl">
-          Launch a coin. She keeps the curve honest.
-        </h1>
-        <p className="mt-4 max-w-2xl text-base text-mute sm:text-lg">
-          Total supply is 1,000,000,000 tokens — fixed at mint, never inflated. 800 million sit in a constant-product
-          bonding curve (a virtual AMM): virtual reserves start at 30 SOL and ~1.073 billion tokens, and their product
-          k stays fixed, so every buy lifts the price and every sell eases it. When 85 SOL of real buys have filled the
-          curve, the remaining 200 million plus curve SOL lock into LP and the coin graduates. Mint authority and freeze
-          authority are revoked at launch. 1% on each swap; 50% of that fee is paid to the dev.
-        </p>
+        <p className="font-mono text-[11px] tracking-[0.28em] text-acid">LAUNCH · 1B · 1% SWAP · 50% TO DEV</p>
+        <h1 className="mt-2 font-display text-4xl text-ghost sm:text-5xl">Fair launch. Swap like Phantom.</h1>
 
-        <div className="mt-8 grid gap-6 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-          <section className="panel panel-glass rounded-3xl border-acid/20 p-5">
-            <div className="font-mono text-[10px] tracking-[0.22em] text-violet">CREATE · FAIR</div>
-            <h2 className="mt-1 font-display text-2xl text-ghost">Name it. She’s live.</h2>
+        <div className="mt-8 grid gap-5 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
+          <section className="panel-bubble rounded-3xl p-5">
+            <h2 className="font-display text-2xl text-ghost">Create</h2>
             {!owner ? (
               <div className="mt-6 space-y-3">
-                <p className="text-sm text-mute">
-                  Phantom is the login. Connect to launch, track your coins, and withdraw dev rewards.
-                </p>
+                <p className="text-sm text-mute">Phantom is the login.</p>
                 <WalletConnect />
               </div>
             ) : (
               <>
-                <div className="mt-4 flex items-center gap-4">
+                <div className="mt-4 flex items-center gap-3">
                   <button
                     type="button"
                     onClick={() => fileRef.current?.click()}
-                    className="relative h-24 w-24 shrink-0 overflow-hidden rounded-2xl border border-violet/40 bg-void"
+                    className="relative h-20 w-20 shrink-0 overflow-hidden rounded-2xl border border-violet/40 bg-void"
                   >
                     {image ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={image} alt="" className="h-full w-full object-cover" />
                     ) : (
-                      <span className="flex h-full items-center justify-center px-2 text-center font-mono text-[10px] text-mute">
-                        1000×1000
-                      </span>
+                      <span className="flex h-full items-center justify-center font-mono text-[10px] text-mute">art</span>
                     )}
                   </button>
-                  <div className="min-w-0 text-sm text-mute">
-                    Square token art. We crop to <span className="text-ghost">1000×1000</span> so it holds on the site,
-                    X, Telegram, Discord, and Dexscreener, then compress for the tape. PNG/JPG, at least 512px.
-                  </div>
+                  <p className="text-sm text-mute">Square art, 512px min. We crop 1000×1000 for X, Telegram, Discord.</p>
                   <input
                     ref={fileRef}
                     type="file"
@@ -318,7 +267,7 @@ export default function LaunchPage() {
                 <input
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="name"
+                  placeholder="Name"
                   className="mt-4 w-full rounded-2xl border border-violet/30 bg-void px-4 py-3 text-ghost"
                 />
                 <label className="mt-3 flex w-full items-center rounded-2xl border border-violet/30 bg-void px-4 py-3 font-mono text-ghost">
@@ -330,36 +279,39 @@ export default function LaunchPage() {
                     maxLength={10}
                     className="w-full bg-transparent outline-none"
                   />
+                  <span className="text-mute">*</span>
                 </label>
-                <textarea
+                <input
                   value={blurb}
                   onChange={(e) => setBlurb(e.target.value)}
-                  placeholder="one line (optional)"
-                  className="mt-3 h-20 w-full rounded-2xl border border-violet/30 bg-void px-4 py-3 text-ghost"
+                  placeholder="One line (optional)"
+                  className="mt-3 w-full rounded-2xl border border-violet/30 bg-void px-4 py-3 text-ghost"
                 />
                 <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                  <SocialInput kind="website" value={website} onChange={setWebsite} placeholder="website (optional)" />
-                  <SocialInput kind="x" value={x} onChange={setX} placeholder="X / twitter (optional)" />
-                  <SocialInput kind="telegram" value={telegram} onChange={setTelegram} placeholder="telegram (optional)" />
-                  <SocialInput kind="discord" value={discord} onChange={setDiscord} placeholder="discord (optional)" />
+                  <SocialInput kind="website" value={website} onChange={setWebsite} placeholder="website.com" />
+                  <SocialInput kind="x" value={x} onChange={setX} placeholder="@handle or x.com/…" />
+                  <SocialInput kind="telegram" value={telegram} onChange={setTelegram} placeholder="t.me/…" />
+                  <SocialInput kind="discord" value={discord} onChange={setDiscord} placeholder="discord.gg/…" />
                 </div>
                 <label className="mt-4 block">
-                  <div className="flex justify-between font-mono text-[11px] text-mute">
-                    <span>Dev buy at launch</span>
-                    <span className="text-acid">{devBuy.toFixed(2)} SOL</span>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-mute">Dev buy</span>
+                    <span className="font-mono text-acid">
+                      {devBuy.toFixed(2)} SOL · {(devPct * 100).toFixed(2)}% of supply
+                    </span>
                   </div>
                   <input
                     type="range"
                     min={0}
-                    max={DEV_BUY_MAX_SOL}
+                    max={DEV_CAP}
                     step={0.05}
-                    value={devBuy}
+                    value={Math.min(devBuy, DEV_CAP)}
                     onChange={(e) => setDevBuy(Number(e.target.value))}
                     className="mt-2 w-full accent-[#14f195]"
                   />
                   <p className="mt-1 text-xs text-mute">
-                    Optional first buy in the same launch, up to {DEV_BUY_MAX_SOL} SOL. Still capped at 2% of supply
-                    (~0.58 SOL at open).
+                    Optional first buy. Capped at 5% of supply ({fmtSol(DEV_CAP, 2)} SOL at open) so a 2 SOL slide cannot
+                    overbuy.
                   </p>
                 </label>
                 <div className="mt-4 flex flex-wrap items-center gap-3">
@@ -383,51 +335,29 @@ export default function LaunchPage() {
                     }
                     className="btn-acid min-h-[48px] rounded-full px-6 disabled:opacity-40"
                   >
-                    Launch free
+                    Launch
                   </button>
                 </div>
-                <p className="mt-3 font-mono text-[11px] text-mute">
-                  Mint authority locked. Freeze authority locked. 800M on the curve, 200M into LP at 85 SOL.
-                </p>
               </>
             )}
           </section>
 
-          <section className="panel panel-glass rounded-3xl p-5">
-            <div className="flex items-center justify-between gap-3">
-              <div className="font-mono text-[10px] tracking-[0.22em] text-violet">
-                {tab === "mine" ? "YOUR COINS" : "TAPE"}
-              </div>
+          <section className="panel-bubble rounded-3xl p-5">
+            <div className="flex items-center justify-between">
+              <h2 className="font-display text-2xl text-ghost">{tab === "mine" ? "Yours" : "Tape"}</h2>
               {owner && (
                 <div className="flex gap-1 rounded-full border border-violet/30 p-0.5 font-mono text-[10px]">
-                  <button
-                    type="button"
-                    onClick={() => setTab("tape")}
-                    className={`rounded-full px-3 py-1 ${tab === "tape" ? "bg-acid/20 text-acid" : "text-mute"}`}
-                  >
+                  <button type="button" onClick={() => setTab("tape")} className={`rounded-full px-3 py-1 ${tab === "tape" ? "bg-acid/20 text-acid" : "text-mute"}`}>
                     All
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => setTab("mine")}
-                    className={`rounded-full px-3 py-1 ${tab === "mine" ? "bg-acid/20 text-acid" : "text-mute"}`}
-                  >
+                  <button type="button" onClick={() => setTab("mine")} className={`rounded-full px-3 py-1 ${tab === "mine" ? "bg-acid/20 text-acid" : "text-mute"}`}>
                     Mine
                   </button>
                 </div>
               )}
             </div>
-            <h2 className="mt-1 font-display text-2xl text-ghost">{tab === "mine" ? "Track & rewards" : "On the curve"}</h2>
-            {owner && (
-              <p className="mt-2 text-sm text-mute">
-                Connected as {owner.slice(0, 4)}…{owner.slice(-4)}. Phantom is the login. Manage launches and pull 50%
-                swap fees as dev rewards.
-              </p>
-            )}
             <div className="mt-4 max-h-[36rem] space-y-2 overflow-y-auto pr-1">
-              {rows.length === 0 && (
-                <p className="text-sm text-mute">{tab === "mine" ? "You have not launched yet." : "No coins yet. Be first."}</p>
-              )}
+              {rows.length === 0 && <p className="text-sm text-mute">{tab === "mine" ? "Nothing launched yet." : "No coins yet."}</p>}
               {rows.map((c) => (
                 <CoinCard key={c.id} c={c} solUsd={solUsd} active={open?.id === c.id} onOpen={() => setOpen(c)} />
               ))}
@@ -460,8 +390,6 @@ export default function LaunchPage() {
 }
 
 function CoinCard({ c, solUsd, active, onOpen }: { c: Coin; solUsd: number; active: boolean; onOpen: () => void }) {
-  const age = fmtAge(Date.now() - c.createdAt);
-  const up = (c.change5m || 0) >= 0;
   return (
     <div
       role="button"
@@ -473,50 +401,31 @@ function CoinCard({ c, solUsd, active, onOpen }: { c: Coin; solUsd: number; acti
           onOpen();
         }
       }}
-      className={`w-full cursor-pointer rounded-2xl border px-3 py-3 text-left transition ${
-        active ? "border-acid/50 bg-void/50" : "border-violet/20 hover:border-acid/40"
+      className={`flex w-full cursor-pointer items-center gap-3 rounded-2xl border px-3 py-3 text-left ${
+        active ? "border-acid/50 bg-void/40" : "border-violet/20 hover:border-acid/40"
       }`}
     >
-      <div className="flex items-start gap-3">
-        {c.image ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={c.image} alt="" className="h-11 w-11 rounded-xl object-cover" />
-        ) : (
-          <span className="h-11 w-11 rounded-xl bg-violet/20" />
-        )}
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <span className="truncate font-display text-lg text-ghost">{tick(c.symbol)}</span>
-            <span className="truncate font-mono text-[11px] text-mute">{c.name}</span>
-            {c.mint ? <CopyCa ca={c.mint} compact /> : null}
-            <TokenSocials links={c.links} />
-            <span className="ml-auto font-mono text-[10px] text-mute">{age}</span>
-          </div>
-          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[10px]">
-            <span className="text-ghost">
-              {c.marketCapUsd ? fmtUsd(c.marketCapUsd) : `${fmtSol(c.marketCapSol, 1)} SOL`} MC
-            </span>
-            <span className={pctClass(c.change5m)}>5m {fmtPct(c.change5m)}</span>
-            <span className={pctClass(c.change1h)}>1h {fmtPct(c.change1h)}</span>
-            <span className="text-mute">Vol {fmtSol(c.volSol || 0, 2)} SOL</span>
-          </div>
-        </div>
-        <SparkCandles candles={c.spark || []} up={up} />
-      </div>
-      <div className="mt-2 grid grid-cols-5 gap-1 font-mono text-[10px] text-mute">
-        <span>Liq {fmtSol(c.liqSol || c.realSol, 2)}</span>
-        <span>{c.holders} mkrs</span>
-        <span>
-          {c.txns || 0} tx · {c.buys || 0}/{c.sells || 0}
-        </span>
-        <span className={pctClass(c.change6h)}>6h {fmtPct(c.change6h)}</span>
-        <span>{c.status === "graduated" ? "grad" : `${Math.round(c.progress * 100)}% LP`}</span>
-      </div>
-      {solUsd > 0 && (
-        <div className="mt-1 font-mono text-[10px] text-mute">
-          {c.priceSol.toExponential(2)} SOL · ${((c.priceSol || 0) * solUsd).toExponential(2)}
-        </div>
+      {c.image ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={c.image} alt="" className="h-12 w-12 rounded-xl object-cover" />
+      ) : (
+        <span className="h-12 w-12 rounded-xl bg-violet/20" />
       )}
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className="truncate font-display text-lg text-ghost">{tick(c.symbol)}</span>
+          <span className="truncate text-sm text-mute">{c.name}</span>
+        </div>
+        <div className="mt-1 flex flex-wrap items-center gap-2">
+          <span className="font-mono text-[11px] text-ghost">
+            {c.marketCapUsd ? fmtUsd(c.marketCapUsd) : `${fmtSol(c.marketCapSol, 1)} SOL`}
+          </span>
+          <span className="font-mono text-[11px] text-mute">{fmtAge(Date.now() - c.createdAt)}</span>
+          <TokenSocials links={c.links} />
+          {c.mint ? <CopyCa ca={c.mint} compact /> : null}
+        </div>
+      </div>
+      <SparkCandles candles={c.spark || []} up={(c.spark?.at(-1)?.c || 0) >= (c.spark?.[0]?.c || 0)} />
     </div>
   );
 }
@@ -540,186 +449,166 @@ function CoinDesk({
   onClose: () => void;
   onAct: (body: Record<string, unknown>) => void;
 }) {
-  const age = fmtAge(Date.now() - open.createdAt);
-  const snipeLeft = Math.max(0, ANTI_SNIPE_MS - (Date.now() - open.createdAt));
+  const [side, setSide] = useState<"buy" | "sell">("buy");
   const creator = Boolean(owner && open.creator === owner);
+  const snipeLeft = Math.max(0, ANTI_SNIPE_MS - (Date.now() - open.createdAt));
   const cap = open.maxBuySol ?? 0;
   const snipeCap = !creator && snipeLeft > 0 ? ANTI_SNIPE_SOL : Infinity;
   const maxOk = Math.min(cap || 40, snipeCap, 40);
   const quote = useMemo(() => {
     if (!open.curve || open.status !== "curve") return null;
-    return quoteBuy(open.curve, sol);
-  }, [open.curve, open.status, sol]);
-  const sellQ = useMemo(() => {
-    if (!open.curve || !(open.myTokens || 0)) return null;
+    if (side === "buy") return quoteBuy(open.curve, sol);
+    if (!(open.myTokens || 0)) return null;
     return quoteSell(open.curve, open.myTokens || 0);
-  }, [open.curve, open.myTokens]);
+  }, [open.curve, open.status, open.myTokens, sol, side]);
   const blocked =
     open.status !== "curve"
-      ? "This coin already graduated."
-      : sol < MIN_TRADE_SOL
-        ? `Minimum trade is ${MIN_TRADE_SOL} SOL.`
-        : sol > maxOk + 1e-9
-          ? snipeLeft > 0 && !creator && sol > ANTI_SNIPE_SOL
-            ? `First 60 seconds: max ${ANTI_SNIPE_SOL} SOL per buy (${Math.ceil(snipeLeft / 1000)}s left).`
-            : `2% wallet cap. You can buy up to ${fmtSol(maxOk, 3)} SOL at this price.`
-          : "";
+      ? "Graduated."
+      : side === "sell"
+        ? !(open.myTokens || 0)
+          ? "You have no tokens."
+          : ""
+        : sol < MIN_TRADE_SOL
+          ? `Min ${MIN_TRADE_SOL} SOL.`
+          : sol > maxOk + 1e-9
+            ? snipeLeft > 0 && !creator && sol > ANTI_SNIPE_SOL
+              ? `First 60s: max ${ANTI_SNIPE_SOL} SOL.`
+              : `5% wallet cap. Max ${fmtSol(maxOk, 3)} SOL.`
+            : "";
 
   return (
-    <section className="panel panel-glass mt-6 rounded-3xl p-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex items-center gap-3">
-          {open.image ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={open.image} alt="" className="h-14 w-14 rounded-2xl object-cover" />
-          ) : null}
-          <div>
-            <div className="font-mono text-[10px] tracking-[0.22em] text-acid">{tick(open.symbol)}</div>
-            <h2 className="font-display text-3xl text-ghost">{open.name}</h2>
-            <p className="mt-1 text-sm text-mute">{open.blurb || "Fair launch. Mint and freeze locked."}</p>
+    <section className="panel-bubble mt-6 grid gap-5 rounded-3xl p-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
+      <div>
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
+            {open.image ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={open.image} alt="" className="h-14 w-14 rounded-2xl object-cover" />
+            ) : null}
+            <div className="min-w-0">
+              <div className="font-display text-3xl text-ghost">{tick(open.symbol)}</div>
+              <div className="text-sm text-mute">{open.name}</div>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <TokenSocials links={open.links} size="md" />
+                <CopyCa ca={open.mint} compact />
+              </div>
+            </div>
           </div>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {open.mint ? <CopyCa ca={open.mint} /> : null}
           <button type="button" onClick={onClose} className="btn-ghost rounded-full px-4 py-2 text-sm">
             Close
           </button>
         </div>
-      </div>
-      <div className="mt-3 flex flex-wrap items-center gap-3 font-mono text-[11px] text-mute">
-        <TokenSocials links={open.links} size="md" />
-        <span>age {age}</span>
-        <span>mint locked · freeze locked</span>
-      </div>
-
-      <div className="mt-4 overflow-hidden rounded-2xl border border-violet/20 bg-void/40 p-3">
-        <SparkCandles
-          candles={open.spark || []}
-          up={(open.change5m || 0) >= 0}
-          width={640}
-          height={160}
-          className="h-40 w-full"
-        />
+        <div className="mt-4 overflow-hidden rounded-2xl border border-violet/15 bg-void/30 p-3">
+          <SparkCandles candles={open.spark || []} up={(open.spark?.at(-1)?.c || 0) >= (open.spark?.[0]?.c || 0)} width={640} height={140} className="h-36 w-full" />
+        </div>
+        <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-void">
+          <div className="h-full bg-acid" style={{ width: `${Math.round(open.progress * 100)}%` }} />
+        </div>
+        <div className="mt-3 grid grid-cols-4 gap-2">
+          <Stat k="MC" v={open.marketCapUsd ? fmtUsd(open.marketCapUsd) : `${fmtSol(open.marketCapSol, 1)} SOL`} />
+          <Stat k="Liq" v={`${fmtSol(open.liqSol || open.realSol, 2)} SOL`} />
+          <Stat k="Vol" v={`${fmtSol(open.volSol || 0, 2)} SOL`} />
+          <Stat k="Holders" v={String(open.holders)} />
+        </div>
       </div>
 
-      <div className="mt-4 h-2 overflow-hidden rounded-full bg-void">
-        <div className="h-full bg-acid" style={{ width: `${Math.round(open.progress * 100)}%` }} />
-      </div>
-
-      <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
-        <Mini k="MC" v={open.marketCapUsd ? fmtUsd(open.marketCapUsd) : `${fmtSol(open.marketCapSol, 1)} SOL`} />
-        <Mini k="Price" v={`${open.priceSol.toExponential(2)} SOL`} />
-        <Mini k="Liq" v={`${fmtSol(open.liqSol || open.realSol, 2)} SOL`} />
-        <Mini k="Vol" v={`${fmtSol(open.volSol || 0, 2)} SOL`} />
-        <Mini k="5m" v={fmtPct(open.change5m)} c={pctClass(open.change5m)} />
-        <Mini k="1h" v={fmtPct(open.change1h)} c={pctClass(open.change1h)} />
-        <Mini k="6h" v={fmtPct(open.change6h)} c={pctClass(open.change6h)} />
-        <Mini k="Txns" v={`${open.txns || 0} · ${open.buys || 0}/${open.sells || 0}`} />
-      </div>
-      <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Mini k="Holders" v={String(open.holders)} />
-        <Mini k="Curve SOL" v={fmtSol(open.realSol, 2)} />
-        <Mini k="To LP" v={`${Math.round(open.progress * 100)}%`} />
-        <Mini k="Dev rewards" v={`${fmtSol(open.devRewardsSol, 4)} SOL`} />
-      </div>
-
-      <div className="mt-5 flex flex-wrap items-center gap-2">
+      <div className="rounded-3xl border border-violet/20 bg-void/50 p-4">
+        <div className="grid grid-cols-2 rounded-full border border-violet/30 p-1">
+          <button type="button" onClick={() => setSide("buy")} className={`rounded-full py-2 text-sm ${side === "buy" ? "bg-acid/20 text-acid" : "text-mute"}`}>
+            Buy
+          </button>
+          <button type="button" onClick={() => setSide("sell")} className={`rounded-full py-2 text-sm ${side === "sell" ? "bg-acid/20 text-acid" : "text-mute"}`}>
+            Sell
+          </button>
+        </div>
         {!owner ? (
-          <WalletConnect />
+          <div className="mt-6">
+            <WalletConnect />
+          </div>
         ) : (
           <>
-            {PRESETS.map((p) => (
-              <button
-                key={p}
-                type="button"
-                onClick={() => setSol(p)}
-                className={`rounded-full border px-3 py-1.5 font-mono text-[11px] ${
-                  Math.abs(sol - p) < 1e-9 ? "border-acid text-acid" : "border-violet/30 text-mute"
-                }`}
-              >
-                {p} SOL
-              </button>
-            ))}
+            <p className="mt-5 text-xs tracking-wide text-mute">{side === "buy" ? "You pay" : "You sell"}</p>
+            <div className="mt-2 flex items-center justify-between rounded-2xl border border-violet/30 bg-void px-4 py-4">
+              {side === "buy" ? (
+                <input
+                  type="number"
+                  min={0.01}
+                  step={0.01}
+                  value={sol}
+                  onChange={(e) => setSol(Number(e.target.value))}
+                  className="w-full bg-transparent font-display text-3xl text-ghost outline-none"
+                />
+              ) : (
+                <div className="font-display text-3xl text-ghost">{fmtTok(open.myTokens || 0)}</div>
+              )}
+              <span className="shrink-0 font-mono text-sm text-mute">{side === "buy" ? "SOL" : tick(open.symbol)}</span>
+            </div>
+            {side === "buy" && (
+              <div className="mt-2 flex flex-wrap gap-2">
+                {PRESETS.map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => setSol(p)}
+                    className={`rounded-full border px-3 py-1 font-mono text-[11px] ${Math.abs(sol - p) < 1e-9 ? "border-acid text-acid" : "border-violet/30 text-mute"}`}
+                  >
+                    {p}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setSol(Math.max(MIN_TRADE_SOL, Math.floor(maxOk * 1000) / 1000))}
+                  className="rounded-full border border-violet/30 px-3 py-1 font-mono text-[11px] text-mute"
+                >
+                  MAX
+                </button>
+              </div>
+            )}
+            <p className="mt-5 text-xs tracking-wide text-mute">You receive</p>
+            <div className="mt-2 flex items-center justify-between rounded-2xl border border-violet/30 bg-void px-4 py-4">
+              <div className="font-display text-3xl text-ghost">
+                {quote && quote.ok ? (side === "buy" ? fmtTok(quote.tokensOut || 0) : fmtSol(quote.solOut || 0, 4)) : "—"}
+              </div>
+              <span className="font-mono text-sm text-mute">{side === "buy" ? tick(open.symbol) : "SOL"}</span>
+            </div>
+            {blocked && <p className="mt-3 text-sm text-blood">{blocked}</p>}
             <button
               type="button"
-              onClick={() => setSol(Math.max(MIN_TRADE_SOL, Math.floor(maxOk * 1000) / 1000))}
-              className="rounded-full border border-violet/30 px-3 py-1.5 font-mono text-[11px] text-mute"
+              disabled={busy || Boolean(blocked)}
+              onClick={() =>
+                side === "buy"
+                  ? onAct({ action: "buy", id: open.id, sol })
+                  : onAct({ action: "sell", id: open.id, tokens: open.myTokens || 0 })
+              }
+              className="btn-acid mt-5 min-h-[52px] w-full rounded-full disabled:opacity-40"
             >
-              MAX {fmtSol(maxOk, 3)}
+              {side === "buy" ? `Buy ${tick(open.symbol)}` : `Sell ${tick(open.symbol)}`}
             </button>
-            <label className="flex items-center gap-2 rounded-full border border-violet/30 bg-void px-3 py-1.5">
-              <input
-                type="number"
-                min={0.01}
-                step={0.01}
-                value={sol}
-                onChange={(e) => setSol(Number(e.target.value))}
-                className="w-24 bg-transparent font-mono text-ghost outline-none"
-              />
-              <span className="font-mono text-[11px] text-mute">SOL</span>
-            </label>
-            <button
-              type="button"
-              disabled={busy || open.status !== "curve" || Boolean(blocked)}
-              onClick={() => onAct({ action: "buy", id: open.id, sol })}
-              className="btn-acid min-h-[44px] rounded-full px-5 disabled:opacity-40"
-            >
-              Buy {fmtSol(sol, 3)} SOL
-            </button>
-            <button
-              type="button"
-              disabled={busy || open.status !== "curve" || !(open.myTokens || 0)}
-              onClick={() => onAct({ action: "sell", id: open.id, tokens: open.myTokens || 0 })}
-              className="btn-ghost min-h-[44px] rounded-full px-5 disabled:opacity-40"
-            >
-              Sell all
-            </button>
+            <p className="mt-3 text-center font-mono text-[11px] text-mute">
+              1% fee · 50% to the dev{solUsd ? ` · SOL $${solUsd.toFixed(0)}` : ""}
+            </p>
             {creator && (
               <button
                 type="button"
                 disabled={busy || !(open.devRewardsSol > 0)}
                 onClick={() => onAct({ action: "withdraw_dev", id: open.id })}
-                className="min-h-[44px] rounded-full border border-acid/40 px-5 text-sm text-acid disabled:opacity-40"
+                className="mt-3 w-full rounded-full border border-acid/40 py-2 text-sm text-acid disabled:opacity-40"
               >
-                Withdraw dev rewards
+                Withdraw {fmtSol(open.devRewardsSol, 4)} SOL rewards
               </button>
             )}
           </>
         )}
       </div>
-      {blocked && owner && <p className="mt-3 font-mono text-sm text-blood">{blocked}</p>}
-      {quote && quote.ok && !blocked && (
-        <p className="mt-3 font-mono text-[11px] text-mute">
-          You get ~{fmtTok(quote.tokensOut || 0)} {tick(open.symbol)} · impact {fmtPct(quote.impactPct)} · fee{" "}
-          {fmtSol(quote.feeSol, 4)} SOL · 50% of that fee is paid to the dev
-          {solUsd ? ` · ~${fmtUsd((sol || 0) * solUsd)}` : ""}
-        </p>
-      )}
-      {sellQ && sellQ.ok && (open.myTokens || 0) > 0 && (
-        <p className="mt-1 font-mono text-[11px] text-mute">
-          Your bag {fmtTok(open.myTokens || 0)} {tick(open.symbol)} → ~{fmtSol(sellQ.solOut || 0, 4)} SOL if you sell all.
-        </p>
-      )}
-      <p className="mt-2 font-mono text-[11px] text-mute">
-        Wallet cap 2% of 1B (~{fmtSol(cap, 3)} SOL at this price). First minute max 1 SOL for everyone except the
-        creator. 1% swap.
-      </p>
-      <div className="mt-4 max-h-40 space-y-1 overflow-auto font-mono text-[11px] text-mute">
-        {open.fills.map((f, i) => (
-          <div key={`${f.at}-${i}`} className={f.side === "buy" ? "text-acid" : "text-ghost"}>
-            {f.side.toUpperCase()} {fmtSol(f.sol, 3)} SOL · {fmtTok(f.tokens)} {tick(open.symbol)}
-          </div>
-        ))}
-      </div>
     </section>
   );
 }
 
-function Mini({ k, v, c }: { k: string; v: string; c?: string }) {
+function Stat({ k, v }: { k: string; v: string }) {
   return (
-    <div className="rounded-2xl border border-violet/20 px-3 py-2">
-      <div className="font-mono text-[10px] tracking-[0.16em] text-mute">{k}</div>
-      <div className={`font-display text-lg ${c || "text-ghost"}`}>{v}</div>
+    <div className="rounded-2xl border border-violet/15 px-3 py-2">
+      <div className="font-mono text-[10px] text-mute">{k}</div>
+      <div className="font-display text-lg text-ghost">{v}</div>
     </div>
   );
 }

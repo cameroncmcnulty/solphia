@@ -9,7 +9,7 @@ export const LAUNCH_ERRORS: Record<string, string> = {
   bad_image: "Use a PNG or JPEG. We store a 512px square so it stays on the tape.",
   dev_buy_cap: `Dev buy at launch is capped at ${DEV_BUY_MAX_SOL} SOL.`,
   anti_snipe: "First 60 seconds: max 1 SOL per buy (sniper cap).",
-  wallet_cap: "That buy would put this wallet over the 2% supply cap.",
+  wallet_cap: "That buy would put this wallet over the 5% supply cap.",
   graduated: "This coin already graduated. Curve trading is closed.",
   too_small: "Minimum trade is 0.01 SOL.",
   too_large: "Maximum trade is 40 SOL.",

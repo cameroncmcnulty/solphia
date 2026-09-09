@@ -1,6 +1,7 @@
 "use client";
 
 import type { MouseEvent, ReactNode } from "react";
+import { socialHref, type SocialKind } from "@/lib/launch/links";
 
 export type TokenLinks = {
   website?: string;
@@ -10,11 +11,8 @@ export type TokenLinks = {
   discord?: string;
 };
 
-function hrefOf(raw?: string): string {
-  const s = (raw || "").trim();
-  if (!s) return "";
-  if (/^https?:\/\//i.test(s)) return s;
-  return "";
+function hrefOf(kind: SocialKind, raw?: string): string {
+  return socialHref(kind, raw);
 }
 
 function IconLink({
@@ -113,10 +111,10 @@ export function TokenSocials({
   size?: "sm" | "md";
 }) {
   if (!links) return null;
-  const website = hrefOf(links.website);
-  const x = hrefOf(links.x || links.twitter);
-  const telegram = hrefOf(links.telegram);
-  const discord = hrefOf(links.discord);
+  const website = hrefOf("website", links.website);
+  const x = hrefOf("x", links.x || links.twitter);
+  const telegram = hrefOf("telegram", links.telegram);
+  const discord = hrefOf("discord", links.discord);
   if (!website && !x && !telegram && !discord) return null;
   return (
     <span className="inline-flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>

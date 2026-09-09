@@ -6,6 +6,7 @@ import {
   DEV_BUY_MAX_SOL,
   emptyCurve,
   graduatePool,
+  launchDevBuyCap,
   marketCapSol,
   maxBuySol,
   MAX_WALLET_BPS,
@@ -17,6 +18,7 @@ import {
   TOKEN_SUPPLY,
   type CurveState,
 } from "./curve";
+import { socialHref } from "./links";
 
 export { launchError, LAUNCH_ERRORS } from "./errors";
 
@@ -94,30 +96,7 @@ function nameOk(s: string): boolean {
 }
 
 function cleanLink(raw?: string, kind?: "website" | "x" | "telegram" | "discord"): string {
-  const s = (raw || "").trim().slice(0, 160);
-  if (!s) return "";
-  if (kind === "x") {
-    const h = s.replace(/^https?:\/\/(www\.)?(x|twitter)\.com\//i, "").replace(/^@/, "");
-    if (!/^[A-Za-z0-9_]{1,15}$/.test(h)) return "";
-    return `https://x.com/${h}`;
-  }
-  if (kind === "telegram") {
-    const h = s.replace(/^https?:\/\/(t\.me|telegram\.me)\//i, "").replace(/^@/, "");
-    if (!/^[A-Za-z0-9_]{3,32}$/.test(h)) return "";
-    return `https://t.me/${h}`;
-  }
-  if (kind === "discord") {
-    if (/^https?:\/\/(discord\.gg|discord\.com\/invite)\//i.test(s)) return s.split("?")[0];
-    if (/^[A-Za-z0-9-]{3,32}$/.test(s)) return `https://discord.gg/${s}`;
-    return "";
-  }
-  try {
-    const u = new URL(s.startsWith("http") ? s : `https://${s}`);
-    if (u.protocol !== "https:" && u.protocol !== "http:") return "";
-    return u.toString().slice(0, 160);
-  } catch {
-    return "";
-  }
+  return socialHref(kind || "website", raw);
 }
 
 function imageOk(raw?: string): string {
@@ -287,8 +266,8 @@ export function createCoin(
   }
   const img = imageOk(opts.image);
   if (opts.image && !img) return { ok: false, error: "bad_image" };
-  const launchBuy = Math.max(0, Number(opts.launchBuySol) || 0);
-  if (launchBuy && launchBuy > DEV_BUY_MAX_SOL) return { ok: false, error: "dev_buy_cap" };
+  const launchBuy = Math.min(launchDevBuyCap(), Math.max(0, Number(opts.launchBuySol) || 0));
+  if ((Number(opts.launchBuySol) || 0) > DEV_BUY_MAX_SOL) return { ok: false, error: "dev_buy_cap" };
   const now = opts.now || Date.now();
   const mint = `curve:${symbol}:${now.toString(36)}`;
   const coin: LaunchCoin = {

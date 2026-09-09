@@ -16,6 +16,7 @@ import {
   VIRTUAL_TOKENS,
   emptyCurve,
   feeOn,
+  launchDevBuyCap,
   maxBuySol,
   quoteBuy,
   quoteSell,
@@ -97,6 +98,11 @@ describe("launch curve math", () => {
     assert.equal(CURVE_SALE, 800_000_000);
     assert.equal(TOKEN_IMAGE_PX, 1000);
     assert.equal(DEV_BUY_MAX_SOL, 2);
+    assert.equal(MAX_WALLET_BPS, 500);
+    const cap = launchDevBuyCap();
+    assert.ok(cap <= DEV_BUY_MAX_SOL);
+    assert.ok(cap < 2, `2 SOL at open would exceed 5%, cap is ${cap}`);
+    assert.ok(cap > 1.2 && cap < 1.7);
   });
 });
 
@@ -134,6 +140,22 @@ describe("fair launch book", () => {
     assert.ok((r.coin.links.website || "").includes("solphia.io"));
     assert.equal(r.coin.links.telegram, "https://t.me/solphia");
     assert.equal(r.coin.links.discord, "https://discord.gg/solphia");
+    const urls = createCoin(book, {
+      creator: A,
+      name: "Urls",
+      symbol: "URLS",
+      x: "https://x.com/solphia",
+      telegram: "t.me/solphia",
+      discord: "https://discord.gg/solphia",
+      website: "solphia.io",
+    });
+    assert.equal(urls.ok, true);
+    if (urls.ok) {
+      assert.equal(urls.coin.links.x, "https://x.com/solphia");
+      assert.equal(urls.coin.links.telegram, "https://t.me/solphia");
+      assert.equal(urls.coin.links.discord, "https://discord.gg/solphia");
+      assert.ok((urls.coin.links.website || "").includes("solphia.io"));
+    }
     assert.ok((r.coin.holders[A]?.tokens || 0) > 0);
     const bad = createCoin(book, { creator: A, name: "Bad", symbol: "BADX", image: "https://evil.example/x.png" });
     assert.equal(bad.ok, false);
@@ -167,7 +189,7 @@ describe("fair launch book", () => {
     assert.equal(book.ownerEarningsSol, 0);
   });
 
-  it("blocks snipes over 1 SOL in the first minute and the 2% wallet cap", () => {
+  it("blocks snipes over 1 SOL in the first minute and the 5% wallet cap", () => {
     const book = emptyLaunchBook();
     const made = createCoin(book, { creator: A, name: "Slow", symbol: "SLOW" });
     assert.ok(made.ok);
@@ -179,7 +201,7 @@ describe("fair launch book", () => {
     assert.equal(ok.ok, true);
     const later = buyCoin(book, { id: made.coin.id, owner: B, sol: 40, now: made.coin.createdAt + 70_000 });
     assert.equal(later.ok, false);
-    assert.equal(MAX_WALLET_BPS, 200);
+    assert.equal(MAX_WALLET_BPS, 500);
   });
 
   it("round-trips a holder: sell returns SOL and does not mint extra tokens", () => {
@@ -244,7 +266,7 @@ describe("fair launch book", () => {
     assert.equal(run(), run());
   });
 
-  it("rejects a 10 SOL open buy as wallet_cap and explains the 2% rule", () => {
+  it("rejects a 10 SOL open buy as wallet_cap and explains the 5% rule", () => {
     const book = emptyLaunchBook();
     const made = createCoin(book, { creator: A, name: "Cap", symbol: "CAPX" });
     assert.ok(made.ok);
@@ -259,10 +281,10 @@ describe("fair launch book", () => {
     assert.equal(big.ok, false);
     if (!big.ok) {
       assert.equal(big.error, "wallet_cap");
-      assert.match(launchError(big.error), /2%/);
+      assert.match(launchError(big.error), /5%/);
     }
     const cap = maxBuySol(emptyCurve(), 0);
-    assert.ok(cap > 0.4 && cap < 0.8, `open cap should be ~0.58 SOL, got ${cap}`);
+    assert.ok(cap > 1.2 && cap < 1.7, `open 5% cap should be ~1.48 SOL, got ${cap}`);
   });
 
   it("builds candles and public stats, and merge keeps a local coin the remote dropped", () => {

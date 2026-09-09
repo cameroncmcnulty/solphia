@@ -16,28 +16,29 @@ export default function Home() {
             <SolphiaFace mode="hero" />
           </div>
           <div className="order-2 pb-8 pt-1 lg:order-1 lg:pb-8 lg:pt-8">
-            <p className="text-base font-medium tracking-wide text-mute sm:text-2xl">Meet</p>
+            <p className="text-base font-medium tracking-wide text-mute sm:text-2xl">A Solana project</p>
             <h1 className="solphia-flow mt-1 font-display text-[clamp(2.4rem,12vw,5.75rem)] font-bold leading-[0.9] tracking-[-0.04em]">
               SOLPHIA
             </h1>
             <p className="mt-4 max-w-xl text-lg leading-snug text-ghost sm:text-3xl sm:leading-tight">
-              She splits SOL across USDC, S&P 500, Nasdaq-100, and gold — and trades whichever pair is stretched.
+              Trading desk. Fair launch pad. Protocol token. One stack, keys in Phantom.
             </p>
             <p className="mt-3 max-w-lg text-sm leading-relaxed text-mute sm:text-xl">
-              Connect Phantom. Add SOL. She handles the rest. Practice first. Your keys stay in your wallet.
+              She is not a single bot. She is the layer: official-market trading, a bonding-curve launch pad, and
+              $SOLPHIA* — the asset that sits at the center.
             </p>
             <div className="mt-6 flex flex-col gap-3 sm:mt-8 sm:flex-row">
               <Link
                 href="/trading"
                 className="btn-acid inline-flex min-h-[48px] w-full items-center justify-center rounded-full px-6 py-3 text-center text-base sm:min-h-[56px] sm:w-auto sm:px-8 sm:text-lg"
               >
-                LAUNCH BOT
+                Open the desk
               </Link>
               <Link
-                href="#backtest"
+                href="/launch"
                 className="btn-ghost inline-flex min-h-[48px] w-full items-center justify-center rounded-full px-6 py-3 text-center text-base sm:min-h-[56px] sm:w-auto sm:px-8 sm:text-lg"
               >
-                See the backtest
+                Launch a coin
               </Link>
             </div>
           </div>
@@ -45,39 +46,61 @@ export default function Home() {
       </section>
 
       <LiveStats />
+
+      <section className="px-4 py-10 md:px-12 md:py-16">
+        <p className="text-base text-acid sm:text-lg">The stack</p>
+        <h2 className="mt-2 max-w-3xl font-display text-3xl leading-tight text-ghost sm:text-4xl md:text-6xl">
+          Three products. One ecosystem.
+        </h2>
+        <div className="mt-8 grid gap-3 lg:grid-cols-3">
+          <Pillar
+            k="01"
+            t="Trade"
+            d="Non-custodial desk. SOL against official SPYx, QQQx, and GLDx. Paper first. Optional 2×/3× on SOL only. Phantom stays in charge."
+            href="/trading"
+            c="Open desk"
+          />
+          <Pillar
+            k="02"
+            t="Launch"
+            d="Fair bonding curve. 1B supply, mint and freeze locked, 1% swap, 50% of fees to the creator. Swap like you would in Phantom."
+            href="/launch"
+            c="Launch"
+          />
+          <Pillar
+            k="03"
+            t="$SOLPHIA*"
+            d="The protocol token. CA coming soon. Burned supply, holders, and liquidity live on Token the moment the mint is public."
+            href="/token"
+            c="Token desk"
+          />
+        </div>
+      </section>
+
       <BacktestBrochure />
       <TickerCharts />
 
       <section className="px-4 py-10 md:px-12 md:py-16">
-        <p className="text-base text-acid sm:text-lg">How it works</p>
+        <p className="text-base text-acid sm:text-lg">Why it holds together</p>
         <h2 className="mt-2 max-w-3xl font-display text-3xl leading-tight text-ghost sm:text-4xl md:text-6xl">
-          Connect. Add SOL. She trades.
+          Built like a chain, not a gadget.
         </h2>
-        <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Step n="01" t="Connect" d="Phantom only. You approve. We never hold your keys." href="/trading" c="Connect" />
-          <Step n="02" t="Add SOL" d="Move SOL into a trading wallet on this device." href="/trading" c="Add SOL" />
-          <Step n="03" t="Practice" d="She trades on live prices with fake money first, so you can watch." href="/trading" c="Open hub" />
-          <Step n="04" t="Stop" d="Hit KILL any time. She sells back and you can withdraw." href="/trading" c="LAUNCH BOT" />
-        </div>
-      </section>
-
-      <section className="px-4 py-8 md:px-12">
-        <p className="text-base text-acid sm:text-lg">What she actually does</p>
-        <h2 className="mt-2 font-display text-3xl text-ghost sm:text-4xl md:text-6xl">Every pair. One job.</h2>
-        <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <Feature t="S&P 500, Nasdaq, gold" d="Official SPYx, QQQx, and GLDx only. Fake tickers are refused." href="/trading" />
+        <div className="mt-8 grid gap-3 sm:grid-cols-2">
           <Feature
-            t="Any pair that’s stretched"
-            d="If SOL drops 0.7% while gold or the S&P holds, she can take that 1% gap on a short tape — not just the slow 7-day stretch."
-            href="/trading"
+            t="Official markets only"
+            d="The desk refuses fake tickers. SPYx, QQQx, and GLDx are the xStock prints. SOL is home. PnL is marked in USDC."
           />
-          <Feature t="PnL in USDC" d="The book, stops, and profit are marked in USDC so a SOL candle doesn’t fake the score." href="/trading" />
-          <Feature t="Practice first" d="Paper is always on so you can see PnL before you risk SOL." href="/trading" />
-          <Feature t="Your wallet, your keys" d="Phantom stays in charge. She never asks for a seed phrase." href="/trading" />
           <Feature
-            t="Optional SOL 2×/3×"
-            d="xStocks stay spot. SOL can run 2× or 3× with Jupiter Perps fees and a real liquidation. An 8% drop still sells everything and pauses."
-            href="/pricing"
+            t="Keys never leave Phantom"
+            d="Connect is login. She never asks for a seed. Practice on live prices with paper, then size in when you are ready."
+          />
+          <Feature
+            t="Fair launches, not team bags"
+            d="Create is free. 800M on a constant-product curve, 200M into LP at 85 SOL. 5% wallet cap. 50% of the 1% swap is paid to the dev."
+          />
+          <Feature
+            t="A token with a home"
+            d="$SOLPHIA* is the protocol asset — not a side meme. The Token page is its desk: burns, holders, liquidity, CA when it is live."
           />
         </div>
       </section>
@@ -98,21 +121,21 @@ export default function Home() {
         <div className="panel rounded-3xl p-5 sm:p-8 md:flex md:items-center md:justify-between md:p-14">
           <div>
             <p className="text-base text-mute sm:text-lg">Ready</p>
-            <h2 className="mt-2 font-display text-3xl text-ghost sm:text-4xl md:text-6xl">Turn her on.</h2>
-            <p className="mt-3 text-base text-mute sm:text-xl">Practice first. Keys in Phantom. KILL always works.</p>
+            <h2 className="mt-2 font-display text-3xl text-ghost sm:text-4xl md:text-6xl">Enter the stack.</h2>
+            <p className="mt-3 text-base text-mute sm:text-xl">Trade. Launch. $SOLPHIA*. Keys in Phantom.</p>
           </div>
           <div className="mt-6 flex flex-col gap-3 sm:flex-row md:mt-0">
             <Link
               href="/trading"
               className="btn-acid inline-flex min-h-[48px] w-full items-center justify-center rounded-full px-6 py-3 text-base sm:w-auto sm:px-8 sm:text-lg"
             >
-              LAUNCH BOT
+              Open the desk
             </Link>
             <Link
-              href="/pricing"
+              href="/token"
               className="btn-ghost inline-flex min-h-[48px] w-full items-center justify-center rounded-full px-6 py-3 text-base sm:w-auto sm:px-8 sm:text-lg"
             >
-              See pricing
+              $SOLPHIA*
             </Link>
           </div>
         </div>
@@ -121,10 +144,10 @@ export default function Home() {
   );
 }
 
-function Step({ n, t, d, href, c }: { n: string; t: string; d: string; href: string; c: string }) {
+function Pillar({ k, t, d, href, c }: { k: string; t: string; d: string; href: string; c: string }) {
   return (
     <Link href={href} className="panel rounded-3xl p-5 sm:p-7">
-      <div className="text-base text-acid sm:text-lg">{n}</div>
+      <div className="text-base text-acid sm:text-lg">{k}</div>
       <div className="mt-3 font-display text-2xl text-ghost sm:text-3xl">{t}</div>
       <p className="mt-3 text-base leading-relaxed text-mute">{d}</p>
       <div className="mt-6 text-base text-acid">{c} →</div>
@@ -132,12 +155,11 @@ function Step({ n, t, d, href, c }: { n: string; t: string; d: string; href: str
   );
 }
 
-function Feature({ t, d, href }: { t: string; d: string; href: string }) {
+function Feature({ t, d }: { t: string; d: string }) {
   return (
-    <Link href={href} className="panel rounded-3xl p-5 sm:p-7">
+    <div className="panel rounded-3xl p-5 sm:p-7">
       <div className="font-display text-2xl leading-tight text-ghost sm:text-3xl">{t}</div>
       <p className="mt-3 text-base leading-relaxed text-mute">{d}</p>
-      <div className="mt-6 text-base text-acid">Open →</div>
-    </Link>
+    </div>
   );
 }

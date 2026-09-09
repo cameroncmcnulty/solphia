@@ -26,7 +26,7 @@ export const OWNER_FEE_BPS = 25;
 export const TREAS_FEE_BPS = 25;
 export const CREATE_FEE_SOL = 0;
 export const GRADUATE_FEE_SOL = 0.01;
-export const MAX_WALLET_BPS = 200;
+export const MAX_WALLET_BPS = 500;
 export const ANTI_SNIPE_MS = 60_000;
 export const ANTI_SNIPE_SOL = 1;
 export const MIN_TRADE_SOL = 0.01;
@@ -188,4 +188,19 @@ export function maxBuySol(c: CurveState, heldTokens = 0): number {
     else hi = mid;
   }
   return Math.floor(lo * 1000) / 1000;
+}
+
+/** Slider ceiling: never let a 2 SOL dev buy print more than the wallet cap at open. */
+export function launchDevBuyCap(): number {
+  return Math.min(DEV_BUY_MAX_SOL, maxBuySol(emptyCurve(), 0));
+}
+
+export function supplyPct(tokens: number): number {
+  return TOKEN_SUPPLY > 0 ? Math.max(0, tokens) / TOKEN_SUPPLY : 0;
+}
+
+export function buySupplyPct(c: CurveState, solIn: number): number {
+  if (!(solIn >= MIN_TRADE_SOL)) return 0;
+  const q = quoteBuy(c, solIn);
+  return q.ok ? supplyPct(q.tokensOut || 0) : 0;
 }
