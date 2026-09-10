@@ -190,15 +190,33 @@ export function setLiveOwner(state: AppState, owner: string, live: boolean) {
 }
 
 export function hotOwners(state: AppState, now = Date.now()): string[] {
+  return engineOwners(state, now);
+}
+
+/** Every armed, not-killed book — not just browsers that pinged in the last 6 minutes. */
+export function engineOwners(state: AppState, now = Date.now()): string[] {
   const live = state.liveOwners || [];
+  const known = Object.keys(state.traders || {});
   const recent = Object.entries(state.hotAt || {})
-    .filter(([, at]) => now - (at || 0) <= HOT_MS)
     .sort((a, b) => (b[1] || 0) - (a[1] || 0))
     .map(([owner]) => owner);
+  const ranked = [...new Set([...live, ...known, ...recent])].sort((a, b) => {
+    const al = live.includes(a) ? 0 : 1;
+    const bl = live.includes(b) ? 0 : 1;
+    if (al !== bl) return al - bl;
+    const ta = state.traders[a];
+    const tb = state.traders[b];
+    const ak = ta?.book?.killed ? 1 : 0;
+    const bk = tb?.book?.killed ? 1 : 0;
+    if (ak !== bk) return ak - bk;
+    return (ta?.updatedAt || 0) - (tb?.updatedAt || 0);
+  });
   const out: string[] = [];
-  for (const owner of [...live, ...recent]) {
+  for (const owner of ranked) {
     if (out.length >= MAX_TICK_TRADERS) break;
-    if (!out.includes(owner)) out.push(owner);
+    const t = state.traders[owner];
+    if (t?.book?.killed) continue;
+    out.push(owner);
   }
   return out;
 }
@@ -319,6 +337,20 @@ export async function saveTrader(t: TraderAccount): Promise<void> {
   if (!knownTraderOwners.includes(t.owner)) knownTraderOwners.push(t.owner);
 }
 
+export async function enrollPaperBot(owner: string): Promise<TraderAccount> {
+  const state = await readyState();
+  const existing = state.traders[owner] || (await loadTrader(owner));
+  if (existing) {
+    state.traders[owner] = existing;
+    if (!existing.book.killed && existing.auto) existing.auto.armed = existing.auto.mode === "live" ? Boolean(existing.auto.armed) : true;
+    await saveTrader(existing);
+    return existing;
+  }
+  const t = emptyTrader(owner);
+  await saveTrader(t);
+  return t;
+}
+
 export async function loadTrader(owner: string): Promise<TraderAccount | null> {
   if (mem?.traders[owner]) return mem.traders[owner];
   if (durableConfigured()) {
@@ -365,10 +397,13 @@ async function loadTraderMap(owners: string[]): Promise<Record<string, TraderAcc
 }
 
 export async function loadHotTraders(state: AppState): Promise<TraderAccount[]> {
-  const ids = hotOwners(state);
-  const extra = await loadTraderMap(ids.filter((o) => !state.traders[o]));
-  Object.assign(state.traders, extra);
-  return ids.map((o) => state.traders[o]).filter(Boolean);
+  return loadEngineTraders(state);
+}
+
+export async function loadEngineTraders(state: AppState): Promise<TraderAccount[]> {
+  await loadAllTraders(state);
+  const ids = engineOwners(state);
+  return ids.map((o) => state.traders[o]).filter((t): t is TraderAccount => Boolean(t) && !t.book?.killed);
 }
 
 export async function loadAllTraders(state: AppState): Promise<void> {

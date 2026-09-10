@@ -236,6 +236,7 @@ export async function runMarketTick(): Promise<{
 
     const hot = await loadHotTraders(state);
     for (const trader of hot) {
+      // Armed paper books keep clipping even if the owner closed the browser.
       const owner = trader.owner;
       const seatOk = !treasuryAddress() || liveSeatOk(state, owner);
       const liveWanted = trader.auto?.mode === "live" && liveTradingEnabled() && seatOk;

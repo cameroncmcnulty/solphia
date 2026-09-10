@@ -57,7 +57,7 @@ export default function Home() {
           <Eco
             n="01"
             t="Auto-trade"
-            d="She watches SOL vs tokenized S&P 500, Nasdaq-100, and gold — and clips for profit when a pair stretches. Jupiter quotes. Phantom signs. Paper first."
+            d="She watches SOL vs tokenized S&P 500, Nasdaq-100, and gold — and clips for profit when a pair stretches. Set it and close the tab. Paper runs 24/7 until you kill her or an 8% drop flattens the book."
             href="/trading"
             c="Trade"
           />

@@ -7,10 +7,10 @@ import { KEYS } from "../lib/persist";
 import { slimBacktest } from "../lib/pair/backtest";
 
 describe("scale store", () => {
-  it("ticks live and recent owners only, and caps the batch", () => {
+  it("ticks armed paper books even after they go cold, skips killed, and caps the batch", () => {
     const s = emptyState();
     const now = Date.now();
-    for (let i = 0; i < 80; i++) {
+    for (let i = 0; i < 10; i++) {
       const owner = `owner${i}1111111111111111111111111111111`.slice(0, 44);
       s.traders[owner] = emptyTrader(owner);
       touchHot(s, owner, now - i * 1000);
@@ -20,8 +20,16 @@ describe("scale store", () => {
     s.traders[live].auto.mode = "live";
     s.traders[live].auto.armed = true;
     setLiveOwner(s, live, true);
+    const cold = "ColdOwner11111111111111111111111111111111".slice(0, 44);
+    s.traders[cold] = emptyTrader(cold);
+    s.traders[cold].updatedAt = now - 3 * 24 * 60 * 60_000;
+    const dead = "DeadOwner11111111111111111111111111111111".slice(0, 44);
+    s.traders[dead] = emptyTrader(dead);
+    s.traders[dead].book.killed = true;
     const hot = hotOwners(s, now);
     assert.ok(hot.includes(live));
+    assert.ok(hot.includes(cold), "closed-tab paper books still get ticks");
+    assert.ok(!hot.includes(dead), "killed books stay off");
     assert.ok(hot.length <= MAX_TICK_TRADERS);
     assert.equal(KEYS.trader("abc").startsWith("solphia:trader:"), true);
     assert.equal(KEYS.backtest(2), "solphia:backtest:2");

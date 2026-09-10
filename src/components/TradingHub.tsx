@@ -297,7 +297,7 @@ export function TradingHub() {
           <p className="font-mono text-[11px] tracking-[0.28em] text-violet">SOL · S&P 500 · NASDAQ · GOLD</p>
           <h1 className="mt-1 font-display text-3xl leading-none text-ghost sm:text-4xl md:text-6xl">Operate</h1>
           <p className="mt-3 max-w-xl text-base text-mute sm:text-lg">
-            Connect Phantom. Add SOL. She sits in USDC and scalps whichever of SOL, S&P 500, Nasdaq, or gold has a 5m/15m setup that agrees with the daily/4H trend, then trails the stop up. PnL is in USDC.
+            Connect Phantom. She keeps trading after you close the tab — paper fills 24/7 on the server. Kill here to stop her, or she flattens to USDC and pauses if the book drops 8% from start.
           </p>
         </div>
         <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-row sm:items-center sm:gap-3">

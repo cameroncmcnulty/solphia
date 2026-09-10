@@ -12,7 +12,8 @@ export const maxDuration = 60;
 export async function GET(req: NextRequest) {
   const auth = req.headers.get("authorization") || "";
   const q = req.nextUrl.searchParams.get("secret") || "";
-  if (CRON_SECRET && auth !== `Bearer ${CRON_SECRET}` && q !== CRON_SECRET) {
+  const vercelCron = req.headers.get("x-vercel-cron") === "1";
+  if (CRON_SECRET && !vercelCron && auth !== `Bearer ${CRON_SECRET}` && q !== CRON_SECRET) {
     return NextResponse.json({ error: "denied" }, { status: 401 });
   }
   const tick = await runMarketTick();
@@ -36,5 +37,13 @@ export async function GET(req: NextRequest) {
   } catch {
     /* tick still counts */
   }
-  return NextResponse.json({ ok: true, entries: tick.entries, exits: tick.exits, equity: tick.paper.equityUsd, promos });
+  return NextResponse.json({
+    ok: true,
+    entries: tick.entries,
+    exits: tick.exits,
+    equity: tick.paper.equityUsd,
+    promos,
+    lastTickAt: Date.now(),
+    liveTrading: tick.liveTrading,
+  });
 }

@@ -19,6 +19,8 @@ export async function GET() {
     xai: Boolean(process.env.XAI_API_KEY),
     smtp: Boolean(process.env.SMTP_HOST),
     lastTickAt: state.lastTickAt,
+    tickAgeMs: state.lastTickAt ? Date.now() - state.lastTickAt : null,
+    engine: Date.now() - (state.lastTickAt || 0) < 3 * 60_000 ? "live" : "stale",
     equity: state.paper.equityUsd,
     feeds: state.feedHealth,
     heliusKeyPresent: Boolean(HELIUS_API_KEY),
