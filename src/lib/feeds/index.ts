@@ -97,6 +97,7 @@ function fromPump(coin: PumpCoin): TokenSnapshot {
     pairAddress: coin.pool_address || coin.raydium_pool || undefined,
     creator: coin.creator,
     createdAt: num(coin.created_timestamp, Date.now()),
+    priceUsd: mcap > 0 ? mcap / 1_000_000_000 : 0,
     marketCapUsd: mcap,
     liquidityUsd: graduated ? Math.max(mcap * 0.08, 0) : Math.max(mcap * 0.12, 0),
     bondingProgress: pumpProgress(coin),
@@ -334,7 +335,7 @@ export async function ingestMarket(
   return { tokens, health, solUsd, copyBook: tape.book };
 }
 
-/** Lighter tape ingest: Pump + Dexscreener only. No copy-wallet overlay. */
+/** Fast tape ingest. Three sources, short timeouts — the list must paint even if one feed is slow. */
 export async function ingestPublicTape(): Promise<{ tokens: TokenSnapshot[]; solUsd: number }> {
   const map = new Map<string, TokenSnapshot>();
   const put = (t: TokenSnapshot | null) => {
@@ -342,47 +343,31 @@ export async function ingestPublicTape(): Promise<{ tokens: TokenSnapshot[]; sol
     const prev = map.get(t.mint);
     map.set(t.mint, prev ? mergeSnapshots(prev, t) : t);
   };
-  const [solUsd] = await Promise.all([
-    solPriceUsd(),
-    (async () => {
-      const r = await getJson<PumpCoin[]>(
-        "https://frontend-api-v3.pump.fun/coins?offset=0&limit=50&sort=created_timestamp&order=desc&includeNsfw=false",
-      );
-      (r.data || []).forEach((c) => put(fromPump(c)));
-    })(),
-    (async () => {
-      const r = await getJson<PumpCoin[]>(
-        "https://frontend-api-v3.pump.fun/coins?offset=0&limit=50&sort=last_trade_timestamp&order=desc&includeNsfw=false",
-      );
-      (r.data || []).forEach((c) => put(fromPump(c)));
-    })(),
-    (async () => {
-      const r = await getJson<PumpCoin[]>(
-        "https://frontend-api-v3.pump.fun/coins?offset=0&limit=40&sort=market_cap&order=desc&includeNsfw=false",
-      );
-      (r.data || []).forEach((c) => put(fromPump(c)));
-    })(),
-    (async () => {
-      const r = await getJson<{ pairs?: DexPair[] }>("https://api.dexscreener.com/latest/dex/search?q=SOL");
+  const jobs = [
+    getJson<PumpCoin[]>(
+      "https://frontend-api-v3.pump.fun/coins?offset=0&limit=40&sort=created_timestamp&order=desc&includeNsfw=false",
+      4500,
+    ).then((r) => (r.data || []).forEach((c) => put(fromPump(c)))),
+    getJson<PumpCoin[]>(
+      "https://frontend-api-v3.pump.fun/coins?offset=0&limit=40&sort=last_trade_timestamp&order=desc&includeNsfw=false",
+      4500,
+    ).then((r) => (r.data || []).forEach((c) => put(fromPump(c)))),
+    getJson<{ pairs?: DexPair[] }>("https://api.dexscreener.com/latest/dex/search?q=SOL", 4500).then((r) => {
       const pairs = (r.data?.pairs || []).filter((p) => p.chainId === "solana");
-      pairs.slice(0, 60).forEach((p) => put(fromDex(p)));
-    })(),
-    (async () => {
-      const r = await getJson<{ data?: { rows?: LaunchRow[] } }>(
-        "https://launch-mint-v1.raydium.io/get/list?sort=lastTrade&size=40",
-      );
-      (r.data?.data?.rows || []).forEach((row) => put(fromLaunch(row)));
-    })(),
-    (async () => {
-      const r = await getJson<{ data?: GeckoPool[] }>(
-        "https://api.geckoterminal.com/api/v2/networks/solana/trending_pools?page=1",
-      );
-      (r.data?.data || []).forEach((p) => put(fromGecko(p)));
-    })(),
-    (async () => {
-      const r = await getJson<{ data?: GeckoPool[] }>("https://api.geckoterminal.com/api/v2/networks/solana/new_pools?page=1");
-      (r.data?.data || []).forEach((p) => put(fromGecko(p)));
-    })(),
-  ]);
-  return { tokens: [...map.values()].filter((t) => t.mint.length >= 32), solUsd };
+      pairs.slice(0, 50).forEach((p) => put(fromDex(p)));
+    }),
+  ];
+  const [solUsd] = await Promise.all([solPriceUsd().catch(() => 100), Promise.allSettled(jobs)]);
+  const mints = [...map.keys()];
+  const chunks: string[][] = [];
+  for (let i = 0; i < Math.min(mints.length, 60); i += 30) chunks.push(mints.slice(i, i + 30));
+  await Promise.allSettled(
+    chunks.map(async (chunk) => {
+      const r = await getJson<{ pairs?: DexPair[] }>(`https://api.dexscreener.com/latest/dex/tokens/${chunk.join(",")}`, 4000);
+      const pairs = (r.data?.pairs || []).filter((p) => p.chainId === "solana");
+      pairs.sort((a, b) => num(a.liquidity?.usd) - num(b.liquidity?.usd));
+      pairs.forEach((p) => put(fromDex(p)));
+    }),
+  );
+  return { tokens: [...map.values()].filter((t) => t.mint.length >= 32), solUsd: solUsd || 100 };
 }

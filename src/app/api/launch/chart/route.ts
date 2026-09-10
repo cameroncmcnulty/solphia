@@ -11,11 +11,11 @@ export async function GET(req: NextRequest) {
   const venue = req.nextUrl.searchParams.get("venue") || "";
   const tfRaw = (req.nextUrl.searchParams.get("tf") || "15m") as ChartTf;
   const tf = TFS.has(tfRaw) ? tfRaw : "15m";
-  if (!mint && !pair) return NextResponse.json({ candles: [] });
+  if (!mint && !pair) return NextResponse.json({ candles: [], unit: "sol" });
   try {
-    const candles = await fetchTokenChart({ mint: mint || undefined, pair: pair || undefined, venue: venue || undefined, tf });
-    return NextResponse.json({ candles, tf });
+    const pack = await fetchTokenChart({ mint: mint || undefined, pair: pair || undefined, venue: venue || undefined, tf });
+    return NextResponse.json({ candles: pack.candles, unit: pack.unit, tf });
   } catch {
-    return NextResponse.json({ candles: [], tf });
+    return NextResponse.json({ candles: [], unit: "sol", tf });
   }
 }

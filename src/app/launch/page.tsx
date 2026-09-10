@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CopyCa } from "@/components/CopyCa";
 import { SolphiaConstellation } from "@/components/SolphiaConstellation";
-import { SparkCandles } from "@/components/SparkCandles";
+import { MiniSpark } from "@/components/SparkCandles";
+import { TokenArt } from "@/components/TokenArt";
 import { TokenChart } from "@/components/TokenChart";
 import { SocialInput, TokenSocials } from "@/components/TokenSocials";
 import { WalletConnect } from "@/components/WalletConnect";
@@ -235,33 +236,52 @@ export default function LaunchPage() {
   const [vol, setVol] = useState<VolWindow | null>(null);
   const [ranked, setRanked] = useState(false);
   const [source, setSource] = useState<"all" | "born" | "market">("all");
+  const [tapeLoading, setTapeLoading] = useState(true);
   const fileRef = useRef<HTMLInputElement>(null);
   const devPct = buySupplyPct(emptyCurve(), devBuy);
 
-  async function refresh() {
+  async function refreshPad() {
     const q = owner ? `pubkey=${encodeURIComponent(owner)}` : "";
-    const [pad, tape] = await Promise.all([
-      fetch(`/api/launch?${q}`, { cache: "no-store" }).then((r) => r.json()),
-      fetch("/api/launch/tape", { cache: "no-store" })
-        .then((r) => r.json())
-        .catch(() => ({ coins: [] })),
-    ]);
+    const pad = await fetch(`/api/launch?${q}`, { cache: "no-store" }).then((r) => r.json());
     if (pad.solUsd) setSolUsd(pad.solUsd);
-    else if (tape.solUsd) setSolUsd(tape.solUsd);
     const padCoins: Coin[] = Array.isArray(pad.coins) ? pad.coins.map((c: Coin) => ({ ...c, born: true })) : [];
-    const padMints = new Set(padCoins.map((c) => c.mint).filter(Boolean));
-    const market: Coin[] = Array.isArray(tape.coins)
-      ? tape.coins.filter((c: Coin) => !c.mint || !padMints.has(c.mint))
-      : [];
-    const next = [...padCoins, ...market];
-    setCoins((prev) => mergeCoins(next, prev));
-    setOpen((cur) => (cur ? next.find((c) => c.id === cur.id) || cur : cur));
+    setCoins((prev) => {
+      const market = prev.filter((c) => !c.born);
+      const next = [...padCoins, ...market];
+      setOpen((cur) => (cur ? next.find((c) => c.id === cur.id) || cur : cur));
+      return mergeCoins(next, prev.filter((c) => c.born));
+    });
+  }
+
+  async function refreshTape() {
+    try {
+      const tape = await fetch("/api/launch/tape", { cache: "no-store" }).then((r) => r.json());
+      if (tape.solUsd) setSolUsd((s) => s || tape.solUsd);
+      const market: Coin[] = Array.isArray(tape.coins) ? tape.coins : [];
+      setCoins((prev) => {
+        const padCoins = prev.filter((c) => c.born);
+        const padMints = new Set(padCoins.map((c) => c.mint).filter(Boolean));
+        const extra = market.filter((c) => !c.mint || !padMints.has(c.mint));
+        const next = [...padCoins, ...extra];
+        setOpen((cur) => (cur ? next.find((c) => c.id === cur.id) || cur : cur));
+        return next;
+      });
+    } catch {
+      /* keep whatever is on screen */
+    } finally {
+      setTapeLoading(false);
+    }
   }
 
   useEffect(() => {
-    refresh().catch(() => {});
-    const t = setInterval(() => refresh().catch(() => {}), 8_000);
-    return () => clearInterval(t);
+    refreshPad().catch(() => {});
+    refreshTape().catch(() => setTapeLoading(false));
+    const padT = setInterval(() => refreshPad().catch(() => {}), 8_000);
+    const tapeT = setInterval(() => refreshTape().catch(() => {}), 40_000);
+    return () => {
+      clearInterval(padT);
+      clearInterval(tapeT);
+    };
   }, [owner]);
 
   function launchToken() {
@@ -327,7 +347,7 @@ export default function LaunchPage() {
         setOpen(j.coin);
         setCoins((prev) => [j.coin, ...prev.filter((c) => c.id !== j.coin.id)]);
       }
-      await refresh();
+      await Promise.all([refreshPad(), refreshTape()]);
       if (body.action === "create") {
         createErr.ok();
         setName("");
@@ -656,7 +676,14 @@ export default function LaunchPage() {
               )}
             </div>
             <div className={`mt-3 space-y-1.5 ${ranked ? "" : "max-h-[44rem] overflow-y-auto overflow-x-hidden"}`}>
-              {rows.length === 0 && (
+              {rows.length === 0 && tapeLoading && tab !== "mine" && (
+                <div className="space-y-2">
+                  {Array.from({ length: 8 }).map((_, i) => (
+                    <div key={i} className="h-[52px] animate-pulse rounded-2xl bg-violet/10" />
+                  ))}
+                </div>
+              )}
+              {rows.length === 0 && !tapeLoading && (
                 <p className="text-sm text-mute">
                   {tab === "mine"
                     ? "Nothing launched yet."
@@ -702,23 +729,6 @@ export default function LaunchPage() {
         {msg && !err && <p className="relative z-10 mt-4 font-mono text-sm text-acid">{msg}</p>}
       </div>
     </main>
-  );
-}
-
-function TokenArt({ src, className }: { src?: string; className?: string }) {
-  const [dead, setDead] = useState(false);
-  if (!src || dead) return <span className={`${className || ""} bg-violet/25`} />;
-  return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src={src}
-      alt=""
-      referrerPolicy="no-referrer"
-      loading="lazy"
-      decoding="async"
-      onError={() => setDead(true)}
-      className={className}
-    />
   );
 }
 
@@ -806,7 +816,7 @@ function CoinCard({
     >
       {elite && <span aria-hidden className="pointer-events-none absolute inset-0 rounded-2xl" style={{ boxShadow: eliteGlow(rank) }} />}
       {rank > 0 && <RankMark n={rank} />}
-      <TokenArt src={c.image} className="relative z-[1] h-11 w-11 shrink-0 rounded-xl object-cover" />
+      <TokenArt src={c.image} mint={c.mint} label={c.symbol} className="relative z-[1] h-11 w-11 shrink-0 rounded-xl" />
       <div className="relative z-[1] min-w-0 flex-1">
         <div className="flex min-w-0 items-center gap-2">
           <span className="truncate font-display text-base text-ghost sm:text-lg">{tick(c.symbol)}</span>
@@ -822,9 +832,7 @@ function CoinCard({
           <span className={up ? "text-acid" : "text-blood"}>{fmtPct(c.change24h)}</span>
         </div>
       </div>
-      <div className="relative z-[1] h-9 w-[4.75rem] shrink-0 sm:h-10 sm:w-28">
-        <SparkCandles candles={spark} up={up} variant="line" className="h-full w-full" />
-      </div>
+      <MiniSpark candles={spark} up={up} />
       {score != null && (
         <span
           className={`relative z-[1] hidden shrink-0 rounded-full px-2 py-1 font-mono text-[11px] sm:inline ${
@@ -888,199 +896,203 @@ function CoinDesk({
             : "";
 
   return (
-    <section className="panel-bubble mt-6 grid min-w-0 gap-5 overflow-x-hidden rounded-3xl p-4 sm:p-5 lg:grid-cols-[minmax(0,1fr)_minmax(260px,340px)]">
-      <div>
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-3">
-            <TokenArt src={open.image} className="h-14 w-14 shrink-0 rounded-2xl object-cover" />
-            <div className="min-w-0">
-              <div className="font-display text-3xl text-ghost">{tick(open.symbol)}</div>
-              <div className="text-sm text-mute">{open.name}</div>
-              <div className={`mt-1 font-mono text-sm ${(open.change24h || 0) >= 0 ? "text-acid" : "text-blood"}`}>
-                {fmtPx((open.priceSol || 0) * (solUsd || 0))}
-                <span className="ml-2">{fmtPct(open.change24h)} 24h</span>
-              </div>
-              <div className="mt-2 flex flex-wrap items-center gap-2">
-                <span className={`rounded-full px-2 py-0.5 font-mono text-[10px] ${open.born ? "bg-acid/15 text-acid" : "bg-white/10 text-mute"}`}>
-                  {venueLabel(open)}
-                </span>
-                <TokenSocials links={open.links} size="md" />
-                <CopyCa ca={open.mint} compact />
-              </div>
+    <section className="panel-bubble mt-6 flex min-w-0 flex-col gap-5 overflow-x-hidden rounded-3xl p-4 sm:p-5">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <TokenArt src={open.image} mint={open.mint} label={open.symbol} eager className="h-14 w-14 rounded-2xl" />
+          <div className="min-w-0">
+            <div className="font-display text-3xl text-ghost">{tick(open.symbol)}</div>
+            <div className="text-sm text-mute">{open.name}</div>
+            <div className={`mt-1 font-mono text-sm ${(open.change24h || 0) >= 0 ? "text-acid" : "text-blood"}`}>
+              {fmtPx((open.priceSol || 0) * (solUsd || 0))}
+              <span className="ml-2">{fmtPct(open.change24h)} 24h</span>
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <span className={`rounded-full px-2 py-0.5 font-mono text-[10px] ${open.born ? "bg-acid/15 text-acid" : "bg-white/10 text-mute"}`}>
+                {venueLabel(open)}
+              </span>
+              <TokenSocials links={open.links} size="md" />
+              <CopyCa ca={open.mint} compact />
             </div>
           </div>
-          <button type="button" onClick={onClose} className="btn-ghost rounded-full px-4 py-2 text-sm">
-            Close
-          </button>
         </div>
-        <div className="mt-4">
-          <TokenChart
-            mint={open.mint}
-            pair={open.pairAddress}
-            venue={open.venue || (open.born ? "launchlab" : undefined)}
-            seed={open.spark}
-            change24h={open.change24h}
-          />
-        </div>
-        {open.born && (
-          <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-void">
-            <div className="h-full bg-acid" style={{ width: `${Math.round((open.progress || 0) * 100)}%` }} />
-          </div>
-        )}
-        <div className="mt-3 grid grid-cols-4 gap-2">
-          <Stat k="MC" v={open.marketCapUsd ? fmtUsd(open.marketCapUsd) : `${fmtSol(open.marketCapSol, 1)} SOL`} />
-          <Stat k="Liq" v={`${fmtSol(open.liqSol || open.realSol, 2)} SOL`} />
-          <Stat k="Vol" v={`${fmtSol(open.volSol || 0, 2)} SOL`} />
-          <Stat k="Holders" v={String(open.holders)} />
-        </div>
-        <div className="mt-3 rounded-2xl border border-violet/20 bg-void/40 p-3">
-          <div className="flex items-center justify-between gap-2">
-            <div className="font-mono text-[10px] tracking-[0.22em] text-mute">FULL AUDIT</div>
-            <span
-              className={`rounded-full px-2 py-0.5 font-mono text-[11px] ${
-                audit.grade === "S" || audit.grade === "A"
-                  ? "bg-acid/20 text-acid"
-                  : audit.grade === "B"
-                    ? "bg-cyan/20 text-cyan"
-                    : audit.vetoed
-                      ? "bg-blood/20 text-blood"
-                      : "bg-white/10 text-mute"
-              }`}
-            >
-              {audit.grade} {audit.score} · {audit.verdict.toUpperCase()}
-            </span>
-          </div>
-          <p className="mt-2 text-sm text-ghost">{audit.why}</p>
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {audit.factors
-              .slice()
-              .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
-              .slice(0, 6)
-              .map((f) => (
-                <span
-                  key={f.id}
-                  className={`rounded-full px-2 py-0.5 font-mono text-[10px] ${f.delta >= 0 ? "bg-acid/10 text-acid" : "bg-blood/10 text-blood"}`}
-                >
-                  {f.delta >= 0 ? "+" : ""}
-                  {f.delta} {f.label}
-                </span>
-              ))}
-          </div>
-        </div>
+        <button type="button" onClick={onClose} className="btn-ghost rounded-full px-4 py-2 text-sm">
+          Close
+        </button>
       </div>
 
-      <div className="rounded-3xl border border-violet/20 bg-void/50 p-4">
-        {!open.born ? (
-          <MarketSwap open={open} owner={owner} sol={sol} setSol={setSol} solUsd={solUsd} />
-        ) : (
-          <>
-        <div className="grid grid-cols-2 rounded-full border border-violet/30 p-1">
-          <button type="button" onClick={() => setSide("buy")} className={`rounded-full py-2 text-sm ${side === "buy" ? "bg-acid/20 text-acid" : "text-mute"}`}>
-            Buy
-          </button>
-          <button type="button" onClick={() => setSide("sell")} className={`rounded-full py-2 text-sm ${side === "sell" ? "bg-acid/20 text-acid" : "text-mute"}`}>
-            Sell
-          </button>
-        </div>
-        {!owner ? (
-          <div className="mt-6">
-            <WalletConnect />
-          </div>
-        ) : (
-          <>
-            <p className="mt-5 text-xs tracking-wide text-mute">{side === "buy" ? "You pay" : "You sell"}</p>
-            <div
-              data-field="amount"
-              className={`mt-2 flex items-center justify-between rounded-2xl border bg-void px-4 py-4 ${fieldClass(tradeErr.errors.amount)}`}
-            >
-              {side === "buy" ? (
-                <input
-                  type="number"
-                  min={0.01}
-                  step={0.01}
-                  value={sol}
-                  onChange={(e) => {
-                    setSol(Number(e.target.value));
-                    tradeErr.clear("amount");
-                  }}
-                  aria-invalid={Boolean(tradeErr.errors.amount)}
-                  className="w-full bg-transparent font-display text-3xl text-ghost outline-none"
-                />
-              ) : (
-                <div className="font-display text-3xl text-ghost">{fmtTok(open.myTokens || 0)}</div>
-              )}
-              <span className="shrink-0 font-mono text-sm text-mute">{side === "buy" ? "SOL" : tick(open.symbol)}</span>
+      <TokenChart
+        key={open.mint || open.id}
+        mint={open.mint}
+        pair={open.pairAddress}
+        venue={open.venue || (open.born ? "launchlab" : undefined)}
+        seed={open.spark}
+        change24h={open.change24h}
+        solUsd={solUsd}
+      />
+
+      <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(280px,360px)]">
+        <div className="min-w-0">
+          {open.born && (
+            <div className="mb-3 h-1.5 overflow-hidden rounded-full bg-void">
+              <div className="h-full bg-acid" style={{ width: `${Math.round((open.progress || 0) * 100)}%` }} />
             </div>
-            <FieldError error={tradeErr.errors.amount} />
-            {side === "buy" && (
-              <div className="mt-2 flex flex-wrap gap-2">
-                {PRESETS.map((p) => (
-                  <button
-                    key={p}
-                    type="button"
-                    onClick={() => setSol(p)}
-                    className={`rounded-full border px-3 py-1 font-mono text-[11px] ${Math.abs(sol - p) < 1e-9 ? "border-acid text-acid" : "border-violet/30 text-mute"}`}
+          )}
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <Stat k="MC" v={open.marketCapUsd ? fmtUsd(open.marketCapUsd) : `${fmtSol(open.marketCapSol, 1)} SOL`} />
+            <Stat k="Liq" v={`${fmtSol(open.liqSol || open.realSol, 2)} SOL`} />
+            <Stat k="Vol" v={`${fmtSol(open.volSol || 0, 2)} SOL`} />
+            <Stat k="Holders" v={String(open.holders)} />
+          </div>
+          <div className="mt-3 rounded-2xl border border-violet/20 bg-void/40 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <div className="font-mono text-[10px] tracking-[0.22em] text-mute">FULL AUDIT</div>
+              <span
+                className={`rounded-full px-2 py-0.5 font-mono text-[11px] ${
+                  audit.grade === "S" || audit.grade === "A"
+                    ? "bg-acid/20 text-acid"
+                    : audit.grade === "B"
+                      ? "bg-cyan/20 text-cyan"
+                      : audit.vetoed
+                        ? "bg-blood/20 text-blood"
+                        : "bg-white/10 text-mute"
+                }`}
+              >
+                {audit.grade} {audit.score} · {audit.verdict.toUpperCase()}
+              </span>
+            </div>
+            <p className="mt-2 text-sm text-ghost">{audit.why}</p>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {audit.factors
+                .slice()
+                .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
+                .slice(0, 6)
+                .map((f) => (
+                  <span
+                    key={f.id}
+                    className={`rounded-full px-2 py-0.5 font-mono text-[10px] ${f.delta >= 0 ? "bg-acid/10 text-acid" : "bg-blood/10 text-blood"}`}
                   >
-                    {p}
-                  </button>
+                    {f.delta >= 0 ? "+" : ""}
+                    {f.delta} {f.label}
+                  </span>
                 ))}
-                <button
-                  type="button"
-                  onClick={() => setSol(Math.max(MIN_TRADE_SOL, Math.floor(maxOk * 1000) / 1000))}
-                  className="rounded-full border border-violet/30 px-3 py-1 font-mono text-[11px] text-mute"
-                >
-                  MAX
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-3xl border border-violet/20 bg-void/50 p-4">
+          {!open.born ? (
+            <MarketSwap open={open} owner={owner} sol={sol} setSol={setSol} solUsd={solUsd} />
+          ) : (
+            <>
+              <div className="grid grid-cols-2 rounded-full border border-violet/30 p-1">
+                <button type="button" onClick={() => setSide("buy")} className={`rounded-full py-2 text-sm ${side === "buy" ? "bg-acid/20 text-acid" : "text-mute"}`}>
+                  Buy
+                </button>
+                <button type="button" onClick={() => setSide("sell")} className={`rounded-full py-2 text-sm ${side === "sell" ? "bg-acid/20 text-acid" : "text-mute"}`}>
+                  Sell
                 </button>
               </div>
-            )}
-            <p className="mt-5 text-xs tracking-wide text-mute">You receive</p>
-            <div className="mt-2 flex items-center justify-between rounded-2xl border border-violet/30 bg-void px-4 py-4">
-              <div className="font-display text-3xl text-ghost">
-                {quote && quote.ok ? (side === "buy" ? fmtTok(quote.tokensOut || 0) : fmtSol(quote.solOut || 0, 4)) : "—"}
-              </div>
-              <span className="font-mono text-sm text-mute">{side === "buy" ? tick(open.symbol) : "SOL"}</span>
-            </div>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => {
-                if (!owner) {
-                  tradeErr.fail({ wallet: "Connect Phantom to swap." });
-                  return;
-                }
-                if (blocked) {
-                  tradeErr.fail({ amount: blocked });
-                  return;
-                }
-                tradeErr.ok();
-                if (side === "buy") onAct({ action: "buy", id: open.id, sol });
-                else onAct({ action: "sell", id: open.id, tokens: open.myTokens || 0 });
-              }}
-              className="btn-acid mt-5 min-h-[52px] w-full rounded-full disabled:opacity-40"
-            >
-              {side === "buy" ? `Buy ${tick(open.symbol)}` : `Sell ${tick(open.symbol)}`}
-            </button>
-            <div className="mt-3">
-              <FormAlert error={tradeErr.banner} />
-            </div>
-            <p className="mt-3 text-center font-mono text-[11px] text-mute">
-              1% fee · 50% to the dev · protocol share: listings, buybacks, burns
-              {solUsd ? ` · SOL $${solUsd.toFixed(0)}` : ""}
-            </p>
-            {creator && (
-              <button
-                type="button"
-                disabled={busy || !(open.devRewardsSol > 0)}
-                onClick={() => onAct({ action: "withdraw_dev", id: open.id })}
-                className="mt-3 w-full rounded-full border border-acid/40 py-2 text-sm text-acid disabled:opacity-40"
-              >
-                Withdraw {fmtSol(open.devRewardsSol, 4)} SOL rewards
-              </button>
-            )}
-          </>
-        )}
-          </>
-        )}
+              {!owner ? (
+                <div className="mt-6">
+                  <WalletConnect />
+                </div>
+              ) : (
+                <>
+                  <p className="mt-5 text-xs tracking-wide text-mute">{side === "buy" ? "You pay" : "You sell"}</p>
+                  <div
+                    data-field="amount"
+                    className={`mt-2 flex items-center justify-between rounded-2xl border bg-void px-4 py-4 ${fieldClass(tradeErr.errors.amount)}`}
+                  >
+                    {side === "buy" ? (
+                      <input
+                        type="number"
+                        min={0.01}
+                        step={0.01}
+                        value={sol}
+                        onChange={(e) => {
+                          setSol(Number(e.target.value));
+                          tradeErr.clear("amount");
+                        }}
+                        aria-invalid={Boolean(tradeErr.errors.amount)}
+                        className="w-full bg-transparent font-display text-3xl text-ghost outline-none"
+                      />
+                    ) : (
+                      <div className="font-display text-3xl text-ghost">{fmtTok(open.myTokens || 0)}</div>
+                    )}
+                    <span className="shrink-0 font-mono text-sm text-mute">{side === "buy" ? "SOL" : tick(open.symbol)}</span>
+                  </div>
+                  <FieldError error={tradeErr.errors.amount} />
+                  {side === "buy" && (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {PRESETS.map((p) => (
+                        <button
+                          key={p}
+                          type="button"
+                          onClick={() => setSol(p)}
+                          className={`rounded-full border px-3 py-1 font-mono text-[11px] ${Math.abs(sol - p) < 1e-9 ? "border-acid text-acid" : "border-violet/30 text-mute"}`}
+                        >
+                          {p}
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => setSol(Math.max(MIN_TRADE_SOL, Math.floor(maxOk * 1000) / 1000))}
+                        className="rounded-full border border-violet/30 px-3 py-1 font-mono text-[11px] text-mute"
+                      >
+                        MAX
+                      </button>
+                    </div>
+                  )}
+                  <p className="mt-5 text-xs tracking-wide text-mute">You receive</p>
+                  <div className="mt-2 flex items-center justify-between rounded-2xl border border-violet/30 bg-void px-4 py-4">
+                    <div className="font-display text-3xl text-ghost">
+                      {quote && quote.ok ? (side === "buy" ? fmtTok(quote.tokensOut || 0) : fmtSol(quote.solOut || 0, 4)) : "—"}
+                    </div>
+                    <span className="font-mono text-sm text-mute">{side === "buy" ? tick(open.symbol) : "SOL"}</span>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => {
+                      if (!owner) {
+                        tradeErr.fail({ wallet: "Connect Phantom to swap." });
+                        return;
+                      }
+                      if (blocked) {
+                        tradeErr.fail({ amount: blocked });
+                        return;
+                      }
+                      tradeErr.ok();
+                      if (side === "buy") onAct({ action: "buy", id: open.id, sol });
+                      else onAct({ action: "sell", id: open.id, tokens: open.myTokens || 0 });
+                    }}
+                    className="btn-acid mt-5 min-h-[52px] w-full rounded-full disabled:opacity-40"
+                  >
+                    {side === "buy" ? `Buy ${tick(open.symbol)}` : `Sell ${tick(open.symbol)}`}
+                  </button>
+                  <div className="mt-3">
+                    <FormAlert error={tradeErr.banner} />
+                  </div>
+                  <p className="mt-3 text-center font-mono text-[11px] text-mute">
+                    1% fee · 50% to the dev · protocol share: listings, buybacks, burns
+                    {solUsd ? ` · SOL $${solUsd.toFixed(0)}` : ""}
+                  </p>
+                  {creator && (
+                    <button
+                      type="button"
+                      disabled={busy || !(open.devRewardsSol > 0)}
+                      onClick={() => onAct({ action: "withdraw_dev", id: open.id })}
+                      className="mt-3 w-full rounded-full border border-acid/40 py-2 text-sm text-acid disabled:opacity-40"
+                    >
+                      Withdraw {fmtSol(open.devRewardsSol, 4)} SOL rewards
+                    </button>
+                  )}
+                </>
+              )}
+            </>
+          )}
+        </div>
       </div>
     </section>
   );

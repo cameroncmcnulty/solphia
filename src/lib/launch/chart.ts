@@ -97,7 +97,21 @@ export function fmtAxisPx(n: number): string {
   if (n >= 1000) return n.toFixed(0);
   if (n >= 1) return n.toFixed(n >= 100 ? 2 : 4);
   if (n >= 0.01) return n.toFixed(4);
+  if (n >= 0.0001) return n.toFixed(6);
   return n.toPrecision(3);
+}
+
+export function scaleSpark(rows: Spark[], k: number): Spark[] {
+  if (!(k > 0) || k === 1) return rows;
+  return rows.map((c) => ({ t: c.t, o: c.o * k, h: c.h * k, l: c.l * k, c: c.c * k }));
+}
+
+/** Even price ticks in the same linear space as the candle Y map. */
+export function axisTicks(min: number, max: number, n = 4): number[] {
+  if (n < 2) return [max];
+  const span = max - min || Math.abs(max) * 0.04 || 1;
+  const hi = max;
+  return Array.from({ length: n }, (_, i) => hi - (span * i) / (n - 1));
 }
 
 export function bucketCandles(rows: Spark[], max: number): Spark[] {
@@ -170,10 +184,43 @@ export async function fetchGeckoCandles(pool: string, tf: ChartTf, limit = 48): 
           ? { path: "hour", aggregate: 1 }
           : { path: "hour", aggregate: 6 };
   const r = await getJson<{ data?: { attributes?: { ohlcv_list?: unknown } } }>(
-    `https://api.geckoterminal.com/api/v2/networks/solana/pools/${encodeURIComponent(pool)}/ohlcv/${spec.path}?aggregate=${spec.aggregate}&limit=${limit}`,
+    `https://api.geckoterminal.com/api/v2/networks/solana/pools/${encodeURIComponent(pool)}/ohlcv/${spec.path}?aggregate=${spec.aggregate}&limit=${limit}&currency=usd`,
     5000,
   );
   return fromGecko(r.data?.data?.attributes?.ohlcv_list);
+}
+
+export type ChartPack = { candles: Spark[]; unit: "sol" | "usd" };
+
+const packCache = new Map<string, { at: number; pack: ChartPack }>();
+
+async function fetchTokenChartUncached(opts: {
+  mint?: string;
+  pair?: string;
+  venue?: string;
+  tf?: ChartTf;
+}): Promise<ChartPack> {
+  const tf = opts.tf || "15m";
+  const pumpTf = tf === "5m" ? 5 : tf === "15m" ? 15 : tf === "1h" ? 60 : 240;
+  const venue = (opts.venue || "").toLowerCase();
+  const tryPump = async () => {
+    if (!opts.mint) return [] as Spark[];
+    return fetchPumpCandles(opts.mint, pumpTf === 240 ? 60 : pumpTf, tf === "6h" ? 72 : 80);
+  };
+  const tryGecko = async () => {
+    if (!opts.pair) return [] as Spark[];
+    return fetchGeckoCandles(opts.pair, tf, tf === "6h" ? 60 : 80);
+  };
+
+  if (opts.pair) {
+    const gecko = await tryGecko();
+    if (gecko.length >= 4) return { candles: gecko, unit: "usd" };
+  }
+  if (opts.mint && (venue === "pumpfun" || venue === "pumpswap" || !opts.pair)) {
+    const pump = await tryPump();
+    if (pump.length >= 4) return { candles: pump, unit: "sol" };
+  }
+  return { candles: [], unit: "sol" };
 }
 
 export async function fetchTokenChart(opts: {
@@ -181,23 +228,13 @@ export async function fetchTokenChart(opts: {
   pair?: string;
   venue?: string;
   tf?: ChartTf;
-}): Promise<Spark[]> {
-  const tf = opts.tf || "15m";
-  const pumpTf = tf === "5m" ? 5 : tf === "15m" ? 15 : tf === "1h" ? 60 : 240;
-  const venue = (opts.venue || "").toLowerCase();
-  if (opts.mint && (venue === "pumpfun" || venue === "pumpswap" || !opts.pair)) {
-    const pump = await fetchPumpCandles(opts.mint, pumpTf === 240 ? 60 : pumpTf, tf === "6h" ? 72 : 60);
-    if (pump.length >= 4) return pump;
-  }
-  if (opts.pair) {
-    const gecko = await fetchGeckoCandles(opts.pair, tf, tf === "6h" ? 48 : 60);
-    if (gecko.length >= 4) return gecko;
-  }
-  if (opts.mint && venue !== "pumpfun" && venue !== "pumpswap") {
-    const pump = await fetchPumpCandles(opts.mint, pumpTf === 240 ? 60 : pumpTf, 48);
-    if (pump.length >= 4) return pump;
-  }
-  return [];
+}): Promise<ChartPack> {
+  const key = `${opts.mint || ""}|${opts.pair || ""}|${opts.venue || ""}|${opts.tf || "15m"}`;
+  const hit = packCache.get(key);
+  if (hit && Date.now() - hit.at < 30_000) return hit.pack;
+  const pack = await fetchTokenChartUncached(opts);
+  if (pack.candles.length >= 4) packCache.set(key, { at: Date.now(), pack });
+  return pack;
 }
 
 async function poolMap<T>(items: T[], n: number, fn: (item: T) => Promise<void>) {
@@ -221,7 +258,7 @@ export async function attachTapeSparks<T extends TapeCoin>(coins: T[]): Promise<
         venue: coin.venue,
         tf: "15m",
       });
-      coin.spark = live.length >= 4 ? live.slice(-36) : syntheticSpark(coin);
+      coin.spark = live.candles.length >= 4 ? live.candles.slice(-36) : syntheticSpark(coin);
     } catch {
       coin.spark = syntheticSpark(coin);
     }

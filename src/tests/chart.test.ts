@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { bucketCandles, normalizeCandles, smoothSpark, sparkUp, syntheticSpark } from "../lib/launch/chart";
+import { axisTicks, bucketCandles, fmtAxisPx, normalizeCandles, scaleSpark, smoothSpark, sparkUp, syntheticSpark } from "../lib/launch/chart";
+import { rewriteImageUrl } from "../components/TokenArt";
 
 describe("token sparks", () => {
   it("builds a 5-print path from windowed % so each coin is not the same sine wave", () => {
@@ -34,5 +35,41 @@ describe("token sparks", () => {
     const b = bucketCandles(long, 10);
     assert.ok(b.length <= 10);
     assert.equal(b[b.length - 1].c, long[long.length - 1].c);
+  });
+
+  it("scales SOL candles into USD without changing time", () => {
+    const rows = scaleSpark(
+      [
+        { t: 1, o: 0.01, h: 0.02, l: 0.009, c: 0.015 },
+        { t: 2, o: 0.015, h: 0.03, l: 0.01, c: 0.02 },
+      ],
+      100,
+    );
+    assert.equal(rows[1].t, 2);
+    assert.equal(rows[1].c, 2);
+    assert.ok(rows[0].h > rows[0].c);
+  });
+
+  it("places axis ticks on the same min/max the candles use", () => {
+    const ticks = axisTicks(0.8, 1.2, 4);
+    assert.equal(ticks.length, 4);
+    assert.equal(ticks[0], 1.2);
+    assert.equal(ticks[ticks.length - 1], 0.8);
+    assert.ok(fmtAxisPx(0.00042).startsWith("0.000"));
+  });
+});
+
+describe("token art urls", () => {
+  it("leaves https and data urls alone and lifts ipfs onto a gateway", () => {
+    assert.equal(rewriteImageUrl("https://dd.dexscreener.com/x.png"), "https://dd.dexscreener.com/x.png");
+    assert.equal(rewriteImageUrl("data:image/png;base64,abc"), "data:image/png;base64,abc");
+    assert.equal(
+      rewriteImageUrl("ipfs://QmHashHereThatIsLongEnoughToPassTheCidCheckXX"),
+      "https://pump.mypinata.cloud/ipfs/QmHashHereThatIsLongEnoughToPassTheCidCheckXX",
+    );
+    assert.equal(
+      rewriteImageUrl("https://ipfs.io/ipfs/bafybeibi5456odfpboswifv75btyarpbh3qpvjtai5q4k6r737jpmaczuu"),
+      "https://pump.mypinata.cloud/ipfs/bafybeibi5456odfpboswifv75btyarpbh3qpvjtai5q4k6r737jpmaczuu",
+    );
   });
 });
