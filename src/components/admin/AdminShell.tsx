@@ -148,6 +148,9 @@ export function AdminShell({ children }: { children: ReactNode }) {
               >
                 {data.liveTrading ? "LIVE ON" : "LIVE OFF"}
               </button>
+              <span className={`hidden rounded-full px-3 py-1.5 font-mono text-[11px] sm:inline ${data.signerReady ? "bg-acid/15 text-acid" : "border border-line text-mute"}`}>
+                {data.signerReady ? "24/7 READY" : "24/7 OFF"}
+              </span>
               <span className="hidden rounded-full border border-line px-3 py-1.5 font-mono text-[11px] text-cyan md:inline">
                 {ticking ? "tick live" : "tick stale"} · {tickAge}
               </span>

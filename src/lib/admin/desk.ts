@@ -1,6 +1,7 @@
 import { DEFAULT_AUTO } from "../auto";
 import { PAIR_FEE_BPS, PAIR_SLIP_BPS, PROTOCOL_FEE_BPS, XAI_API_KEY } from "../config";
 import { liveTradingEnabled } from "../liveFlag";
+import { signerConfigured } from "../live/crypto";
 import { SLEEVE_WEIGHT, TRADE_PAIRS } from "../pair/catalog";
 import { SOL_MINT, USDC_MINT, gldxMint, qqqxMint, spyxMint } from "../pair/mints";
 import type { PairDeskPublic } from "../pair/public";
@@ -51,6 +52,7 @@ export function buildAdminDesk(opts?: { light?: boolean }): AdminDesk {
       trades: book.trades,
       lastAction: t.book.lastAction,
       pending: Boolean(t.book.pendingIntent),
+      delegated: Boolean(t.auto?.liveDelegate),
       leverage: t.auto?.leverage === 2 || t.auto?.leverage === 3 ? t.auto.leverage : 1,
       updatedAt: t.updatedAt,
     };
@@ -101,6 +103,7 @@ export function buildAdminDesk(opts?: { light?: boolean }): AdminDesk {
 
   return {
     liveTrading: liveTradingEnabled(),
+    signerReady: signerConfigured(),
     helius: heliusEnabled(),
     treasury,
     treasurySet: Boolean(treasury),

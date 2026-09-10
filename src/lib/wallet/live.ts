@@ -1,21 +1,9 @@
 "use client";
 
-import { SOL_MINT, USDC_MINT, XSTOCKS, xstockBySymbol, xstockMint } from "@/lib/pair/mints";
+import { SOL_MINT, USDC_MINT, XSTOCKS, xstockMint } from "@/lib/pair/mints";
+import { planIntentSwaps } from "@/lib/live/intent";
 import { signAndSendSwap, skimProtocolFee, tradingPubkey } from "./trading";
 import type { PairIntent } from "@/lib/types";
-
-function mintFor(label: string): string {
-  if (label === "SOL") return SOL_MINT;
-  if (label === "USDC") return USDC_MINT;
-  const row = xstockBySymbol(label);
-  return row ? xstockMint(row.id) : xstockMint("spyx");
-}
-
-function qtyKey(id: string): "spyxQty" | "qqqxQty" | "gldxQty" {
-  if (id === "qqqx") return "qqqxQty";
-  if (id === "gldx") return "gldxQty";
-  return "spyxQty";
-}
 
 function xstockLabel(mint: string): string {
   const row = XSTOCKS.find((x) => xstockMint(x.id) === mint);
@@ -56,37 +44,17 @@ export async function executePendingIntent(opts: {
     }
     return swapOne(inputMint, outputMint, amount);
   }
-  function pxOf(label: string) {
-    if (label === "USDC") return 1;
-    if (label === "SOL") return opts.solUsd;
-    if (label === "QQQx") return opts.qqqxUsd;
-    if (label === "GLDx") return opts.gldxUsd;
-    return opts.spyxUsd;
-  }
   let sig = "";
-  if (intent.action === "flatten") {
-    const h = opts.holdings;
-    for (const x of XSTOCKS) {
-      const qty = Number(h?.[qtyKey(x.id)] || 0);
-      if (qty > 0.0001) sig = await swap(xstockMint(x.id), SOL_MINT, qty);
-    }
-    const usdc = Number(h?.usdcQty || 0);
-    if (usdc > 1) sig = await swap(USDC_MINT, SOL_MINT, usdc);
-  } else if (intent.action === "deploy") {
-    if (intent.to && intent.to !== "SOL") {
-      const amt = intent.clipUsd / opts.solUsd;
-      if (amt > 0.002) sig = await swap(SOL_MINT, mintFor(intent.to), amt);
-    } else {
-      const slice = (intent.clipUsd * 0.2) / opts.solUsd;
-      if (slice > 0.002) sig = await swap(SOL_MINT, USDC_MINT, slice);
-      for (const x of XSTOCKS) {
-        if (slice > 0.002) sig = await swap(SOL_MINT, xstockMint(x.id), slice);
-      }
-    }
-  } else if (intent.from && intent.to && intent.from !== "none" && intent.to !== "none") {
-    const p = pxOf(intent.from);
-    const amt = p > 0 ? intent.clipUsd / p : 0;
-    if (amt > 0) sig = await swap(mintFor(intent.from), mintFor(intent.to), amt);
+  const legs = planIntentSwaps({
+    intent,
+    solUsd: opts.solUsd,
+    spyxUsd: opts.spyxUsd,
+    qqqxUsd: opts.qqqxUsd,
+    gldxUsd: opts.gldxUsd,
+    holdings: opts.holdings,
+  });
+  for (const leg of legs) {
+    sig = await swap(leg.inputMint, leg.outputMint, leg.amount);
   }
   if (!sig) throw new Error("no live swap built");
   await fetch("/api/auto", {

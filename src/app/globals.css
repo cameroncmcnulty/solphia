@@ -13,6 +13,11 @@ body {
   background: var(--void);
   color: #f7f4ff;
   min-height: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html {
+  overscroll-behavior-y: none;
 }
 
 body {

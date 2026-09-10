@@ -20,6 +20,7 @@ export function SystemSection() {
           <Row k="Seat" v={`${data.seatSol} / ${data.seatSolLev} SOL`} />
           <Row k="Clip fee" v={`${data.protocolFeeBps} bps`} />
           <Row k="PnL" v="USDC" />
+          <Row k="24/7 signer" v={data.signerReady ? "READY" : "OFF"} />
         </div>
       </div>
       <div className="panel rounded-2xl p-5">

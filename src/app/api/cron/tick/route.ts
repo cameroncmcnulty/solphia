@@ -45,5 +45,6 @@ export async function GET(req: NextRequest) {
     promos,
     lastTickAt: Date.now(),
     liveTrading: tick.liveTrading,
+    liveFills: tick.liveFills,
   });
 }

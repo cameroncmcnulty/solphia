@@ -340,6 +340,8 @@ export interface AutoSettings {
   /** 1 = spot SOL. 2 or 3 = isolated SOL-PERP (Jupiter Perps fee model). */
   leverage: 1 | 2 | 3;
   tradingPubkey?: string;
+  /** Encrypted trading-wallet secret is on the server so she can clip while the device is off. */
+  liveDelegate?: boolean;
   /** @deprecated memecoin desks — ignored */
   copy?: boolean;
   launch?: boolean;

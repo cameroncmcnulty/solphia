@@ -10,6 +10,7 @@ dist
 data/*.json
 data/*.lock
 data/promos/
+data/signers/
 coverage
 tsconfig.tsbuildinfo
 .vercel

@@ -13,7 +13,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const path = usePathname();
   const isAdmin = path.startsWith("/admin");
   return (
-    <div className={`relative min-h-screen overflow-x-hidden ${isAdmin ? "" : "pb-28 md:pb-8"}`}>
+    <div className={`relative min-h-screen overflow-x-hidden ${isAdmin ? "" : "pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:pb-8"}`}>
       {!isAdmin && <ParticleField />}
       {!isAdmin && <div className="vignette" />}
       {!isAdmin && (

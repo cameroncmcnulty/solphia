@@ -10,6 +10,7 @@ import { DEFAULT_STUDY } from "./pair/knowledge";
 import { loadShortTape } from "./pair/shortTape";
 import { loadScalpFrames } from "./pair/frames";
 import { readyState, saveOps, saveTrader, loadHotTraders } from "./store";
+import { fillLiveIntent, MAX_LIVE_FILLS_PER_TICK } from "./live/execute";
 import { liveSeatOk, levSeatOk } from "./access";
 import { leverageUnlocked } from "./leverage";
 import { treasuryAddress } from "./treasury";
@@ -114,6 +115,7 @@ export async function runMarketTick(): Promise<{
   mind: ReturnType<typeof publicMind>;
   pair: PairDeskPublic | null;
   liveTrading: boolean;
+  liveFills: number;
 }> {
   ensurePaperLoop();
   const run = lock.then(async () => {
@@ -165,6 +167,7 @@ export async function runMarketTick(): Promise<{
         mind: publicMind(state.mind),
         pair: null,
         liveTrading: liveTradingEnabled(),
+        liveFills: 0,
       };
     }
 
@@ -233,6 +236,7 @@ export async function runMarketTick(): Promise<{
 
     let entries = demo.fills.filter((f) => f.side === "buy").length;
     let exits = demo.fills.filter((f) => f.side === "sell").length;
+    let liveFills = 0;
 
     const hot = await loadHotTraders(state);
     for (const trader of hot) {
@@ -245,6 +249,7 @@ export async function runMarketTick(): Promise<{
         mode: liveWanted ? "live" : "paper",
         armed: !trader.book.killed,
         tradingPubkey: trader.auto?.tradingPubkey,
+        liveDelegate: trader.auto?.liveDelegate,
         armedAt: trader.auto?.armedAt,
         leverage: leverageUnlocked({
           mode: liveWanted ? "live" : "paper",
@@ -282,6 +287,15 @@ export async function runMarketTick(): Promise<{
       });
       entries += t.fills.filter((f) => f.side === "buy").length;
       exits += t.fills.filter((f) => f.side === "sell").length;
+      if (
+        live &&
+        trader.auto.liveDelegate &&
+        trader.book.pendingIntent &&
+        liveFills < MAX_LIVE_FILLS_PER_TICK
+      ) {
+        const sent = await fillLiveIntent(trader, prices, now, state.mind);
+        if (sent.ok) liveFills += 1;
+      }
       trader.updatedAt = now;
       await saveTrader(trader);
     }
@@ -310,6 +324,7 @@ export async function runMarketTick(): Promise<{
       mind: publicMind(state.mind),
       pair: lastPairPublic,
       liveTrading: liveTradingEnabled(),
+      liveFills,
     };
   });
   lock = run.then(

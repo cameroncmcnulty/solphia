@@ -20,6 +20,7 @@ export type AdminTrader = {
   trades: number;
   lastAction?: string;
   pending: boolean;
+  delegated: boolean;
   leverage: 1 | 2 | 3;
   updatedAt: number;
 };
@@ -103,6 +104,7 @@ export type AdminPair = {
 
 export type AdminDesk = {
   liveTrading: boolean;
+  signerReady: boolean;
   helius: boolean;
   treasury: string;
   treasurySet: boolean;

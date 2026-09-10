@@ -549,13 +549,20 @@ export function tickPairBook(opts: {
       opts.book.pendingIntent = intent;
       pushTape(
         opts.book,
-        tapeOf(opts.now, decision.action === "flatten" ? "flatten" : decision.action === "deploy" ? "deploy" : "trade", `Live · waiting for signature. ${decision.reason}`, {
-          z: decision.z7,
-          ratio: decision.ratio,
-          sizeUsd: decision.clipUsd,
-          from: decision.from,
-          to: decision.to,
-        }),
+        tapeOf(
+          opts.now,
+          decision.action === "flatten" ? "flatten" : decision.action === "deploy" ? "deploy" : "trade",
+          opts.auto.liveDelegate
+            ? `Live · sending from server. ${decision.reason}`
+            : `Live · waiting for signature. ${decision.reason}`,
+          {
+            z: decision.z7,
+            ratio: decision.ratio,
+            sizeUsd: decision.clipUsd,
+            from: decision.from,
+            to: decision.to,
+          },
+        ),
       );
     }
     markPair(opts.book, opts.prices);

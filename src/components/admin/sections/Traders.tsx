@@ -20,6 +20,7 @@ export function TradersSection() {
                 <span className={t.killed ? "text-blood" : t.mode === "live" ? "text-acid" : "text-cyan"}>
                   {t.killed ? "KILL" : t.mode.toUpperCase()}
                   {t.leverage > 1 ? ` · SOL ${t.leverage}×` : ""}
+                  {t.delegated ? " · 24/7" : ""}
                   {t.pending ? " · CLIP" : ""}
                 </span>
               </div>

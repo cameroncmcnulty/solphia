@@ -25,6 +25,7 @@ export function LiveRunner() {
         const tpk = tradingPubkey();
         const a = await fetch(`/api/auto?owner=${owner}`).then((r) => r.json());
         if (a.auto?.mode !== "live" || a.paper?.killed) return;
+        if (a.auto?.liveDelegate || a.liveDelegate) return;
         const intent = a.paper?.pendingIntent;
         if (!intent || intent.reason === lastSig.current) return;
         const solUsd = Number(data?.pair?.solUsd || data?.solUsd || 0);

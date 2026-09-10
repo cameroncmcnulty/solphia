@@ -27,6 +27,7 @@ export function lockedAuto(partial?: Partial<AutoSettings>): AutoSettings {
     armed: partial?.armed !== false,
     armedAt: partial?.armedAt,
     tradingPubkey: partial?.tradingPubkey,
+    liveDelegate: Boolean(partial?.liveDelegate),
     leverage: clampLev(partial?.leverage) as Lev,
   };
 }

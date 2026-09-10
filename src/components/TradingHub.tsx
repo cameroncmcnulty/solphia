@@ -29,6 +29,7 @@ type Auto = {
   armedAt?: number;
   mode?: "paper" | "live";
   leverage?: 1 | 2 | 3;
+  liveDelegate?: boolean;
 };
 
 function money(n: number) {
@@ -69,6 +70,7 @@ export function TradingHub() {
   const [auto, setAuto] = useState<Auto | null>(null);
   const [paper, setPaper] = useState<any>(null);
   const [liveTrading, setLiveTrading] = useState(false);
+  const [delegated, setDelegated] = useState(false);
   const [tradePk, setTradePk] = useState("");
   const [bal, setBal] = useState(0);
   const [solAmt, setSolAmt] = useState(0.5);
@@ -99,6 +101,7 @@ export function TradingHub() {
     setAuto(a.auto);
     setPaper(a.paper);
     setLiveTrading(Boolean(a.liveTrading));
+    setDelegated(Boolean(a.liveDelegate || a.auto?.liveDelegate));
     try {
       const s = await fetch(`/api/access?pubkey=${pk}`).then((r) => r.json());
       setSeat(s);
@@ -395,13 +398,17 @@ export function TradingHub() {
           {(owner && book?.lastAction) || pair?.reason || book?.lastAction || "Waiting on prices…"}
         </p>
         {book?.pendingIntent && auto?.mode === "live" && (
-          <p className="mt-2 font-mono text-sm text-acid">Live trade going out from the trading wallet on this device — no extra Phantom popup.</p>
+          <p className="mt-2 font-mono text-sm text-acid">
+            {delegated
+              ? "Live clip going out from the server — you can close this tab."
+              : "Live trade going out from the trading wallet on this device — no extra Phantom popup."}
+          </p>
         )}
 
         <div className="mt-6 border-t border-violet/20 pt-5">
           <div className="font-mono text-[10px] tracking-[0.2em] text-mute">
-            TRADING WALLET · {tradePk ? `${tradePk.slice(0, 4)}…${tradePk.slice(-4)}` : "connect first"} · keys never leave
-            this device
+            TRADING WALLET · {tradePk ? `${tradePk.slice(0, 4)}…${tradePk.slice(-4)}` : "connect first"} ·{" "}
+            {delegated ? "24/7 server signer on" : "keys stay on this device until you enable 24/7"}
           </div>
           <div data-field="amount" className={`mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4 ${fundErr.errors.amount ? "rounded-2xl p-1 ring-1 ring-blood/60" : ""}`}>
             {[0.1, 0.5, 1, 2].map((n) => (
@@ -487,7 +494,9 @@ export function TradingHub() {
                 : seat?.treasury && !seat?.liveSeat && !seat?.founder
                   ? "Live is on, but you need a paid 0.1 SOL (spot) or 0.15 SOL (2×/3×) seat before she can spend the trading wallet."
                   : auto?.mode === "live"
-                    ? "Uses the SOL you added. You already connected — she signs from this device."
+                    ? delegated
+                      ? "Uses the SOL you added. She signs on the server — close the laptop, she keeps clipping."
+                      : "Uses the SOL you added. She signs from this device unless you enable 24/7 live below."
                     : "Fake fills on live prices. Flip to real trades after you add SOL and pay the seat."}
             </p>
             {seat?.liveSeat && seat.subscribedUntil ? (
@@ -533,6 +542,75 @@ export function TradingHub() {
                 className="min-h-[40px] rounded-full border border-blood/40 px-4 font-mono text-[11px] text-blood"
               >
                 Unsubscribe
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-2xl border border-violet/20 p-4">
+          <div className="font-mono text-[10px] tracking-[0.2em] text-mute">24/7 LIVE</div>
+          <p className="mt-1 text-sm text-mute">
+            Solana transactions expire in about a minute, so she cannot presign swaps for later. 24/7 live uploads an
+            encrypted copy of the trading-wallet key (not Phantom) so the server can sign real Jupiter swaps while this
+            device is off. Phantom never leaves Phantom. Anyone with the backup can spend this trading wallet.
+          </p>
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+            <button
+              type="button"
+              disabled={busy || !owner || !liveTrading}
+              onClick={async () => {
+                if (!owner) return setMsg("Connect Phantom first.");
+                setBusy(true);
+                try {
+                  const r = await fetch("/api/live/delegate", {
+                    method: "POST",
+                    headers: { "content-type": "application/json" },
+                    body: JSON.stringify({ owner, secret: exportSecret() }),
+                  });
+                  const j = await r.json();
+                  if (!r.ok) throw new Error(j.error || "Could not enable 24/7 live.");
+                  setDelegated(true);
+                  setMsg("24/7 live on. She can clip this wallet while this device is off.");
+                  await refreshAuto(owner);
+                } catch (e) {
+                  setMsg(e instanceof Error ? e.message : "delegate failed");
+                } finally {
+                  setBusy(false);
+                }
+              }}
+              className={`min-h-[44px] rounded-full px-5 font-mono text-[12px] disabled:opacity-40 ${
+                delegated ? "btn-on" : "btn-acid"
+              }`}
+            >
+              {delegated ? "24/7 LIVE ON" : "Enable 24/7 live"}
+            </button>
+            {delegated && (
+              <button
+                type="button"
+                disabled={busy || !owner}
+                onClick={async () => {
+                  if (!owner) return;
+                  setBusy(true);
+                  try {
+                    const r = await fetch("/api/live/delegate", {
+                      method: "DELETE",
+                      headers: { "content-type": "application/json" },
+                      body: JSON.stringify({ owner }),
+                    });
+                    const j = await r.json();
+                    if (!r.ok) throw new Error(j.error || "Could not revoke 24/7 live.");
+                    setDelegated(false);
+                    setMsg("24/7 live off. She only signs from this device again.");
+                    await refreshAuto(owner);
+                  } catch (e) {
+                    setMsg(e instanceof Error ? e.message : "revoke failed");
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+                className="min-h-[44px] rounded-full border border-blood/40 px-5 font-mono text-[12px] text-blood disabled:opacity-40"
+              >
+                Revoke server key
               </button>
             )}
           </div>

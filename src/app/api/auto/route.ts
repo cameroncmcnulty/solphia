@@ -11,7 +11,8 @@ import { treasuryAddress } from "@/lib/treasury";
 import { publicMind } from "@/lib/mind/engine";
 import { killBook, unkilled, flattenToUsdc, applyPairDecision } from "@/lib/pair/paper";
 import { loadPairPrices } from "@/lib/pair/prices";
-import type { PairDecision } from "@/lib/pair/engine";
+import { decisionFromIntent } from "@/lib/live/fill";
+import { fillLiveIntent } from "@/lib/live/execute";
 
 export const dynamic = "force-dynamic";
 
@@ -34,6 +35,7 @@ export async function GET(req: NextRequest) {
     armed: trader.book.killed ? false : trader.auto.mode === "live" ? Boolean(trader.auto.armed) : true,
     tradingPubkey: trader.auto.tradingPubkey,
     armedAt: trader.auto.armedAt,
+    liveDelegate: trader.auto.liveDelegate,
   });
   if (trader.book.killed) auto.armed = false;
   else if (auto.mode !== "live") auto.armed = true;
@@ -44,6 +46,7 @@ export async function GET(req: NextRequest) {
     paper: publicBook(trader.book),
     mind: publicMind(state.mind),
     liveTrading: liveTradingEnabled(),
+    liveDelegate: Boolean(auto.liveDelegate),
   });
 }
 
@@ -85,7 +88,7 @@ export async function POST(req: NextRequest) {
     prices = null;
   }
   const solUsd = prices?.sol.usd || 0;
-  const trader = await mutateTrader(parsed.data.owner, (t, s) => {
+  const trader = await mutateTrader(parsed.data.owner, async (t, s) => {
     const wasArmed = Boolean(t.auto?.armed);
     const nextMode = parsed.data.auto?.mode ?? t.auto.mode;
     const nextArmed = parsed.data.auto?.armed ?? t.auto.armed;
@@ -101,6 +104,7 @@ export async function POST(req: NextRequest) {
       mode: nextMode,
       armed: nextArmed,
       tradingPubkey: t.auto.tradingPubkey,
+      liveDelegate: t.auto.liveDelegate,
       armedAt: t.auto.armedAt,
       leverage: wantLev === 2 || wantLev === 3 ? (levAllowed ? wantLev : 1) : t.auto.leverage,
     });
@@ -127,39 +131,20 @@ export async function POST(req: NextRequest) {
       t.book.pair.gldxQty = t.book.pair.gldxQty || 0;
     }
     if (prices && parsed.data.liveFill && t.book.pendingIntent) {
-      const intent = t.book.pendingIntent;
-      const stub = {
-        ratio: 0,
-        logR: 0,
-        mean24: 0,
-        mean7: 0,
-        std24: 0,
-        std7: 0,
-        z24: 0,
-        z7: 0,
-        n24: 0,
-        n7: 0,
-        asset: intent.asset || "spyx",
-      };
-      const decision: PairDecision = {
-        action: intent.action,
-        reason: `${intent.reason} · ${parsed.data.liveFill.signature.slice(0, 8)}`,
-        clipUsd: intent.clipUsd,
-        from: intent.from as PairDecision["from"],
-        to: intent.to as PairDecision["to"],
-        z7: 0,
-        z24: 0,
-        ratio: 0,
-        bandK: 0,
-        session: "cash",
-        read: stub,
-        solPct: intent.solPct,
-        asset: intent.asset,
-        pairId: intent.pairId,
-      };
-      applyPairDecision(t.book, decision, prices, Date.now(), s.mind);
+      applyPairDecision(t.book, decisionFromIntent(t.book.pendingIntent, parsed.data.liveFill.signature), prices, Date.now(), s.mind);
     }
     if (prices && (parsed.data.kill || parsed.data.flatten)) {
+      if (t.auto.liveDelegate && t.auto.mode === "live" && !parsed.data.liveFill) {
+        t.book.pendingIntent = {
+          action: "flatten",
+          from: "both",
+          to: "USDC",
+          clipUsd: t.book.equityUsd || 0,
+          reason: parsed.data.kill ? "Kill switch." : "Operator flatten to USDC.",
+          at: Date.now(),
+        };
+        await fillLiveIntent(t, prices, Date.now(), s.mind);
+      }
       if (parsed.data.kill) {
         killBook(t.book, prices, Date.now(), s.mind);
         t.auto.armed = false;
@@ -176,6 +161,7 @@ export async function POST(req: NextRequest) {
     mode: trader.auto.mode,
     armed: trader.auto.armed,
     tradingPubkey: trader.auto.tradingPubkey,
+    liveDelegate: trader.auto.liveDelegate,
     armedAt: trader.auto.armedAt,
   });
   if (trader.book.killed) autoOut.armed = false;
@@ -188,5 +174,6 @@ export async function POST(req: NextRequest) {
     paper: publicBook(trader.book),
     mind: publicMind(loadState().mind),
     liveTrading: liveTradingEnabled(),
+    liveDelegate: Boolean(autoOut.liveDelegate),
   });
 }

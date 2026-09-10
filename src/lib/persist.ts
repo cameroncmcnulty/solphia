@@ -10,6 +10,7 @@ export const KEYS = {
   trader: (owner: string) => `solphia:trader:${owner}`,
   backtest: (lev: 1 | 2 | 3) => `solphia:backtest:${lev}`,
   launch: "solphia:launch",
+  signer: (owner: string) => `solphia:signer:${owner}`,
 };
 
 const BLOB_PATH = "solphia-state.json";
@@ -97,6 +98,11 @@ export async function kvMGetJson(keys: string[]): Promise<(unknown | null)[]> {
   const cmd = await kvCommand(["MGET", ...keys]);
   const rows = Array.isArray(cmd.result) ? cmd.result : [];
   return keys.map((_, i) => parseJson(rows[i]));
+}
+
+export async function kvDel(key: string): Promise<boolean> {
+  const r = await kvCommand(["DEL", key]);
+  return r.ok;
 }
 
 export async function kvSadd(key: string, member: string): Promise<void> {

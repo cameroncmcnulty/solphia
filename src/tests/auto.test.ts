@@ -42,5 +42,6 @@ describe("auto bankroll", () => {
     assert.equal(DEFAULT_AUTO.cooldownMin, 2);
     assert.equal(DEFAULT_AUTO.band, "normal");
     assert.equal(DEFAULT_AUTO.targetSolPct, 0.2);
+    assert.equal(DEFAULT_AUTO.liveDelegate, undefined);
   });
 });

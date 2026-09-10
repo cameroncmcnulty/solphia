@@ -15,6 +15,8 @@ export const PAIR_SLIP_BPS = 4;
 export const DEFAULT_TREASURY = "2jNYVsfptvRLrg8V8AoLMVq6pnmpi7BHVo7Hsx5PTpma";
 export const TREASURY = (process.env.SOLPHIA_TREASURY || "").trim() || DEFAULT_TREASURY;
 export const ADMIN_SECRET = process.env.ADMIN_SECRET || "";
+/** AES key material for delegated 24/7 trading-wallet secrets. Falls back to ADMIN_SECRET. */
+export const LIVE_SIGNER_SECRET = (process.env.LIVE_SIGNER_SECRET || "").trim() || ADMIN_SECRET;
 export const CRON_SECRET = process.env.CRON_SECRET || "";
 export const HELIUS_API_KEY = process.env.HELIUS_API_KEY || "";
 export const XAI_API_KEY = process.env.XAI_API_KEY || "";
