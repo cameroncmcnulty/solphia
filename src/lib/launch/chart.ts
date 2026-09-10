@@ -65,6 +65,41 @@ export function syntheticSpark(coin: {
   });
 }
 
+function catmull(p0: number, p1: number, p2: number, p3: number, t: number) {
+  return 0.5 * (2 * p1 + (-p0 + p2) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t * t + (-p0 + 3 * p1 - 3 * p2 + p3) * t * t * t);
+}
+
+/** Smooth Dexscreener-style spark from each coin's own 24h/6h/1h/5m prints. */
+export function smoothSpark(coin: Parameters<typeof syntheticSpark>[0]): Spark[] {
+  const keys = syntheticSpark(coin);
+  if (keys.length < 2) return keys;
+  const n = 32;
+  const out: Spark[] = [];
+  for (let i = 0; i < n; i++) {
+    const u = i / (n - 1);
+    const x = u * (keys.length - 1);
+    const j = Math.min(keys.length - 2, Math.floor(x));
+    const t = x - j;
+    const p0 = keys[Math.max(0, j - 1)].c;
+    const p1 = keys[j].c;
+    const p2 = keys[j + 1].c;
+    const p3 = keys[Math.min(keys.length - 1, j + 2)].c;
+    const c = Math.max(1e-12, catmull(p0, p1, p2, p3, t));
+    const prev = out[out.length - 1]?.c || c;
+    const tm = keys[0].t + u * (keys[keys.length - 1].t - keys[0].t);
+    out.push({ t: tm, o: prev, h: Math.max(prev, c), l: Math.min(prev, c), c });
+  }
+  return out;
+}
+
+export function fmtAxisPx(n: number): string {
+  if (!(n > 0)) return "0";
+  if (n >= 1000) return n.toFixed(0);
+  if (n >= 1) return n.toFixed(n >= 100 ? 2 : 4);
+  if (n >= 0.01) return n.toFixed(4);
+  return n.toPrecision(3);
+}
+
 export function bucketCandles(rows: Spark[], max: number): Spark[] {
   if (rows.length <= max) return rows;
   const size = Math.ceil(rows.length / max);

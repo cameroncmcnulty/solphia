@@ -86,7 +86,7 @@ export function TokenChart({
         }`}
       >
         {loading && <div className="absolute right-2 top-1.5 z-[1] font-mono text-[9px] text-mute">…</div>}
-        <SparkCandles candles={candles} up={up} variant="candles" className="h-full w-full" />
+        <SparkCandles candles={candles} up={up} variant="candles" axis className="h-full w-full" />
       </div>
     </div>
   );

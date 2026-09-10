@@ -1,7 +1,7 @@
 import { ingestPublicTape } from "../feeds";
 import { scoreToken } from "../risk/engine";
 import type { TokenSnapshot } from "../types";
-import { attachTapeSparks } from "./chart";
+import { smoothSpark } from "./chart";
 import type { TapeCoin } from "./tape";
 
 /** Preferred safety floor. The board still fills to MARKET_CAP with the next-best live names. */
@@ -39,7 +39,7 @@ export function pairUrlOf(t: TokenSnapshot): string {
 export function snapshotToTape(t: TokenSnapshot, solUsd: number): TapeCoin {
   const sol = solUsd > 0 ? solUsd : 100;
   const toSol = (usd: number) => (usd > 0 ? usd / sol : 0);
-  return {
+  const row: TapeCoin = {
     id: t.mint,
     mint: t.mint,
     born: false,
@@ -87,6 +87,8 @@ export function snapshotToTape(t: TokenSnapshot, solUsd: number): TapeCoin {
     change6h: (t.priceChange6h || 0) / 100,
     change24h: (t.priceChange24h || 0) / 100,
   };
+  row.spark = smoothSpark(row);
+  return row;
 }
 
 export type MarketRow = { coin: TapeCoin; score: number; grade: string };
@@ -136,7 +138,6 @@ export async function loadMarketTape(force = false): Promise<{
   }
   const { tokens, solUsd } = await ingestPublicTape();
   const { rows, scanned } = filterMarketSnapshots(tokens, solUsd);
-  await attachTapeSparks(rows.map((r) => r.coin));
   cache = { at: Date.now(), rows, solUsd, scanned };
   return { rows, solUsd, scanned, minScore: MARKET_MIN_SCORE };
 }

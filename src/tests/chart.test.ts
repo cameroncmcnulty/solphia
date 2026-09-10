@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { bucketCandles, normalizeCandles, sparkUp, syntheticSpark } from "../lib/launch/chart";
+import { bucketCandles, normalizeCandles, smoothSpark, sparkUp, syntheticSpark } from "../lib/launch/chart";
 
 describe("token sparks", () => {
   it("builds a 5-print path from windowed % so each coin is not the same sine wave", () => {
@@ -8,6 +8,15 @@ describe("token sparks", () => {
     assert.equal(spark.length, 5);
     assert.ok(spark[spark.length - 1].c > spark[0].c);
     assert.equal(sparkUp(spark, 0), true);
+  });
+
+  it("smooths those prints into a unique curve, not a copied sine", () => {
+    const a = smoothSpark({ priceSol: 1, change24h: 0.4, change1h: -0.05, change5m: 0.02 });
+    const b = smoothSpark({ priceSol: 1, change24h: -0.3, change1h: 0.1, change5m: -0.02 });
+    assert.equal(a.length, 32);
+    assert.ok(a[a.length - 1].c > a[0].c);
+    assert.ok(b[b.length - 1].c < b[0].c);
+    assert.notEqual(a.map((p) => p.c.toFixed(4)).join(), b.map((p) => p.c.toFixed(4)).join());
   });
 
   it("sorts and clamps candle wicks", () => {

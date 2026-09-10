@@ -705,6 +705,23 @@ export default function LaunchPage() {
   );
 }
 
+function TokenArt({ src, className }: { src?: string; className?: string }) {
+  const [dead, setDead] = useState(false);
+  if (!src || dead) return <span className={`${className || ""} bg-violet/25`} />;
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={src}
+      alt=""
+      referrerPolicy="no-referrer"
+      loading="lazy"
+      decoding="async"
+      onError={() => setDead(true)}
+      className={className}
+    />
+  );
+}
+
 function RankMark({ n }: { n: number }) {
   if (n === 1) {
     return (
@@ -789,12 +806,7 @@ function CoinCard({
     >
       {elite && <span aria-hidden className="pointer-events-none absolute inset-0 rounded-2xl" style={{ boxShadow: eliteGlow(rank) }} />}
       {rank > 0 && <RankMark n={rank} />}
-      {c.image ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={c.image} alt="" className="relative z-[1] h-11 w-11 shrink-0 rounded-xl object-cover" />
-      ) : (
-        <span className="relative z-[1] h-11 w-11 shrink-0 rounded-xl bg-violet/25" />
-      )}
+      <TokenArt src={c.image} className="relative z-[1] h-11 w-11 shrink-0 rounded-xl object-cover" />
       <div className="relative z-[1] min-w-0 flex-1">
         <div className="flex min-w-0 items-center gap-2">
           <span className="truncate font-display text-base text-ghost sm:text-lg">{tick(c.symbol)}</span>
@@ -810,7 +822,7 @@ function CoinCard({
           <span className={up ? "text-acid" : "text-blood"}>{fmtPct(c.change24h)}</span>
         </div>
       </div>
-      <div className={`relative z-[1] h-8 w-16 shrink-0 sm:h-9 sm:w-[5.5rem] ${up ? "" : ""}`}>
+      <div className="relative z-[1] h-9 w-[4.75rem] shrink-0 sm:h-10 sm:w-28">
         <SparkCandles candles={spark} up={up} variant="line" className="h-full w-full" />
       </div>
       {score != null && (
@@ -880,10 +892,7 @@ function CoinDesk({
       <div>
         <div className="flex items-start justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
-            {open.image ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={open.image} alt="" className="h-14 w-14 rounded-2xl object-cover" />
-            ) : null}
+            <TokenArt src={open.image} className="h-14 w-14 shrink-0 rounded-2xl object-cover" />
             <div className="min-w-0">
               <div className="font-display text-3xl text-ghost">{tick(open.symbol)}</div>
               <div className="text-sm text-mute">{open.name}</div>
