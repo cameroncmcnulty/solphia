@@ -99,8 +99,8 @@ function onVoid(img, size) {
 }
 
 fs.writeFileSync(path.join(outDir, "spha-mark.png"), PNG.sync.write(mark));
-fs.writeFileSync(path.join(outDir, "favicon.png"), PNG.sync.write(onVoid(mark, 64)));
-fs.writeFileSync(path.join(outDir, "icon-192.png"), PNG.sync.write(onVoid(mark, 192)));
-fs.writeFileSync(path.join(outDir, "icon-512.png"), PNG.sync.write(onVoid(mark, 512)));
+fs.writeFileSync(path.join(outDir, "favicon.png"), PNG.sync.write(scaleBox(mark, 64)));
+fs.writeFileSync(path.join(outDir, "icon-192.png"), PNG.sync.write(scaleBox(mark, 192)));
+fs.writeFileSync(path.join(outDir, "icon-512.png"), PNG.sync.write(scaleBox(mark, 512)));
 fs.writeFileSync(path.join(outDir, "apple-touch-icon.png"), PNG.sync.write(onVoid(mark, 180)));
 console.log("wrote spha-mark", side, "from bbox", bw, bh);

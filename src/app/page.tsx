@@ -117,6 +117,24 @@ export default function Home() {
       <BacktestBrochure />
 
       <section className="px-4 py-16 md:px-12 md:py-24">
+        <p className="text-sm tracking-[0.2em] text-acid">REFERRALS</p>
+        <h2 className="mt-3 max-w-3xl font-display text-4xl leading-tight text-ghost sm:text-5xl md:text-6xl">
+          Invite once. Earn for life.
+        </h2>
+        <p className="mt-4 max-w-2xl text-lg text-mute">
+          Share your link. When someone follows it and connects Phantom, they are yours for life. Every coin they
+          launch pays you 25% of swap fees — on top of the 50% the actual dev keeps. Withdraw from your dashboard
+          whenever you want.
+        </p>
+        <Link
+          href="/account#referrals"
+          className="btn-acid mt-8 inline-flex min-h-[52px] items-center justify-center rounded-full px-8 text-base"
+        >
+          Referral dashboard
+        </Link>
+      </section>
+
+      <section className="px-4 py-16 md:px-12 md:py-24">
         <p className="text-sm tracking-[0.2em] text-acid">HOW IT WORKS</p>
         <h2 className="mt-3 font-display text-4xl text-ghost sm:text-5xl">Three steps.</h2>
         <div className="mt-12 grid gap-4 md:grid-cols-3">
