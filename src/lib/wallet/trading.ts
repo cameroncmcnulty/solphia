@@ -1,6 +1,6 @@
 "use client";
 
-import { Keypair, PublicKey, SystemProgram, Transaction, LAMPORTS_PER_SOL } from "@solana/web3.js";
+import { Keypair, PublicKey, SystemProgram, Transaction, VersionedTransaction, LAMPORTS_PER_SOL } from "@solana/web3.js";
 
 const SECRET = "solphia_trading_secret";
 const OWNER = "solphia_owner";
@@ -117,12 +117,28 @@ async function sendFromTrading(to: string, sol: number): Promise<string> {
 
 export function phantomProvider(): {
   isPhantom?: boolean;
-  signAndSendTransaction: (tx: Transaction) => Promise<{ signature?: string } | string>;
+  signAndSendTransaction: (tx: Transaction | VersionedTransaction) => Promise<{ signature?: string } | string>;
 } | null {
   if (typeof window === "undefined") return null;
   const w = window as unknown as { phantom?: { solana?: any }; solana?: any };
   const p = w.phantom?.solana?.isPhantom ? w.phantom.solana : w.solana?.isPhantom ? w.solana : null;
   return p || null;
+}
+
+export async function signAndSendPhantom(transactionB64: string): Promise<string> {
+  const provider = phantomProvider();
+  if (!provider) throw new Error("Open this page in Phantom (browser or in-app).");
+  const raw = Uint8Array.from(atob(transactionB64), (c) => c.charCodeAt(0));
+  let tx: Transaction | VersionedTransaction;
+  try {
+    tx = VersionedTransaction.deserialize(raw);
+  } catch {
+    tx = Transaction.from(raw);
+  }
+  const sent = await provider.signAndSendTransaction(tx);
+  const sig = String(typeof sent === "string" ? sent : sent.signature || "");
+  if (!sig) throw new Error("Phantom did not return a signature.");
+  return sig;
 }
 
 /** First-month seat: Phantom (owner) → treasury. */

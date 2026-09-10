@@ -3,10 +3,10 @@ import { scoreToken } from "../risk/engine";
 import type { TokenSnapshot } from "../types";
 import type { TapeCoin } from "./tape";
 
-/** Market tokens below this safety score never hit the tape. Solphia-born skip the gate. */
-export const MARKET_MIN_SCORE = 65;
-export const MARKET_MIN_MCAP_USD = 2_000;
-export const MARKET_CAP = 40;
+/** Preferred safety floor. The board still fills to MARKET_CAP with the next-best live names. */
+export const MARKET_MIN_SCORE = 45;
+export const MARKET_MIN_MCAP_USD = 400;
+export const MARKET_CAP = 48;
 
 export function marketPasses(opts: {
   born?: boolean;
@@ -17,14 +17,16 @@ export function marketPasses(opts: {
   livestream?: boolean;
   marketCapUsd?: number;
   liquidityUsd?: number;
+  volume1hUsd?: number;
+  preferred?: boolean;
 }): boolean {
   if (opts.born) return true;
   if (opts.nsfw || opts.banned || opts.livestream) return false;
-  if (opts.vetoed) return false;
-  if (opts.score < MARKET_MIN_SCORE) return false;
   const mcap = opts.marketCapUsd || 0;
   const liq = opts.liquidityUsd || 0;
-  if (mcap < MARKET_MIN_MCAP_USD && liq < 1_500) return false;
+  const vol = opts.volume1hUsd || 0;
+  if (mcap < MARKET_MIN_MCAP_USD && liq < 250 && vol < 80) return false;
+  if (opts.preferred && opts.score < MARKET_MIN_SCORE) return false;
   return true;
 }
 
@@ -91,31 +93,34 @@ let cache: { at: number; rows: MarketRow[]; solUsd: number; scanned: number } | 
 const CACHE_MS = 45_000;
 
 export function filterMarketSnapshots(tokens: TokenSnapshot[], solUsd: number): { rows: MarketRow[]; scanned: number } {
-  const rows: MarketRow[] = [];
+  const scored: MarketRow[] = [];
   for (const t of tokens) {
     if (!t.mint || t.mint.length < 32) continue;
-    const report = scoreToken(t);
     if (
       !marketPasses({
         born: false,
-        score: report.score,
-        vetoed: report.vetoed,
+        score: 100,
         nsfw: t.nsfw,
         banned: t.banned,
         livestream: t.livestream,
         marketCapUsd: t.marketCapUsd,
         liquidityUsd: t.liquidityUsd,
+        volume1hUsd: t.volume1h,
       })
     ) {
       continue;
     }
-    rows.push({ coin: snapshotToTape(t, solUsd), score: report.score, grade: report.grade });
+    const report = scoreToken(t);
+    scored.push({ coin: snapshotToTape(t, solUsd), score: report.score, grade: report.grade });
   }
-  rows.sort((a, b) => {
+  scored.sort((a, b) => {
     if (b.score !== a.score) return b.score - a.score;
     return (b.coin.vol1h || 0) - (a.coin.vol1h || 0);
   });
-  return { rows: rows.slice(0, MARKET_CAP), scanned: tokens.length };
+  const preferred = scored.filter((r) => r.score >= MARKET_MIN_SCORE);
+  const rest = scored.filter((r) => r.score < MARKET_MIN_SCORE);
+  const rows = [...preferred, ...rest].slice(0, MARKET_CAP);
+  return { rows, scanned: tokens.length };
 }
 
 export async function loadMarketTape(force = false): Promise<{

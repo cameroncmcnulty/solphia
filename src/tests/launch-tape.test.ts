@@ -107,13 +107,14 @@ describe("launch tape audit rank", () => {
 });
 
 describe("market tape gate", () => {
-  it("lets Solphia-born through even with a junk score, and requires 65+ for the rest of the market", () => {
-    assert.equal(MARKET_MIN_SCORE, 65);
+  it("lets Solphia-born through, cuts NSFW/dust, and prefers 45+ without starving the board", () => {
+    assert.equal(MARKET_MIN_SCORE, 45);
     assert.equal(marketPasses({ born: true, score: 12, vetoed: true }), true);
     assert.equal(marketPasses({ score: 80, marketCapUsd: 50_000, liquidityUsd: 10_000 }), true);
-    assert.equal(marketPasses({ score: 50, marketCapUsd: 50_000, liquidityUsd: 10_000 }), false);
-    assert.equal(marketPasses({ score: 90, vetoed: true, marketCapUsd: 50_000 }), false);
+    assert.equal(marketPasses({ score: 50, marketCapUsd: 50_000, liquidityUsd: 10_000, preferred: true }), true);
+    assert.equal(marketPasses({ score: 30, marketCapUsd: 50_000, preferred: true }), false);
+    assert.equal(marketPasses({ score: 30, marketCapUsd: 50_000 }), true);
     assert.equal(marketPasses({ score: 90, nsfw: true, marketCapUsd: 50_000 }), false);
-    assert.equal(marketPasses({ score: 90, marketCapUsd: 100, liquidityUsd: 100 }), false);
+    assert.equal(marketPasses({ score: 90, marketCapUsd: 10, liquidityUsd: 10, volume1hUsd: 10 }), false);
   });
 });

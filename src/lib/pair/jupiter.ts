@@ -1,3 +1,4 @@
+import { isSolanaAddress } from "../security";
 import {
   SOL_MINT,
   USDC_MINT,
@@ -119,17 +120,25 @@ async function quoteOnce(opts: {
   amount: number;
   slippageBps: number;
   extra?: string;
+  open?: boolean;
+  inDecimals?: number;
 }): Promise<QuoteResult> {
-  if (!isAllowedMint(opts.inputMint) || !isAllowedMint(opts.outputMint)) {
-    return { ok: false, reason: "Mint not on the SOL / USDC / official xStock allowlist." };
+  if (!opts.open) {
+    if (!isAllowedMint(opts.inputMint) || !isAllowedMint(opts.outputMint)) {
+      return { ok: false, reason: "Mint not on the SOL / USDC / official xStock allowlist." };
+    }
+    if (!endpointOk(opts.outputMint) || !endpointOk(opts.inputMint)) {
+      return { ok: false, reason: "Refusing lookalike ticker. Official SPYx, QQQx, and GLDx only." };
+    }
+  } else if (!isSolanaAddress(opts.inputMint) || !isSolanaAddress(opts.outputMint)) {
+    return { ok: false, reason: "Bad mint." };
   }
-  if (!endpointOk(opts.outputMint) || !endpointOk(opts.inputMint)) {
-    return { ok: false, reason: "Refusing lookalike ticker. Official SPYx, QQQx, and GLDx only." };
-  }
-  const amount = toUnits(opts.amount, decimals(opts.inputMint));
+  const dec = opts.inDecimals ?? (opts.open && opts.inputMint !== SOL_MINT && opts.inputMint !== USDC_MINT ? 6 : decimals(opts.inputMint));
+  const amount = toUnits(opts.amount, dec);
   const qs =
     `inputMint=${opts.inputMint}&outputMint=${opts.outputMint}&amount=${amount}` +
-    `&slippageBps=${opts.slippageBps}&restrictIntermediateTokens=true` +
+    `&slippageBps=${opts.slippageBps}` +
+    (opts.open ? "" : "&restrictIntermediateTokens=true") +
     (opts.extra ? `&${opts.extra}` : "");
   let last = "Swap quote failed.";
   for (const base of QUOTE_URLS) {
@@ -148,20 +157,32 @@ async function quoteOnce(opts: {
       continue;
     }
     const hops = routeMints(quote);
-    if (!routeMintsOk(hops)) {
+    if (!opts.open && !routeMintsOk(hops)) {
       last = `Swap hops a token she does not trade (${hops.filter((m) => !isAllowedMint(m)).join(",") || "unknown"}).`;
       continue;
     }
+    const outDec =
+      opts.open && quote.outputMint !== SOL_MINT && quote.outputMint !== USDC_MINT ? 6 : decimals(quote.outputMint);
     const impactPct = Math.abs(quote.priceImpactPct) > 1 ? Math.abs(quote.priceImpactPct) / 100 : Math.abs(quote.priceImpactPct);
     return {
       ok: true,
       quote,
       impactPct,
-      outAmount: fromUnits(quote.outAmount, decimals(quote.outputMint)),
+      outAmount: fromUnits(quote.outAmount, outDec),
       usd: quote.swapUsdValue,
     };
   }
   return { ok: false, reason: last };
+}
+
+export async function quoteOpenSwap(opts: {
+  inputMint: string;
+  outputMint: string;
+  amount: number;
+  slippageBps: number;
+  inDecimals?: number;
+}): Promise<QuoteResult> {
+  return quoteOnce({ ...opts, open: true });
 }
 
 export async function quoteSwap(opts: {

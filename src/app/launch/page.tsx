@@ -26,10 +26,11 @@ import {
   type LaunchField,
 } from "@/lib/launch/validate";
 import { FieldError, FormAlert, fieldClass, useConfirmErrors } from "@/components/form/confirm";
-import { loadOwner } from "@/lib/wallet/trading";
+import { loadOwner, signAndSendPhantom } from "@/lib/wallet/trading";
+import { SWAP_FEE_BPS } from "@/lib/launch/curve";
 import { auditLaunchCoin, rankTape, type LaunchAudit } from "@/lib/launch/audit";
 import { TAPE_BOARD, filterTape, sortTape, volumeIn, type AgeFilter, type VolWindow } from "@/lib/launch/tape";
-import { MARKET_MIN_SCORE } from "@/lib/launch/market";
+
 
 const TOKEN_PX = TOKEN_IMAGE_PX;
 const STORE_PX = 512;
@@ -365,7 +366,7 @@ export default function LaunchPage() {
         <p className="font-mono text-[11px] tracking-[0.28em] text-acid">LAUNCH · 1B · 1% SWAP · 50% TO DEV · 25% TO INVITER</p>
         <h1 className="mt-2 font-display text-4xl text-ghost sm:text-5xl">Fair launch. Swap like Phantom.</h1>
 
-        <div className="mt-8 grid gap-5 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
+        <div className="mt-8 grid gap-5 lg:grid-cols-[minmax(280px,0.72fr)_minmax(0,1.28fr)]">
           <section className="panel-bubble overflow-hidden rounded-3xl p-5">
             <h2 className="font-display text-2xl text-ghost">Create</h2>
             {!owner ? (
@@ -641,22 +642,12 @@ export default function LaunchPage() {
               )}
               {!ranked && (
                 <p className="text-[11px] leading-relaxed text-mute">
-                  Market coins need a {MARKET_MIN_SCORE}+ safety score. Solphia-born always make the tape.
+                  NSFW, banned, and livestream junk is cut. Safety score is on every row. The board fills with the next-best
+                  live names so it is never empty.
                 </p>
               )}
             </div>
-            {!ranked && (
-              <div className="mt-3 hidden grid-cols-[minmax(0,1.4fr)_repeat(6,minmax(0,0.7fr))] gap-2 px-3 font-mono text-[10px] tracking-[0.14em] text-mute md:grid">
-                <span>TOKEN</span>
-                <span>AGE</span>
-                <span>MC</span>
-                <span>LIQ</span>
-                <span>VOL</span>
-                <span>24H</span>
-                <span className="text-right">SCORE</span>
-              </div>
-            )}
-            <div className={`mt-2 space-y-2 ${ranked ? "" : "max-h-[36rem] overflow-y-auto overflow-x-hidden"}`}>
+            <div className={`mt-3 space-y-1.5 ${ranked ? "" : "max-h-[44rem] overflow-y-auto overflow-x-hidden"}`}>
               {rows.length === 0 && (
                 <p className="text-sm text-mute">
                   {tab === "mine"
@@ -769,6 +760,9 @@ function CoinCard({
   vol: VolWindow | null;
 }) {
   const elite = rank > 0 && rank <= 3;
+  const score = audit?.score ?? c.score;
+  const grade = audit?.grade ?? c.grade;
+  const spark = c.spark || [];
   return (
     <div
       role="button"
@@ -780,50 +774,46 @@ function CoinCard({
           onOpen();
         }
       }}
-      className={`relative isolate flex w-full cursor-pointer items-center gap-3 overflow-hidden rounded-2xl border px-3 py-3 text-left ${eliteClass(rank, active)}`}
+      className={`relative isolate flex w-full cursor-pointer items-center gap-3 overflow-hidden rounded-2xl border px-3 py-2.5 text-left ${eliteClass(rank, active)}`}
     >
       {elite && <span aria-hidden className="pointer-events-none absolute inset-0 rounded-2xl" style={{ boxShadow: eliteGlow(rank) }} />}
       {rank > 0 && <RankMark n={rank} />}
       {c.image ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={c.image} alt="" className={`relative z-[1] rounded-xl object-cover ${elite ? "h-14 w-14" : "h-12 w-12"}`} />
+        <img src={c.image} alt="" className="relative z-[1] h-11 w-11 shrink-0 rounded-xl object-cover" />
       ) : (
-        <span className={`relative z-[1] rounded-xl bg-violet/20 ${elite ? "h-14 w-14" : "h-12 w-12"}`} />
+        <span className="relative z-[1] h-11 w-11 shrink-0 rounded-xl bg-violet/25" />
       )}
       <div className="relative z-[1] min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <span className={`truncate font-display text-ghost ${elite ? "text-xl" : "text-lg"}`}>{tick(c.symbol)}</span>
-          <span className="truncate text-sm text-mute">{c.name}</span>
-          <span className={`shrink-0 rounded-full px-2 py-0.5 font-mono text-[9px] tracking-wide ${c.born ? "bg-acid/15 text-acid" : "bg-white/10 text-mute"}`}>
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="truncate font-display text-base text-ghost sm:text-lg">{tick(c.symbol)}</span>
+          <span className="hidden truncate text-sm text-mute sm:inline">{c.name}</span>
+          <span className={`shrink-0 rounded-full px-1.5 py-0.5 font-mono text-[9px] ${c.born ? "bg-acid/15 text-acid" : "bg-white/10 text-mute"}`}>
             {venueLabel(c)}
           </span>
         </div>
-        <div className="mt-1 grid grid-cols-2 gap-x-3 gap-y-0.5 font-mono text-[11px] md:grid-cols-6">
-          <span className="text-mute md:hidden">{fmtAge(Date.now() - c.createdAt)}</span>
-          <span className="hidden text-mute md:inline">{fmtAge(Date.now() - c.createdAt)}</span>
+        <div className="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 font-mono text-[11px] text-mute">
+          <span>{fmtAge(Date.now() - c.createdAt)}</span>
           <span className="text-ghost">{c.marketCapUsd ? fmtUsd(c.marketCapUsd) : `${fmtSol(c.marketCapSol, 1)} SOL`}</span>
-          <span className="hidden text-mute md:inline">{c.liqUsd ? fmtUsd(c.liqUsd) : c.liqSol ? `${fmtSol(c.liqSol, 1)} SOL` : "—"}</span>
-          <span className="hidden text-mute md:inline">
-            {vol ? `${fmtSol(volumeIn(c, vol), 2)} SOL` : c.vol1h ? `${fmtSol(c.vol1h, 2)} SOL` : "—"}
-          </span>
+          {(vol || c.vol1h) && <span>{fmtSol(vol ? volumeIn(c, vol) : c.vol1h || 0, 2)} SOL</span>}
           <span className={(c.change24h || 0) >= 0 ? "text-acid" : "text-blood"}>{fmtPct(c.change24h)}</span>
-          <span
-            className={`justify-self-end rounded-full px-2 py-0.5 text-[10px] ${
-              (audit?.grade || c.grade) === "S" || (audit?.grade || c.grade) === "A"
-                ? "bg-acid/20 text-acid"
-                : (audit?.grade || c.grade) === "B"
-                  ? "bg-cyan/20 text-cyan"
-                  : "bg-white/10 text-mute"
-            }`}
-          >
-            {audit ? `${audit.grade} ${audit.score}` : c.score != null ? `${c.grade || ""} ${c.score}` : "—"}
-          </span>
         </div>
-        {audit && elite && <p className="mt-1 truncate font-mono text-[10px] text-mute">{audit.why}</p>}
       </div>
-      <div className="relative z-[1] hidden overflow-hidden rounded-xl sm:block">
-        <SparkCandles candles={c.spark || []} up={(c.spark?.at(-1)?.c || 0) >= (c.spark?.[0]?.c || 0)} />
-      </div>
+      {score != null && (
+        <span
+          className={`relative z-[1] shrink-0 rounded-full px-2 py-1 font-mono text-[11px] ${
+            grade === "S" || grade === "A" ? "bg-acid/20 text-acid" : grade === "B" ? "bg-cyan/20 text-cyan" : "bg-white/10 text-mute"
+          }`}
+        >
+          {grade ? `${grade} ` : ""}
+          {score}
+        </span>
+      )}
+      {spark.length >= 4 && (
+        <div className="relative z-[1] hidden w-24 shrink-0 sm:block">
+          <SparkCandles candles={spark} up={(spark.at(-1)?.c || 0) >= (spark[0]?.c || 0)} width={96} height={36} />
+        </div>
+      )}
     </div>
   );
 }
@@ -951,33 +941,7 @@ function CoinDesk({
 
       <div className="rounded-3xl border border-violet/20 bg-void/50 p-4">
         {!open.born ? (
-          <div>
-            <p className="font-display text-xl text-ghost">Trade off-pad</p>
-            <p className="mt-2 text-sm text-mute">
-              This is a market coin that cleared a {MARKET_MIN_SCORE}+ safety score. Solphia does not custody it. Swap on the venue it
-              actually lives on.
-            </p>
-            <div className="mt-4 flex flex-col gap-2">
-              <a
-                href={open.pairUrl || `https://dexscreener.com/solana/${open.mint}`}
-                target="_blank"
-                rel="noreferrer"
-                className="btn-acid inline-flex min-h-[44px] items-center justify-center rounded-full px-5 text-sm"
-              >
-                Open Dexscreener
-              </a>
-              {(open.venue === "pumpfun" || open.venue === "pumpswap") && open.mint && (
-                <a
-                  href={`https://pump.fun/${open.mint}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="btn-ghost inline-flex min-h-[44px] items-center justify-center rounded-full px-5 text-sm"
-                >
-                  Open Pump.fun
-                </a>
-              )}
-            </div>
-          </div>
+          <MarketSwap open={open} owner={owner} sol={sol} setSol={setSol} solUsd={solUsd} />
         ) : (
           <>
         <div className="grid grid-cols-2 rounded-full border border-violet/30 p-1">
@@ -1089,6 +1053,191 @@ function CoinDesk({
         )}
       </div>
     </section>
+  );
+}
+
+function MarketSwap({
+  open,
+  owner,
+  sol,
+  setSol,
+  solUsd,
+}: {
+  open: Coin;
+  owner: string | null;
+  sol: number;
+  setSol: (n: number) => void;
+  solUsd: number;
+}) {
+  const [side, setSide] = useState<"buy" | "sell">("buy");
+  const [busy, setBusy] = useState(false);
+  const [out, setOut] = useState<number | null>(null);
+  const [feeSol, setFeeSol] = useState(0);
+  const [held, setHeld] = useState(0);
+  const [msg, setMsg] = useState("");
+  const tradeErr = useConfirmErrors<"wallet" | "amount">();
+  const mint = open.mint || "";
+
+  useEffect(() => {
+    if (!owner || !mint) {
+      setHeld(0);
+      return;
+    }
+    fetch(`/api/sol/token?owner=${encodeURIComponent(owner)}&mint=${encodeURIComponent(mint)}`)
+      .then((r) => r.json())
+      .then((j) => setHeld(Number(j.amount) || 0))
+      .catch(() => setHeld(0));
+  }, [owner, mint]);
+
+  useEffect(() => {
+    const amount = side === "buy" ? sol : held;
+    if (!mint || !(amount > 0)) {
+      setOut(null);
+      return;
+    }
+    const ctrl = new AbortController();
+    const t = setTimeout(() => {
+      fetch("/api/swap/quote", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ mint, side, amount, slippageBps: 100 }),
+        signal: ctrl.signal,
+      })
+        .then((r) => r.json())
+        .then((j) => {
+          if (j.ok) {
+            setOut(Number(j.outAmount) || 0);
+            setFeeSol(Number(j.feeSol) || 0);
+          } else setOut(null);
+        })
+        .catch(() => setOut(null));
+    }, 280);
+    return () => {
+      clearTimeout(t);
+      ctrl.abort();
+    };
+  }, [mint, side, sol, held]);
+
+  async function go() {
+    if (!owner) {
+      tradeErr.fail({ wallet: "Connect Phantom to swap. Tokens land in that wallet." });
+      return;
+    }
+    if (!mint) {
+      tradeErr.fail({ amount: "This coin has no mint yet." });
+      return;
+    }
+    const amount = side === "buy" ? sol : held;
+    if (side === "buy" && sol < MIN_TRADE_SOL) {
+      tradeErr.fail({ amount: `Min ${MIN_TRADE_SOL} SOL.` });
+      return;
+    }
+    if (side === "sell" && !(held > 0)) {
+      tradeErr.fail({ amount: "You have none of this token in Phantom." });
+      return;
+    }
+    tradeErr.ok();
+    setBusy(true);
+    setMsg("");
+    try {
+      const r = await fetch("/api/swap/build", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ owner, mint, side, amount, slippageBps: 100 }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || "Could not build the swap.");
+      const sig = await signAndSendPhantom(j.transaction);
+      setMsg(`Filled · ${sig.slice(0, 8)}… Tokens are in Phantom.`);
+      if (owner && mint) {
+        const b = await fetch(`/api/sol/token?owner=${encodeURIComponent(owner)}&mint=${encodeURIComponent(mint)}`).then((x) => x.json());
+        setHeld(Number(b.amount) || 0);
+      }
+    } catch (e) {
+      tradeErr.fail({ amount: e instanceof Error ? e.message : "swap failed" });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div>
+      <div className="grid grid-cols-2 rounded-full border border-violet/30 p-1">
+        <button type="button" onClick={() => setSide("buy")} className={`rounded-full py-2 text-sm ${side === "buy" ? "bg-acid/20 text-acid" : "text-mute"}`}>
+          Buy
+        </button>
+        <button type="button" onClick={() => setSide("sell")} className={`rounded-full py-2 text-sm ${side === "sell" ? "bg-acid/20 text-acid" : "text-mute"}`}>
+          Sell
+        </button>
+      </div>
+      <p className="mt-3 text-sm text-mute">
+        Phantom signs. Tokens land in that wallet — not the bot trading wallet. {SWAP_FEE_BPS / 100}% protocol fee on the route
+        funds listings, buybacks, and burns.
+      </p>
+      {!owner ? (
+        <div className="mt-5">
+          <WalletConnect />
+          <FieldError error={tradeErr.errors.wallet} />
+        </div>
+      ) : (
+        <>
+          <p className="mt-5 text-xs tracking-wide text-mute">{side === "buy" ? "You pay" : "You sell"}</p>
+          <div
+            data-field="amount"
+            className={`mt-2 flex items-center justify-between rounded-2xl border bg-void px-4 py-4 ${fieldClass(tradeErr.errors.amount)}`}
+          >
+            {side === "buy" ? (
+              <input
+                type="number"
+                min={0.01}
+                step={0.01}
+                value={sol}
+                onChange={(e) => {
+                  setSol(Number(e.target.value));
+                  tradeErr.clear("amount");
+                }}
+                aria-invalid={Boolean(tradeErr.errors.amount)}
+                className="w-full bg-transparent font-display text-3xl text-ghost outline-none"
+              />
+            ) : (
+              <div className="font-display text-3xl text-ghost">{fmtTok(held)}</div>
+            )}
+            <span className="shrink-0 font-mono text-sm text-mute">{side === "buy" ? "SOL" : tick(open.symbol)}</span>
+          </div>
+          <FieldError error={tradeErr.errors.amount} />
+          {side === "buy" && (
+            <div className="mt-2 flex flex-wrap gap-2">
+              {PRESETS.map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => setSol(p)}
+                  className={`rounded-full border px-3 py-1 font-mono text-[11px] ${Math.abs(sol - p) < 1e-9 ? "border-acid text-acid" : "border-violet/30 text-mute"}`}
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
+          )}
+          <p className="mt-5 text-xs tracking-wide text-mute">You receive</p>
+          <div className="mt-2 flex items-center justify-between rounded-2xl border border-violet/30 bg-void px-4 py-4">
+            <div className="font-display text-3xl text-ghost">
+              {out == null ? "—" : side === "buy" ? fmtTok(out) : fmtSol(out, 4)}
+            </div>
+            <span className="font-mono text-sm text-mute">{side === "buy" ? tick(open.symbol) : "SOL"}</span>
+          </div>
+          {feeSol > 0 && (
+            <p className="mt-2 font-mono text-[11px] text-mute">
+              Protocol fee {fmtSol(feeSol, 4)} SOL{solUsd ? ` · ~$${(feeSol * solUsd).toFixed(3)}` : ""}
+            </p>
+          )}
+          <button type="button" disabled={busy} onClick={go} className="btn-acid mt-5 min-h-[52px] w-full rounded-full disabled:opacity-40">
+            {busy ? "Swapping…" : side === "buy" ? `Buy ${tick(open.symbol)}` : `Sell ${tick(open.symbol)}`}
+          </button>
+          {msg && <p className="mt-3 font-mono text-sm text-acid">{msg}</p>}
+        </>
+      )}
+    </div>
   );
 }
 

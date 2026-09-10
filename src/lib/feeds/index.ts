@@ -346,20 +346,42 @@ export async function ingestPublicTape(): Promise<{ tokens: TokenSnapshot[]; sol
     solPriceUsd(),
     (async () => {
       const r = await getJson<PumpCoin[]>(
-        "https://frontend-api-v3.pump.fun/coins?offset=0&limit=40&sort=created_timestamp&order=desc&includeNsfw=false",
+        "https://frontend-api-v3.pump.fun/coins?offset=0&limit=50&sort=created_timestamp&order=desc&includeNsfw=false",
       );
       (r.data || []).forEach((c) => put(fromPump(c)));
     })(),
     (async () => {
       const r = await getJson<PumpCoin[]>(
-        "https://frontend-api-v3.pump.fun/coins?offset=0&limit=30&sort=last_trade_timestamp&order=desc&includeNsfw=false",
+        "https://frontend-api-v3.pump.fun/coins?offset=0&limit=50&sort=last_trade_timestamp&order=desc&includeNsfw=false",
+      );
+      (r.data || []).forEach((c) => put(fromPump(c)));
+    })(),
+    (async () => {
+      const r = await getJson<PumpCoin[]>(
+        "https://frontend-api-v3.pump.fun/coins?offset=0&limit=40&sort=market_cap&order=desc&includeNsfw=false",
       );
       (r.data || []).forEach((c) => put(fromPump(c)));
     })(),
     (async () => {
       const r = await getJson<{ pairs?: DexPair[] }>("https://api.dexscreener.com/latest/dex/search?q=SOL");
       const pairs = (r.data?.pairs || []).filter((p) => p.chainId === "solana");
-      pairs.slice(0, 50).forEach((p) => put(fromDex(p)));
+      pairs.slice(0, 60).forEach((p) => put(fromDex(p)));
+    })(),
+    (async () => {
+      const r = await getJson<{ data?: { rows?: LaunchRow[] } }>(
+        "https://launch-mint-v1.raydium.io/get/list?sort=lastTrade&size=40",
+      );
+      (r.data?.data?.rows || []).forEach((row) => put(fromLaunch(row)));
+    })(),
+    (async () => {
+      const r = await getJson<{ data?: GeckoPool[] }>(
+        "https://api.geckoterminal.com/api/v2/networks/solana/trending_pools?page=1",
+      );
+      (r.data?.data || []).forEach((p) => put(fromGecko(p)));
+    })(),
+    (async () => {
+      const r = await getJson<{ data?: GeckoPool[] }>("https://api.geckoterminal.com/api/v2/networks/solana/new_pools?page=1");
+      (r.data?.data || []).forEach((p) => put(fromGecko(p)));
     })(),
   ]);
   return { tokens: [...map.values()].filter((t) => t.mint.length >= 32), solUsd };
