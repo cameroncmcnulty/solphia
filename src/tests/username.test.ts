@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { emptyLaunchBook } from "../lib/launch/engine";
-import { setUsername, usernameOk } from "../lib/launch/username";
+import { setUsername, usernameIssue, usernameOk } from "../lib/launch/username";
 
 const A = "CyaE1VxvBrahnPWkqm5VsdCvyS2QmNht2UFrKJHga54o";
 const B = "D4uCNcBKAbG9NAkmhQg7pBiztuejNzbWrZDcZmFGut81";
@@ -13,6 +13,9 @@ describe("usernames", () => {
     assert.equal(usernameOk("ab"), false);
     assert.equal(usernameOk("1cam"), false);
     assert.equal(usernameOk("solphia"), false);
+    assert.equal(usernameIssue("solphia"), "username_reserved");
+    assert.equal(usernameIssue("ab"), "bad_username");
+    assert.equal(usernameIssue(""), null);
     const book = emptyLaunchBook();
     const first = setUsername(book, A, "Cam");
     assert.equal(first.ok, true);

@@ -30,10 +30,16 @@ export function usernameKey(raw: string): string {
 }
 
 export function usernameOk(raw: string): boolean {
+  return !usernameIssue(raw);
+}
+
+/** Empty is allowed (clears the handle). Otherwise a launch error code. */
+export function usernameIssue(raw: string): "bad_username" | "username_reserved" | null {
   const u = normalizeUsername(raw);
-  if (!USERNAME_RE.test(u)) return false;
-  if (RESERVED.has(u.toLowerCase())) return false;
-  return true;
+  if (!u) return null;
+  if (!USERNAME_RE.test(u)) return "bad_username";
+  if (RESERVED.has(u.toLowerCase())) return "username_reserved";
+  return null;
 }
 
 export function findUsernameOwner(book: LaunchBook, raw: string, except?: string): string | null {
@@ -61,7 +67,8 @@ export function setUsername(
     acc.usernameAt = undefined;
     return { ok: true, account: acc, username: "" };
   }
-  if (!usernameOk(u)) return { ok: false, error: "bad_username" };
+  const issue = usernameIssue(u);
+  if (issue) return { ok: false, error: issue };
   const taken = findUsernameOwner(book, u, pubkey);
   if (taken) return { ok: false, error: "username_taken" };
   const acc = ensureAccount(book, pubkey);

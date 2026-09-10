@@ -11,6 +11,7 @@ import { loadBacktestTape } from "@/lib/pair/backtestTape";
 import { mutateState, audit, pushBounded, readyState, loadAllTraders, deleteTrader, withLaunch } from "@/lib/store";
 import { emptyLaunchBook } from "@/lib/launch/engine";
 import { setUsername } from "@/lib/launch/username";
+import { launchError } from "@/lib/launch/errors";
 import { socialHref } from "@/lib/launch/links";
 import { revokeDelegatedSigner } from "@/lib/live/signer";
 
@@ -192,7 +193,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, note: "Account deleted.", desk: buildAdminDesk() });
     }
     if (u.email != null && u.email !== "" && !isEmail(u.email)) {
-      return NextResponse.json({ error: "bad_email", desk: buildAdminDesk() }, { status: 400 });
+      return NextResponse.json({ error: "bad_email", message: launchError("bad_email"), desk: buildAdminDesk() }, { status: 400 });
     }
     const named = await withLaunch((s) => {
       if (!s.launch) s.launch = emptyLaunchBook();
@@ -239,7 +240,8 @@ export async function POST(req: NextRequest) {
       return { ok: true as const };
     }, true);
     if (named && "ok" in named && !named.ok) {
-      return NextResponse.json({ error: (named as { error?: string }).error || "failed", desk: buildAdminDesk() }, { status: 400 });
+      const code = (named as { error?: string }).error || "failed";
+      return NextResponse.json({ error: code, message: launchError(code), desk: buildAdminDesk() }, { status: 400 });
     }
     return NextResponse.json({ ok: true, note: "Account updated.", desk: buildAdminDesk() });
   }

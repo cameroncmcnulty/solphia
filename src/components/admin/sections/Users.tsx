@@ -2,6 +2,9 @@
 
 import { useMemo, useState } from "react";
 import type { AdminUser } from "@/lib/admin/types";
+import { launchError } from "@/lib/launch/errors";
+import { usernameIssue } from "@/lib/launch/username";
+import { FieldError, fieldClass, useConfirmErrors } from "@/components/form/confirm";
 import { useAdmin } from "../AdminProvider";
 import { shortPk } from "../ui";
 
@@ -30,6 +33,7 @@ export function UsersSection() {
   const [email, setEmail] = useState("");
   const [notes, setNotes] = useState("");
   const [confirmDel, setConfirmDel] = useState("");
+  const fieldErr = useConfirmErrors<"username" | "email">();
 
   const rows = useMemo(() => {
     const list = (data?.users || []).filter((u) => matches(u, q.trim().toLowerCase(), filter));
@@ -50,11 +54,18 @@ export function UsersSection() {
     setEmail(u.email || "");
     setNotes(u.notes || "");
     setConfirmDel("");
+    fieldErr.ok();
   }
 
-  function save() {
+  async function save() {
     if (!picked) return;
-    patch({
+    const issue = usernameIssue(username);
+    if (issue) {
+      fieldErr.fail({ username: launchError(issue) });
+      return;
+    }
+    fieldErr.ok();
+    const r = await patch({
       user: {
         pubkey: picked.pubkey,
         username,
@@ -62,6 +73,14 @@ export function UsersSection() {
         notes,
       },
     });
+    if (!r.ok) {
+      const code = r.error || "";
+      if (code === "username_taken" || code === "bad_username" || code === "username_reserved") {
+        fieldErr.fail({ username: r.message || launchError(code) });
+      } else if (code === "bad_email") {
+        fieldErr.fail({ email: r.message || launchError(code) });
+      }
+    }
   }
 
   if (!data) return null;
@@ -144,23 +163,33 @@ export function UsersSection() {
               Last seen {picked.lastSeen ? new Date(picked.lastSeen).toLocaleString() : "never"} · invited {picked.referredCount} ·
               deposited {picked.depositedSol.toFixed(3)} SOL
             </p>
-            <label className="block">
+            <label className="block" data-field="username">
               <span className="font-mono text-[10px] text-mute">Username</span>
               <input
                 value={username}
-                onChange={(e) => setUsername(e.target.value)}
+                onChange={(e) => {
+                  setUsername(e.target.value);
+                  fieldErr.clear("username");
+                }}
                 placeholder="@handle"
-                className="mt-1 min-h-[40px] w-full rounded-full border border-line bg-void px-4 font-mono text-[12px] text-ghost"
+                aria-invalid={Boolean(fieldErr.errors.username)}
+                className={`mt-1 min-h-[40px] w-full rounded-full border bg-void px-4 font-mono text-[12px] text-ghost ${fieldClass(fieldErr.errors.username, "border-line")}`}
               />
+              <FieldError error={fieldErr.errors.username} />
             </label>
-            <label className="block">
+            <label className="block" data-field="email">
               <span className="font-mono text-[10px] text-mute">Email</span>
               <input
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  fieldErr.clear("email");
+                }}
                 placeholder="optional"
-                className="mt-1 min-h-[40px] w-full rounded-full border border-line bg-void px-4 font-mono text-[12px] text-ghost"
+                aria-invalid={Boolean(fieldErr.errors.email)}
+                className={`mt-1 min-h-[40px] w-full rounded-full border bg-void px-4 font-mono text-[12px] text-ghost ${fieldClass(fieldErr.errors.email, "border-line")}`}
               />
+              <FieldError error={fieldErr.errors.email} />
             </label>
             <label className="block">
               <span className="font-mono text-[10px] text-mute">Internal notes</span>

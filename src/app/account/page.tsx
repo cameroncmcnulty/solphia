@@ -7,6 +7,9 @@ import { WalletConnect } from "@/components/WalletConnect";
 import { useOwner } from "@/lib/hooks";
 import { exportSecret, importSecret, tradingPubkey } from "@/lib/wallet/trading";
 import { IMAGE_DATA_MAX } from "@/lib/launch/validate";
+import { launchError } from "@/lib/launch/errors";
+import { usernameIssue } from "@/lib/launch/username";
+import { FieldError, fieldClass, useConfirmErrors } from "@/components/form/confirm";
 
 type Invited = { pubkey: string; launched: number };
 type Coin = {
@@ -55,7 +58,9 @@ export default function AccountPage() {
   const [desk, setDesk] = useState<Desk | null>(null);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState("");
+  const [noteErr, setNoteErr] = useState(false);
   const [username, setUsername] = useState("");
+  const fieldErr = useConfirmErrors<"username" | "restore" | "pfp">();
   const [tradePk, setTradePk] = useState("");
   const [ownerBal, setOwnerBal] = useState(0);
   const [tradeBal, setTradeBal] = useState(0);
@@ -98,8 +103,19 @@ export default function AccountPage() {
 
   async function post(body: Record<string, unknown>) {
     if (!owner) return;
+    if (body.action === "username") {
+      const issue = usernameIssue(String(body.username || ""));
+      if (issue) {
+        fieldErr.fail({ username: launchError(issue) });
+        setNote("");
+        setNoteErr(false);
+        return;
+      }
+    }
     setBusy(true);
     setNote("");
+    setNoteErr(false);
+    fieldErr.ok();
     try {
       const r = await fetch("/api/account", {
         method: "POST",
@@ -108,10 +124,18 @@ export default function AccountPage() {
       });
       const j = await r.json();
       if (!r.ok) {
-        setNote(j.message || j.error || "failed");
+        const code = typeof j.error === "string" ? j.error : "";
+        const msg = j.message || launchError(code) || "failed";
+        if (body.action === "username") fieldErr.fail({ username: msg });
+        else if (body.action === "pfp") fieldErr.fail({ pfp: msg });
+        else {
+          setNote(msg);
+          setNoteErr(true);
+        }
         return;
       }
       setDesk(j);
+      if (typeof j.username === "string") setUsername(j.username);
       if (j.withdrawn) setNote(`Withdrew ${Number(j.withdrawn).toFixed(4)} SOL in referral rewards.`);
       if (body.action === "pfp") setNote(body.pfp ? "PFP saved." : "PFP cleared. Cartoon is back.");
       if (body.action === "username") setNote(j.username ? `Username set to @${j.username}` : "Username cleared.");
@@ -164,7 +188,11 @@ export default function AccountPage() {
         ))}
       </div>
 
-      {note && <p className="mt-4 font-mono text-sm text-acid">{note}</p>}
+      {note && (
+        <p className={`mt-4 font-mono text-sm ${noteErr ? "text-blood" : "text-acid"}`} role={noteErr ? "alert" : undefined}>
+          {note}
+        </p>
+      )}
 
       {tab === "overview" && (
         <div className="mt-6 space-y-4">
@@ -172,22 +200,30 @@ export default function AccountPage() {
             <h2 className="font-display text-2xl text-ghost">Username</h2>
             <p className="mt-1 text-sm text-mute">Unique on Solphia. 3–20 characters, start with a letter. Letters, numbers, underscore.</p>
             <form
-              className="mt-3 flex gap-2"
+              className="mt-3"
               onSubmit={(e) => {
                 e.preventDefault();
                 post({ action: "username", username });
               }}
             >
-              <input
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="@handle"
-                maxLength={20}
-                className="min-h-[44px] min-w-0 flex-1 rounded-full border border-violet/30 bg-void px-4 font-mono text-sm text-ghost"
-              />
-              <button type="submit" disabled={busy} className="btn-acid rounded-full px-5 text-sm disabled:opacity-40">
-                Save
-              </button>
+              <div className="flex gap-2">
+                <input
+                  data-field="username"
+                  value={username}
+                  onChange={(e) => {
+                    setUsername(e.target.value);
+                    fieldErr.clear("username");
+                  }}
+                  placeholder="@handle"
+                  maxLength={20}
+                  aria-invalid={Boolean(fieldErr.errors.username)}
+                  className={`min-h-[44px] min-w-0 flex-1 rounded-full border bg-void px-4 font-mono text-sm text-ghost ${fieldClass(fieldErr.errors.username)}`}
+                />
+                <button type="submit" disabled={busy} className="btn-acid rounded-full px-5 text-sm disabled:opacity-40">
+                  Save
+                </button>
+              </div>
+              <FieldError error={fieldErr.errors.username} />
             </form>
           </section>
           <div className="grid gap-3 sm:grid-cols-3">
@@ -214,8 +250,10 @@ export default function AccountPage() {
               onClick={async () => {
                 try {
                   await navigator.clipboard.writeText(exportSecret());
+                  setNoteErr(false);
                   setNote("Trading key copied. Store it offline.");
                 } catch {
+                  setNoteErr(true);
                   setNote("Could not copy the trading key.");
                 }
               }}
@@ -224,7 +262,7 @@ export default function AccountPage() {
             </button>
           </div>
           <form
-            className="flex gap-2"
+            className="space-y-1"
             onSubmit={(e) => {
               e.preventDefault();
               const box = e.currentTarget.elements.namedItem("restore") as HTMLInputElement;
@@ -232,20 +270,28 @@ export default function AccountPage() {
                 const pk = importSecret(box.value);
                 setTradePk(pk);
                 box.value = "";
+                fieldErr.clear("restore");
+                setNoteErr(false);
                 setNote(`Restored ${pk.slice(0, 4)}…${pk.slice(-4)}`);
               } catch (err) {
-                setNote(err instanceof Error ? err.message : "restore failed");
+                fieldErr.fail({ restore: err instanceof Error ? err.message : "Could not restore that backup." });
               }
             }}
           >
-            <input
-              name="restore"
-              placeholder="paste backup to restore"
-              className="min-h-[40px] min-w-0 flex-1 rounded-full border border-violet/30 bg-void px-4 font-mono text-[11px] text-ghost"
-            />
-            <button type="submit" className="btn-ghost rounded-full px-4 text-sm">
-              Restore
-            </button>
+            <div className="flex gap-2">
+              <input
+                name="restore"
+                data-field="restore"
+                placeholder="paste backup to restore"
+                aria-invalid={Boolean(fieldErr.errors.restore)}
+                onChange={() => fieldErr.clear("restore")}
+                className={`min-h-[40px] min-w-0 flex-1 rounded-full border bg-void px-4 font-mono text-[11px] text-ghost ${fieldClass(fieldErr.errors.restore)}`}
+              />
+              <button type="submit" className="btn-ghost rounded-full px-4 text-sm">
+                Restore
+              </button>
+            </div>
+            <FieldError error={fieldErr.errors.restore} />
           </form>
         </section>
       )}
@@ -256,7 +302,7 @@ export default function AccountPage() {
           <p className="mt-2 text-sm text-mute">
             Until you pick one, we draw a cartoon from your wallet. Same wallet, same face.
           </p>
-          <div className="mt-4 flex items-center gap-4">
+          <div data-field="pfp" className={`mt-4 flex items-center gap-4 ${fieldErr.errors.pfp ? "rounded-2xl p-1 ring-1 ring-blood/60" : ""}`}>
             <CartoonPfp seed={owner} src={desk?.pfp} className="h-24 w-24" />
             <div className="flex flex-wrap gap-2">
               <button type="button" className="btn-acid rounded-full px-5 py-2 text-sm" onClick={() => fileRef.current?.click()}>
@@ -272,6 +318,7 @@ export default function AccountPage() {
               </button>
             </div>
           </div>
+          <FieldError error={fieldErr.errors.pfp} />
           <input
             ref={fileRef}
             type="file"
@@ -281,11 +328,12 @@ export default function AccountPage() {
               const f = e.target.files?.[0];
               e.target.value = "";
               if (!f) return;
+              fieldErr.clear("pfp");
               try {
                 const data = await squarePfp(f);
                 await post({ action: "pfp", pfp: data });
               } catch (err) {
-                setNote(err instanceof Error ? err.message : "image failed");
+                fieldErr.fail({ pfp: err instanceof Error ? err.message : "Could not use that image." });
               }
             }}
           />
@@ -337,6 +385,7 @@ export default function AccountPage() {
               className="btn-acid rounded-full px-5 py-2 text-sm"
               onClick={async () => {
                 await navigator.clipboard.writeText(invite);
+                setNoteErr(false);
                 setNote("Invite link copied.");
               }}
             >

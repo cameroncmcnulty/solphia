@@ -22,7 +22,7 @@ type AdminContextValue = {
   login: () => Promise<void>;
   logout: () => Promise<void>;
   reload: () => Promise<void>;
-  patch: (body: Record<string, unknown>) => Promise<void>;
+  patch: (body: Record<string, unknown>) => Promise<{ ok: boolean; error?: string; message?: string }>;
   adminPk: string;
   setAdminPk: (v: string) => void;
   treasuryPk: string;
@@ -160,15 +160,22 @@ export function AdminProvider({ children }: { children: ReactNode }) {
       });
       const j = await r.json();
       if (!r.ok) {
-        setNote(j.error || "failed");
+        const error = typeof j.error === "string" ? j.error : "failed";
+        const message = typeof j.message === "string" ? j.message : error;
+        setNote(message);
         setNoteErr(true);
         if (j.desk) setData(j.desk);
-        return;
+        return { ok: false, error, message };
       }
       if (j.desk) setData(j.desk as AdminDesk);
       if (j.note) setNote(j.note);
       else if (j.made != null) setNote(j.made ? `Made ${j.made} new post${j.made === 1 ? "" : "s"}.` : "Pack already ran today.");
       setNoteErr(false);
+      return { ok: true };
+    } catch {
+      setNote("Save failed.");
+      setNoteErr(true);
+      return { ok: false, error: "failed", message: "Save failed." };
     } finally {
       setBusy(false);
     }
