@@ -13,6 +13,7 @@ import {
   setOwnerWallet,
   withdrawDev,
   withdrawOwner,
+  withdrawReferral,
 } from "@/lib/launch/engine";
 import { lastPairPrices } from "@/lib/tick";
 import { IMAGE_DATA_MAX } from "@/lib/launch/validate";
@@ -20,7 +21,7 @@ import { IMAGE_DATA_MAX } from "@/lib/launch/validate";
 export const dynamic = "force-dynamic";
 
 const Body = z.object({
-  action: z.enum(["create", "buy", "sell", "quote", "withdraw_dev", "withdraw_owner", "set_owner"]),
+  action: z.enum(["create", "buy", "sell", "quote", "withdraw_dev", "withdraw_owner", "withdraw_referral", "set_owner"]),
   pubkey: z.string(),
   id: z.string().optional(),
   name: z.string().optional(),
@@ -113,6 +114,7 @@ export async function POST(req: NextRequest) {
     if (b.action === "sell") return sellCoin(book, { id: b.id || "", owner: b.pubkey, tokens: Number(b.tokens) || 0 });
     if (b.action === "withdraw_dev") return withdrawDev(book, { id: b.id || "", owner: b.pubkey });
     if (b.action === "withdraw_owner") return withdrawOwner(book, { owner: b.pubkey });
+    if (b.action === "withdraw_referral") return withdrawReferral(book, { owner: b.pubkey });
     if (b.action === "set_owner") {
       const secret = process.env.ADMIN_SECRET || "";
       if (!secret || b.adminSecret !== secret) return { ok: false as const, error: "admin_only" };

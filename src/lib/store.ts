@@ -108,7 +108,10 @@ function hydrateFromRaw(raw: AppState): AppState {
     backtest: raw.backtest || null,
     backtestLev2: raw.backtestLev2 || null,
     backtestLev3: raw.backtestLev3 || null,
-    launch: raw.launch && Array.isArray(raw.launch.coins) ? raw.launch : emptyLaunchBook(),
+    launch:
+      raw.launch && Array.isArray(raw.launch.coins)
+        ? { ...emptyLaunchBook(), ...raw.launch, accounts: raw.launch.accounts || {} }
+        : emptyLaunchBook(),
     ownerWallet: raw.ownerWallet || raw.launch?.ownerWallet || "",
     sphaSocials: {
       x: raw.sphaSocials?.x || "",

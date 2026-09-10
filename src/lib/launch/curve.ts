@@ -8,6 +8,8 @@
  *   50% creator Dev Rewards (withdraw anytime)
  *   25% owner earnings
  *   25% protocol treasury
+ * If the creator was invited, the inviter also gets 25% of the fee for life
+ * (taken from owner + treasury, never from the creator’s 50%).
  *
  * Live on-chain custody needs the Solphia launch program. This module is the
  * canonical math both paper and that program must match.
@@ -24,6 +26,10 @@ export const SWAP_FEE_BPS = 100;
 export const DEV_FEE_BPS = 50;
 export const OWNER_FEE_BPS = 25;
 export const TREAS_FEE_BPS = 25;
+/** Inviter cut when the coin’s creator was referred. Same size as owner, taken from owner+treasury. */
+export const REF_FEE_BPS = 25;
+export const REFERRED_OWNER_BPS = 12.5;
+export const REFERRED_TREAS_BPS = 12.5;
 export const CREATE_FEE_SOL = 0;
 export const GRADUATE_FEE_SOL = 0.01;
 export const MAX_WALLET_BPS = 500;
@@ -70,11 +76,19 @@ export function progressPct(c: CurveState): number {
   return Math.max(0, Math.min(1, c.realSol / GRADUATE_SOL));
 }
 
-export function splitFee(feeSol: number): { dev: number; owner: number; treasury: number } {
+export type FeeSplit = { dev: number; owner: number; treasury: number; referral: number };
+
+export function splitFee(feeSol: number, referred = false): FeeSplit {
   const dev = (feeSol * DEV_FEE_BPS) / SWAP_FEE_BPS;
-  const owner = (feeSol * OWNER_FEE_BPS) / SWAP_FEE_BPS;
-  const treasury = Math.max(0, feeSol - dev - owner);
-  return { dev, owner, treasury };
+  if (!referred) {
+    const owner = (feeSol * OWNER_FEE_BPS) / SWAP_FEE_BPS;
+    const treasury = Math.max(0, feeSol - dev - owner);
+    return { dev, owner, treasury, referral: 0 };
+  }
+  const referral = (feeSol * REF_FEE_BPS) / SWAP_FEE_BPS;
+  const owner = (feeSol * REFERRED_OWNER_BPS) / SWAP_FEE_BPS;
+  const treasury = Math.max(0, feeSol - dev - referral - owner);
+  return { dev, owner, treasury, referral };
 }
 
 export function feeOn(sol: number): number {
@@ -88,7 +102,7 @@ export type Quote = {
   tokensOut?: number;
   tokensIn?: number;
   feeSol: number;
-  split: { dev: number; owner: number; treasury: number };
+  split: FeeSplit;
   priceSol: number;
   impactPct: number;
   newCurve: CurveState;

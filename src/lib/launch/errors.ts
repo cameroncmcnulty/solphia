@@ -23,6 +23,8 @@ export const LAUNCH_ERRORS: Record<string, string> = {
   not_creator: "Only the creator can withdraw dev rewards.",
   empty: "Nothing to withdraw.",
   not_owner: "Owner wallet only.",
+  self_referral: "You cannot invite yourself.",
+  already_referred: "This wallet already has an inviter.",
   rate_limited: "Too many requests. Wait a few seconds.",
   bad_request: "Bad request. Check the amount and try again.",
   admin_only: "Admin only.",

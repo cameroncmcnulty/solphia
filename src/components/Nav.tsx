@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { SphaMark } from "./SphaMark";
-import { WalletConnect } from "./WalletConnect";
+import { AccountMenu } from "./AccountMenu";
 
 const LINKS = [
   ["/", "Home"],
@@ -34,13 +34,7 @@ export function Nav() {
         ))}
       </nav>
       <div className="flex shrink-0 items-center gap-2">
-        <Link
-          href="/launch"
-          className="btn-acid hidden min-h-[40px] items-center rounded-full px-4 py-2 text-sm sm:inline-flex sm:min-h-[44px] sm:px-5"
-        >
-          LAUNCH
-        </Link>
-        <WalletConnect compact />
+        <AccountMenu />
       </div>
     </header>
   );

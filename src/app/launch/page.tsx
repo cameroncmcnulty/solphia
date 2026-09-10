@@ -323,7 +323,7 @@ export default function LaunchPage() {
     <main className="relative min-h-[calc(100vh-4rem)] overflow-x-hidden pb-24">
       <SolphiaConstellation />
       <div className="relative z-10 mx-auto max-w-6xl px-4 pt-6 md:px-8 md:pt-10">
-        <p className="font-mono text-[11px] tracking-[0.28em] text-acid">LAUNCH · 1B · 1% SWAP · 50% TO DEV</p>
+        <p className="font-mono text-[11px] tracking-[0.28em] text-acid">LAUNCH · 1B · 1% SWAP · 50% TO DEV · 25% TO INVITER</p>
         <h1 className="mt-2 font-display text-4xl text-ghost sm:text-5xl">Fair launch. Swap like Phantom.</h1>
 
         <div className="mt-8 grid gap-5 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">

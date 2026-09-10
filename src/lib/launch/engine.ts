@@ -6,6 +6,7 @@ import {
   emptyCurve,
   graduatePool,
   launchDevBuyCap,
+  splitFee,
   marketCapSol,
   maxBuySol,
   MAX_WALLET_BPS,
@@ -69,8 +70,18 @@ export type LaunchCoin = {
   devRewardsSol: number;
   ownerFeesSol: number;
   treasuryFeesSol: number;
+  referralFeesSol: number;
+  referrer?: string;
   graduatedAt?: number;
   pool?: { sol: number; tokens: number };
+};
+
+export type LaunchAccount = {
+  pubkey: string;
+  referrer?: string;
+  referredAt?: number;
+  pfp?: string;
+  referralRewardsSol: number;
 };
 
 export type LaunchBook = {
@@ -78,10 +89,69 @@ export type LaunchBook = {
   ownerWallet: string;
   ownerEarningsSol: number;
   treasuryFeesSol: number;
+  accounts: Record<string, LaunchAccount>;
 };
 
 export function emptyLaunchBook(): LaunchBook {
-  return { coins: [], ownerWallet: "", ownerEarningsSol: 0, treasuryFeesSol: 0 };
+  return { coins: [], ownerWallet: "", ownerEarningsSol: 0, treasuryFeesSol: 0, accounts: {} };
+}
+
+export function emptyAccount(pubkey: string): LaunchAccount {
+  return { pubkey, referralRewardsSol: 0 };
+}
+
+export function ensureAccount(book: LaunchBook, pubkey: string): LaunchAccount {
+  if (!book.accounts) book.accounts = {};
+  if (!book.accounts[pubkey]) book.accounts[pubkey] = emptyAccount(pubkey);
+  return book.accounts[pubkey];
+}
+
+export function bindReferrer(
+  book: LaunchBook,
+  pubkey: string,
+  referrer: string,
+): { ok: true; account: LaunchAccount; bound: boolean } | { ok: false; error: string } {
+  if (!isSolanaAddress(pubkey)) return { ok: false, error: "bad_wallet" };
+  const acc = ensureAccount(book, pubkey);
+  if (acc.referrer) return { ok: true, account: acc, bound: false };
+  if (!referrer || !isSolanaAddress(referrer) || referrer === pubkey) {
+    return { ok: true, account: acc, bound: false };
+  }
+  ensureAccount(book, referrer);
+  acc.referrer = referrer;
+  acc.referredAt = Date.now();
+  return { ok: true, account: acc, bound: true };
+}
+
+export function setAccountPfp(
+  book: LaunchBook,
+  pubkey: string,
+  pfp: string,
+): { ok: true; account: LaunchAccount } | { ok: false; error: string } {
+  if (!isSolanaAddress(pubkey)) return { ok: false, error: "bad_wallet" };
+  const img = imageOk(pfp) || (pfp === "" ? "" : "");
+  if (pfp && !img) return { ok: false, error: "bad_image" };
+  const acc = ensureAccount(book, pubkey);
+  acc.pfp = img || undefined;
+  return { ok: true, account: acc };
+}
+
+export function withdrawReferral(
+  book: LaunchBook,
+  opts: { owner: string },
+): { ok: true; sol: number } | { ok: false; error: string } {
+  if (!isSolanaAddress(opts.owner)) return { ok: false, error: "bad_wallet" };
+  const acc = ensureAccount(book, opts.owner);
+  const sol = acc.referralRewardsSol || 0;
+  if (!(sol > 0)) return { ok: false, error: "empty" };
+  acc.referralRewardsSol = 0;
+  return { ok: true, sol };
+}
+
+export function referredBy(book: LaunchBook, pubkey: string): string[] {
+  return Object.values(book.accounts || {})
+    .filter((a) => a.referrer === pubkey)
+    .map((a) => a.pubkey);
 }
 
 function id(prefix: string) {
@@ -128,8 +198,16 @@ function pxAt(fills: LaunchFill[], before: number, fallback: number): number {
 }
 
 export function slimLaunch(book: LaunchBook): LaunchBook {
+  const accounts: Record<string, LaunchAccount> = {};
+  for (const [k, a] of Object.entries(book.accounts || {})) {
+    accounts[k] = {
+      ...a,
+      pfp: (a.pfp || "").length > 90_000 ? "" : a.pfp,
+    };
+  }
   return {
     ...book,
+    accounts,
     coins: (book.coins || []).slice(0, 120).map((c) => ({
       ...c,
       image: (c.image || "").length > 90_000 ? "" : c.image,
@@ -154,11 +232,27 @@ export function mergeLaunch(local: LaunchBook, remote: LaunchBook): LaunchBook {
     if (localF > remoteF || (localF === remoteF && localSol >= remoteSol)) map.set(c.id, c);
   }
   const coins = [...map.values()].sort((a, b) => b.createdAt - a.createdAt).slice(0, 120);
+  const accounts: Record<string, LaunchAccount> = { ...(remote.accounts || {}) };
+  for (const [k, a] of Object.entries(local.accounts || {})) {
+    const r = accounts[k];
+    if (!r) {
+      accounts[k] = a;
+      continue;
+    }
+    accounts[k] = {
+      pubkey: a.pubkey || r.pubkey || k,
+      referrer: a.referrer || r.referrer,
+      referredAt: a.referredAt || r.referredAt,
+      pfp: a.pfp || r.pfp,
+      referralRewardsSol: Math.max(a.referralRewardsSol || 0, r.referralRewardsSol || 0),
+    };
+  }
   return {
     coins,
     ownerWallet: local.ownerWallet || remote.ownerWallet,
     ownerEarningsSol: Math.max(local.ownerEarningsSol || 0, remote.ownerEarningsSol || 0),
     treasuryFeesSol: Math.max(local.treasuryFeesSol || 0, remote.treasuryFeesSol || 0),
+    accounts,
   };
 }
 
@@ -304,6 +398,8 @@ export function publicCoin(c: LaunchCoin, solUsd = 0, viewer?: string, book?: La
     change6h: ch(6 * 60 * 60_000),
     change24h: ch(24 * 60 * 60_000),
     devRewardsSol: c.devRewardsSol,
+    referralFeesSol: c.referralFeesSol || 0,
+    referred: Boolean(c.referrer),
     graduatedAt: c.graduatedAt || null,
     myTokens: mine?.tokens || 0,
     mySpentSol: mine?.spentSol || 0,
@@ -351,6 +447,7 @@ export function createCoin(
   const launchBuy = Math.min(launchDevBuyCap(), Math.max(0, Number(opts.launchBuySol) || 0));
   const now = opts.now || Date.now();
   const mint = `curve:${symbol}:${now.toString(36)}`;
+  const creatorAcc = ensureAccount(book, opts.creator);
   const coin: LaunchCoin = {
     id: id("ln"),
     mint,
@@ -375,6 +472,8 @@ export function createCoin(
     devRewardsSol: 0,
     ownerFeesSol: 0,
     treasuryFeesSol: 0,
+    referralFeesSol: 0,
+    referrer: creatorAcc.referrer || undefined,
   };
   book.coins.unshift(coin);
   if (book.coins.length > 120) book.coins.length = 120;
@@ -394,12 +493,19 @@ function holderOf(coin: LaunchCoin, owner: string): LaunchHolder {
   return n;
 }
 
-function creditFees(book: LaunchBook, coin: LaunchCoin, split: { dev: number; owner: number; treasury: number }) {
-  coin.devRewardsSol += split.dev;
-  coin.ownerFeesSol += split.owner;
-  coin.treasuryFeesSol += split.treasury;
-  book.ownerEarningsSol += split.owner;
-  book.treasuryFeesSol += split.treasury;
+function creditFees(book: LaunchBook, coin: LaunchCoin, split: { dev: number; owner: number; treasury: number; referral?: number }) {
+  const fee = split.dev + split.owner + split.treasury + (split.referral || 0);
+  const s = splitFee(fee, Boolean(coin.referrer));
+  coin.devRewardsSol += s.dev;
+  coin.ownerFeesSol += s.owner;
+  coin.treasuryFeesSol += s.treasury;
+  coin.referralFeesSol = (coin.referralFeesSol || 0) + s.referral;
+  book.ownerEarningsSol += s.owner;
+  book.treasuryFeesSol += s.treasury;
+  if (s.referral > 0 && coin.referrer) {
+    const acc = ensureAccount(book, coin.referrer);
+    acc.referralRewardsSol += s.referral;
+  }
 }
 
 function maybeGraduate(coin: LaunchCoin, now: number) {
