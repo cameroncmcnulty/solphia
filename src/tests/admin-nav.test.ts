@@ -23,6 +23,7 @@ describe("admin nav", () => {
 
   it("accepts known section hashes", () => {
     assert.equal(isAdminSection("overview"), true);
+    assert.equal(isAdminSection("users"), true);
     assert.equal(isAdminSection("not-a-tool"), false);
   });
 });

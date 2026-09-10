@@ -321,6 +321,8 @@ export interface AppUser {
   lastPaidAt?: number;
   lastPaySig?: string;
   unsubscribedAt?: number;
+  username?: string;
+  notes?: string;
 }
 
 export interface AutoSettings {

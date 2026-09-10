@@ -29,6 +29,7 @@ import { FieldError, FormAlert, fieldClass, useConfirmErrors } from "@/component
 import { loadOwner } from "@/lib/wallet/trading";
 import { auditLaunchCoin, rankTape, type LaunchAudit } from "@/lib/launch/audit";
 import { TAPE_BOARD, filterTape, sortTape, volumeIn, type AgeFilter, type VolWindow } from "@/lib/launch/tape";
+import { MARKET_MIN_SCORE } from "@/lib/launch/market";
 
 const TOKEN_PX = TOKEN_IMAGE_PX;
 const STORE_PX = 512;
@@ -39,6 +40,12 @@ type Spark = { t: number; o: number; h: number; l: number; c: number };
 type Coin = {
   id: string;
   mint?: string;
+  born?: boolean;
+  venue?: string;
+  pairUrl?: string;
+  liqUsd?: number;
+  score?: number;
+  grade?: string;
   name: string;
   symbol: string;
   image?: string;
@@ -175,9 +182,23 @@ function jpegFit(canvas: HTMLCanvasElement, max = IMAGE_DATA_MAX): string {
 }
 
 function mergeCoins(remote: Coin[], prev: Coin[]): Coin[] {
-  if (!remote.length) return prev;
   const seen = new Set(remote.map((c) => c.id));
-  return [...remote, ...prev.filter((c) => !seen.has(c.id))];
+  const keepBorn = prev.filter((c) => c.born && !seen.has(c.id));
+  return [...remote, ...keepBorn];
+}
+
+function fmtPct(n?: number) {
+  if (n == null || !Number.isFinite(n) || n === 0) return "0%";
+  const pct = n * 100;
+  return `${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%`;
+}
+
+function venueLabel(c: Coin) {
+  if (c.born) return "SOLPHIA";
+  if (c.venue === "pumpfun" || c.venue === "pumpswap") return "PUMP";
+  if (c.venue === "raydium" || c.venue === "launchlab") return "RAY";
+  if (c.venue === "meteora") return "MET";
+  return "MKT";
 }
 
 export default function LaunchPage() {
@@ -204,18 +225,28 @@ export default function LaunchPage() {
   const [age, setAge] = useState<AgeFilter>("newest");
   const [vol, setVol] = useState<VolWindow | null>(null);
   const [ranked, setRanked] = useState(false);
+  const [source, setSource] = useState<"all" | "born" | "market">("all");
   const fileRef = useRef<HTMLInputElement>(null);
   const devPct = buySupplyPct(emptyCurve(), devBuy);
 
   async function refresh() {
     const q = owner ? `pubkey=${encodeURIComponent(owner)}` : "";
-    const r = await fetch(`/api/launch?${q}`, { cache: "no-store" });
-    const j = await r.json();
-    if (j.solUsd) setSolUsd(j.solUsd);
-    if (Array.isArray(j.coins)) {
-      setCoins((prev) => mergeCoins(j.coins, prev));
-      setOpen((cur) => (cur ? j.coins.find((c: Coin) => c.id === cur.id) || cur : cur));
-    }
+    const [pad, tape] = await Promise.all([
+      fetch(`/api/launch?${q}`, { cache: "no-store" }).then((r) => r.json()),
+      fetch("/api/launch/tape", { cache: "no-store" })
+        .then((r) => r.json())
+        .catch(() => ({ coins: [] })),
+    ]);
+    if (pad.solUsd) setSolUsd(pad.solUsd);
+    else if (tape.solUsd) setSolUsd(tape.solUsd);
+    const padCoins: Coin[] = Array.isArray(pad.coins) ? pad.coins.map((c: Coin) => ({ ...c, born: true })) : [];
+    const padMints = new Set(padCoins.map((c) => c.mint).filter(Boolean));
+    const market: Coin[] = Array.isArray(tape.coins)
+      ? tape.coins.filter((c: Coin) => !c.mint || !padMints.has(c.mint))
+      : [];
+    const next = [...padCoins, ...market];
+    setCoins((prev) => mergeCoins(next, prev));
+    setOpen((cur) => (cur ? next.find((c) => c.id === cur.id) || cur : cur));
   }
 
   useEffect(() => {
@@ -310,13 +341,21 @@ export default function LaunchPage() {
     }
   }
 
-  const mine = owner ? coins.filter((c) => c.creator === owner) : [];
+  const mine = owner ? coins.filter((c) => c.creator === owner && c.born) : [];
   const pool = owner && tab === "mine" ? mine : coins;
   const board = useMemo(() => {
-    const aged = filterTape(pool, age);
-    if (ranked) return rankTape(aged, solUsd);
-    return sortTape(aged, vol).map((coin, i) => ({ coin, audit: null as LaunchAudit | null, rank: i + 1 }));
-  }, [pool, age, vol, ranked, solUsd]);
+    const sourced =
+      tab === "mine"
+        ? pool
+        : source === "born"
+          ? pool.filter((c) => c.born)
+          : source === "market"
+            ? pool.filter((c) => !c.born)
+            : pool;
+    const aged = filterTape(sourced, age);
+    if (ranked) return rankTape(aged.filter((c) => c.born), solUsd);
+    return sortTape(aged, vol).map((coin, i) => ({ coin, audit: coin.born ? auditLaunchCoin(coin, solUsd) : null, rank: i + 1 }));
+  }, [pool, age, vol, ranked, solUsd, source, tab]);
   const rows = board.map((r) => r.coin);
 
   return (
@@ -533,6 +572,24 @@ export default function LaunchPage() {
             </div>
             <div className="mt-3 space-y-2">
               <div>
+                <div className="font-mono text-[10px] tracking-[0.22em] text-mute">SOURCE</div>
+                <div className="mt-1 flex flex-wrap gap-1 rounded-2xl border border-violet/25 p-1">
+                  {(["all", "born", "market"] as const).map((k) => (
+                    <button
+                      key={k}
+                      type="button"
+                      onClick={() => {
+                        setSource(k);
+                        if (k === "market") setRanked(false);
+                      }}
+                      className={`rounded-full px-3 py-1 font-mono text-[10px] ${source === k ? "bg-acid/20 text-acid" : "text-mute hover:text-ghost"}`}
+                    >
+                      {k === "all" ? "ALL" : k === "born" ? "SOLPHIA" : "MARKET"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
                 <div className="font-mono text-[10px] tracking-[0.22em] text-mute">WHEN</div>
                 <div className="mt-1 flex flex-wrap gap-1 rounded-2xl border border-violet/25 p-1">
                   {(["newest", "1h", "6h", "24h"] as const).map((k) => (
@@ -582,11 +639,31 @@ export default function LaunchPage() {
                   Solphia-born tokens are ranked by Solphia’s risk engine. Top {TAPE_BOARD} fill the board.
                 </p>
               )}
+              {!ranked && (
+                <p className="text-[11px] leading-relaxed text-mute">
+                  Market coins need a {MARKET_MIN_SCORE}+ safety score. Solphia-born always make the tape.
+                </p>
+              )}
             </div>
-            <div className={`mt-4 space-y-2 ${ranked ? "" : "max-h-[28rem] overflow-y-auto overflow-x-hidden"}`}>
+            {!ranked && (
+              <div className="mt-3 hidden grid-cols-[minmax(0,1.4fr)_repeat(6,minmax(0,0.7fr))] gap-2 px-3 font-mono text-[10px] tracking-[0.14em] text-mute md:grid">
+                <span>TOKEN</span>
+                <span>AGE</span>
+                <span>MC</span>
+                <span>LIQ</span>
+                <span>VOL</span>
+                <span>24H</span>
+                <span className="text-right">SCORE</span>
+              </div>
+            )}
+            <div className={`mt-2 space-y-2 ${ranked ? "" : "max-h-[36rem] overflow-y-auto overflow-x-hidden"}`}>
               {rows.length === 0 && (
                 <p className="text-sm text-mute">
-                  {tab === "mine" ? "Nothing launched yet." : ranked ? "Nothing in this window ranks yet." : "No coins in this window."}
+                  {tab === "mine"
+                    ? "Nothing launched yet."
+                    : ranked
+                      ? "Nothing in this window ranks yet."
+                      : "No coins in this window passed the gate."}
                 </p>
               )}
               {board.map((row) => (
@@ -717,36 +794,34 @@ function CoinCard({
         <div className="flex items-center gap-2">
           <span className={`truncate font-display text-ghost ${elite ? "text-xl" : "text-lg"}`}>{tick(c.symbol)}</span>
           <span className="truncate text-sm text-mute">{c.name}</span>
-          {audit && (
-            <span
-              className={`shrink-0 rounded-full px-2 py-0.5 font-mono text-[10px] ${
-                audit.grade === "S" || audit.grade === "A"
-                  ? "bg-acid/20 text-acid"
-                  : audit.grade === "B"
-                    ? "bg-cyan/20 text-cyan"
-                    : "bg-white/10 text-mute"
-              }`}
-            >
-              {audit.grade} {audit.score}
-            </span>
-          )}
-        </div>
-        <div className="mt-1 flex flex-wrap items-center gap-2">
-          <span className="font-mono text-[11px] text-ghost">
-            {c.marketCapUsd ? fmtUsd(c.marketCapUsd) : `${fmtSol(c.marketCapSol, 1)} SOL`}
+          <span className={`shrink-0 rounded-full px-2 py-0.5 font-mono text-[9px] tracking-wide ${c.born ? "bg-acid/15 text-acid" : "bg-white/10 text-mute"}`}>
+            {venueLabel(c)}
           </span>
-          <span className="font-mono text-[11px] text-mute">{fmtAge(Date.now() - c.createdAt)}</span>
-          {vol && (
-            <span className="font-mono text-[11px] text-acid">
-              {fmtSol(volumeIn(c, vol), 2)} SOL {vol}
-            </span>
-          )}
-          <TokenSocials links={c.links} />
-          {c.mint ? <CopyCa ca={c.mint} compact /> : null}
+        </div>
+        <div className="mt-1 grid grid-cols-2 gap-x-3 gap-y-0.5 font-mono text-[11px] md:grid-cols-6">
+          <span className="text-mute md:hidden">{fmtAge(Date.now() - c.createdAt)}</span>
+          <span className="hidden text-mute md:inline">{fmtAge(Date.now() - c.createdAt)}</span>
+          <span className="text-ghost">{c.marketCapUsd ? fmtUsd(c.marketCapUsd) : `${fmtSol(c.marketCapSol, 1)} SOL`}</span>
+          <span className="hidden text-mute md:inline">{c.liqUsd ? fmtUsd(c.liqUsd) : c.liqSol ? `${fmtSol(c.liqSol, 1)} SOL` : "—"}</span>
+          <span className="hidden text-mute md:inline">
+            {vol ? `${fmtSol(volumeIn(c, vol), 2)} SOL` : c.vol1h ? `${fmtSol(c.vol1h, 2)} SOL` : "—"}
+          </span>
+          <span className={(c.change24h || 0) >= 0 ? "text-acid" : "text-blood"}>{fmtPct(c.change24h)}</span>
+          <span
+            className={`justify-self-end rounded-full px-2 py-0.5 text-[10px] ${
+              (audit?.grade || c.grade) === "S" || (audit?.grade || c.grade) === "A"
+                ? "bg-acid/20 text-acid"
+                : (audit?.grade || c.grade) === "B"
+                  ? "bg-cyan/20 text-cyan"
+                  : "bg-white/10 text-mute"
+            }`}
+          >
+            {audit ? `${audit.grade} ${audit.score}` : c.score != null ? `${c.grade || ""} ${c.score}` : "—"}
+          </span>
         </div>
         {audit && elite && <p className="mt-1 truncate font-mono text-[10px] text-mute">{audit.why}</p>}
       </div>
-      <div className="relative z-[1] overflow-hidden rounded-xl">
+      <div className="relative z-[1] hidden overflow-hidden rounded-xl sm:block">
         <SparkCandles candles={c.spark || []} up={(c.spark?.at(-1)?.c || 0) >= (c.spark?.[0]?.c || 0)} />
       </div>
     </div>
@@ -814,6 +889,9 @@ function CoinDesk({
               <div className="font-display text-3xl text-ghost">{tick(open.symbol)}</div>
               <div className="text-sm text-mute">{open.name}</div>
               <div className="mt-2 flex flex-wrap items-center gap-2">
+                <span className={`rounded-full px-2 py-0.5 font-mono text-[10px] ${open.born ? "bg-acid/15 text-acid" : "bg-white/10 text-mute"}`}>
+                  {venueLabel(open)}
+                </span>
                 <TokenSocials links={open.links} size="md" />
                 <CopyCa ca={open.mint} compact />
               </div>
@@ -872,6 +950,36 @@ function CoinDesk({
       </div>
 
       <div className="rounded-3xl border border-violet/20 bg-void/50 p-4">
+        {!open.born ? (
+          <div>
+            <p className="font-display text-xl text-ghost">Trade off-pad</p>
+            <p className="mt-2 text-sm text-mute">
+              This is a market coin that cleared a {MARKET_MIN_SCORE}+ safety score. Solphia does not custody it. Swap on the venue it
+              actually lives on.
+            </p>
+            <div className="mt-4 flex flex-col gap-2">
+              <a
+                href={open.pairUrl || `https://dexscreener.com/solana/${open.mint}`}
+                target="_blank"
+                rel="noreferrer"
+                className="btn-acid inline-flex min-h-[44px] items-center justify-center rounded-full px-5 text-sm"
+              >
+                Open Dexscreener
+              </a>
+              {(open.venue === "pumpfun" || open.venue === "pumpswap") && open.mint && (
+                <a
+                  href={`https://pump.fun/${open.mint}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="btn-ghost inline-flex min-h-[44px] items-center justify-center rounded-full px-5 text-sm"
+                >
+                  Open Pump.fun
+                </a>
+              )}
+            </div>
+          </div>
+        ) : (
+          <>
         <div className="grid grid-cols-2 rounded-full border border-violet/30 p-1">
           <button type="button" onClick={() => setSide("buy")} className={`rounded-full py-2 text-sm ${side === "buy" ? "bg-acid/20 text-acid" : "text-mute"}`}>
             Buy
@@ -975,6 +1083,8 @@ function CoinDesk({
                 Withdraw {fmtSol(open.devRewardsSol, 4)} SOL rewards
               </button>
             )}
+          </>
+        )}
           </>
         )}
       </div>

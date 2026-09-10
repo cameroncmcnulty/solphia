@@ -10,6 +10,7 @@ import {
   durableKind,
   kvGetJson,
   kvMGetJson,
+  kvDel,
   kvSadd,
   kvSetJson,
   kvSmembers,
@@ -349,6 +350,16 @@ export async function enrollPaperBot(owner: string): Promise<TraderAccount> {
   const t = emptyTrader(owner);
   await saveTrader(t);
   return t;
+}
+
+export async function deleteTrader(owner: string): Promise<void> {
+  const state = mem || emptyState();
+  delete state.traders[owner];
+  if (state.hotAt) delete state.hotAt[owner];
+  state.liveOwners = (state.liveOwners || []).filter((o) => o !== owner);
+  knownTraderOwners = knownTraderOwners.filter((o) => o !== owner);
+  if (durableConfigured()) await kvDel(KEYS.trader(owner));
+  else writeFs(state);
 }
 
 export async function loadTrader(owner: string): Promise<TraderAccount | null> {

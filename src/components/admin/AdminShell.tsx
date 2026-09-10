@@ -15,6 +15,7 @@ import {
   Rocket,
   Search,
   Settings2,
+  Users,
   Wallet,
   X,
 } from "lucide-react";
@@ -40,6 +41,7 @@ const ICONS: Record<AdminIcon, typeof LayoutDashboard> = {
   backtest: LineChart,
   system: Settings2,
   wallets: Wallet,
+  users: Users,
 };
 
 export function AdminShell({ children }: { children: ReactNode }) {

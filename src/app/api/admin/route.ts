@@ -4,13 +4,15 @@ import { requireAdmin } from "@/lib/admin/auth";
 import { buildAdminDesk } from "@/lib/admin/desk";
 import { generatePromoPack, settlePendingPromo } from "@/lib/admin/promo";
 import { grantFounder, revokeFounder } from "@/lib/access";
-import { isSolanaAddress, clientIp } from "@/lib/security";
+import { isSolanaAddress, isEmail, clientIp } from "@/lib/security";
 import { emptyBook } from "@/lib/auto";
 import { runBacktest } from "@/lib/pair/backtest";
 import { loadBacktestTape } from "@/lib/pair/backtestTape";
-import { mutateState, audit, pushBounded, readyState, loadAllTraders } from "@/lib/store";
+import { mutateState, audit, pushBounded, readyState, loadAllTraders, deleteTrader, withLaunch } from "@/lib/store";
 import { emptyLaunchBook } from "@/lib/launch/engine";
+import { setUsername } from "@/lib/launch/username";
 import { socialHref } from "@/lib/launch/links";
+import { revokeDelegatedSigner } from "@/lib/live/signer";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -45,6 +47,19 @@ const Patch = z.object({
   contentHint: z.string().max(280).optional(),
   resetPaper: z.boolean().optional(),
   runBacktest: z.boolean().optional(),
+  user: z
+    .object({
+      pubkey: z.string(),
+      username: z.string().max(32).optional(),
+      email: z.string().max(120).nullable().optional(),
+      notes: z.string().max(500).nullable().optional(),
+      grantAdmin: z.boolean().optional(),
+      comped: z.boolean().optional(),
+      alertsEnabled: z.boolean().optional(),
+      clearUsername: z.boolean().optional(),
+      delete: z.boolean().optional(),
+    })
+    .optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -157,6 +172,76 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: result.error, note: result.note, desk: buildAdminDesk() }, { status: 400 });
     }
     return NextResponse.json({ ok: true, made: result.made, note: result.note, desk: buildAdminDesk() });
+  }
+  if (body.user) {
+    const u = body.user;
+    if (!isSolanaAddress(u.pubkey)) return NextResponse.json({ error: "bad_wallet", desk: buildAdminDesk() }, { status: 400 });
+    if (u.delete) {
+      await withLaunch((s) => {
+        if (s.launch?.accounts) delete s.launch.accounts[u.pubkey];
+        s.users = (s.users || []).filter((row) => row.pubkey !== u.pubkey);
+        revokeFounder(s, u.pubkey);
+        pushBounded(s.audit, audit("admin", "user_delete", u.pubkey, ip), 400);
+      }, true);
+      await deleteTrader(u.pubkey);
+      try {
+        await revokeDelegatedSigner(u.pubkey);
+      } catch {
+        /* missing key is fine */
+      }
+      return NextResponse.json({ ok: true, note: "Account deleted.", desk: buildAdminDesk() });
+    }
+    if (u.email != null && u.email !== "" && !isEmail(u.email)) {
+      return NextResponse.json({ error: "bad_email", desk: buildAdminDesk() }, { status: 400 });
+    }
+    const named = await withLaunch((s) => {
+      if (!s.launch) s.launch = emptyLaunchBook();
+      if (u.clearUsername) {
+        const r = setUsername(s.launch, u.pubkey, "");
+        if (!r.ok) return r;
+      } else if (typeof u.username === "string") {
+        const r = setUsername(s.launch, u.pubkey, u.username);
+        if (!r.ok) return r;
+      }
+      if (typeof u.notes === "string" || u.notes === null) {
+        const acc = s.launch.accounts[u.pubkey] || (s.launch.accounts[u.pubkey] = { pubkey: u.pubkey, referralRewardsSol: 0 });
+        acc.notes = u.notes || undefined;
+      }
+      let user = (s.users || []).find((row) => row.pubkey === u.pubkey);
+      if (!user) {
+        user = {
+          pubkey: u.pubkey,
+          createdAt: Date.now(),
+          lastSeen: Date.now(),
+          alertsEnabled: true,
+        };
+        s.users.push(user);
+      }
+      if (typeof u.username === "string") user.username = u.clearUsername ? undefined : u.username || undefined;
+      if (u.clearUsername) user.username = undefined;
+      if (u.email !== undefined) user.email = u.email || undefined;
+      if (u.notes !== undefined) user.notes = u.notes || undefined;
+      if (typeof u.alertsEnabled === "boolean") user.alertsEnabled = u.alertsEnabled;
+      if (typeof u.comped === "boolean") {
+        user.comped = u.comped;
+        if (u.comped) {
+          user.plan = user.plan === "paper" ? "live" : user.plan;
+          user.subscribedUntil = Date.now() + 10 * 365 * 24 * 60 * 60 * 1000;
+        } else if (!s.adminWallets?.includes(u.pubkey)) {
+          user.subscribedUntil = Date.now();
+        }
+      }
+      if (typeof u.grantAdmin === "boolean") {
+        if (u.grantAdmin) grantFounder(s, u.pubkey);
+        else revokeFounder(s, u.pubkey);
+      }
+      pushBounded(s.audit, audit("admin", "user_edit", u.pubkey, ip), 400);
+      return { ok: true as const };
+    }, true);
+    if (named && "ok" in named && !named.ok) {
+      return NextResponse.json({ error: (named as { error?: string }).error || "failed", desk: buildAdminDesk() }, { status: 400 });
+    }
+    return NextResponse.json({ ok: true, note: "Account updated.", desk: buildAdminDesk() });
   }
   return NextResponse.json({ ok: true, desk: buildAdminDesk() });
 }

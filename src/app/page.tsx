@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { SolphiaFace } from "@/components/SolphiaFace";
 import { SphaMark } from "@/components/SphaMark";
-import { LiveStats } from "@/components/LiveStats";
 import { BacktestBrochure } from "@/components/BacktestBrochure";
 
 export default function Home() {
@@ -41,8 +40,6 @@ export default function Home() {
           </div>
         </div>
       </section>
-
-      <LiveStats />
 
       <section className="px-4 py-16 md:px-12 md:py-24">
         <p className="text-sm tracking-[0.2em] text-acid">ECOSYSTEM</p>
@@ -97,41 +94,25 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="px-4 py-16 md:px-12 md:py-24">
-        <p className="text-sm tracking-[0.2em] text-acid">AGGREGATOR</p>
-        <h2 className="mt-3 max-w-3xl font-display text-4xl leading-tight text-ghost sm:text-5xl md:text-6xl">
-          Auto-trades the tokenized books.
-        </h2>
-        <p className="mt-4 max-w-2xl text-lg text-mute">
-          She sits in SOL and USDC and auto-trades official SPYx, QQQx, and GLDx for profit. When a sleeve stretches,
-          she clips. Jupiter finds the cheapest hop. Junk, stale, and thin routes never print. You approve in Phantom.
-        </p>
-        <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Chip t="Jupiter quotes" d="Live route, impact, and out-amount before she clips." />
-          <Chip t="Official mints" d="SOL, USDC, SPYx, QQQx, GLDx. Lookalikes are refused." />
-          <Chip t="Clean hops" d="Liquid intermediates only. Stale and thin paths drop." />
-          <Chip t="One clip" d="About 20% into the pair that’s actually stretched." />
-        </div>
-      </section>
-
       <BacktestBrochure />
 
-      <section className="px-4 py-16 md:px-12 md:py-24">
-        <p className="text-sm tracking-[0.2em] text-acid">REFERRALS</p>
-        <h2 className="mt-3 max-w-3xl font-display text-4xl leading-tight text-ghost sm:text-5xl md:text-6xl">
-          Invite once. Earn for life.
-        </h2>
-        <p className="mt-4 max-w-2xl text-lg text-mute">
-          Share your link. When someone follows it and connects Phantom, they are yours for life. Every coin they
-          launch pays you 25% of swap fees — on top of the 50% the actual dev keeps. Withdraw from your dashboard
-          whenever you want.
-        </p>
-        <Link
-          href="/account#referrals"
-          className="btn-acid mt-8 inline-flex min-h-[52px] items-center justify-center rounded-full px-8 text-base"
-        >
-          Referral dashboard
-        </Link>
+      <section className="px-4 py-10 md:px-12">
+        <div className="rounded-3xl border border-acid/25 bg-acid/[0.06] px-6 py-8 md:flex md:items-center md:justify-between md:px-10">
+          <div className="max-w-xl">
+            <p className="font-mono text-[11px] tracking-[0.22em] text-acid">REFERRALS · 25% FOR LIFE</p>
+            <h2 className="mt-2 font-display text-2xl text-ghost sm:text-3xl">Invite once. Get paid on every coin they launch.</h2>
+            <p className="mt-2 text-sm leading-relaxed text-mute sm:text-base">
+              First inviter locks forever. You earn 25% of swap fees on top of the 50% the actual dev keeps. Share the
+              link, then withdraw from your dashboard.
+            </p>
+          </div>
+          <Link
+            href="/account#referrals"
+            className="btn-acid mt-5 inline-flex min-h-[48px] items-center justify-center rounded-full px-7 text-base md:mt-0"
+          >
+            Get your link
+          </Link>
+        </div>
       </section>
 
       <section className="px-4 py-16 md:px-12 md:py-24">

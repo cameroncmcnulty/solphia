@@ -25,6 +25,8 @@ export const LAUNCH_ERRORS: Record<string, string> = {
   not_owner: "Owner wallet only.",
   self_referral: "You cannot invite yourself.",
   already_referred: "This wallet already has an inviter.",
+  bad_username: "Username must be 3–20 letters, start with a letter, and use only letters, numbers, or _.",
+  username_taken: "That username is taken.",
   rate_limited: "Too many requests. Wait a few seconds.",
   bad_request: "Bad request. Check the amount and try again.",
   admin_only: "Admin only.",

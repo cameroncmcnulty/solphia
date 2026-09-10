@@ -22,6 +22,7 @@ type Coin = {
 };
 type Desk = {
   pubkey: string;
+  username?: string;
   pfp: string;
   referrer: string | null;
   referralRewardsSol: number;
@@ -54,6 +55,7 @@ export default function AccountPage() {
   const [desk, setDesk] = useState<Desk | null>(null);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState("");
+  const [username, setUsername] = useState("");
   const [tradePk, setTradePk] = useState("");
   const [ownerBal, setOwnerBal] = useState(0);
   const [tradeBal, setTradeBal] = useState(0);
@@ -63,6 +65,7 @@ export default function AccountPage() {
     if (!owner) return;
     const j = await fetch(`/api/account?pubkey=${encodeURIComponent(owner)}`).then((r) => r.json());
     setDesk(j);
+    if (typeof j.username === "string") setUsername(j.username);
   }, [owner]);
 
   useEffect(() => {
@@ -111,6 +114,7 @@ export default function AccountPage() {
       setDesk(j);
       if (j.withdrawn) setNote(`Withdrew ${Number(j.withdrawn).toFixed(4)} SOL in referral rewards.`);
       if (body.action === "pfp") setNote(body.pfp ? "PFP saved." : "PFP cleared. Cartoon is back.");
+      if (body.action === "username") setNote(j.username ? `Username set to @${j.username}` : "Username cleared.");
     } finally {
       setBusy(false);
     }
@@ -137,7 +141,7 @@ export default function AccountPage() {
         <CartoonPfp seed={owner} src={desk?.pfp} className="h-14 w-14" />
         <div>
           <p className="font-mono text-[11px] tracking-[0.22em] text-violet">ACCOUNT</p>
-          <h1 className="font-display text-3xl text-ghost">You</h1>
+          <h1 className="font-display text-3xl text-ghost">{desk?.username ? `@${desk.username}` : "You"}</h1>
           <p className="font-mono text-[11px] text-mute">
             {owner.slice(0, 6)}…{owner.slice(-6)}
           </p>
@@ -163,10 +167,34 @@ export default function AccountPage() {
       {note && <p className="mt-4 font-mono text-sm text-acid">{note}</p>}
 
       {tab === "overview" && (
-        <div className="mt-6 grid gap-3 sm:grid-cols-3">
-          <Mini k="Launched" v={String(desk?.launched.length || 0)} />
-          <Mini k="Invited" v={String(desk?.referredCount || 0)} />
-          <Mini k="Referral rewards" v={`${(desk?.referralRewardsSol || 0).toFixed(4)} SOL`} />
+        <div className="mt-6 space-y-4">
+          <section className="panel-bubble overflow-hidden rounded-3xl p-5">
+            <h2 className="font-display text-2xl text-ghost">Username</h2>
+            <p className="mt-1 text-sm text-mute">Unique on Solphia. 3–20 characters, start with a letter. Letters, numbers, underscore.</p>
+            <form
+              className="mt-3 flex gap-2"
+              onSubmit={(e) => {
+                e.preventDefault();
+                post({ action: "username", username });
+              }}
+            >
+              <input
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="@handle"
+                maxLength={20}
+                className="min-h-[44px] min-w-0 flex-1 rounded-full border border-violet/30 bg-void px-4 font-mono text-sm text-ghost"
+              />
+              <button type="submit" disabled={busy} className="btn-acid rounded-full px-5 text-sm disabled:opacity-40">
+                Save
+              </button>
+            </form>
+          </section>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <Mini k="Launched" v={String(desk?.launched.length || 0)} />
+            <Mini k="Invited" v={String(desk?.referredCount || 0)} />
+            <Mini k="Referral rewards" v={`${(desk?.referralRewardsSol || 0).toFixed(4)} SOL`} />
+          </div>
         </div>
       )}
 

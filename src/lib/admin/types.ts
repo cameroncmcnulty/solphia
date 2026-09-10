@@ -35,6 +35,32 @@ export type AdminSeat = {
   autoRenew: boolean;
 };
 
+export type AdminUser = {
+  pubkey: string;
+  username: string | null;
+  email: string | null;
+  notes: string | null;
+  pfp: boolean;
+  plan: string;
+  paid: boolean;
+  admin: boolean;
+  comped: boolean;
+  createdAt: number;
+  lastSeen: number;
+  subscribedUntil: number | null;
+  autoRenew: boolean;
+  alertsEnabled: boolean;
+  referredCount: number;
+  referrer: string | null;
+  referralRewardsSol: number;
+  launched: number;
+  depositedSol: number;
+  mode: "paper" | "live";
+  killed: boolean;
+  liveDelegate: boolean;
+  tradingPubkey: string | null;
+};
+
 export type AdminWindow = {
   volumeUsd: number;
   trades: number;
@@ -128,6 +154,7 @@ export type AdminDesk = {
   feedHealth: FeedHealth[];
   traders: AdminTrader[];
   seats: AdminSeat[];
+  users: AdminUser[];
   adminWallets: string[];
   ops: AdminOps;
   promos: AdminPromo[];

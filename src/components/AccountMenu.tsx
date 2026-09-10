@@ -6,7 +6,7 @@ import { useOwner } from "@/lib/hooks";
 import { CartoonPfp } from "./CartoonPfp";
 import { WalletConnect } from "./WalletConnect";
 
-type Desk = { pfp?: string; referralRewardsSol?: number; referredCount?: number };
+type Desk = { pfp?: string; username?: string; referralRewardsSol?: number; referredCount?: number };
 
 const LINKS = [
   { href: "/account", label: "Account" },
@@ -63,7 +63,7 @@ export function AccountMenu() {
       >
         <CartoonPfp seed={owner} src={desk?.pfp} className="h-9 w-9" />
         <span className="hidden font-mono text-[11px] text-ghost sm:inline">
-          {owner.slice(0, 4)}…{owner.slice(-4)}
+          {desk?.username ? `@${desk.username}` : `${owner.slice(0, 4)}…${owner.slice(-4)}`}
         </span>
       </button>
       {open && (
@@ -75,7 +75,7 @@ export function AccountMenu() {
             <CartoonPfp seed={owner} src={desk?.pfp} className="h-11 w-11" />
             <div className="min-w-0">
               <div className="truncate font-mono text-xs text-ghost">
-                {owner.slice(0, 6)}…{owner.slice(-6)}
+                {desk?.username ? `@${desk.username}` : `${owner.slice(0, 6)}…${owner.slice(-6)}`}
               </div>
               <div className="font-mono text-[10px] text-mute">
                 {desk?.referredCount || 0} invited · {(desk?.referralRewardsSol || 0).toFixed(4)} SOL

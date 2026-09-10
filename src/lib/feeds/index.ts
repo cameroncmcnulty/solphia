@@ -333,3 +333,34 @@ export async function ingestMarket(
 
   return { tokens, health, solUsd, copyBook: tape.book };
 }
+
+/** Lighter tape ingest: Pump + Dexscreener only. No copy-wallet overlay. */
+export async function ingestPublicTape(): Promise<{ tokens: TokenSnapshot[]; solUsd: number }> {
+  const map = new Map<string, TokenSnapshot>();
+  const put = (t: TokenSnapshot | null) => {
+    if (!t?.mint) return;
+    const prev = map.get(t.mint);
+    map.set(t.mint, prev ? mergeSnapshots(prev, t) : t);
+  };
+  const [solUsd] = await Promise.all([
+    solPriceUsd(),
+    (async () => {
+      const r = await getJson<PumpCoin[]>(
+        "https://frontend-api-v3.pump.fun/coins?offset=0&limit=40&sort=created_timestamp&order=desc&includeNsfw=false",
+      );
+      (r.data || []).forEach((c) => put(fromPump(c)));
+    })(),
+    (async () => {
+      const r = await getJson<PumpCoin[]>(
+        "https://frontend-api-v3.pump.fun/coins?offset=0&limit=30&sort=last_trade_timestamp&order=desc&includeNsfw=false",
+      );
+      (r.data || []).forEach((c) => put(fromPump(c)));
+    })(),
+    (async () => {
+      const r = await getJson<{ pairs?: DexPair[] }>("https://api.dexscreener.com/latest/dex/search?q=SOL");
+      const pairs = (r.data?.pairs || []).filter((p) => p.chainId === "solana");
+      pairs.slice(0, 50).forEach((p) => put(fromDex(p)));
+    })(),
+  ]);
+  return { tokens: [...map.values()].filter((t) => t.mint.length >= 32), solUsd };
+}

@@ -27,7 +27,8 @@ export type AdminIcon =
   | "content"
   | "backtest"
   | "system"
-  | "wallets";
+  | "wallets"
+  | "users";
 
 export const ADMIN_NAV = [
   {
@@ -88,6 +89,14 @@ export const ADMIN_NAV = [
     label: "System",
     hint: "Locked defaults and the audit log",
     icon: "system" as const,
+  },
+  {
+    id: "users",
+    group: "access",
+    label: "Users",
+    hint: "Search, edit, and delete accounts",
+    icon: "users" as const,
+    badge: (d: AdminDesk) => d.users?.length || null,
   },
   {
     id: "wallets",

@@ -81,6 +81,9 @@ export type LaunchAccount = {
   referrer?: string;
   referredAt?: number;
   pfp?: string;
+  username?: string;
+  usernameAt?: number;
+  notes?: string;
   referralRewardsSol: number;
 };
 
@@ -244,6 +247,9 @@ export function mergeLaunch(local: LaunchBook, remote: LaunchBook): LaunchBook {
       referrer: a.referrer || r.referrer,
       referredAt: a.referredAt || r.referredAt,
       pfp: a.pfp || r.pfp,
+      username: a.username || r.username,
+      usernameAt: a.usernameAt || r.usernameAt,
+      notes: a.notes || r.notes,
       referralRewardsSol: Math.max(a.referralRewardsSol || 0, r.referralRewardsSol || 0),
     };
   }
@@ -341,6 +347,8 @@ export function publicCoin(c: LaunchCoin, solUsd = 0, viewer?: string, book?: La
   return {
     id: c.id,
     mint: c.mint,
+    born: true as const,
+    venue: "launchlab" as const,
     name: c.name,
     symbol: c.symbol,
     image: c.image || "",

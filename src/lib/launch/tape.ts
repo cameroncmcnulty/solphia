@@ -21,6 +21,11 @@ export const TAPE_BOARD = 6;
 export type TapeCoin = {
   id: string;
   mint?: string;
+  /** True when the coin launched on Solphia's pad. Market tokens are false. */
+  born?: boolean;
+  venue?: string;
+  pairUrl?: string;
+  liqUsd?: number;
   name: string;
   symbol: string;
   image?: string;

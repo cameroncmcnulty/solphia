@@ -12,6 +12,7 @@ import { ContentSection } from "./Content";
 import { BacktestSection } from "./Backtest";
 import { SystemSection } from "./System";
 import { WalletsSection } from "./Wallets";
+import { UsersSection } from "./Users";
 
 /** Map a nav id to its screen. Add a tool here when you append it in src/lib/admin/nav.ts. */
 export const ADMIN_SECTIONS: Record<AdminSectionId, ComponentType> = {
@@ -24,6 +25,7 @@ export const ADMIN_SECTIONS: Record<AdminSectionId, ComponentType> = {
   backtest: BacktestSection,
   system: SystemSection,
   wallets: WalletsSection,
+  users: UsersSection,
 };
 
 export function AdminSection() {

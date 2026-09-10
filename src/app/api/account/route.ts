@@ -11,6 +11,7 @@ import {
   setAccountPfp,
   withdrawReferral,
 } from "@/lib/launch/engine";
+import { setUsername } from "@/lib/launch/username";
 import { launchError } from "@/lib/launch/errors";
 import { IMAGE_DATA_MAX } from "@/lib/launch/validate";
 import { lastPairPrices } from "@/lib/tick";
@@ -19,10 +20,11 @@ import { enrollPaperBot } from "@/lib/store";
 export const dynamic = "force-dynamic";
 
 const Body = z.object({
-  action: z.enum(["hello", "pfp", "withdraw_referral"]),
+  action: z.enum(["hello", "pfp", "withdraw_referral", "username"]),
   pubkey: z.string(),
   referrer: z.string().optional(),
   pfp: z.string().max(IMAGE_DATA_MAX).optional(),
+  username: z.string().max(32).optional(),
 });
 
 function bookOf(s: { launch?: ReturnType<typeof emptyLaunchBook>; ownerWallet?: string }) {
@@ -41,6 +43,7 @@ function pack(book: ReturnType<typeof emptyLaunchBook>, pubkey: string, solUsd: 
   const launched = book.coins.filter((c) => c.creator === pubkey).slice(0, 40);
   return {
     pubkey,
+    username: acc.username || "",
     pfp: acc.pfp || "",
     referrer: acc.referrer || null,
     referredAt: acc.referredAt || null,
@@ -80,6 +83,24 @@ export async function POST(req: NextRequest) {
     }
     if (b.action === "pfp") {
       return setAccountPfp(book, b.pubkey, b.pfp || "");
+    }
+    if (b.action === "username") {
+      const r = setUsername(book, b.pubkey, b.username || "");
+      if (r.ok) {
+        let user = s.users.find((u) => u.pubkey === b.pubkey);
+        if (!user) {
+          user = {
+            pubkey: b.pubkey,
+            createdAt: Date.now(),
+            lastSeen: Date.now(),
+            alertsEnabled: true,
+          };
+          s.users.push(user);
+        }
+        user.username = r.username || undefined;
+        user.lastSeen = Date.now();
+      }
+      return r;
     }
     if (b.action === "withdraw_referral") {
       return withdrawReferral(book, { owner: b.pubkey });

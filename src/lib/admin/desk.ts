@@ -14,6 +14,7 @@ import { treasuryAddress } from "../treasury";
 import { seatSol } from "../seat";
 import { promoDataUrl, promoViewToken } from "./promoFile";
 import { bookHoldingUsd, sumWindows, tradingNow, uniqueWallets } from "./stats";
+import { buildAdminUsers } from "./users";
 import type { AdminDesk, AdminPromo, AdminSeat, AdminSleeve, AdminTrader } from "./types";
 
 export type { AdminDesk, AdminSeat, AdminSleeve, AdminTrader } from "./types";
@@ -137,6 +138,7 @@ export function buildAdminDesk(opts?: { light?: boolean }): AdminDesk {
     feedHealth: s.feedHealth || [],
     traders,
     seats,
+    users: buildAdminUsers(s),
     adminWallets: s.adminWallets || [],
     ops: {
       holdingUsd: round2(holdingUsd),
