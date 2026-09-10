@@ -38,7 +38,7 @@ export function normalizeCandles(raw: Spark[]): Spark[] {
   }));
 }
 
-/** Build a 24-point path from the windowed % prints so every row has a spark. */
+/** Five real window prints. No sine fill — that made every bubble look identical. */
 export function syntheticSpark(coin: {
   priceSol?: number;
   marketCapUsd?: number;
@@ -48,39 +48,38 @@ export function syntheticSpark(coin: {
   change24h?: number;
   createdAt?: number;
 }): Spark[] {
-  const last = coin.priceSol || (coin.marketCapUsd ? coin.marketCapUsd / 1e9 : 0) || 1;
+  const last = coin.priceSol || 1;
   const now = Date.now();
   const ch = (v?: number) => (Number.isFinite(v) ? v || 0 : 0);
-  const px = (chg: number) => last / Math.max(0.05, 1 + chg);
-  const p24 = px(ch(coin.change24h));
-  const p6 = px(ch(coin.change6h) || ch(coin.change24h) * 0.45);
-  const p1 = px(ch(coin.change1h) || ch(coin.change24h) * 0.12);
-  const p5 = px(ch(coin.change5m) || ch(coin.change1h) * 0.2);
-  const anchors: { t: number; p: number }[] = [
-    { t: now - 24 * 3600_000, p: p24 },
-    { t: now - 6 * 3600_000, p: p6 },
-    { t: now - 3600_000, p: p1 },
-    { t: now - 5 * 60_000, p: p5 },
+  const px = (chg: number) => Math.max(1e-12, last / Math.max(0.08, 1 + chg));
+  const pts = [
+    { t: now - 24 * 3600_000, p: px(ch(coin.change24h)) },
+    { t: now - 6 * 3600_000, p: px(ch(coin.change6h) || ch(coin.change24h) * 0.4) },
+    { t: now - 3600_000, p: px(ch(coin.change1h) || ch(coin.change24h) * 0.1) },
+    { t: now - 5 * 60_000, p: px(ch(coin.change5m) || ch(coin.change1h) * 0.15) },
     { t: now, p: last },
   ];
+  return pts.map((row, i) => {
+    const prev = i ? pts[i - 1].p : row.p;
+    return { t: row.t, o: prev, h: Math.max(prev, row.p), l: Math.min(prev, row.p), c: row.p };
+  });
+}
+
+export function bucketCandles(rows: Spark[], max: number): Spark[] {
+  if (rows.length <= max) return rows;
+  const size = Math.ceil(rows.length / max);
   const out: Spark[] = [];
-  const n = 24;
-  for (let i = 0; i < n; i++) {
-    const t = anchors[0].t + ((anchors[anchors.length - 1].t - anchors[0].t) * i) / (n - 1);
-    let p = last;
-    for (let k = 1; k < anchors.length; k++) {
-      if (t <= anchors[k].t) {
-        const a = anchors[k - 1];
-        const b = anchors[k];
-        const u = (t - a.t) / Math.max(1, b.t - a.t);
-        p = a.p + (b.p - a.p) * u;
-        break;
-      }
-    }
-    const jitter = 1 + Math.sin(i * 1.7) * 0.004;
-    const c = Math.max(1e-12, p * jitter);
-    const prev = out[out.length - 1]?.c || c;
-    out.push({ t, o: prev, h: Math.max(prev, c), l: Math.min(prev, c), c });
+  for (let i = 0; i < rows.length; i += size) {
+    const sl = rows.slice(i, i + size);
+    const first = sl[0];
+    const last = sl[sl.length - 1];
+    out.push({
+      t: first.t,
+      o: first.o,
+      h: Math.max(...sl.map((x) => x.h)),
+      l: Math.min(...sl.map((x) => x.l)),
+      c: last.c,
+    });
   }
   return out;
 }

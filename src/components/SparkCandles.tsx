@@ -2,81 +2,94 @@
 
 export type Spark = { t: number; o: number; h: number; l: number; c: number };
 
+function bucketCandles(rows: Spark[], max: number): Spark[] {
+  if (rows.length <= max) return rows;
+  const size = Math.ceil(rows.length / max);
+  const out: Spark[] = [];
+  for (let i = 0; i < rows.length; i += size) {
+    const sl = rows.slice(i, i + size);
+    const first = sl[0];
+    const last = sl[sl.length - 1];
+    out.push({
+      t: first.t,
+      o: first.o,
+      h: Math.max(...sl.map((x) => x.h)),
+      l: Math.min(...sl.map((x) => x.l)),
+      c: last.c,
+    });
+  }
+  return out;
+}
+
 const BULL = "#14f195";
 const BEAR = "#ff4d7a";
 
 export function SparkCandles({
   candles,
   up,
-  width = 112,
-  height = 44,
   className,
   variant = "candles",
 }: {
   candles: Spark[];
   up: boolean;
-  width?: number;
-  height?: number;
   className?: string;
   variant?: "candles" | "line";
 }) {
-  if (!candles.length) {
-    const stroke = up ? BULL : BEAR;
+  const tone = up ? BULL : BEAR;
+  const vbW = variant === "line" ? 88 : 320;
+  const vbH = variant === "line" ? 32 : 148;
+  const rows = variant === "line" ? bucketCandles(candles, 20) : bucketCandles(candles, 42);
+  const padX = variant === "line" ? 1 : 6;
+  const padY = variant === "line" ? 2 : 8;
+
+  if (rows.length < 2) {
     return (
-      <svg viewBox={`0 0 ${width} ${height}`} width={width} height={height} className={className || "shrink-0"} aria-hidden>
-        <line x1="4" x2={width - 4} y1={height / 2} y2={height / 2} stroke={stroke} strokeOpacity="0.35" strokeWidth="2" />
+      <svg viewBox={`0 0 ${vbW} ${vbH}`} className={className || "h-full w-full"} preserveAspectRatio="none" aria-hidden>
+        <line x1={padX} x2={vbW - padX} y1={vbH / 2} y2={vbH / 2} stroke={tone} strokeOpacity="0.4" strokeWidth="1.5" />
       </svg>
     );
   }
-  const pad = 2;
-  const highs = candles.map((c) => c.h);
-  const lows = candles.map((c) => c.l);
+
+  const highs = rows.map((c) => c.h);
+  const lows = rows.map((c) => c.l);
   const max = Math.max(...highs);
   const min = Math.min(...lows);
-  const span = max - min || 1e-12;
-  const y = (px: number) => pad + ((max - px) / span) * (height - pad * 2);
-  const tone = up ? BULL : BEAR;
+  const span = max - min || Math.abs(max) * 0.02 || 1;
+  const y = (px: number) => padY + ((max - px) / span) * (vbH - padY * 2);
+  const xAt = (i: number) => padX + (i / (rows.length - 1)) * (vbW - padX * 2);
 
   if (variant === "line") {
-    const pts = candles.map((c, i) => {
-      const x = pad + (i / Math.max(1, candles.length - 1)) * (width - pad * 2);
-      return `${x},${y(c.c)}`;
-    });
-    const firstX = pad;
-    const lastX = width - pad;
-    const base = `${lastX},${height - pad} ${firstX},${height - pad}`;
+    const pts = rows.map((c, i) => `${xAt(i).toFixed(2)},${y(c.c).toFixed(2)}`);
+    const lastX = xAt(rows.length - 1);
+    const firstX = xAt(0);
     return (
-      <svg
-        viewBox={`0 0 ${width} ${height}`}
-        width={width}
-        height={height}
-        className={className || "shrink-0"}
-        preserveAspectRatio="none"
-        aria-hidden="true"
-      >
-        <polygon points={`${pts.join(" ")} ${base}`} fill={tone} fillOpacity="0.18" />
-        <polyline points={pts.join(" ")} fill="none" stroke={tone} strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round" />
+      <svg viewBox={`0 0 ${vbW} ${vbH}`} className={className || "h-full w-full"} preserveAspectRatio="none" aria-hidden>
+        <polygon
+          points={`${pts.join(" ")} ${lastX},${vbH - 1} ${firstX},${vbH - 1}`}
+          fill={tone}
+          fillOpacity="0.16"
+        />
+        <polyline
+          points={pts.join(" ")}
+          fill="none"
+          stroke={tone}
+          strokeWidth="1.4"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+        />
       </svg>
     );
   }
 
-  const gap = width / candles.length;
-  const bodyW = Math.max(1.2, gap * 0.55);
+  const gap = (vbW - padX * 2) / rows.length;
+  const bodyW = Math.max(2, Math.min(7, gap * 0.62));
   return (
-    <svg
-      viewBox={`0 0 ${width} ${height}`}
-      width={width}
-      height={height}
-      className={className || "shrink-0"}
-      preserveAspectRatio="none"
-      aria-hidden="true"
-    >
-      {candles.map((c, i) => {
-        const x = gap * i + gap / 2;
+    <svg viewBox={`0 0 ${vbW} ${vbH}`} className={className || "h-full w-full"} preserveAspectRatio="none" aria-hidden>
+      {rows.map((c, i) => {
+        const x = padX + gap * i + gap / 2;
         const open = y(c.o);
         const close = y(c.c);
-        const green = c.c >= c.o;
-        const color = green ? BULL : BEAR;
+        const color = c.c >= c.o ? BULL : BEAR;
         return (
           <g key={`${c.t}-${i}`}>
             <line x1={x} x2={x} y1={y(c.h)} y2={y(c.l)} stroke={color} strokeWidth="1" />
@@ -84,21 +97,12 @@ export function SparkCandles({
               x={x - bodyW / 2}
               y={Math.min(open, close)}
               width={bodyW}
-              height={Math.max(1.1, Math.abs(close - open))}
+              height={Math.max(1.2, Math.abs(close - open))}
               fill={color}
             />
           </g>
         );
       })}
-      <line
-        x1={0}
-        x2={width}
-        y1={y(candles[candles.length - 1].c)}
-        y2={y(candles[candles.length - 1].c)}
-        stroke={tone}
-        strokeOpacity="0.28"
-        strokeDasharray="3 3"
-      />
     </svg>
   );
 }

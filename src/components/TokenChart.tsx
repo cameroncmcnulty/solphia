@@ -17,14 +17,12 @@ export function TokenChart({
   venue,
   seed,
   change24h,
-  priceLabel,
 }: {
   mint?: string;
   pair?: string;
   venue?: string;
   seed?: Spark[];
   change24h?: number;
-  priceLabel?: string;
 }) {
   const [tf, setTf] = useState<ChartTf>("15m");
   const [candles, setCandles] = useState<Spark[]>(seed || []);
@@ -32,7 +30,7 @@ export function TokenChart({
 
   useEffect(() => {
     setCandles(seed || []);
-  }, [mint, seed]);
+  }, [mint, pair, seed]);
 
   useEffect(() => {
     if (!mint && !pair) return;
@@ -57,37 +55,38 @@ export function TokenChart({
     if (candles.length >= 2) return (candles[candles.length - 1]?.c || 0) >= (candles[0]?.c || 0);
     return (change24h || 0) >= 0;
   }, [candles, change24h]);
-  const chg = candles.length >= 2 ? candles[candles.length - 1].c / candles[0].c - 1 : change24h || 0;
-  const last = candles[candles.length - 1]?.c;
+  const chg = candles.length >= 2 ? candles[candles.length - 1].c / Math.max(1e-12, candles[0].c) - 1 : change24h || 0;
 
   return (
-    <div className={`overflow-hidden rounded-2xl border ${up ? "border-acid/35 bg-acid/[0.04]" : "border-blood/35 bg-blood/[0.04]"}`}>
-      <div className="flex flex-wrap items-end justify-between gap-2 px-3 pt-3">
-        <div>
-          <div className={`font-display text-2xl sm:text-3xl ${up ? "text-acid" : "text-blood"}`}>
-            {priceLabel || (last ? last.toPrecision(4) : "—")}
-          </div>
-          <div className={`font-mono text-[12px] ${up ? "text-acid" : "text-blood"}`}>
-            {chg >= 0 ? "+" : ""}
-            {(chg * 100).toFixed(2)}% · {tf}
-          </div>
-        </div>
-        <div className="flex gap-1 rounded-full border border-violet/25 p-0.5">
+    <div className="min-w-0">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <span className={`font-mono text-[11px] ${up ? "text-acid" : "text-blood"}`}>
+          {chg >= 0 ? "+" : ""}
+          {(chg * 100).toFixed(2)}%
+          <span className="ml-1.5 text-mute">{tf}</span>
+        </span>
+        <div className="flex gap-0.5 rounded-full border border-violet/25 p-0.5">
           {TFS.map((row) => (
             <button
               key={row.id}
               type="button"
               onClick={() => setTf(row.id)}
-              className={`rounded-full px-2.5 py-1 font-mono text-[10px] ${tf === row.id ? (up ? "bg-acid/20 text-acid" : "bg-blood/20 text-blood") : "text-mute"}`}
+              className={`rounded-full px-2 py-0.5 font-mono text-[10px] ${
+                tf === row.id ? (up ? "bg-acid/20 text-acid" : "bg-blood/20 text-blood") : "text-mute"
+              }`}
             >
               {row.label}
             </button>
           ))}
         </div>
       </div>
-      <div className="relative px-2 pb-2 pt-1">
-        {loading && <div className="absolute right-3 top-2 font-mono text-[10px] text-mute">loading</div>}
-        <SparkCandles candles={candles} up={up} width={720} height={180} variant="candles" className="h-40 w-full sm:h-48" />
+      <div
+        className={`relative h-[148px] w-full min-w-0 overflow-hidden rounded-xl border sm:h-[168px] ${
+          up ? "border-acid/30 bg-void/50" : "border-blood/30 bg-void/50"
+        }`}
+      >
+        {loading && <div className="absolute right-2 top-1.5 z-[1] font-mono text-[9px] text-mute">…</div>}
+        <SparkCandles candles={candles} up={up} variant="candles" className="h-full w-full" />
       </div>
     </div>
   );

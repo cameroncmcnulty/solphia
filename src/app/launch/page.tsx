@@ -783,7 +783,7 @@ function CoinCard({
           onOpen();
         }
       }}
-      className={`relative isolate flex w-full cursor-pointer items-center gap-3 overflow-hidden rounded-2xl border border-l-[3px] px-3 py-2.5 text-left ${eliteClass(rank, active)} ${
+      className={`relative isolate flex w-full min-w-0 cursor-pointer items-center gap-2.5 overflow-hidden rounded-2xl border border-l-[3px] px-2.5 py-2 text-left sm:gap-3 sm:px-3 sm:py-2.5 ${eliteClass(rank, active)} ${
         up ? "border-l-acid" : "border-l-blood"
       }`}
     >
@@ -810,8 +810,8 @@ function CoinCard({
           <span className={up ? "text-acid" : "text-blood"}>{fmtPct(c.change24h)}</span>
         </div>
       </div>
-      <div className={`relative z-[1] h-10 w-[4.6rem] shrink-0 overflow-hidden rounded-lg sm:h-11 sm:w-28 ${up ? "bg-acid/[0.07]" : "bg-blood/[0.07]"}`}>
-        <SparkCandles candles={spark} up={up} width={112} height={44} variant="line" className="h-full w-full" />
+      <div className={`relative z-[1] h-8 w-16 shrink-0 sm:h-9 sm:w-[5.5rem] ${up ? "" : ""}`}>
+        <SparkCandles candles={spark} up={up} variant="line" className="h-full w-full" />
       </div>
       {score != null && (
         <span
@@ -876,7 +876,7 @@ function CoinDesk({
             : "";
 
   return (
-    <section className="panel-bubble mt-6 grid gap-5 overflow-hidden rounded-3xl p-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
+    <section className="panel-bubble mt-6 grid min-w-0 gap-5 overflow-x-hidden rounded-3xl p-4 sm:p-5 lg:grid-cols-[minmax(0,1fr)_minmax(260px,340px)]">
       <div>
         <div className="flex items-start justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
@@ -911,7 +911,6 @@ function CoinDesk({
             venue={open.venue || (open.born ? "launchlab" : undefined)}
             seed={open.spark}
             change24h={open.change24h}
-            priceLabel={fmtPx((open.priceSol || 0) * (solUsd || 0))}
           />
         </div>
         {open.born && (
