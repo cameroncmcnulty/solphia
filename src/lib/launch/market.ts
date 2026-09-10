@@ -1,6 +1,7 @@
 import { ingestPublicTape } from "../feeds";
 import { scoreToken } from "../risk/engine";
 import type { TokenSnapshot } from "../types";
+import { attachTapeSparks } from "./chart";
 import type { TapeCoin } from "./tape";
 
 /** Preferred safety floor. The board still fills to MARKET_CAP with the next-best live names. */
@@ -43,6 +44,7 @@ export function snapshotToTape(t: TokenSnapshot, solUsd: number): TapeCoin {
     mint: t.mint,
     born: false,
     venue: t.venue,
+    pairAddress: t.pairAddress,
     pairUrl: pairUrlOf(t),
     name: t.name,
     symbol: t.symbol,
@@ -134,6 +136,7 @@ export async function loadMarketTape(force = false): Promise<{
   }
   const { tokens, solUsd } = await ingestPublicTape();
   const { rows, scanned } = filterMarketSnapshots(tokens, solUsd);
+  await attachTapeSparks(rows.map((r) => r.coin));
   cache = { at: Date.now(), rows, solUsd, scanned };
   return { rows, solUsd, scanned, minScore: MARKET_MIN_SCORE };
 }

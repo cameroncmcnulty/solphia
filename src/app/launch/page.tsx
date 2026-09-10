@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { CopyCa } from "@/components/CopyCa";
 import { SolphiaConstellation } from "@/components/SolphiaConstellation";
 import { SparkCandles } from "@/components/SparkCandles";
+import { TokenChart } from "@/components/TokenChart";
 import { SocialInput, TokenSocials } from "@/components/TokenSocials";
 import { WalletConnect } from "@/components/WalletConnect";
 import { useOwner } from "@/lib/hooks";
@@ -43,6 +44,7 @@ type Coin = {
   mint?: string;
   born?: boolean;
   venue?: string;
+  pairAddress?: string;
   pairUrl?: string;
   liqUsd?: number;
   score?: number;
@@ -192,6 +194,12 @@ function fmtPct(n?: number) {
   if (n == null || !Number.isFinite(n) || n === 0) return "0%";
   const pct = n * 100;
   return `${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%`;
+}
+
+function fmtPx(n?: number) {
+  if (!(n && n > 0)) return "—";
+  if (n >= 1) return `$${n.toFixed(n >= 100 ? 2 : 4)}`;
+  return `$${n.toPrecision(4)}`;
 }
 
 function venueLabel(c: Coin) {
@@ -763,6 +771,7 @@ function CoinCard({
   const score = audit?.score ?? c.score;
   const grade = audit?.grade ?? c.grade;
   const spark = c.spark || [];
+  const up = spark.length >= 2 ? spark[spark.length - 1].c >= spark[0].c : (c.change24h || 0) >= 0;
   return (
     <div
       role="button"
@@ -774,7 +783,9 @@ function CoinCard({
           onOpen();
         }
       }}
-      className={`relative isolate flex w-full cursor-pointer items-center gap-3 overflow-hidden rounded-2xl border px-3 py-2.5 text-left ${eliteClass(rank, active)}`}
+      className={`relative isolate flex w-full cursor-pointer items-center gap-3 overflow-hidden rounded-2xl border border-l-[3px] px-3 py-2.5 text-left ${eliteClass(rank, active)} ${
+        up ? "border-l-acid" : "border-l-blood"
+      }`}
     >
       {elite && <span aria-hidden className="pointer-events-none absolute inset-0 rounded-2xl" style={{ boxShadow: eliteGlow(rank) }} />}
       {rank > 0 && <RankMark n={rank} />}
@@ -796,23 +807,21 @@ function CoinCard({
           <span>{fmtAge(Date.now() - c.createdAt)}</span>
           <span className="text-ghost">{c.marketCapUsd ? fmtUsd(c.marketCapUsd) : `${fmtSol(c.marketCapSol, 1)} SOL`}</span>
           {(vol || c.vol1h) && <span>{fmtSol(vol ? volumeIn(c, vol) : c.vol1h || 0, 2)} SOL</span>}
-          <span className={(c.change24h || 0) >= 0 ? "text-acid" : "text-blood"}>{fmtPct(c.change24h)}</span>
+          <span className={up ? "text-acid" : "text-blood"}>{fmtPct(c.change24h)}</span>
         </div>
+      </div>
+      <div className={`relative z-[1] h-10 w-[4.6rem] shrink-0 overflow-hidden rounded-lg sm:h-11 sm:w-28 ${up ? "bg-acid/[0.07]" : "bg-blood/[0.07]"}`}>
+        <SparkCandles candles={spark} up={up} width={112} height={44} variant="line" className="h-full w-full" />
       </div>
       {score != null && (
         <span
-          className={`relative z-[1] shrink-0 rounded-full px-2 py-1 font-mono text-[11px] ${
+          className={`relative z-[1] hidden shrink-0 rounded-full px-2 py-1 font-mono text-[11px] sm:inline ${
             grade === "S" || grade === "A" ? "bg-acid/20 text-acid" : grade === "B" ? "bg-cyan/20 text-cyan" : "bg-white/10 text-mute"
           }`}
         >
           {grade ? `${grade} ` : ""}
           {score}
         </span>
-      )}
-      {spark.length >= 4 && (
-        <div className="relative z-[1] hidden w-24 shrink-0 sm:block">
-          <SparkCandles candles={spark} up={(spark.at(-1)?.c || 0) >= (spark[0]?.c || 0)} width={96} height={36} />
-        </div>
       )}
     </div>
   );
@@ -878,6 +887,10 @@ function CoinDesk({
             <div className="min-w-0">
               <div className="font-display text-3xl text-ghost">{tick(open.symbol)}</div>
               <div className="text-sm text-mute">{open.name}</div>
+              <div className={`mt-1 font-mono text-sm ${(open.change24h || 0) >= 0 ? "text-acid" : "text-blood"}`}>
+                {fmtPx((open.priceSol || 0) * (solUsd || 0))}
+                <span className="ml-2">{fmtPct(open.change24h)} 24h</span>
+              </div>
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <span className={`rounded-full px-2 py-0.5 font-mono text-[10px] ${open.born ? "bg-acid/15 text-acid" : "bg-white/10 text-mute"}`}>
                   {venueLabel(open)}
@@ -891,12 +904,21 @@ function CoinDesk({
             Close
           </button>
         </div>
-        <div className="mt-4 overflow-hidden rounded-2xl border border-violet/15 bg-void/30 p-3">
-          <SparkCandles candles={open.spark || []} up={(open.spark?.at(-1)?.c || 0) >= (open.spark?.[0]?.c || 0)} width={640} height={140} className="h-36 w-full" />
+        <div className="mt-4">
+          <TokenChart
+            mint={open.mint}
+            pair={open.pairAddress}
+            venue={open.venue || (open.born ? "launchlab" : undefined)}
+            seed={open.spark}
+            change24h={open.change24h}
+            priceLabel={fmtPx((open.priceSol || 0) * (solUsd || 0))}
+          />
         </div>
-        <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-void">
-          <div className="h-full bg-acid" style={{ width: `${Math.round(open.progress * 100)}%` }} />
-        </div>
+        {open.born && (
+          <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-void">
+            <div className="h-full bg-acid" style={{ width: `${Math.round((open.progress || 0) * 100)}%` }} />
+          </div>
+        )}
         <div className="mt-3 grid grid-cols-4 gap-2">
           <Stat k="MC" v={open.marketCapUsd ? fmtUsd(open.marketCapUsd) : `${fmtSol(open.marketCapSol, 1)} SOL`} />
           <Stat k="Liq" v={`${fmtSol(open.liqSol || open.realSol, 2)} SOL`} />

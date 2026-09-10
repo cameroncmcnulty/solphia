@@ -24,6 +24,7 @@ export type TapeCoin = {
   /** True when the coin launched on Solphia's pad. Market tokens are false. */
   born?: boolean;
   venue?: string;
+  pairAddress?: string;
   pairUrl?: string;
   liqUsd?: number;
   name: string;
