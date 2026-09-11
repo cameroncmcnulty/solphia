@@ -147,6 +147,12 @@ export function TradingHub() {
   }, [owner]);
 
   useEffect(() => {
+    if (!owner || delegated || book?.killed) return;
+    if (!liveTrading) return;
+    ensureLive();
+  }, [owner, liveTrading, delegated, book?.killed]);
+
+  useEffect(() => {
     if (!armed) return;
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
@@ -162,6 +168,24 @@ export function TradingHub() {
     const j = await r.json();
     setAuto(j.auto);
     setPaper(j.paper);
+    setLiveTrading(Boolean(j.liveTrading));
+    setDelegated(Boolean(j.liveDelegate || j.auto?.liveDelegate));
+  }
+
+  async function ensureLive() {
+    if (!owner || delegated) return;
+    try {
+      const r = await fetch("/api/live/delegate", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ owner, secret: exportSecret() }),
+      });
+      if (!r.ok) return;
+      setDelegated(true);
+      await refreshAuto(owner);
+    } catch {
+      /* seat or live flag may still be off */
+    }
   }
 
   async function kill() {
@@ -245,7 +269,10 @@ export function TradingHub() {
       const tx = await buildTransfer(owner, tpk, solAmt);
       const sent = await provider.signAndSendTransaction(tx);
       setMsg(`Added ${solAmt} SOL · ${String(sent.signature || sent).slice(0, 16)}…`);
-      setTimeout(() => refreshAuto(owner), 2500);
+      setTimeout(() => {
+        refreshAuto(owner);
+        ensureLive();
+      }, 2500);
     } catch (e) {
       fundErr.fail({}, e instanceof Error ? e.message : "deposit rejected");
     } finally {
@@ -300,7 +327,7 @@ export function TradingHub() {
           <p className="font-mono text-[11px] tracking-[0.28em] text-violet">SOL · S&P 500 · NASDAQ · GOLD</p>
           <h1 className="mt-1 font-display text-3xl leading-none text-ghost sm:text-4xl md:text-6xl">Operate</h1>
           <p className="mt-3 max-w-xl text-base text-mute sm:text-lg">
-            Connect Phantom. She keeps trading after you close the tab — paper fills 24/7 on the server. Kill here to stop her, or she flattens to USDC and pauses if the book drops 8% from start.
+            Connect Phantom, add SOL, turn her on. She clips official SPYx, QQQx, and GLDx for about 0.5% and keeps going until you kill her or the book drops 8%.
           </p>
         </div>
         <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-row sm:items-center sm:gap-3">
@@ -313,14 +340,17 @@ export function TradingHub() {
           {book?.killed ? (
             <button
               type="button"
-              onClick={() => patch({ armed: true })}
+              onClick={async () => {
+                await patch({ armed: true });
+                await ensureLive();
+              }}
               className="btn-acid col-span-1 inline-flex min-h-[48px] w-full items-center justify-center rounded-full px-4 py-3 text-sm sm:min-h-[56px] sm:w-auto sm:px-8 sm:text-lg"
             >
               RESUME
             </button>
           ) : (
             <div className="btn-on col-span-1 inline-flex min-h-[48px] w-full items-center justify-center rounded-full px-4 py-3 text-sm sm:min-h-[56px] sm:w-auto sm:px-8 sm:text-lg">
-              PAPER ON
+              {liveTrading && auto?.mode === "live" ? "LIVE" : "ON"}
             </div>
           )}
           <button
@@ -335,26 +365,14 @@ export function TradingHub() {
       </header>
 
       <ol className="mt-5 grid gap-3 sm:grid-cols-3">
-        <How n="1" t="Connect Phantom" d="Your keys stay in the wallet. We never see them." />
-        <How n="2" t="Add SOL" d="Phantom is login. Added SOL sits in a trading wallet on this device until you withdraw." />
-        <How n="3" t="Let her work" d="Practice never spends it. Real trades only after a paid 0.1 SOL (spot) or 0.15 SOL (2×/3×) seat, LIVE ON, and you flip to REAL." />
+        <How n="1" t="Connect Phantom" d="Login only. Keys stay in Phantom." />
+        <How n="2" t="Add SOL" d="Funds the trading wallet. Backup that key." />
+        <How n="3" t="Leave her on" d="Paid seat, then she clips until you kill her." />
       </ol>
 
-      <div className="mt-5 rounded-2xl border border-blood/40 bg-blood/10 p-4 text-sm leading-relaxed text-ghost">
-        These are official tokenized S&P 500, Nasdaq-100, and gold (xStocks). They are not the same as the New York
-        market after hours. You can lose SOL. xStocks stay spot. Optional SOL 2×/3× is a Jupiter Perps-style long with
-        borrow and liquidation. Keys stay on this device. Adding SOL is a real on-chain transfer to the trading wallet
-        on this browser. Backup that key. Clearing the browser without a backup can lose the SOL.
+      <div className="mt-5 rounded-2xl border border-blood/40 bg-blood/10 px-4 py-3 text-sm text-ghost">
+        You can lose SOL. Official xStocks are not the New York cash close. Backup the trading key.
       </div>
-
-      {!owner && (
-        <div className="panel mt-5 rounded-2xl border-cyan/30 p-4">
-          <div className="font-mono text-[11px] tracking-[0.2em] text-cyan">START HERE</div>
-          <p className="mt-1 text-base text-mute">
-            Connect Phantom to preview her paper book, then add SOL when you want her trading with real size.
-          </p>
-        </div>
-      )}
 
       <section className="panel mt-5 rounded-3xl p-5 md:p-8">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
@@ -398,17 +416,12 @@ export function TradingHub() {
           {(owner && book?.lastAction) || pair?.reason || book?.lastAction || "Waiting on prices…"}
         </p>
         {book?.pendingIntent && auto?.mode === "live" && (
-          <p className="mt-2 font-mono text-sm text-acid">
-            {delegated
-              ? "Live clip going out from the server — you can close this tab."
-              : "Live trade going out from the trading wallet on this device — no extra Phantom popup."}
-          </p>
+          <p className="mt-2 font-mono text-sm text-acid">Clip going out. You can close the tab.</p>
         )}
 
         <div className="mt-6 border-t border-violet/20 pt-5">
           <div className="font-mono text-[10px] tracking-[0.2em] text-mute">
-            TRADING WALLET · {tradePk ? `${tradePk.slice(0, 4)}…${tradePk.slice(-4)}` : "connect first"} ·{" "}
-            {delegated ? "24/7 server signer on" : "keys stay on this device until you enable 24/7"}
+            TRADING WALLET · {tradePk ? `${tradePk.slice(0, 4)}…${tradePk.slice(-4)}` : "connect first"}
           </div>
           <div data-field="amount" className={`mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4 ${fundErr.errors.amount ? "rounded-2xl p-1 ring-1 ring-blood/60" : ""}`}>
             {[0.1, 0.5, 1, 2].map((n) => (
@@ -485,142 +498,54 @@ export function TradingHub() {
           </div>
         </div>
 
-        <div className="mt-6 flex flex-col gap-3 rounded-2xl border border-violet/20 p-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="min-w-0">
-            <div className="font-display text-xl text-ghost">{auto?.mode === "live" ? "Real trades" : "Practice mode"}</div>
-            <p className="mt-1 text-sm text-mute">
-              {!liveTrading
-                ? "Practice only right now. Real swaps are not turned on for this site yet."
-                : seat?.treasury && !seat?.liveSeat && !seat?.founder
-                  ? "Live is on, but you need a paid 0.1 SOL (spot) or 0.15 SOL (2×/3×) seat before she can spend the trading wallet."
-                  : auto?.mode === "live"
-                    ? delegated
-                      ? "Uses the SOL you added. She signs on the server — close the laptop, she keeps clipping."
-                      : "Uses the SOL you added. She signs from this device unless you enable 24/7 live below."
-                    : "Fake fills on live prices. Flip to real trades after you add SOL and pay the seat."}
-            </p>
-            {seat?.liveSeat && seat.subscribedUntil ? (
-              <p className="mt-2 font-mono text-[11px] text-acid">
-                Seat through {new Date(seat.subscribedUntil).toLocaleDateString()}
-                {seat.autoRenew ? " · auto-renew on" : " · auto-renew off"}
-              </p>
-            ) : null}
+        {(seat?.treasury && !seat?.liveSeat && !seat?.founder) || (seat?.liveSeat && seat.subscribedUntil) || (seat?.autoRenew && !seat?.founder) ? (
+          <div className="mt-6 flex flex-col gap-3 rounded-2xl border border-violet/20 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              {seat?.treasury && !seat?.liveSeat && !seat?.founder ? (
+                <p className="text-sm text-mute">Pay the 0.1 SOL seat (0.15 SOL for SOL 2×/3×) and she spends the trading wallet.</p>
+              ) : seat?.liveSeat && seat.subscribedUntil ? (
+                <p className="font-mono text-[11px] text-acid">
+                  Seat through {new Date(seat.subscribedUntil).toLocaleDateString()}
+                  {seat.autoRenew ? " · auto-renew on" : ""}
+                </p>
+              ) : null}
+            </div>
+            <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto">
+              {seat?.treasury && !seat?.liveSeat && !seat?.founder && (
+                <Link href="/pricing" className="btn-acid inline-flex min-h-[40px] items-center justify-center rounded-full px-4 font-mono text-[11px]">
+                  Pay the seat
+                </Link>
+              )}
+              {seat?.autoRenew && !seat?.founder && (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={async () => {
+                    if (!owner) return;
+                    setBusy(true);
+                    try {
+                      await unsubscribeSeat(owner);
+                      setMsg("Auto-renew off. Seat stays until the paid-through date.");
+                      await refreshAuto(owner);
+                    } catch (e) {
+                      setMsg(e instanceof Error ? e.message : "unsubscribe failed");
+                    } finally {
+                      setBusy(false);
+                    }
+                  }}
+                  className="min-h-[40px] rounded-full border border-blood/40 px-4 font-mono text-[11px] text-blood"
+                >
+                  Unsubscribe
+                </button>
+              )}
+            </div>
           </div>
-          <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto">
-            <button
-              type="button"
-              disabled={!liveTrading || Boolean(seat?.treasury && !seat?.liveSeat && !seat?.founder)}
-              onClick={() => patch({ mode: auto?.mode === "live" ? "paper" : "live" })}
-              className={`min-h-[44px] w-full rounded-full px-5 font-mono text-[12px] sm:w-auto ${
-                auto?.mode === "live" ? "btn-on" : "btn-ghost"
-              } disabled:opacity-40`}
-            >
-              {liveTrading ? (auto?.mode === "live" ? "REAL" : "PRACTICE") : "PRACTICE"}
-            </button>
-            {seat?.treasury && !seat?.liveSeat && !seat?.founder && (
-              <Link href="/pricing" className="btn-acid inline-flex min-h-[40px] items-center justify-center rounded-full px-4 font-mono text-[11px]">
-                Pay the seat
-              </Link>
-            )}
-            {seat?.autoRenew && !seat?.founder && (
-              <button
-                type="button"
-                disabled={busy}
-                onClick={async () => {
-                  if (!owner) return;
-                  setBusy(true);
-                  try {
-                    await unsubscribeSeat(owner);
-                    setMsg("Auto-renew off. Seat stays until the paid-through date.");
-                    await refreshAuto(owner);
-                  } catch (e) {
-                    setMsg(e instanceof Error ? e.message : "unsubscribe failed");
-                  } finally {
-                    setBusy(false);
-                  }
-                }}
-                className="min-h-[40px] rounded-full border border-blood/40 px-4 font-mono text-[11px] text-blood"
-              >
-                Unsubscribe
-              </button>
-            )}
-          </div>
-        </div>
-
-        <div className="mt-4 rounded-2xl border border-violet/20 p-4">
-          <div className="font-mono text-[10px] tracking-[0.2em] text-mute">24/7 LIVE</div>
-          <p className="mt-1 text-sm text-mute">
-            Solana transactions expire in about a minute, so she cannot presign swaps for later. 24/7 live uploads an
-            encrypted copy of the trading-wallet key (not Phantom) so the server can sign real Jupiter swaps while this
-            device is off. Phantom never leaves Phantom. Anyone with the backup can spend this trading wallet.
-          </p>
-          <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-            <button
-              type="button"
-              disabled={busy || !owner || !liveTrading}
-              onClick={async () => {
-                if (!owner) return setMsg("Connect Phantom first.");
-                setBusy(true);
-                try {
-                  const r = await fetch("/api/live/delegate", {
-                    method: "POST",
-                    headers: { "content-type": "application/json" },
-                    body: JSON.stringify({ owner, secret: exportSecret() }),
-                  });
-                  const j = await r.json();
-                  if (!r.ok) throw new Error(j.error || "Could not enable 24/7 live.");
-                  setDelegated(true);
-                  setMsg("24/7 live on. She can clip this wallet while this device is off.");
-                  await refreshAuto(owner);
-                } catch (e) {
-                  setMsg(e instanceof Error ? e.message : "delegate failed");
-                } finally {
-                  setBusy(false);
-                }
-              }}
-              className={`min-h-[44px] rounded-full px-5 font-mono text-[12px] disabled:opacity-40 ${
-                delegated ? "btn-on" : "btn-acid"
-              }`}
-            >
-              {delegated ? "24/7 LIVE ON" : "Enable 24/7 live"}
-            </button>
-            {delegated && (
-              <button
-                type="button"
-                disabled={busy || !owner}
-                onClick={async () => {
-                  if (!owner) return;
-                  setBusy(true);
-                  try {
-                    const r = await fetch("/api/live/delegate", {
-                      method: "DELETE",
-                      headers: { "content-type": "application/json" },
-                      body: JSON.stringify({ owner }),
-                    });
-                    const j = await r.json();
-                    if (!r.ok) throw new Error(j.error || "Could not revoke 24/7 live.");
-                    setDelegated(false);
-                    setMsg("24/7 live off. She only signs from this device again.");
-                    await refreshAuto(owner);
-                  } catch (e) {
-                    setMsg(e instanceof Error ? e.message : "revoke failed");
-                  } finally {
-                    setBusy(false);
-                  }
-                }}
-                className="min-h-[44px] rounded-full border border-blood/40 px-5 font-mono text-[12px] text-blood disabled:opacity-40"
-              >
-                Revoke server key
-              </button>
-            )}
-          </div>
-        </div>
+        ) : null}
 
         <div className="mt-4 rounded-2xl border border-violet/20 p-4">
           <div className="font-mono text-[10px] tracking-[0.2em] text-mute">SOL SLEEVE</div>
           <p className="mt-1 text-sm text-mute">
-            Equities and gold stay spot. Paper 2×/3× is free. Live 2×/3× needs the 0.15 SOL seat. Jupiter Perps fees,
-            borrow, and liquidation. On-chain perps wait on Jupiter’s API — this marks live prices with those fees.
+            SPYx, QQQx, and GLDx stay spot. SOL 2×/3× needs the 0.15 SOL seat — borrow, fees, liquidation.
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
             {([1, 2, 3] as const).map((n) => (
@@ -657,12 +582,11 @@ export function TradingHub() {
       <div className="mt-6 grid gap-4 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.2fr)]">
         <div className="panel space-y-4 rounded-2xl p-5">
           <div className="font-mono text-[10px] tracking-[0.22em] text-violet">HOW SHE TRADES</div>
-          <h3 className="font-display text-2xl text-ghost">Every pair. USDC PnL.</h3>
+          <h3 className="font-display text-2xl text-ghost">0.5% clips. 40% of a sleeve.</h3>
           <p className="text-sm leading-relaxed text-mute">
-            She sits in USDC and buys the sleeve — SOL, S&P 500, Nasdaq, or gold — with a 5m/15m scalp that agrees
-            with Daily and 4H bias. After fees she only moves the stop up. SOL and gold run around the clock; equities
-            sit more on weekends. 0.1% on each clip. Optional SOL 2×/3× uses Jupiter Perps fees and can be liquidated.
-            An 8% drop sells everything back to USDC and pauses.
+            She routes every swap in-house, then spends at most half of a holding so the rest can rotate into SPYx,
+            QQQx, or GLDx. Target is about 0.5% after fees. 0.1% protocol skim on the clip. An 8% drawdown flattens to
+            USDC and pauses.
           </p>
           <div className="grid grid-cols-3 gap-2">
             <Mini k="S&P 500" v={spyxUsd ? `$${Number(spyxUsd).toFixed(0)}` : "—"} />
@@ -689,7 +613,7 @@ export function TradingHub() {
               />
             ))}
             {!tape.length && !fills.length && (
-              <p className="text-sm text-mute">{loading ? "Loading…" : "No decisions yet. Paper is already on."}</p>
+              <p className="text-sm text-mute">{loading ? "Loading…" : "No decisions yet."}</p>
             )}
           </div>
         </div>

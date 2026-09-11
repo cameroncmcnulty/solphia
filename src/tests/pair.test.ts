@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { DEFAULT_AUTO, emptyBook } from "../lib/auto";
 import { CLIP_AIM, clipAimOf, needOf, ROUND_TRIP } from "../lib/pair/signals";
-import { decidePair, markPair } from "../lib/pair/engine";
+import { clipHoldingUsd, decidePair, HOLDING_CLIP_MAX, HOLDING_CLIP_MIN, markPair } from "../lib/pair/engine";
 import { flattenToUsdc, killBook, tickPairBook } from "../lib/pair/paper";
 import { DEFAULT_STUDY } from "../lib/pair/knowledge";
 import {
@@ -258,7 +258,7 @@ describe("USDC-home engine", () => {
     assert.equal(d.to, "USDC");
   });
 
-  it("rides a winner — no hard take-profit, stop only moves up", () => {
+  it("rides a winner under the 0.5% clip — stop only moves up", () => {
     const book = emptyBook(1000);
     book.pair = {
       solQty: 4,
@@ -267,12 +267,12 @@ describe("USDC-home engine", () => {
       gldxQty: 0,
       usdcQty: 200,
       solCostUsd: 400,
-      stops: { SOL: { entryPx: 100, peakPx: 101.1, stopPx: 100.4, armed: true } },
+      stops: { SOL: { entryPx: 100, peakPx: 100.3, stopPx: 100.15, armed: true } },
     };
     const d = decidePair({
       auto: auto({ cooldownMin: 0, stopPct: 0.9 }),
       book,
-      prices: px(101.1, 770),
+      prices: px(100.3, 770),
       samples: hist(100, 770),
       study: DEFAULT_STUDY,
       now: CASH,
@@ -281,12 +281,11 @@ describe("USDC-home engine", () => {
     assert.match(d.reason, /Riding it|Watching other sleeves/i);
     const stop = book.pair?.stops?.SOL;
     assert.ok(stop?.armed);
-    assert.ok((stop?.peakPx || 0) >= 101.1);
-    assert.ok((stop?.stopPx || 0) > 100.4);
-    assert.ok((stop?.stopPx || 0) < 101.1);
+    assert.ok((stop?.peakPx || 0) >= 100.3);
+    assert.ok((stop?.stopPx || 0) < 100.3);
   });
 
-  it("banks a 1.2% clip to USDC so she can take the next setup", () => {
+  it("banks a 0.5% clip of part of the sleeve so she can take the next setup", () => {
     const book = emptyBook(1000);
     book.pair = {
       solQty: 4,
@@ -308,7 +307,9 @@ describe("USDC-home engine", () => {
     assert.equal(d.action, "swap");
     assert.equal(d.from, "SOL");
     assert.equal(d.to, "USDC");
-    assert.match(d.reason, /1\.2%|Banking/i);
+    assert.match(d.reason, /Banking/i);
+    assert.ok(d.clipUsd < 4 * 101.3);
+    assert.ok(d.clipUsd / (4 * 101.3) <= HOLDING_CLIP_MAX + 1e-9);
   });
 
   it("sells only when price falls through the ratcheted trail", () => {
@@ -474,6 +475,14 @@ describe("paper fills + kill", () => {
     assert.ok((book.pair?.usdcQty || 0) > 50);
   });
 
+  it("clips 30-50% of a holding so the rest can work", () => {
+    const pos = 200;
+    const take = clipHoldingUsd(pos);
+    assert.ok(take / pos >= HOLDING_CLIP_MIN - 1e-9);
+    assert.ok(take / pos <= HOLDING_CLIP_MAX + 1e-9);
+    assert.ok(take < pos);
+  });
+
   it("banks equity clips after fees, smaller than SOL, and does not dump the whole book into one sleeve", () => {
     const eq = clipAimOf("SPYx", 0.004);
     const gold = clipAimOf("GLDx", 0.005);
@@ -506,12 +515,14 @@ describe("paper fills + kill", () => {
     }
   });
 
-  it("default leverage is spot 1x and cooldown is 2 minutes", () => {
+  it("default leverage is spot 1x and cooldown is 1 minute", () => {
     assert.equal(DEFAULT_AUTO.leverage, 1);
     assert.equal(DEFAULT_AUTO.mode, "paper");
     assert.equal(DEFAULT_AUTO.style, "scalp");
-    assert.equal(DEFAULT_AUTO.cooldownMin, 2);
+    assert.equal(DEFAULT_AUTO.cooldownMin, 1);
     assert.equal(DEFAULT_AUTO.band, "normal");
+    assert.equal(DEFAULT_AUTO.clipPct, 0.4);
+    assert.equal(DEFAULT_AUTO.takeProfitPct, 0.005);
   });
 
   it("flatten closes a SOL-PERP back to USDC", () => {

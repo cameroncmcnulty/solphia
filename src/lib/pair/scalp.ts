@@ -4,7 +4,7 @@ import type { Sleeve } from "./catalog";
 import type { ScalpFrames, SleeveFrames } from "./frames";
 import { hasTape } from "./frames";
 
-const CLIP_MIN = 0.008;
+const CLIP_MIN = 0.005;
 
 export type Bias = "bull" | "bear" | "flat";
 export type Setup = "trend_pullback" | "range_fade" | "momentum" | "none";

@@ -14,10 +14,10 @@ export const RISK_SLEEVES: Exclude<Sleeve, "USDC">[] = ["SOL", "SPYx", "QQQx", "
 
 export const ROUND_TRIP = (PAIR_FEE_BPS + PROTOCOL_FEE_BPS + PAIR_SLIP_BPS) * 2 * 0.0001;
 
-/** Target clip after fees: 0.8–1.5%+. Round-trip drag is ~38 bps. */
-export const CLIP_MIN = 0.008;
-export const CLIP_AIM = 0.012;
-export const CLIP_HARD = 0.016;
+/** Target clip after fees: ~0.5% on xStocks so she can fire all day. Round-trip drag is ~38 bps. */
+export const CLIP_MIN = 0.005;
+export const CLIP_AIM = 0.006;
+export const CLIP_HARD = 0.009;
 /** 1h dump this large is a knife, not a 1% dip. */
 export const KNIFE_1H = 0.035;
 
@@ -53,18 +53,18 @@ export const DEFAULT_LEARN: SleeveLearn = { trades: 0, wins: 0, pnlUsd: 0, buyNe
 
 /** A 15m reclaim / momentum clip — not RSI alone. */
 export function needOf(learn?: SleeveLearn, sleeve?: Exclude<Sleeve, "USDC">): number {
-  const fallback = sleeve === "SOL" ? DEFAULT_LEARN.buyNeed : 0.24;
+  const fallback = sleeve === "SOL" ? DEFAULT_LEARN.buyNeed : 0.2;
   const n = learn?.buyNeed ?? fallback;
-  const floor = sleeve === "SOL" ? 0.28 : 0.2;
-  const cap = sleeve === "SOL" ? 0.5 : 0.34;
+  const floor = sleeve === "SOL" ? 0.26 : 0.16;
+  const cap = sleeve === "SOL" ? 0.48 : 0.3;
   return Math.min(cap, Math.max(floor, n));
 }
 
-/** SOL aims ~1.2%. Equities/gold bank a fee-cleared scalp (~58–75 bps), not a SOL-sized run. */
+/** xStocks bank ~0.5% after fees. SOL needs a hair more room for 15m noise. */
 export function clipAimOf(sleeve: Exclude<Sleeve, "USDC">, atrPct = 0.01): number {
-  const floor = ROUND_TRIP + 0.002;
-  if (sleeve === "SOL") return Math.max(CLIP_AIM, floor);
-  return Math.max(floor, Math.min(0.0075, Math.max(0.0055, atrPct * 1.15)));
+  const floor = ROUND_TRIP + 0.0012;
+  if (sleeve === "SOL") return Math.max(CLIP_AIM, floor, atrPct * 0.9);
+  return Math.max(CLIP_MIN, floor);
 }
 
 export function bucketCandles(samples: RatioSample[], sleeve: Sleeve, ms = 15 * 60 * 1000): Candle[] {

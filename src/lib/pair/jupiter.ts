@@ -114,7 +114,7 @@ function endpointOk(mint: string): boolean {
   return mint === SOL_MINT || mint === USDC_MINT || officialMints().includes(mint);
 }
 
-async function quoteOnce(opts: {
+export async function quoteOnce(opts: {
   inputMint: string;
   outputMint: string;
   amount: number;
@@ -185,41 +185,89 @@ export async function quoteOpenSwap(opts: {
   return quoteOnce({ ...opts, open: true });
 }
 
-export async function quoteSwap(opts: {
+export function pickBestQuote(rows: QuoteResult[]): QuoteResult {
+  const ok = rows.filter((r): r is Extract<QuoteResult, { ok: true }> => r.ok);
+  if (!ok.length) return rows.find((r) => !r.ok) || { ok: false, reason: "No swap route." };
+  ok.sort((a, b) => {
+    const aHop = a.viaUsdc ? 0.9985 : 1;
+    const bHop = b.viaUsdc ? 0.9985 : 1;
+    const aNet = a.outAmount * aHop * (1 - Math.min(0.02, a.impactPct));
+    const bNet = b.outAmount * bHop * (1 - Math.min(0.02, b.impactPct));
+    return bNet - aNet;
+  });
+  return ok[0];
+}
+
+/** Race default / direct / skinny / USDC-hub / SOL-hub and keep the cheapest net out. */
+export async function quoteBestRoute(opts: {
   inputMint: string;
   outputMint: string;
   amount: number;
   slippageBps: number;
 }): Promise<QuoteResult> {
-  const first = await quoteOnce(opts);
-  if (first.ok) return first;
-  const direct = await quoteOnce({ ...opts, extra: "onlyDirectRoutes=true" });
-  if (direct.ok) return direct;
+  const base = { inputMint: opts.inputMint, outputMint: opts.outputMint, amount: opts.amount, slippageBps: opts.slippageBps };
+  const jobs: Promise<QuoteResult>[] = [
+    quoteOnce(base),
+    quoteOnce({ ...base, extra: "onlyDirectRoutes=true" }),
+    quoteOnce({ ...base, extra: "maxAccounts=24" }),
+  ];
   if (opts.inputMint !== USDC_MINT && opts.outputMint !== USDC_MINT) {
-    const toUsdc = await quoteOnce({
-      inputMint: opts.inputMint,
-      outputMint: USDC_MINT,
-      amount: opts.amount,
-      slippageBps: opts.slippageBps,
-    });
-    if (toUsdc.ok) {
-      const fromUsdc = await quoteOnce({
-        inputMint: USDC_MINT,
-        outputMint: opts.outputMint,
-        amount: toUsdc.outAmount,
-        slippageBps: opts.slippageBps,
-      });
-      if (fromUsdc.ok) {
+    jobs.push(
+      (async () => {
+        const toUsdc = await quoteOnce({
+          inputMint: opts.inputMint,
+          outputMint: USDC_MINT,
+          amount: opts.amount,
+          slippageBps: opts.slippageBps,
+        });
+        if (!toUsdc.ok) return toUsdc;
+        const fromUsdc = await quoteOnce({
+          inputMint: USDC_MINT,
+          outputMint: opts.outputMint,
+          amount: toUsdc.outAmount,
+          slippageBps: opts.slippageBps,
+        });
+        if (!fromUsdc.ok) return fromUsdc;
         return {
           ...fromUsdc,
           impactPct: toUsdc.impactPct + fromUsdc.impactPct,
           viaUsdc: true,
           midAmount: toUsdc.outAmount,
         };
-      }
-    }
+      })(),
+    );
   }
-  return first;
+  if (opts.inputMint !== SOL_MINT && opts.outputMint !== SOL_MINT) {
+    jobs.push(
+      (async () => {
+        const toSol = await quoteOnce({
+          inputMint: opts.inputMint,
+          outputMint: SOL_MINT,
+          amount: opts.amount,
+          slippageBps: opts.slippageBps,
+        });
+        if (!toSol.ok) return toSol;
+        const fromSol = await quoteOnce({
+          inputMint: SOL_MINT,
+          outputMint: opts.outputMint,
+          amount: toSol.outAmount,
+          slippageBps: opts.slippageBps,
+        });
+        if (!fromSol.ok) return fromSol;
+        return { ...fromSol, impactPct: toSol.impactPct + fromSol.impactPct };
+      })(),
+    );
+  }
+  return pickBestQuote(await Promise.all(jobs));
+}
+
+export async function quoteSwap(opts: {
+  inputMint: string;
+  outputMint: string;
+  amount: number;
+  slippageBps: number;
+}): Promise<QuoteResult> {
+  return quoteBestRoute(opts);
 }
 
 export async function quoteSolSpyx(solAmount: number, slippageBps: number): Promise<QuoteResult> {

@@ -1,42 +1,10 @@
-import {
-  AddressLookupTableAccount,
-  Connection,
-  PublicKey,
-  SystemProgram,
-  TransactionInstruction,
-  TransactionMessage,
-  VersionedTransaction,
-  LAMPORTS_PER_SOL,
-} from "@solana/web3.js";
-import { rpcUrl } from "../config";
 import { SWAP_FEE_BPS } from "../launch/curve";
 import { quoteOpenSwap, type JupiterQuote } from "../pair/jupiter";
 import { SOL_MINT } from "../pair/mints";
 import { isSolanaAddress } from "../security";
-import { treasuryAddress } from "../treasury";
-
-const IX_URLS = ["https://lite-api.jup.ag/swap/v1/swap-instructions", "https://api.jup.ag/swap/v1/swap-instructions"];
+import { assembleSwapTx } from "./build";
 
 export const PAD_SWAP_FEE_BPS = SWAP_FEE_BPS;
-
-type IxJson = {
-  programId: string;
-  accounts: { pubkey: string; isSigner: boolean; isWritable: boolean }[];
-  data: string;
-};
-
-function toIx(raw: IxJson | null | undefined): TransactionInstruction | null {
-  if (!raw?.programId || !raw.data || !Array.isArray(raw.accounts)) return null;
-  return new TransactionInstruction({
-    programId: new PublicKey(raw.programId),
-    keys: raw.accounts.map((a) => ({
-      pubkey: new PublicKey(a.pubkey),
-      isSigner: Boolean(a.isSigner),
-      isWritable: Boolean(a.isWritable),
-    })),
-    data: Buffer.from(raw.data, "base64"),
-  });
-}
 
 function feeSolOf(amountSol: number): number {
   return Math.floor(amountSol * PAD_SWAP_FEE_BPS) / 10_000;
@@ -46,31 +14,6 @@ export function splitPadSpend(amountSol: number): { feeSol: number; swapSol: num
   const feeSol = feeSolOf(amountSol);
   const swapSol = Math.max(0, amountSol - feeSol);
   return { feeSol, swapSol };
-}
-
-async function jupIx(quote: JupiterQuote, userPublicKey: string): Promise<Record<string, unknown> | null> {
-  for (const url of IX_URLS) {
-    try {
-      const r = await fetch(url, {
-        method: "POST",
-        cache: "no-store",
-        headers: { accept: "application/json", "content-type": "application/json" },
-        body: JSON.stringify({
-          quoteResponse: quote,
-          userPublicKey,
-          wrapAndUnwrapSol: true,
-          dynamicComputeUnitLimit: true,
-          prioritizationFeeLamports: "auto",
-        }),
-        signal: AbortSignal.timeout(12_000),
-      });
-      const data = (await r.json().catch(() => null)) as Record<string, unknown> | null;
-      if (r.ok && data && (data.swapInstruction || data.setupInstructions)) return data;
-    } catch {
-      /* try next */
-    }
-  }
-  return null;
 }
 
 export async function quotePadSwap(opts: {
@@ -143,45 +86,5 @@ export async function buildPadSwapTx(opts: {
   feeSol: number;
 }): Promise<{ ok: true; transaction: string } | { ok: false; reason: string }> {
   if (!isSolanaAddress(opts.owner)) return { ok: false, reason: "Connect Phantom first." };
-  const treasury = treasuryAddress();
-  const ixPayload = await jupIx(opts.quote, opts.owner);
-  if (!ixPayload) return { ok: false, reason: "Could not build the swap." };
-  const compute = ((ixPayload.computeBudgetInstructions as IxJson[]) || []).map(toIx).filter(Boolean) as TransactionInstruction[];
-  const setup = ((ixPayload.setupInstructions as IxJson[]) || []).map(toIx).filter(Boolean) as TransactionInstruction[];
-  const swap = toIx(ixPayload.swapInstruction as IxJson);
-  const cleanup = toIx(ixPayload.cleanupInstruction as IxJson);
-  if (!swap) return { ok: false, reason: "Could not build the swap." };
-  const feeLamports = Math.round((opts.feeSol || 0) * LAMPORTS_PER_SOL);
-  const ixs: TransactionInstruction[] = [...compute];
-  if (treasury && feeLamports >= 5_000) {
-    ixs.push(
-      SystemProgram.transfer({
-        fromPubkey: new PublicKey(opts.owner),
-        toPubkey: new PublicKey(treasury),
-        lamports: feeLamports,
-      }),
-    );
-  }
-  ixs.push(...setup, swap);
-  if (cleanup) ixs.push(cleanup);
-
-  const conn = new Connection(rpcUrl(), { commitment: "confirmed" });
-  const altAddrs = (ixPayload.addressLookupTableAddresses as string[]) || [];
-  const alts: AddressLookupTableAccount[] = [];
-  for (const addr of altAddrs) {
-    try {
-      const acc = await conn.getAddressLookupTable(new PublicKey(addr));
-      if (acc.value) alts.push(acc.value);
-    } catch {
-      /* skip missing ALT */
-    }
-  }
-  const { blockhash } = await conn.getLatestBlockhash();
-  const msg = new TransactionMessage({
-    payerKey: new PublicKey(opts.owner),
-    recentBlockhash: blockhash,
-    instructions: ixs,
-  }).compileToV0Message(alts);
-  const tx = new VersionedTransaction(msg);
-  return { ok: true, transaction: Buffer.from(tx.serialize()).toString("base64") };
+  return assembleSwapTx({ owner: opts.owner, quote: opts.quote, feeSol: opts.feeSol });
 }

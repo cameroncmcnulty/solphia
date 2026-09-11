@@ -1,14 +1,10 @@
 "use client";
 
-import { SOL_MINT, USDC_MINT, XSTOCKS, xstockMint } from "@/lib/pair/mints";
+import { USDC_MINT } from "@/lib/pair/mints";
 import { planIntentSwaps } from "@/lib/live/intent";
-import { signAndSendSwap, skimProtocolFee, tradingPubkey } from "./trading";
+import { BOT_SLIPPAGE_BPS } from "@/lib/config";
+import { signAndSendSwap, tradingPubkey } from "./trading";
 import type { PairIntent } from "@/lib/types";
-
-function xstockLabel(mint: string): string {
-  const row = XSTOCKS.find((x) => xstockMint(x.id) === mint);
-  return row?.symbol || "SPYx";
-}
 
 export async function executePendingIntent(opts: {
   owner: string;
@@ -22,27 +18,30 @@ export async function executePendingIntent(opts: {
 }): Promise<string> {
   const { owner, intent } = opts;
   const tpk = tradingPubkey();
-  const slip = 50;
-  async function swapOne(inputMint: string, outputMint: string, amount: number) {
+  const slip = BOT_SLIPPAGE_BPS;
+  async function swapOne(inputMint: string, outputMint: string, amount: number, fee = false) {
     const r = await fetch("/api/pair/swap", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ owner, tradingPubkey: tpk, inputMint, outputMint, amount, slippageBps: slip }),
+      body: JSON.stringify({
+        owner,
+        tradingPubkey: tpk,
+        inputMint,
+        outputMint,
+        amount,
+        slippageBps: slip,
+        clipUsd: fee ? intent.clipUsd : 0,
+        solUsd: fee ? opts.solUsd : 0,
+      }),
     });
     const j = await r.json();
     if (!r.ok) throw new Error(j.error || "swap build failed");
-    return signAndSendSwap(j.transaction);
-  }
-  async function swap(inputMint: string, outputMint: string, amount: number) {
-    const from = inputMint === SOL_MINT ? "SOL" : inputMint === USDC_MINT ? "USDC" : xstockLabel(inputMint);
-    const to = outputMint === SOL_MINT ? "SOL" : outputMint === USDC_MINT ? "USDC" : xstockLabel(outputMint);
-    const q = await fetch(`/api/pair/quote?from=${from}&to=${to}&amount=${amount}&slippageBps=${slip}`).then((r) => r.json());
-    if (!q.ok) throw new Error(q.reason || "quote failed");
-    if (q.viaUsdc && q.midAmount > 0) {
-      await swapOne(inputMint, USDC_MINT, amount);
-      return swapOne(USDC_MINT, outputMint, q.midAmount);
+    if (j.viaUsdc && j.midAmount > 0) {
+      await swapOne(inputMint, USDC_MINT, amount, fee);
+      return swapOne(USDC_MINT, outputMint, j.midAmount, false);
     }
-    return swapOne(inputMint, outputMint, amount);
+    if (!j.transaction) throw new Error("swap build failed");
+    return signAndSendSwap(j.transaction);
   }
   let sig = "";
   const legs = planIntentSwaps({
@@ -53,8 +52,9 @@ export async function executePendingIntent(opts: {
     gldxUsd: opts.gldxUsd,
     holdings: opts.holdings,
   });
-  for (const leg of legs) {
-    sig = await swap(leg.inputMint, leg.outputMint, leg.amount);
+  for (let i = 0; i < legs.length; i++) {
+    const leg = legs[i];
+    sig = await swapOne(leg.inputMint, leg.outputMint, leg.amount, i === 0);
   }
   if (!sig) throw new Error("no live swap built");
   await fetch("/api/auto", {
@@ -62,12 +62,5 @@ export async function executePendingIntent(opts: {
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ owner, liveFill: { signature: sig } }),
   });
-  if (opts.treasury && opts.solUsd > 0 && intent.clipUsd > 0) {
-    try {
-      await skimProtocolFee(opts.treasury, intent.clipUsd, opts.solUsd);
-    } catch {
-      /* fee skim is best-effort */
-    }
-  }
   return sig;
 }

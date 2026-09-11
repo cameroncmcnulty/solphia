@@ -351,8 +351,11 @@ function swapSleeves(
   }
   if (to === "USDC" && from !== "USDC") {
     const k = from as "SOL" | "SPYx" | "QQQx" | "GLDx";
-    delete h.stops[k];
-    book.pairLearn[from] = noteExit(book.pairLearn[from] || DEFAULT_LEARN, sell.pnlUsd || 0);
+    const remainUsd = sleeveQty(h, from) * fromPx;
+    if (remainUsd < 8) {
+      delete h.stops[k];
+      book.pairLearn[from] = noteExit(book.pairLearn[from] || DEFAULT_LEARN, sell.pnlUsd || 0);
+    }
   }
   book.pair = h;
   book.lastTradeAt = now;

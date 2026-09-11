@@ -24,8 +24,20 @@ export type { Sleeve, TradePair } from "./catalog";
 export { SLEEVE_WEIGHT, TRADE_PAIRS };
 
 export { PAIR_FEE_BPS, PAIR_SLIP_BPS, PROTOCOL_FEE_BPS } from "../config";
-export const PAIR_MIN_CLIP_USD = 15;
+export const PAIR_MIN_CLIP_USD = 10;
 export const PAIR_MAX_IMPACT = 0.004;
+/** Never dump a sleeve. Clip 30–50% so the rest can work another pair. */
+export const HOLDING_CLIP = 0.4;
+export const HOLDING_CLIP_MIN = 0.3;
+export const HOLDING_CLIP_MAX = 0.5;
+
+export function clipHoldingUsd(posUsd: number, frac = HOLDING_CLIP): number {
+  if (!(posUsd > 0)) return 0;
+  const f = Math.min(HOLDING_CLIP_MAX, Math.max(HOLDING_CLIP_MIN, frac));
+  const take = posUsd * f;
+  if (take < PAIR_MIN_CLIP_USD && posUsd >= PAIR_MIN_CLIP_USD) return Math.min(posUsd * HOLDING_CLIP_MAX, posUsd);
+  return Math.min(posUsd * HOLDING_CLIP_MAX, Math.max(PAIR_MIN_CLIP_USD, take));
+}
 export const SOL_WEIGHT = SLEEVE_WEIGHT;
 export const X_WEIGHT = SLEEVE_WEIGHT;
 
@@ -294,7 +306,7 @@ export function decidePair(opts: {
 
   if (book.killed) return empty("skip", "Stopped. Sitting.");
   if ((book.haltedUntil || 0) > now) return empty("skip", book.haltReason || "Paused.");
-  if (!auto.armed && auto.mode === "live") return empty("hold", "Live is off. Paper still marks the book.");
+  if (!auto.armed && auto.mode === "live") return empty("hold", "She's off. Turn her on to clip.");
   if (prices.stale || prices.sol.usd <= 0) {
     return empty("skip", prices.reason || "Prices are stale. Sitting.");
   }
@@ -397,8 +409,8 @@ export function decidePair(opts: {
     if (trail.armed && sig.px <= trail.stopPx) {
       return {
         action: "swap",
-        reason: `Trail hit on ${sig.sleeve} at ${sig.px.toFixed(2)} (stop ${trail.stopPx.toFixed(2)}, locked ${(locked * 100).toFixed(1)}%). Back to USDC.`,
-        clipUsd: pos,
+        reason: `Trail hit on ${sig.sleeve} at ${sig.px.toFixed(2)} (stop ${trail.stopPx.toFixed(2)}, locked ${(locked * 100).toFixed(1)}%). Banking ${Math.round(HOLDING_CLIP_MAX * 100)}% to USDC, rest stays in play.`,
+        clipUsd: clipHoldingUsd(pos, HOLDING_CLIP_MAX),
         from: sig.sleeve,
         to: "USDC",
         asset: xstockIdOf(sig.sleeve) || undefined,
@@ -415,8 +427,8 @@ export function decidePair(opts: {
     if (pnlPct >= aim) {
       return {
         action: "swap",
-        reason: `${sig.sleeve} up ${(pnlPct * 100).toFixed(1)}%. Banking the ${(aim * 100).toFixed(1)}% clip to USDC and looking for the next one.`,
-        clipUsd: pos,
+        reason: `${sig.sleeve} up ${(pnlPct * 100).toFixed(1)}%. Banking ${Math.round(HOLDING_CLIP * 100)}% at the ${(aim * 100).toFixed(1)}% clip. Rest stays for the next tape.`,
+        clipUsd: clipHoldingUsd(pos),
         from: sig.sleeve,
         to: "USDC",
         asset: xstockIdOf(sig.sleeve) || undefined,
@@ -433,7 +445,7 @@ export function decidePair(opts: {
   }
 
   const openSet = new Set(RISK_SLEEVES.filter((s) => usdOf(s) >= PAIR_MIN_CLIP_USD));
-  const clipUsd = Math.max(PAIR_MIN_CLIP_USD, Math.min(allocated * SLEEVE_WEIGHT, h.usdcQty * 0.38));
+  const clipUsd = Math.max(PAIR_MIN_CLIP_USD, Math.min(allocated * SLEEVE_WEIGHT, h.usdcQty * HOLDING_CLIP_MAX));
   const ranked = [...sigs].sort((a, b) => b.buy - a.buy);
   for (const best of ranked) {
     if (openSet.has(best.sleeve)) continue;
@@ -450,6 +462,36 @@ export function decidePair(opts: {
         from: "USDC",
         to: best.sleeve,
         asset: xstockIdOf(best.sleeve) || undefined,
+        pairId,
+        z7: primary.z7,
+        z24: primary.z24,
+        ratio: primary.ratio,
+        bandK,
+        session,
+        read: primary,
+        reads,
+      };
+    }
+  }
+
+  for (const src of sigs.filter((s) => openSet.has(s.sleeve))) {
+    const pos = usdOf(src.sleeve);
+    if (pos < PAIR_MIN_CLIP_USD * 1.5) continue;
+    for (const dest of ranked) {
+      if (dest.sleeve === src.sleeve) continue;
+      if (openSet.has(dest.sleeve) && usdOf(dest.sleeve) >= allocated * SLEEVE_WEIGHT * 1.15) continue;
+      const need = needOf(learn[dest.sleeve] || DEFAULT_LEARN, dest.sleeve);
+      if (!(dest.buy >= need && dest.buy >= src.buy + 0.08 && dest.setup && dest.setup !== "none")) continue;
+      const pairId = `${src.sleeve.toLowerCase()}-${dest.sleeve.toLowerCase()}`;
+      const lastThis = h.lastClipAt?.[pairId] || 0;
+      if (cooldownMs > 0 && lastThis && now - lastThis < cooldownMs) continue;
+      return {
+        action: "swap",
+        reason: `Rotating ${Math.round(HOLDING_CLIP * 100)}% of ${src.sleeve} into ${dest.sleeve}. ${dest.reason}`,
+        clipUsd: clipHoldingUsd(pos),
+        from: src.sleeve,
+        to: dest.sleeve,
+        asset: xstockIdOf(dest.sleeve) || undefined,
         pairId,
         z7: primary.z7,
         z24: primary.z24,

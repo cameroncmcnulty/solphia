@@ -11,6 +11,8 @@ export const FEE_BPS = 10;
 export const PROTOCOL_FEE_BPS = 10;
 export const PAIR_FEE_BPS = 5;
 export const PAIR_SLIP_BPS = 4;
+/** Bot swap slip. Tight so a 0.5% scalp is not given back. */
+export const BOT_SLIPPAGE_BPS = 35;
 /** Founder treasury. Admin can override; empty override falls back here. */
 export const DEFAULT_TREASURY = "2jNYVsfptvRLrg8V8AoLMVq6pnmpi7BHVo7Hsx5PTpma";
 export const TREASURY = (process.env.SOLPHIA_TREASURY || "").trim() || DEFAULT_TREASURY;

@@ -90,8 +90,9 @@ export async function POST(req: NextRequest) {
   const solUsd = prices?.sol.usd || 0;
   const trader = await mutateTrader(parsed.data.owner, async (t, s) => {
     const wasArmed = Boolean(t.auto?.armed);
-    const nextMode = parsed.data.auto?.mode ?? t.auto.mode;
     const nextArmed = parsed.data.auto?.armed ?? t.auto.armed;
+    const canLive = liveTradingEnabled() && (!treasuryAddress() || liveSeatOk(s, parsed.data.owner));
+    const nextMode = canLive && nextArmed !== false && !t.book.killed ? "live" : parsed.data.auto?.mode ?? t.auto.mode;
     const wantLev = parsed.data.auto?.leverage;
     const liveNow = nextMode === "live";
     const levAllowed = leverageUnlocked({
