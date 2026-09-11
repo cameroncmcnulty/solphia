@@ -1,7 +1,7 @@
 import { HELIUS_API_KEY, rpcUrl, XAI_API_KEY } from "../config";
 import { signerConfigured } from "../live/crypto";
 import { pinataConfigured, pinataUsage } from "../pinata";
-import { durableConfigured, durableKind, kvGetJson, KEYS } from "../persist";
+import { durableConfigured, durableKind, kvGetJson, kvMemoryBytes, KEYS } from "../persist";
 import { pushBounded } from "../store";
 import type { AppState } from "../types";
 import { SERVICES, tierOf, type HealthTiers, type ServiceId } from "./catalog";
@@ -13,6 +13,7 @@ export type HealthSample = {
   rpcMs: number | null;
   jupMs: number | null;
   pinataMs?: number | null;
+  storeMs?: number | null;
   pinataBytes: number | null;
   pinataFiles: number | null;
   source?: "tick" | "probe";
@@ -38,26 +39,52 @@ async function ping(url: string, init?: RequestInit): Promise<{ ok: boolean; ms:
 
 export function estimateStoreBytes(state: AppState): number {
   try {
-    return Buffer.byteLength(JSON.stringify({
-      paper: state.paper,
-      traders: Object.keys(state.traders || {}).length,
-      launch: state.launch ? { coins: state.launch.coins?.length || 0 } : null,
-      users: (state.users || []).length,
-      healthLog: (state.healthLog || []).length,
-    }));
+    return Buffer.byteLength(
+      JSON.stringify({
+        paper: state.paper,
+        traders: state.traders,
+        launch: state.launch,
+        users: state.users,
+        healthLog: state.healthLog,
+        promos: state.promos,
+        backtest: state.backtest ? { t: 1 } : null,
+      }),
+    );
   } catch {
     return 0;
   }
 }
 
+export function lastKnownPinata(log?: HealthSample[] | null): { bytes: number | null; files: number | null } {
+  if (!log?.length) return { bytes: null, files: null };
+  for (let i = log.length - 1; i >= 0; i--) {
+    const s = log[i];
+    if (s.pinataBytes != null || s.pinataFiles != null) {
+      return { bytes: s.pinataBytes, files: s.pinataFiles };
+    }
+  }
+  return { bytes: null, files: null };
+}
+
 export function recordHealthSample(state: AppState, sample: HealthSample) {
   if (!state.healthLog) state.healthLog = [];
   const last = state.healthLog[state.healthLog.length - 1];
+  const filled: HealthSample = {
+    ...sample,
+    pinataBytes: sample.pinataBytes ?? last?.pinataBytes ?? null,
+    pinataFiles: sample.pinataFiles ?? last?.pinataFiles ?? null,
+  };
   if (last && sample.t - last.t < 10 * 60_000) {
-    state.healthLog[state.healthLog.length - 1] = sample;
+    state.healthLog[state.healthLog.length - 1] = {
+      ...filled,
+      rpcMs: filled.rpcMs ?? last.rpcMs,
+      jupMs: filled.jupMs ?? last.jupMs,
+      pinataMs: filled.pinataMs ?? last.pinataMs,
+      storeMs: filled.storeMs ?? last.storeMs,
+    };
     return;
   }
-  pushBounded(state.healthLog, sample, HEALTH_LOG_MAX);
+  pushBounded(state.healthLog, filled, HEALTH_LOG_MAX);
 }
 
 export async function probeHealth(state: AppState): Promise<{
@@ -68,7 +95,7 @@ export async function probeHealth(state: AppState): Promise<{
   sample: HealthSample;
 }> {
   const rpc = rpcUrl();
-  const [rpcPing, jupPing, dexPing, pin, storePing] = await Promise.all([
+  const [rpcPing, jupPing, dexPing, pin, storePing, redisBytes] = await Promise.all([
     ping(rpc, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -84,8 +111,9 @@ export async function probeHealth(state: AppState): Promise<{
           return { ok: true, ms: Date.now() - t0 };
         })()
       : Promise.resolve({ ok: false, ms: 0 }),
+    durableKind() === "upstash" ? kvMemoryBytes([KEYS.ops, KEYS.launch, KEYS.traders, KEYS.state]) : Promise.resolve(0),
   ]);
-  const storeBytes = estimateStoreBytes(state);
+  const storeBytes = Math.max(estimateStoreBytes(state), redisBytes || 0);
   const tickAgeMs = state.lastTickAt ? Date.now() - state.lastTickAt : -1;
   const speeds: SpeedRow[] = [
     { id: "rpc", label: "Solana RPC", ms: rpcPing.ms, ok: rpcPing.ok, detail: HELIUS_API_KEY ? "Helius" : "public RPC" },
@@ -113,6 +141,7 @@ export async function probeHealth(state: AppState): Promise<{
     rpcMs: rpcPing.ok ? rpcPing.ms : null,
     jupMs: jupPing.ok ? jupPing.ms : null,
     pinataMs: pin.ok ? pin.ms : null,
+    storeMs: storePing.ok ? storePing.ms : null,
     pinataBytes: pin.ok ? pin.bytes : null,
     pinataFiles: pin.ok ? pin.files : null,
     source: "probe",

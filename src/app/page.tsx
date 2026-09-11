@@ -5,14 +5,18 @@ import { SolphiaFace } from "@/components/SolphiaFace";
 import { SphaMark } from "@/components/SphaMark";
 import { BacktestBrochure } from "@/components/BacktestBrochure";
 import { Reveal } from "@/components/Reveal";
+import { HoverMarks } from "@/components/HoverMarks";
 
 export default function Home() {
   return (
     <main className="relative">
       <section className="relative">
         <div className="mx-auto grid max-w-6xl items-center gap-8 px-4 pt-4 md:px-12 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] lg:min-h-[78vh] lg:py-10">
-          <div className="mark-float order-1 mx-auto w-full max-w-[220px] sm:max-w-[360px] lg:order-2 lg:max-w-[500px]">
-            <SolphiaFace mode="hero" />
+          <div className="relative order-1 mx-auto w-full max-w-[220px] sm:max-w-[360px] lg:order-2 lg:max-w-[500px]">
+            <HoverMarks />
+            <div className="mark-float">
+              <SolphiaFace mode="hero" />
+            </div>
           </div>
           <div className="order-2 pb-10 lg:order-1 lg:pb-4">
             <Reveal>
@@ -55,7 +59,7 @@ export default function Home() {
           The other products feed the token.
         </p>
         <div className="mt-12 grid gap-4 lg:grid-cols-3">
-          <Reveal delay={40}><Eco
+          <Reveal delay={40} from="left"><Eco
             n="01"
             t="Auto-trade"
             d="She watches SOL vs tokenized S&P 500, Nasdaq-100, and gold — and clips for profit when a pair stretches. Set it and close the tab. Paper runs 24/7 until you kill her or an 8% drop flattens the book."
@@ -69,7 +73,7 @@ export default function Home() {
             href="/launch"
             c="Launch"
           /></Reveal>
-          <Reveal delay={200}><Eco
+          <Reveal delay={200} from="right"><Eco
             n="03"
             t="$SPHA"
             d="The protocol token. CA coming soon. Burns, holders, and liquidity live here the moment the mint is public."
@@ -94,9 +98,9 @@ export default function Home() {
           burns — automatically, by design. The on-chain router ships after the mint. The rule is the product now.
         </p>
         <div className="mt-12 grid gap-4 sm:grid-cols-3">
-          <Reveal delay={40}><Note t="Listings" d="A share of swap proceeds is earmarked for future exchange listing fees so $SPHA can show up where it should." /></Reveal>
+          <Reveal delay={40} from="left"><Note t="Listings" d="A share of swap proceeds is earmarked for future exchange listing fees so $SPHA can show up where it should." /></Reveal>
           <Reveal delay={120}><Note t="Buybacks" d="A share is used to buy $SPHA on the open market. Demand from the products, not from a promise." /></Reveal>
-          <Reveal delay={200}><Note t="Burns" d="A share is retired forever. More volume through the utilities, smaller circulating supply." /></Reveal>
+          <Reveal delay={200} from="right"><Note t="Burns" d="A share is retired forever. More volume through the utilities, smaller circulating supply." /></Reveal>
         </div>
         </Reveal>
       </section>
@@ -129,9 +133,9 @@ export default function Home() {
         <p className="text-sm tracking-[0.2em] text-acid">HOW IT WORKS</p>
         <h2 className="mt-3 font-display text-4xl text-ghost sm:text-5xl">Three steps.</h2>
         <div className="mt-12 grid gap-4 md:grid-cols-3">
-          <Reveal delay={40}><Chip t="01 · Connect" d="Phantom only. That wallet is login. She never holds a key." /></Reveal>
+          <Reveal delay={40} from="left"><Chip t="01 · Connect" d="Phantom only. That wallet is login. She never holds a key." /></Reveal>
           <Reveal delay={120}><Chip t="02 · She trades" d="Auto-clips tokenized S&P, Nasdaq, and gold for profit. Launch sits beside that desk." /></Reveal>
-          <Reveal delay={200}><Chip t="03 · Swap proceeds work" d="A portion of every swap is reserved for listings, buybacks, and burns." /></Reveal>
+          <Reveal delay={200} from="right"><Chip t="03 · Swap proceeds work" d="A portion of every swap is reserved for listings, buybacks, and burns." /></Reveal>
         </div>
         </Reveal>
       </section>
@@ -166,7 +170,7 @@ export default function Home() {
 
 function Eco({ n, t, d, href, c }: { n: string; t: string; d: string; href: string; c: string }) {
   return (
-    <Link href={href} className="group flex flex-col rounded-3xl border border-violet/20 bg-void/35 p-8 transition hover:border-acid/40">
+    <Link href={href} className="card-lift group flex flex-col rounded-3xl border border-violet/20 bg-void/35 p-8 hover:border-acid/40">
       <div className="font-mono text-sm text-acid">{n}</div>
       <div className="mt-6 font-display text-3xl text-ghost">{t}</div>
       <p className="mt-4 flex-1 text-base leading-relaxed text-mute">{d}</p>
@@ -177,7 +181,7 @@ function Eco({ n, t, d, href, c }: { n: string; t: string; d: string; href: stri
 
 function Note({ t, d }: { t: string; d: string }) {
   return (
-    <div className="rounded-3xl border border-violet/20 bg-void/30 p-7">
+    <div className="card-lift rounded-3xl border border-violet/20 bg-void/30 p-7">
       <div className="font-display text-2xl text-ghost">{t}</div>
       <p className="mt-3 text-base leading-relaxed text-mute">{d}</p>
     </div>
@@ -186,7 +190,7 @@ function Note({ t, d }: { t: string; d: string }) {
 
 function Chip({ t, d }: { t: string; d: string }) {
   return (
-    <div className="rounded-3xl border border-violet/15 p-6">
+    <div className="card-lift rounded-3xl border border-violet/15 p-6">
       <div className="font-display text-xl text-ghost">{t}</div>
       <p className="mt-2 text-sm leading-relaxed text-mute sm:text-base">{d}</p>
     </div>

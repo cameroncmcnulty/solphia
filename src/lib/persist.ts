@@ -151,3 +151,15 @@ export async function pushRemoteState(state: unknown): Promise<boolean> {
   });
   return r.ok;
 }
+
+/** Sum Redis MEMORY USAGE for the given keys. 0 if the command is unavailable. */
+export async function kvMemoryBytes(keys: string[]): Promise<number> {
+  const parts = await Promise.all(
+    keys.map(async (k) => {
+      const r = await kvCommand(["MEMORY", "USAGE", k]);
+      const n = Number(r.result);
+      return Number.isFinite(n) && n > 0 ? n : 0;
+    }),
+  );
+  return parts.reduce((a, b) => a + b, 0);
+}

@@ -54,6 +54,7 @@ export async function GET(req: NextRequest) {
       xai: Boolean(XAI_API_KEY),
       pinata: pinataConfigured(),
       signer: signerConfigured(),
+      smtp: Boolean(process.env.SMTP_HOST),
     },
     speeds: probed.speeds,
     pinata: probed.pinata,

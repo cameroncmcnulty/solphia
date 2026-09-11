@@ -519,6 +519,7 @@ export interface AppState {
     rpcMs: number | null;
     jupMs: number | null;
     pinataMs?: number | null;
+    storeMs?: number | null;
     pinataBytes: number | null;
     pinataFiles: number | null;
     source?: "tick" | "probe";

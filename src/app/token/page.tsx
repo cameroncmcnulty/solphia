@@ -7,6 +7,7 @@ import { SphaMark } from "@/components/SphaMark";
 import { SphaSocials } from "@/components/SphaSocials";
 import { SolphiaConstellation } from "@/components/SolphiaConstellation";
 import { solphiaTokenDesk } from "@/lib/token/solphia";
+import { Reveal } from "@/components/Reveal";
 
 function tick(symbol: string) {
   const s = symbol.replace(/^\$+/, "").replace(/\*+$/, "").trim();
@@ -46,18 +47,24 @@ export default function TokenPage() {
         </div>
 
         <div className="mt-12 grid gap-4 sm:grid-cols-3">
-          <Story
-            t="Listings"
-            d="A share of every swap is reserved for future exchange listing fees — so $SPHA can list without a surprise raise."
-          />
-          <Story
-            t="Buybacks"
-            d="A share buys $SPHA on the open market. Desk clips and launch swaps are the bid."
-          />
-          <Story
-            t="Burns"
-            d="A share is taken out of circulation. Volume in the utilities is what tightens the float."
-          />
+          <Reveal delay={40} from="left">
+            <Story
+              t="Listings"
+              d="A share of every swap is reserved for future exchange listing fees — so $SPHA can list without a surprise raise."
+            />
+          </Reveal>
+          <Reveal delay={120}>
+            <Story
+              t="Buybacks"
+              d="A share buys $SPHA on the open market. Desk clips and launch swaps are the bid."
+            />
+          </Reveal>
+          <Reveal delay={200} from="right">
+            <Story
+              t="Burns"
+              d="A share is taken out of circulation. Volume in the utilities is what tightens the float."
+            />
+          </Reveal>
         </div>
 
         <div className="mt-10 grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -87,7 +94,7 @@ export default function TokenPage() {
 
 function Story({ t, d }: { t: string; d: string }) {
   return (
-    <div className="panel-bubble rounded-3xl p-6">
+    <div className="card-lift panel-bubble rounded-3xl p-6">
       <div className="font-display text-2xl text-ghost">{t}</div>
       <p className="mt-3 text-sm leading-relaxed text-mute sm:text-base">{d}</p>
     </div>

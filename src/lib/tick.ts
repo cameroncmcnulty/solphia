@@ -16,7 +16,7 @@ import { liveSeatOk, levSeatOk } from "./access";
 import { leverageUnlocked } from "./leverage";
 import { treasuryAddress } from "./treasury";
 import type { FeedHealth, PaperBook } from "./types";
-import { estimateStoreBytes, recordHealthSample } from "./health/probe";
+import { estimateStoreBytes, lastKnownPinata, recordHealthSample } from "./health/probe";
 
 let lock: Promise<unknown> = Promise.resolve();
 let lastPairPublic: PairDeskPublic | null = null;
@@ -312,6 +312,7 @@ export async function runMarketTick(): Promise<{
       gldxUsd: prices.gldx.usd,
     };
     state.lastPair = lastPairPublic;
+    const pin = lastKnownPinata(state.healthLog);
     recordHealthSample(state, {
       t: now,
       tickAgeMs: 0,
@@ -319,8 +320,9 @@ export async function runMarketTick(): Promise<{
       rpcMs: null,
       jupMs: null,
       pinataMs: null,
-      pinataBytes: null,
-      pinataFiles: null,
+      storeMs: null,
+      pinataBytes: pin.bytes,
+      pinataFiles: pin.files,
       source: "tick",
     });
     await saveOps(state);

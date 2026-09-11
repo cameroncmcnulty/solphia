@@ -94,10 +94,26 @@ body {
   50% { transform: translateY(-7px); }
 }
 
+@keyframes hover-mark {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(-3deg); }
+  50% { transform: translate3d(8px, -14px, 0) rotate(4deg); }
+}
+
 .reveal {
   opacity: 0;
+  transition: opacity 0.75s cubic-bezier(0.22, 1, 0.36, 1), transform 0.75s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.reveal-up {
   transform: translate3d(0, 28px, 0) scale(0.98);
-  transition: opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1), transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.reveal-left {
+  transform: translate3d(-36px, 14px, 0) scale(0.98);
+}
+
+.reveal-right {
+  transform: translate3d(36px, 14px, 0) scale(0.98);
 }
 
 .reveal-on {
@@ -110,10 +126,30 @@ body {
   will-change: transform;
 }
 
+.hover-mark {
+  animation: hover-mark var(--hm-dur, 5s) ease-in-out infinite;
+  animation-delay: var(--hm-delay, 0s);
+  will-change: transform;
+}
+
+.card-lift {
+  transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.25s ease, box-shadow 0.35s ease;
+}
+.card-lift:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 24px 50px rgba(4, 0, 10, 0.45), 0 0 40px rgba(20, 241, 149, 0.08);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .reveal,
   .reveal-on,
-  .mark-float {
+  .reveal-up,
+  .reveal-left,
+  .reveal-right,
+  .mark-float,
+  .hover-mark,
+  .card-lift,
+  .card-lift:hover {
     animation: none;
     opacity: 1;
     transform: none;
