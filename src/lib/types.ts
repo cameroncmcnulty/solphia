@@ -512,6 +512,16 @@ export interface AppState {
   launch?: import("./launch/engine").LaunchBook;
   ownerWallet?: string;
   sphaSocials?: { x?: string; telegram?: string; discord?: string };
+  healthLog?: {
+    t: number;
+    tickAgeMs: number;
+    storeBytes: number;
+    rpcMs: number | null;
+    jupMs: number | null;
+    pinataBytes: number | null;
+    pinataFiles: number | null;
+  }[];
+  healthTiers?: Partial<Record<"vercel" | "upstash" | "helius" | "pinata" | "xai" | "signer", string>>;
 }
 
 export type BacktestPoint = { t: number; equity: number };

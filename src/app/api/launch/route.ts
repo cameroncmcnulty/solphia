@@ -17,6 +17,7 @@ import {
 } from "@/lib/launch/engine";
 import { lastPairPrices } from "@/lib/tick";
 import { IMAGE_DATA_MAX } from "@/lib/launch/validate";
+import { pinDataUrl } from "@/lib/pinata";
 
 export const dynamic = "force-dynamic";
 
@@ -129,9 +130,20 @@ export async function POST(req: NextRequest) {
     return fail((out as { error?: string })?.error || "failed");
   }
   if ("coin" in out && out.coin) {
+    const coin = out.coin;
+    if (b.action === "create" && coin.image?.startsWith("data:")) {
+      const pinned = await pinDataUrl(coin.image, coin.symbol);
+      if (pinned) {
+        await withLaunch((s) => {
+          const c = (s.launch?.coins || []).find((x) => x.id === coin.id);
+          if (c) c.image = pinned.url;
+        }, true);
+        coin.image = pinned.url;
+      }
+    }
     return NextResponse.json({
       ok: true,
-      coin: publicCoin(out.coin, solUsd, b.pubkey, bookSnap),
+      coin: publicCoin(coin, solUsd, b.pubkey, bookSnap),
       fill: "fill" in out ? out.fill : undefined,
     });
   }

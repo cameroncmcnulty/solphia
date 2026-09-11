@@ -65,6 +65,8 @@ export function emptyState(): AppState {
     launch: emptyLaunchBook(),
     ownerWallet: "",
     sphaSocials: { x: "", telegram: "", discord: "" },
+    healthLog: [],
+    healthTiers: {},
   };
 }
 

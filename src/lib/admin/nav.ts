@@ -28,7 +28,8 @@ export type AdminIcon =
   | "backtest"
   | "system"
   | "wallets"
-  | "users";
+  | "users"
+  | "health";
 
 export const ADMIN_NAV = [
   {
@@ -82,6 +83,13 @@ export const ADMIN_NAV = [
     label: "Backtest",
     hint: "Replay spot 1× plus SOL 2× / 3×",
     icon: "backtest" as const,
+  },
+  {
+    id: "health",
+    group: "ops",
+    label: "Health",
+    hint: "Storage, speed, and plan ceilings",
+    icon: "health" as const,
   },
   {
     id: "system",

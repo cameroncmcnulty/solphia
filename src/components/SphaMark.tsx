@@ -7,7 +7,7 @@ export function SphaMark({ className = "h-7 w-7" }: { className?: string }) {
       src="/spha-mark.png?v=2"
       alt=""
       draggable={false}
-      className={`shrink-0 object-contain ${className}`}
+      className={`mark-float shrink-0 object-contain ${className}`}
     />
   );
 }

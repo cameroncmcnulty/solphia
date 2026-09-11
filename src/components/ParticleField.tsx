@@ -11,11 +11,11 @@ export function ParticleField() {
     const ctx = c.getContext("2d");
     if (!ctx) return;
     let raf = 0;
-    const dots = Array.from({ length: 55 }, () => ({
+    const dots = Array.from({ length: 72 }, () => ({
       x: Math.random(),
       y: Math.random(),
-      v: 0.00012 + Math.random() * 0.0003,
-      green: Math.random() > 0.55,
+      v: 0.0001 + Math.random() * 0.00028,
+      green: Math.random() > 0.52,
     }));
     const resize = () => {
       c.width = window.innerWidth;
@@ -28,9 +28,9 @@ export function ParticleField() {
       for (const d of dots) {
         d.y -= d.v;
         if (d.y < 0) d.y = 1;
-        ctx.fillStyle = d.green ? "rgba(20,241,149,0.28)" : "rgba(153,69,255,0.28)";
+        ctx.fillStyle = d.green ? "rgba(20,241,149,0.62)" : "rgba(201,168,255,0.58)";
         ctx.beginPath();
-        ctx.arc(d.x * c.width, d.y * c.height, d.green ? 1.4 : 1.1, 0, Math.PI * 2);
+        ctx.arc(d.x * c.width, d.y * c.height, d.green ? 1.7 : 1.35, 0, Math.PI * 2);
         ctx.fill();
       }
       raf = requestAnimationFrame(loop);
@@ -42,5 +42,5 @@ export function ParticleField() {
     };
   }, []);
 
-  return <canvas ref={ref} className="pointer-events-none fixed inset-0 z-0 opacity-60" />;
+  return <canvas ref={ref} className="pointer-events-none fixed inset-0 z-0 opacity-90" />;
 }

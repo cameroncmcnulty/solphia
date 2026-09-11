@@ -16,6 +16,7 @@ import { liveSeatOk, levSeatOk } from "./access";
 import { leverageUnlocked } from "./leverage";
 import { treasuryAddress } from "./treasury";
 import type { FeedHealth, PaperBook } from "./types";
+import { estimateStoreBytes, recordHealthSample } from "./health/probe";
 
 let lock: Promise<unknown> = Promise.resolve();
 let lastPairPublic: PairDeskPublic | null = null;
@@ -311,6 +312,15 @@ export async function runMarketTick(): Promise<{
       gldxUsd: prices.gldx.usd,
     };
     state.lastPair = lastPairPublic;
+    recordHealthSample(state, {
+      t: now,
+      tickAgeMs: 0,
+      storeBytes: estimateStoreBytes(state),
+      rpcMs: null,
+      jupMs: null,
+      pinataBytes: null,
+      pinataFiles: null,
+    });
     await saveOps(state);
 
     return {

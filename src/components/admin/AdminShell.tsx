@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   Activity,
   BadgeDollarSign,
+  HeartPulse,
   Bot,
   LayoutDashboard,
   LineChart,
@@ -42,6 +43,7 @@ const ICONS: Record<AdminIcon, typeof LayoutDashboard> = {
   system: Settings2,
   wallets: Wallet,
   users: Users,
+  health: HeartPulse,
 };
 
 export function AdminShell({ children }: { children: ReactNode }) {
