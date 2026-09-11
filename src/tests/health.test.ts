@@ -29,7 +29,10 @@ describe("health catalog", () => {
   });
 
   it("does not invent a Pinata key from thin air", () => {
-    assert.equal(pinataConfigured(), Boolean((process.env.PINATA_JWT || process.env.PINATA_API_KEY || "").trim()));
+    const jwt = (process.env.PINATA_JWT || "").trim();
+    const key = (process.env.PINATA_API_KEY || "").trim();
+    const secret = (process.env.PINATA_API_SECRET || "").trim();
+    assert.equal(pinataConfigured(), Boolean(jwt || (key && secret)));
   });
 
   it("carries the last Pinata usage across empty tick samples", () => {

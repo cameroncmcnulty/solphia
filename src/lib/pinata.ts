@@ -9,7 +9,10 @@ const USAGE_URL = "https://api.pinata.cloud/data/userPinnedDataTotal";
 const GATEWAY = (process.env.PINATA_GATEWAY || "https://gateway.pinata.cloud/ipfs").replace(/\/$/, "");
 
 export function pinataConfigured(): boolean {
-  return Boolean((process.env.PINATA_JWT || process.env.PINATA_API_KEY || "").trim());
+  const jwt = (process.env.PINATA_JWT || "").trim();
+  const key = (process.env.PINATA_API_KEY || "").trim();
+  const secret = (process.env.PINATA_API_SECRET || "").trim();
+  return Boolean(jwt || (key && secret));
 }
 
 function authHeaders(): Record<string, string> {
@@ -18,7 +21,6 @@ function authHeaders(): Record<string, string> {
   const secret = (process.env.PINATA_API_SECRET || "").trim();
   if (jwt) return { authorization: `Bearer ${jwt}` };
   if (key && secret) return { pinata_api_key: key, pinata_secret_api_key: secret };
-  if (key) return { authorization: `Bearer ${key}` };
   return {};
 }
 
