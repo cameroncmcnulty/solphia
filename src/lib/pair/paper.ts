@@ -29,7 +29,7 @@ import type { RatioSample } from "./ratio";
 import type { PairIntent } from "../types";
 
 export { BOOK_CURVE_MAX, BOOK_FILLS_MAX, BOOK_TAPE_MAX, compactTape, pruneBookLogs } from "./bookLog";
-import { BOOK_CURVE_MAX, BOOK_FILLS_MAX, BOOK_TAPE_MAX, compactTape } from "./bookLog";
+import { BOOK_CURVE_LIVE, BOOK_FILLS_LIVE, BOOK_TAPE_LIVE, compactTape } from "./bookLog";
 
 export function tapeOf(
   now: number,
@@ -53,7 +53,7 @@ function costs(sizeUsd: number, impactPct = 0) {
 }
 
 function pushFill(book: PaperBook, fill: PaperFill) {
-  pushBounded(book.fills, fill, BOOK_FILLS_MAX);
+  pushBounded(book.fills, fill, BOOK_FILLS_LIVE);
   book.feesPaidUsd += fill.feeUsd;
   book.slippagePaidUsd += fill.slippageUsd;
   if (fill.pnlUsd != null && Math.abs(fill.pnlUsd) >= 0.01) {
@@ -75,7 +75,7 @@ function pushTape(book: PaperBook, row: PairTape) {
     if (row.action === "skip") book.lastSkipReason = row.reason;
     return;
   }
-  pushBounded(book.tape, row, BOOK_TAPE_MAX);
+  pushBounded(book.tape, row, BOOK_TAPE_LIVE);
   book.tape = compactTape(book.tape);
   book.lastAction = `${row.action} · ${row.reason}`;
   if (row.action === "skip") {
@@ -87,7 +87,7 @@ function pushTape(book: PaperBook, row: PairTape) {
 function bumpCurve(book: PaperBook, now: number) {
   const last = book.curve[book.curve.length - 1];
   if (last && now - last.t < 60_000 && Math.abs(last.equity - book.equityUsd) < 0.05) return;
-  pushBounded(book.curve, { t: now, equity: book.equityUsd }, BOOK_CURVE_MAX);
+  pushBounded(book.curve, { t: now, equity: book.equityUsd }, BOOK_CURVE_LIVE);
 }
 
 function pxOf(prices: PairPrices, id: XStockId): number {

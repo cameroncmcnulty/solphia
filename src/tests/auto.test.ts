@@ -39,7 +39,7 @@ describe("auto bankroll", () => {
     assert.equal(DEFAULT_AUTO.armedAt, undefined);
     assert.equal(DEFAULT_AUTO.style, "scalp");
     assert.equal(DEFAULT_AUTO.leverage, 1);
-    assert.equal(DEFAULT_AUTO.cooldownMin, 1);
+    assert.equal(DEFAULT_AUTO.cooldownMin, 240);
     assert.equal(DEFAULT_AUTO.band, "normal");
     assert.equal(DEFAULT_AUTO.targetSolPct, 0.2);
     assert.equal(DEFAULT_AUTO.liveDelegate, undefined);

@@ -17,7 +17,7 @@ import { SLEEVE_WEIGHT, TRADE_PAIRS, xstockIdOf, type Sleeve, type TradePair } f
 import { enrichStudy } from "./policy";
 import type { ShortTape } from "./shortTape";
 import type { ScalpFrames } from "./frames";
-import { DEFAULT_LEARN, RISK_SLEEVES, clipAimOf, needOf, nextTrail, readAsset } from "./signals";
+import { CLIP_HARD, DEFAULT_LEARN, RISK_SLEEVES, clipAimOf, needOf, nextTrail, readAsset } from "./signals";
 import { borrowUsd, clampLev, liqPrice } from "../leverage";
 
 export type { Sleeve, TradePair } from "./catalog";
@@ -27,7 +27,7 @@ export { PAIR_FEE_BPS, PAIR_SLIP_BPS, PROTOCOL_FEE_BPS } from "../config";
 export const PAIR_MIN_CLIP_USD = 10;
 export const PAIR_MAX_IMPACT = 0.004;
 /** Never dump a sleeve. Clip 30–50% so the rest can work another pair. */
-export const HOLDING_CLIP = 0.4;
+export const HOLDING_CLIP = 0.5;
 export const HOLDING_CLIP_MIN = 0.3;
 export const HOLDING_CLIP_MAX = 0.5;
 
@@ -391,6 +391,7 @@ export function decidePair(opts: {
       sig.sleeve === "SOL" ? h.solCostUsd || 0 : costOf(h, xstockIdOf(sig.sleeve) || "spyx");
     const entryPx = h.stops?.[sig.sleeve]?.entryPx || (qty > 0 ? cost / qty : sig.px);
     const prev = h.stops?.[sig.sleeve] || { entryPx, peakPx: sig.px, stopPx: 0, armed: false };
+    const swing = sig.bias === "bull" || sig.trend === "up";
     const trail = nextTrail({
       entryPx: prev.entryPx || entryPx,
       peakPx: prev.peakPx || sig.px,
@@ -399,18 +400,22 @@ export function decidePair(opts: {
       px: sig.px,
       atrPct: sig.atrPct,
       trailK: (learn[sig.sleeve] || DEFAULT_LEARN).trailK,
+      swing,
     });
-    h.stops[sig.sleeve] = { ...trail, entryPx: prev.entryPx || entryPx };
+    h.stops[sig.sleeve] = { ...trail, entryPx: prev.entryPx || entryPx, scaledOut: prev.scaledOut };
     book.pair = h;
     const basis = prev.entryPx || entryPx;
     const pnlPct = basis > 0 ? sig.px / basis - 1 : 0;
     const locked = basis > 0 ? trail.stopPx / basis - 1 : 0;
     const aim = clipAimOf(sig.sleeve, sig.atrPct);
     if (trail.armed && sig.px <= trail.stopPx) {
+      const loser = pnlPct <= 0 && locked <= 0;
       return {
         action: "swap",
-        reason: `Trail hit on ${sig.sleeve} at ${sig.px.toFixed(2)} (stop ${trail.stopPx.toFixed(2)}, locked ${(locked * 100).toFixed(1)}%). Banking ${Math.round(HOLDING_CLIP_MAX * 100)}% to USDC, rest stays in play.`,
-        clipUsd: clipHoldingUsd(pos, HOLDING_CLIP_MAX),
+        reason: loser
+          ? `Stop on ${sig.sleeve} at ${sig.px.toFixed(2)}. Flattening the loser to USDC.`
+          : `Trail hit on ${sig.sleeve} at ${sig.px.toFixed(2)} (stop ${trail.stopPx.toFixed(2)}, locked ${(locked * 100).toFixed(1)}%). Banking the sleeve to USDC.`,
+        clipUsd: pos,
         from: sig.sleeve,
         to: "USDC",
         asset: xstockIdOf(sig.sleeve) || undefined,
@@ -424,11 +429,12 @@ export function decidePair(opts: {
         reads,
       };
     }
-    if (pnlPct >= aim) {
+    if (!swing && pnlPct >= Math.max(aim, CLIP_HARD) && !prev.scaledOut) {
+      h.stops[sig.sleeve] = { ...h.stops[sig.sleeve]!, scaledOut: true };
       return {
         action: "swap",
-        reason: `${sig.sleeve} up ${(pnlPct * 100).toFixed(1)}%. Banking ${Math.round(HOLDING_CLIP * 100)}% at the ${(aim * 100).toFixed(1)}% clip. Rest stays for the next tape.`,
-        clipUsd: clipHoldingUsd(pos),
+        reason: `${sig.sleeve} up ${(pnlPct * 100).toFixed(1)}%. Banking ${Math.round(HOLDING_CLIP_MAX * 100)}% into the ${(CLIP_HARD * 100).toFixed(0)}% runner. Rest rides the trail.`,
+        clipUsd: clipHoldingUsd(pos, HOLDING_CLIP_MAX),
         from: sig.sleeve,
         to: "USDC",
         asset: xstockIdOf(sig.sleeve) || undefined,
@@ -462,36 +468,6 @@ export function decidePair(opts: {
         from: "USDC",
         to: best.sleeve,
         asset: xstockIdOf(best.sleeve) || undefined,
-        pairId,
-        z7: primary.z7,
-        z24: primary.z24,
-        ratio: primary.ratio,
-        bandK,
-        session,
-        read: primary,
-        reads,
-      };
-    }
-  }
-
-  for (const src of sigs.filter((s) => openSet.has(s.sleeve))) {
-    const pos = usdOf(src.sleeve);
-    if (pos < PAIR_MIN_CLIP_USD * 1.5) continue;
-    for (const dest of ranked) {
-      if (dest.sleeve === src.sleeve) continue;
-      if (openSet.has(dest.sleeve) && usdOf(dest.sleeve) >= allocated * SLEEVE_WEIGHT * 1.15) continue;
-      const need = needOf(learn[dest.sleeve] || DEFAULT_LEARN, dest.sleeve);
-      if (!(dest.buy >= need && dest.buy >= src.buy + 0.08 && dest.setup && dest.setup !== "none")) continue;
-      const pairId = `${src.sleeve.toLowerCase()}-${dest.sleeve.toLowerCase()}`;
-      const lastThis = h.lastClipAt?.[pairId] || 0;
-      if (cooldownMs > 0 && lastThis && now - lastThis < cooldownMs) continue;
-      return {
-        action: "swap",
-        reason: `Rotating ${Math.round(HOLDING_CLIP * 100)}% of ${src.sleeve} into ${dest.sleeve}. ${dest.reason}`,
-        clipUsd: clipHoldingUsd(pos),
-        from: src.sleeve,
-        to: dest.sleeve,
-        asset: xstockIdOf(dest.sleeve) || undefined,
         pairId,
         z7: primary.z7,
         z24: primary.z24,

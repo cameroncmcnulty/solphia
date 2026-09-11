@@ -143,8 +143,9 @@ export function restorePair(p?: PairHoldings | null, cashUsd = 0): PairHoldings 
 
 function slimBacktest(report?: BacktestReport | null): BacktestReport | null {
   if (!report || !Array.isArray(report.curve) || !report.curve.length) return null;
-  const fills = Array.isArray(report.fills) ? report.fills.slice(-80) : [];
-  return { ...report, fills };
+  const fills = Array.isArray(report.fills) ? report.fills.slice(-40) : [];
+  const curve = report.curve.length > 160 ? report.curve.filter((_, i) => i % 2 === 0 || i === report.curve.length - 1) : report.curve;
+  return { ...report, fills, curve };
 }
 
 function opsView(state: AppState): AppState {

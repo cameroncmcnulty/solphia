@@ -1,9 +1,13 @@
 import type { PaperFill, PairTape } from "../types";
 
-/** Hard caps so trader shards and the activity feed do not grow without bound. */
+/** Persist caps so trader shards do not grow without bound. */
 export const BOOK_TAPE_MAX = 40;
 export const BOOK_FILLS_MAX = 40;
 export const BOOK_CURVE_MAX = 96;
+/** In-memory room for a month of clips so backtests are not truncated mid-run. */
+export const BOOK_TAPE_LIVE = 80;
+export const BOOK_FILLS_LIVE = 240;
+export const BOOK_CURVE_LIVE = 240;
 
 /** Keep real clips. Drop stacked hold/skip rows — only the latest quiet status stays. */
 export function compactTape(tape: PairTape[] | undefined): PairTape[] {

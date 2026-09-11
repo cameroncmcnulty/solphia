@@ -14,10 +14,10 @@ export const RISK_SLEEVES: Exclude<Sleeve, "USDC">[] = ["SOL", "SPYx", "QQQx", "
 
 export const ROUND_TRIP = (PAIR_FEE_BPS + PROTOCOL_FEE_BPS + PAIR_SLIP_BPS) * 2 * 0.0001;
 
-/** Target clip after fees: ~0.5% on xStocks so she can fire all day. Round-trip drag is ~38 bps. */
-export const CLIP_MIN = 0.005;
-export const CLIP_AIM = 0.006;
-export const CLIP_HARD = 0.009;
+/** Bank a real scalp after fees. 0.5% died to round-trip. ~1.2% SOL / ~0.8% books. */
+export const CLIP_MIN = 0.008;
+export const CLIP_AIM = 0.012;
+export const CLIP_HARD = 0.02;
 /** 1h dump this large is a knife, not a 1% dip. */
 export const KNIFE_1H = 0.035;
 
@@ -53,18 +53,18 @@ export const DEFAULT_LEARN: SleeveLearn = { trades: 0, wins: 0, pnlUsd: 0, buyNe
 
 /** A 15m reclaim / momentum clip — not RSI alone. */
 export function needOf(learn?: SleeveLearn, sleeve?: Exclude<Sleeve, "USDC">): number {
-  const fallback = sleeve === "SOL" ? DEFAULT_LEARN.buyNeed : 0.2;
+  const fallback = sleeve === "SOL" ? 0.36 : 0.22;
   const n = learn?.buyNeed ?? fallback;
-  const floor = sleeve === "SOL" ? 0.26 : 0.16;
-  const cap = sleeve === "SOL" ? 0.48 : 0.3;
+  const floor = sleeve === "SOL" ? 0.34 : 0.18;
+  const cap = sleeve === "SOL" ? 0.5 : 0.34;
   return Math.min(cap, Math.max(floor, n));
 }
 
-/** xStocks bank ~0.5% after fees. SOL needs a hair more room for 15m noise. */
+/** SOL aims ~1.2%. Equities/gold bank a fee-cleared ~80 bps, then trail the rest. */
 export function clipAimOf(sleeve: Exclude<Sleeve, "USDC">, atrPct = 0.01): number {
-  const floor = ROUND_TRIP + 0.0012;
-  if (sleeve === "SOL") return Math.max(CLIP_AIM, floor, atrPct * 0.9);
-  return Math.max(CLIP_MIN, floor);
+  const floor = ROUND_TRIP + 0.0025;
+  if (sleeve === "SOL") return Math.max(CLIP_AIM, floor, Math.min(0.016, atrPct * 1.4));
+  return Math.max(0.008, Math.min(0.012, Math.max(floor, atrPct * 1.2)));
 }
 
 export function bucketCandles(samples: RatioSample[], sleeve: Sleeve, ms = 15 * 60 * 1000): Candle[] {
@@ -232,15 +232,19 @@ export function readAsset(
   };
 }
 
-/** How far below the peak the stop sits. Tightens as the run extends. Never used to lower a stop. */
-export function trailGiveback(peakProfit: number, atrPct: number, trailK: number): number {
-  const atr = Math.max(atrPct, 0.004);
-  const base = Math.max(0.0025, Math.min(0.006, (trailK || 0.55) * atr));
-  if (peakProfit >= 0.025) return Math.min(base * 0.4, 0.0028);
-  if (peakProfit >= CLIP_HARD) return Math.min(base * 0.5, 0.0032);
-  if (peakProfit >= CLIP_AIM) return Math.min(base * 0.6, 0.0038);
-  if (peakProfit >= CLIP_MIN) return Math.min(base * 0.7, 0.0045);
-  return 0.01;
+/** Room under the peak. Bull trends get 3%+ so a SOL run is not scalped to death. */
+export function trailGiveback(peakProfit: number, atrPct: number, trailK: number, swing = false): number {
+  if (swing) {
+    if (peakProfit >= 0.12) return 0.025;
+    if (peakProfit >= 0.06) return 0.03;
+    return 0.034;
+  }
+  const atr = Math.max(atrPct, 0.006);
+  const wide = Math.max(0.01, Math.min(0.018, atr * (0.9 + (trailK || 0.55))));
+  if (peakProfit >= 0.04) return Math.min(wide * 0.35, 0.007);
+  if (peakProfit >= 0.025) return Math.min(wide * 0.45, 0.009);
+  if (peakProfit >= CLIP_AIM) return Math.min(wide * 0.7, 0.012);
+  return wide;
 }
 
 export function nextTrail(opts: {
@@ -251,24 +255,34 @@ export function nextTrail(opts: {
   px: number;
   atrPct: number;
   trailK: number;
+  swing?: boolean;
 }): { peakPx: number; stopPx: number; armed: boolean } {
-  const round = ROUND_TRIP;
-  const breakeven = opts.entryPx * (1 + round);
+  const breakeven = opts.entryPx * (1 + ROUND_TRIP);
   let { peakPx, stopPx, armed } = opts;
   peakPx = Math.max(peakPx, opts.px);
   const profit = opts.entryPx > 0 ? opts.px / opts.entryPx - 1 : 0;
   const peakProfit = opts.entryPx > 0 ? peakPx / opts.entryPx - 1 : 0;
-  if (!armed && profit >= round + 0.001) {
+  const swing = Boolean(opts.swing);
+  const armAt = swing ? CLIP_MIN : CLIP_AIM;
+  if (!armed && profit >= armAt) {
     armed = true;
-    stopPx = Math.max(stopPx, breakeven);
+    stopPx = Math.max(stopPx, swing ? breakeven : opts.entryPx * (1 + CLIP_AIM * 0.85));
   }
-  if (armed && peakProfit >= CLIP_MIN) {
-    const k = trailGiveback(peakProfit, opts.atrPct, opts.trailK);
+  if (armed) {
+    const k = trailGiveback(peakProfit, opts.atrPct, opts.trailK, swing);
     const raw = peakPx * (1 - k);
-    let lock = opts.entryPx * (1 + CLIP_MIN * 0.7);
-    if (peakProfit >= CLIP_AIM) lock = opts.entryPx * (1 + CLIP_MIN);
-    if (peakProfit >= CLIP_HARD) lock = opts.entryPx * (1 + CLIP_AIM);
-    stopPx = Math.max(stopPx, raw, breakeven, lock);
+    let lock = 0;
+    if (!swing) {
+      lock = opts.entryPx * (1 + CLIP_MIN);
+      if (peakProfit >= 0.02) lock = opts.entryPx * (1 + CLIP_AIM);
+      if (peakProfit >= 0.035) lock = opts.entryPx * (1 + 0.02);
+    } else if (peakProfit >= 0.04) {
+      lock = opts.entryPx * (1 + 0.015);
+    } else if (peakProfit >= 0.02) {
+      lock = breakeven;
+    }
+    stopPx = Math.max(stopPx, raw);
+    if (lock > 0) stopPx = Math.max(stopPx, lock);
   }
   return { peakPx, stopPx, armed };
 }

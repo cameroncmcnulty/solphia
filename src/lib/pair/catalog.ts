@@ -12,7 +12,7 @@ export type TradePair = {
 };
 
 /** Equal sleeves so she can fire whichever pair stretches. PnL home is USDC. */
-export const SLEEVE_WEIGHT = 0.2;
+export const SLEEVE_WEIGHT = 0.46;
 export const SLEEVES: Sleeve[] = ["USDC", "SOL", "SPYx", "QQQx", "GLDx"];
 
 export const TRADE_PAIRS: TradePair[] = [

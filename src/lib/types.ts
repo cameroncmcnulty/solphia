@@ -204,6 +204,8 @@ export interface SleeveStop {
   peakPx: number;
   stopPx: number;
   armed: boolean;
+  /** One scale-out at the clip. The rest rides the trail. */
+  scaledOut?: boolean;
 }
 
 export interface SleeveLearn {
