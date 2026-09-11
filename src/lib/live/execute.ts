@@ -1,5 +1,5 @@
 import { Connection, Keypair, Transaction, VersionedTransaction } from "@solana/web3.js";
-import { applyPairDecision, tapeOf } from "../pair/paper";
+import { applyPairDecision, BOOK_TAPE_MAX, tapeOf } from "../pair/paper";
 import { quoteBestRoute } from "../pair/jupiter";
 import { USDC_MINT } from "../pair/mints";
 import type { PairPrices } from "../pair/prices";
@@ -91,7 +91,7 @@ function noteFail(book: PaperBook, now: number, reason: string) {
       to: book.pendingIntent?.to,
       sizeUsd: book.pendingIntent?.clipUsd,
     }),
-    200,
+    BOOK_TAPE_MAX,
   );
   book.lastAction = `skip · ${reason}`;
   book.lastSkipReason = reason;

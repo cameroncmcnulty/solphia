@@ -18,6 +18,7 @@ import {
   KEYS,
 } from "./persist";
 import type { AppState, AuditEvent, BacktestReport, PairHoldings, TraderAccount } from "./types";
+import { pruneBookLogs } from "./pair/bookLog";
 
 export const DATA_DIR = process.env.DATA_DIR || (process.env.VERCEL ? "/tmp/solphia" : path.join(process.cwd(), "data"));
 const FILE = path.join(DATA_DIR, "state.json");
@@ -85,7 +86,7 @@ function hydrateFromRaw(raw: AppState): AppState {
     settings: { ...DEFAULT_SETTINGS, ...(raw.settings || {}) },
     paper: isLegacyBook(rawPaper)
       ? emptyBook()
-      : {
+      : pruneBookLogs({
           ...emptyBook(rawPaper.startingUsd || undefined),
           ...rawPaper,
           startedAt: rawPaper.startedAt || rawPaper.fills?.[0]?.at || Date.now(),
@@ -93,7 +94,7 @@ function hydrateFromRaw(raw: AppState): AppState {
           pair: restorePair(rawPaper.pair, rawPaper.cashUsd ?? emptyBook().cashUsd),
           tape: rawPaper.tape || [],
           skipped: rawPaper.skipped || 0,
-        },
+        }),
     lab: mergeLab(raw.lab),
     mind: mergeMind(raw.mind),
     curveWatch: raw.curveWatch || {},
@@ -283,6 +284,7 @@ async function persistShards(next: AppState, owners: string[]) {
     uniq.map(async (owner) => {
       const t = next.traders[owner];
       if (!t) return;
+      if (t.book) pruneBookLogs(t.book);
       t.rev = (t.rev || 0) + 1;
       await kvSetJson(KEYS.trader(owner), t);
       await kvSadd(KEYS.traders, owner);
@@ -292,6 +294,7 @@ async function persistShards(next: AppState, owners: string[]) {
 }
 
 export async function saveState(next: AppState): Promise<void> {
+  if (next.paper) pruneBookLogs(next.paper);
   mem = next;
   writing = writing.then(async () => {
     writeFs(next);
@@ -307,6 +310,7 @@ export async function saveState(next: AppState): Promise<void> {
 }
 
 export async function saveOps(next: AppState): Promise<void> {
+  if (next.paper) pruneBookLogs(next.paper);
   mem = next;
   writing = writing.then(async () => {
     writeFs(next);
@@ -325,6 +329,7 @@ export async function saveOps(next: AppState): Promise<void> {
 
 export async function saveTrader(t: TraderAccount): Promise<void> {
   const state = mem || emptyState();
+  if (t.book) pruneBookLogs(t.book);
   t.updatedAt = Date.now();
   t.rev = (t.rev || 0) + 1;
   state.traders[t.owner] = t;
@@ -368,6 +373,7 @@ export async function loadTrader(owner: string): Promise<TraderAccount | null> {
     const raw = await kvGetJson(KEYS.trader(owner));
     if (raw && typeof raw === "object") {
       const t = raw as TraderAccount;
+      if (t.book) pruneBookLogs(t.book);
       if (mem) mem.traders[owner] = t;
       return t;
     }

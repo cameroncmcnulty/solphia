@@ -2,6 +2,7 @@ import { DEFAULT_AUTO, lockedAuto, bankrollUsd, maybeResizeBook } from "./auto";
 import { liveTradingEnabled } from "./liveFlag";
 import { publicMind } from "./mind/engine";
 import { tickPairBook } from "./pair/paper";
+import { BOOK_CURVE_MAX, BOOK_FILLS_MAX, BOOK_TAPE_MAX, compactTape } from "./pair/bookLog";
 import { loadPairHistory, pushLiveSample } from "./pair/history";
 import { loadPairPrices } from "./pair/prices";
 import { publicPair, type PairDeskPublic } from "./pair/public";
@@ -56,14 +57,14 @@ export function publicBook(book: PaperBook | null | undefined) {
     open: positions.length,
     trades: fills.filter((f) => f.side === "sell").length,
     positions,
-    fills: fills.slice(-80).reverse(),
-    curve: Array.isArray(b.curve) ? b.curve.slice(-400) : [],
+    fills: fills.slice(-BOOK_FILLS_MAX).reverse(),
+    curve: Array.isArray(b.curve) ? b.curve.slice(-BOOK_CURVE_MAX) : [],
     skipped: b.skipped || 0,
     lastAction: b.lastAction,
     lastSkipReason: b.lastSkipReason,
     killed: Boolean(b.killed),
     pair: b.pair || { solQty: 0, spyxQty: 0, qqqxQty: 0, gldxQty: 0, usdcQty: start },
-    tape: (b.tape || []).slice(-80).reverse(),
+    tape: compactTape(b.tape).slice(-BOOK_TAPE_MAX).reverse(),
     pendingIntent: b.pendingIntent || null,
   };
 }

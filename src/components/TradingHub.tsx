@@ -371,7 +371,7 @@ export function TradingHub() {
       </ol>
 
       <div className="mt-5 rounded-2xl border border-blood/40 bg-blood/10 px-4 py-3 text-sm text-ghost">
-        You can lose SOL. Official xStocks are not the New York cash close. Backup the trading key.
+        Trading carries risk and has the potential of losing. Make sure to back up your trading key.
       </div>
 
       <section className="panel mt-5 rounded-3xl p-5 md:p-8">

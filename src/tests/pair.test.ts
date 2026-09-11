@@ -4,6 +4,7 @@ import { DEFAULT_AUTO, emptyBook } from "../lib/auto";
 import { CLIP_AIM, clipAimOf, needOf, ROUND_TRIP } from "../lib/pair/signals";
 import { clipHoldingUsd, decidePair, HOLDING_CLIP_MAX, HOLDING_CLIP_MIN, markPair } from "../lib/pair/engine";
 import { flattenToUsdc, killBook, tickPairBook } from "../lib/pair/paper";
+import { BOOK_CURVE_MAX, BOOK_FILLS_MAX, BOOK_TAPE_MAX, compactTape, pruneBookLogs } from "../lib/pair/bookLog";
 import { DEFAULT_STUDY } from "../lib/pair/knowledge";
 import {
   isAllowedMint,
@@ -613,6 +614,29 @@ describe("paper fills + kill", () => {
     assert.ok(holds.length <= 1);
     assert.ok((book.tape || []).length <= 2);
     assert.equal(book.skipped || 0, 0);
+  });
+
+  it("compacts hold/skip noise and caps the stored tape", () => {
+    const tape = [
+      { id: "1", at: 1, action: "trade" as const, reason: "buy SPYx" },
+      { id: "2", at: 2, action: "hold" as const, reason: "waiting" },
+      { id: "3", at: 3, action: "skip" as const, reason: "thin" },
+      { id: "4", at: 4, action: "trade" as const, reason: "clip" },
+      { id: "5", at: 5, action: "hold" as const, reason: "watching" },
+    ];
+    const compact = compactTape(tape);
+    assert.equal(compact.filter((r) => r.action === "trade").length, 2);
+    assert.equal(compact.filter((r) => r.action === "hold" || r.action === "skip").length, 1);
+    assert.equal(compact[compact.length - 1].reason, "watching");
+    const fat = {
+      tape: Array.from({ length: 200 }, (_, i) => ({ id: String(i), at: i, action: "trade" as const, reason: "x" })),
+      fills: Array.from({ length: 200 }, () => ({ id: "f" })),
+      curve: Array.from({ length: 500 }, (_, i) => ({ t: i, equity: 1000 })),
+    };
+    pruneBookLogs(fat as never);
+    assert.ok((fat.tape || []).length <= BOOK_TAPE_MAX);
+    assert.ok(fat.fills.length <= BOOK_FILLS_MAX);
+    assert.ok(fat.curve.length <= BOOK_CURVE_MAX);
   });
 
   it("marks sleeve cost so a SOL move shows unrealized", () => {
