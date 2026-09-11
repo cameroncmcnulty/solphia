@@ -15,6 +15,7 @@ export default function Home() {
             <SolphiaFace mode="hero" />
           </div>
           <div className="order-2 pb-10 lg:order-1 lg:pb-4">
+            <Reveal>
             <p className="flex items-center gap-2 text-sm tracking-[0.22em] text-acid sm:text-base">
               <SphaMark className="h-5 w-5" />
               THE SOLPHIA ECOSYSTEM · $SPHA
@@ -38,6 +39,7 @@ export default function Home() {
                 $SPHA
               </Link>
             </div>
+            </Reveal>
           </div>
         </div>
       </section>

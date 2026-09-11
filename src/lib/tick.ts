@@ -318,8 +318,10 @@ export async function runMarketTick(): Promise<{
       storeBytes: estimateStoreBytes(state),
       rpcMs: null,
       jupMs: null,
+      pinataMs: null,
       pinataBytes: null,
       pinataFiles: null,
+      source: "tick",
     });
     await saveOps(state);
 

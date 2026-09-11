@@ -21,6 +21,7 @@ const Patch = z.object({
       helius: z.string().optional(),
       pinata: z.string().optional(),
       xai: z.string().optional(),
+      smtp: z.string().optional(),
       signer: z.string().optional(),
     })
     .optional(),
@@ -73,6 +74,7 @@ export async function GET(req: NextRequest) {
     }),
     log24h: windowSamples(log, 24 * 3600_000),
     log7d: windowSamples(log, 7 * 24 * 3600_000),
+    cronTicks24h: windowSamples(log, 24 * 3600_000).filter((s) => s.source === "tick").length,
   });
 }
 

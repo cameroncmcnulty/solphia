@@ -26,17 +26,20 @@ export type PinataUsage = {
   ok: boolean;
   files: number;
   bytes: number;
+  ms: number;
   error?: string;
 };
 
 export async function pinataUsage(): Promise<PinataUsage> {
-  if (!pinataConfigured()) return { ok: false, files: 0, bytes: 0, error: "not_configured" };
+  if (!pinataConfigured()) return { ok: false, files: 0, bytes: 0, ms: 0, error: "not_configured" };
+  const t0 = Date.now();
   try {
     const r = await fetch(USAGE_URL, {
       headers: { accept: "application/json", ...authHeaders() },
       cache: "no-store",
       signal: AbortSignal.timeout(8000),
     });
+    const ms = Date.now() - t0;
     const j = (await r.json().catch(() => ({}))) as {
       pin_count?: number;
       pin_size_total?: number;
@@ -44,11 +47,11 @@ export async function pinataUsage(): Promise<PinataUsage> {
       message?: string;
     };
     if (!r.ok) {
-      return { ok: false, files: 0, bytes: 0, error: j.error?.reason || j.message || `http_${r.status}` };
+      return { ok: false, files: 0, bytes: 0, ms, error: j.error?.reason || j.message || `http_${r.status}` };
     }
-    return { ok: true, files: Number(j.pin_count) || 0, bytes: Number(j.pin_size_total) || 0 };
+    return { ok: true, files: Number(j.pin_count) || 0, bytes: Number(j.pin_size_total) || 0, ms };
   } catch (e) {
-    return { ok: false, files: 0, bytes: 0, error: e instanceof Error ? e.message : "fetch_failed" };
+    return { ok: false, files: 0, bytes: 0, ms: Date.now() - t0, error: e instanceof Error ? e.message : "fetch_failed" };
   }
 }
 

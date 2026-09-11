@@ -7,7 +7,7 @@ import { pinataConfigured } from "../lib/pinata";
 describe("health catalog", () => {
   it("covers every growth bottleneck with a next step", () => {
     const ids = SERVICES.map((s) => s.id);
-    assert.deepEqual(ids.sort(), ["helius", "pinata", "signer", "upstash", "vercel", "xai"].sort());
+    assert.deepEqual(ids.sort(), ["helius", "pinata", "signer", "smtp", "upstash", "vercel", "xai"].sort());
     for (const s of SERVICES) {
       const cur = tierOf(s);
       assert.ok(cur.limits);

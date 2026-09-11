@@ -1,7 +1,7 @@
 import { HELIUS_API_KEY, rpcUrl, XAI_API_KEY } from "../config";
 import { signerConfigured } from "../live/crypto";
 import { pinataConfigured, pinataUsage } from "../pinata";
-import { durableConfigured, durableKind } from "../persist";
+import { durableConfigured, durableKind, kvGetJson, KEYS } from "../persist";
 import { pushBounded } from "../store";
 import type { AppState } from "../types";
 import { SERVICES, tierOf, type HealthTiers, type ServiceId } from "./catalog";
@@ -12,8 +12,10 @@ export type HealthSample = {
   storeBytes: number;
   rpcMs: number | null;
   jupMs: number | null;
+  pinataMs?: number | null;
   pinataBytes: number | null;
   pinataFiles: number | null;
+  source?: "tick" | "probe";
 };
 
 export type SpeedRow = { id: string; label: string; ms: number | null; ok: boolean; detail?: string };
@@ -66,7 +68,7 @@ export async function probeHealth(state: AppState): Promise<{
   sample: HealthSample;
 }> {
   const rpc = rpcUrl();
-  const [rpcPing, jupPing, dexPing, pin] = await Promise.all([
+  const [rpcPing, jupPing, dexPing, pin, storePing] = await Promise.all([
     ping(rpc, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -75,24 +77,31 @@ export async function probeHealth(state: AppState): Promise<{
     ping("https://lite-api.jup.ag/swap/v1/quote?inputMint=So11111111111111111111111111111111111111112&outputMint=EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v&amount=1000000&slippageBps=50"),
     ping("https://api.dexscreener.com/latest/dex/search?q=SOL"),
     pinataUsage(),
+    durableConfigured()
+      ? (async () => {
+          const t0 = Date.now();
+          await kvGetJson(KEYS.ops);
+          return { ok: true, ms: Date.now() - t0 };
+        })()
+      : Promise.resolve({ ok: false, ms: 0 }),
   ]);
   const storeBytes = estimateStoreBytes(state);
   const tickAgeMs = state.lastTickAt ? Date.now() - state.lastTickAt : -1;
   const speeds: SpeedRow[] = [
-    { id: "rpc", label: "Solana RPC", ms: rpcPing.ms, ok: rpcPing.ok, detail: HELIUS_API_KEY ? "Helius" : "public" },
+    { id: "rpc", label: "Solana RPC", ms: rpcPing.ms, ok: rpcPing.ok, detail: HELIUS_API_KEY ? "Helius" : "public RPC" },
     { id: "jup", label: "Jupiter", ms: jupPing.ms, ok: jupPing.ok },
     { id: "dex", label: "Dexscreener", ms: dexPing.ms, ok: dexPing.ok },
     {
       id: "pinata",
       label: "Pinata",
-      ms: pin.ok ? 1 : pin.error === "not_configured" ? null : 0,
+      ms: pin.error === "not_configured" ? null : pin.ms,
       ok: pin.ok,
-      detail: pin.error,
+      detail: pin.error === "not_configured" ? "no JWT yet" : pin.error,
     },
     {
       id: "store",
       label: "Durable store",
-      ms: durableConfigured() ? 1 : null,
+      ms: storePing.ok ? storePing.ms : null,
       ok: durableConfigured(),
       detail: durableKind(),
     },
@@ -103,8 +112,10 @@ export async function probeHealth(state: AppState): Promise<{
     storeBytes,
     rpcMs: rpcPing.ok ? rpcPing.ms : null,
     jupMs: jupPing.ok ? jupPing.ms : null,
+    pinataMs: pin.ok ? pin.ms : null,
     pinataBytes: pin.ok ? pin.bytes : null,
     pinataFiles: pin.ok ? pin.files : null,
+    source: "probe",
   };
   return {
     speeds,
@@ -122,6 +133,7 @@ export function inferredTiers(): HealthTiers {
     helius: HELIUS_API_KEY ? "free" : "free",
     pinata: pinataConfigured() ? "free" : "free",
     xai: XAI_API_KEY ? "grok" : "none",
+    smtp: process.env.SMTP_HOST ? "set" : "none",
     signer: signerConfigured() ? "on" : "off",
   };
 }

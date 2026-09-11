@@ -518,10 +518,12 @@ export interface AppState {
     storeBytes: number;
     rpcMs: number | null;
     jupMs: number | null;
+    pinataMs?: number | null;
     pinataBytes: number | null;
     pinataFiles: number | null;
+    source?: "tick" | "probe";
   }[];
-  healthTiers?: Partial<Record<"vercel" | "upstash" | "helius" | "pinata" | "xai" | "signer", string>>;
+  healthTiers?: Partial<Record<"vercel" | "upstash" | "helius" | "pinata" | "xai" | "signer" | "smtp", string>>;
 }
 
 export type BacktestPoint = { t: number; equity: number };

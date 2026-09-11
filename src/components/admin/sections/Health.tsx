@@ -10,8 +10,10 @@ type Sample = {
   storeBytes: number;
   rpcMs: number | null;
   jupMs: number | null;
+  pinataMs?: number | null;
   pinataBytes: number | null;
   pinataFiles: number | null;
+  source?: "tick" | "probe";
 };
 type Tier = { id: string; label: string; price: string; limits: Record<string, number>; notes: string };
 type Svc = {
@@ -33,6 +35,7 @@ type Pack = {
   services: Svc[];
   log24h: Sample[];
   log7d: Sample[];
+  cronTicks24h?: number;
   keys: { helius: boolean; xai: boolean; pinata: boolean; signer: boolean };
 };
 
@@ -175,7 +178,11 @@ export function HealthSection() {
   const pinFiles = pack?.pinata.files || 0;
   const storeBytes = pack?.storeBytes || 0;
 
-  const tickFresh = (pack?.tickAgeMs || 0) >= 0 && (pack?.tickAgeMs || 9e99) < 90_000;
+  const vercel = pack?.services.find((s) => s.id === "vercel");
+  const cronCap = vercel?.tier.limits.cronPerDay || 1;
+  const cronTicks = pack?.cronTicks24h || 0;
+  const maxAgeMs = cronCap <= 2 ? 26 * 3600_000 : 180_000;
+  const tickFresh = Boolean(pack && pack.tickAgeMs >= 0 && pack.tickAgeMs < maxAgeMs);
 
   return (
     <div className="space-y-6">
@@ -208,23 +215,37 @@ export function HealthSection() {
       </div>
       {err && <p className="font-mono text-sm text-blood">{err}</p>}
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         <Gauge label="PINATA STORAGE" used={pinBytes} max={pinMax} unit="bytes" warn={!pack?.pinata.configured} />
         <Gauge label="PINATA FILES" used={pinFiles} max={pinFilesMax} unit="count" />
         <Gauge label="APP STATE" used={storeBytes} max={redisMax} unit="bytes" />
+        <Gauge label="CRON TICKS / 24H" used={cronTicks} max={Math.max(1, cronCap)} unit="count" />
         <div className="rounded-2xl border border-violet/20 bg-void/40 p-4">
           <div className="font-mono text-[10px] tracking-[0.2em] text-mute">ENGINE</div>
           <div className={`mt-4 font-display text-3xl ${tickFresh ? "text-acid" : "text-blood"}`}>
-            {pack ? (tickFresh ? "LIVE" : "STALE") : "…"}
+            {pack ? (tickFresh ? "ON SCHEDULE" : "LATE") : "…"}
           </div>
           <div className="mt-1 font-mono text-[11px] text-mute">
-            {pack && pack.tickAgeMs >= 0 ? `${Math.round(pack.tickAgeMs / 1000)}s since tick` : "no tick yet"}
+            {pack && pack.tickAgeMs >= 0
+              ? cronCap <= 2
+                ? `${Math.max(0, Math.round(pack.tickAgeMs / 3600_000))}h since last tick · Hobby is daily`
+                : `${Math.round(pack.tickAgeMs / 1000)}s since tick · Pro should be minutes`
+              : "no tick yet"}
             {data?.durableKind ? ` · store ${data.durableKind}` : ""}
+          </div>
+        </div>
+        <div className="rounded-2xl border border-violet/20 bg-void/40 p-4">
+          <div className="font-mono text-[10px] tracking-[0.2em] text-mute">KEYS ON THE SERVER</div>
+          <div className="mt-3 grid grid-cols-2 gap-2 font-mono text-[11px]">
+            <span className={pack?.keys.helius ? "text-acid" : "text-blood"}>Helius {pack?.keys.helius ? "on" : "off"}</span>
+            <span className={pack?.keys.pinata ? "text-acid" : "text-mute"}>Pinata {pack?.keys.pinata ? "on" : "off"}</span>
+            <span className={pack?.keys.signer ? "text-acid" : "text-mute"}>Signer {pack?.keys.signer ? "on" : "off"}</span>
+            <span className={pack?.keys.xai ? "text-acid" : "text-mute"}>xAI {pack?.keys.xai ? "on" : "off"}</span>
           </div>
         </div>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
         <div className="rounded-2xl border border-violet/20 bg-void/40 p-4">
           <div className="font-mono text-[10px] tracking-[0.2em] text-mute">RPC LATENCY · {range.toUpperCase()}</div>
           <Spark points={log} pick={(s) => s.rpcMs} color="#14f195" />
@@ -232,6 +253,10 @@ export function HealthSection() {
         <div className="rounded-2xl border border-violet/20 bg-void/40 p-4">
           <div className="font-mono text-[10px] tracking-[0.2em] text-mute">JUPITER · {range.toUpperCase()}</div>
           <Spark points={log} pick={(s) => s.jupMs} color="#80eaff" />
+        </div>
+        <div className="rounded-2xl border border-violet/20 bg-void/40 p-4">
+          <div className="font-mono text-[10px] tracking-[0.2em] text-mute">PINATA · {range.toUpperCase()}</div>
+          <Spark points={log} pick={(s) => s.pinataMs ?? null} color="#ffb020" />
         </div>
         <div className="rounded-2xl border border-violet/20 bg-void/40 p-4">
           <div className="font-mono text-[10px] tracking-[0.2em] text-mute">STATE SIZE · {range.toUpperCase()}</div>

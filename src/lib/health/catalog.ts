@@ -1,4 +1,4 @@
-export type ServiceId = "vercel" | "upstash" | "helius" | "pinata" | "xai" | "signer";
+export type ServiceId = "vercel" | "upstash" | "helius" | "pinata" | "xai" | "signer" | "smtp";
 
 export type ServiceTier = {
   id: string;
@@ -147,6 +147,29 @@ export const SERVICES: ServiceDef[] = [
         price: "usage",
         limits: { requestsPerDay: 10_000 },
         notes: "Key present. Watch spend on the xAI console.",
+      },
+    ],
+  },
+  {
+    id: "smtp",
+    name: "Email (SMTP)",
+    why: "Alert mail. No host means seats and alerts stay on-site only.",
+    defaultTier: "none",
+    tiers: [
+      {
+        id: "none",
+        label: "Off",
+        price: "$0",
+        limits: { mailPerDay: 0 },
+        notes: "Set SMTP_HOST to send alert mail.",
+        next: "set",
+      },
+      {
+        id: "set",
+        label: "Configured",
+        price: "your host",
+        limits: { mailPerDay: 500 },
+        notes: "Host is set. Watch the provider's send cap.",
       },
     ],
   },
