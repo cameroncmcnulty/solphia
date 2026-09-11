@@ -1,7 +1,6 @@
 /**
  * Pinata IPFS. Auth from env only — never commit keys.
- * Prefer PINATA_JWT (dashboard → API Keys). PINATA_API_KEY is accepted as Bearer
- * for older keys; PINATA_API_SECRET pairs with the legacy header pair.
+ * Prefer PINATA_JWT. PINATA_API_KEY + PINATA_API_SECRET is the header pair fallback.
  */
 
 const PIN_URL = "https://api.pinata.cloud/pinning/pinFileToIPFS";

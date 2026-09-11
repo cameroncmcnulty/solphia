@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { HELIUS_API_KEY, SITE_URL } from "@/lib/config";
 import { liveTradingEnabled } from "@/lib/liveFlag";
 import { signerConfigured } from "@/lib/live/crypto";
+import { pinataConfigured } from "@/lib/pinata";
 import { readyState, storeInfo } from "@/lib/store";
 import { heliusEnabled } from "@/lib/solana/connection";
 import { treasuryAddress } from "@/lib/treasury";
@@ -30,5 +31,6 @@ export async function GET() {
     treasurySet: Boolean(treasury),
     treasuryTail: treasury ? treasury.slice(-4) : null,
     signerReady: signerConfigured(),
+    pinata: pinataConfigured(),
   });
 }
