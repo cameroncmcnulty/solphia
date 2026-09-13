@@ -515,6 +515,20 @@ export interface AppState {
   devWallet?: string;
   /** Live CA. Empty until mint. Overrides SOLPHIA_TOKEN.mint when set. */
   sphaMint?: string;
+  foundationWallet?: string;
+  airdropWallet?: string;
+  lpWallet?: string;
+  sphaNetwork?: "devnet" | "mainnet-beta";
+  sphaLaunch?: {
+    mint: string;
+    network: "devnet" | "mainnet-beta";
+    name: string;
+    symbol: string;
+    supply: number;
+    launchedAt: number;
+    sigs: string[];
+    allocations: { id: string; wallet: string; tokens: number }[];
+  } | null;
   sphaSocials?: { x?: string; telegram?: string; discord?: string };
   healthLog?: {
     t: number;

@@ -112,6 +112,11 @@ export function buildAdminDesk(opts?: { light?: boolean }): AdminDesk {
     ownerWallet: s.ownerWallet || s.launch?.ownerWallet || "",
     devWallet: s.devWallet || "",
     sphaMint: sphaMintOf(s.sphaMint),
+    foundationWallet: s.foundationWallet || "",
+    airdropWallet: s.airdropWallet || "",
+    lpWallet: s.lpWallet || "",
+    sphaNetwork: s.sphaNetwork === "mainnet-beta" ? "mainnet-beta" : "devnet",
+    sphaLaunch: s.sphaLaunch || null,
     sphaSocials: {
       x: s.sphaSocials?.x || "",
       telegram: s.sphaSocials?.telegram || "",

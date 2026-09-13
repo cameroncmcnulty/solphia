@@ -55,17 +55,10 @@ export const ADMIN_NAV = [
     badge: (d: AdminDesk) => d.traders.length || null,
   },
   {
-    id: "spha",
-    group: "protocol",
-    label: "$SPHA",
-    hint: "Token page socials",
-    icon: "spha" as const,
-  },
-  {
     id: "launch",
     group: "protocol",
     label: "Launch pad",
-    hint: "Owner earnings and coins on the pad",
+    hint: "User coins on the pad",
     icon: "launch" as const,
     badge: (d: AdminDesk) => d.launchCount || null,
   },
@@ -108,9 +101,9 @@ export const ADMIN_NAV = [
   },
   {
     id: "wallets",
-    group: "access",
-    label: "Wallets",
-    hint: "Balances, treasury withdraw, trading keys",
+    group: "protocol",
+    label: "Project",
+    hint: "Wallets, SPHA launch, tokenomics",
     icon: "wallets" as const,
   },
 ] as const;
@@ -120,12 +113,19 @@ export type AdminNavItem = (typeof ADMIN_NAV)[number];
 
 export const ADMIN_SECTION_IDS: readonly AdminSectionId[] = ADMIN_NAV.map((n) => n.id);
 
-export function isAdminSection(id: string): id is AdminSectionId {
-  return (ADMIN_SECTION_IDS as readonly string[]).includes(id);
+export function isAdminSection(id: string): boolean {
+  return id === "spha" || (ADMIN_SECTION_IDS as readonly string[]).includes(id);
+}
+
+export function resolveAdminSection(id: string): AdminSectionId {
+  if (id === "spha") return "wallets";
+  if ((ADMIN_SECTION_IDS as readonly string[]).includes(id)) return id as AdminSectionId;
+  return "overview";
 }
 
 export function adminSection(id: string): AdminNavItem {
-  return ADMIN_NAV.find((n) => n.id === id) || ADMIN_NAV[0];
+  const resolved = resolveAdminSection(id);
+  return ADMIN_NAV.find((n) => n.id === resolved) || ADMIN_NAV[0];
 }
 
 export function filterAdminNav(q: string): AdminNavItem[] {

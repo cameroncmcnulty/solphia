@@ -4,9 +4,11 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import { WalletConnect } from "@/components/WalletConnect";
 import { FieldError, useConfirmErrors } from "@/components/form/confirm";
 import { walletOk } from "@/lib/launch/validate";
-import { planTreasuryWithdraw } from "@/lib/treasury/withdraw";
+import { planTreasuryWithdraw } from "@/lib/treasury/plan";
 import { signAndSendPhantom } from "@/lib/wallet/trading";
 import { useAdmin } from "../AdminProvider";
+import { SphaLaunch } from "../SphaLaunch";
+import { SphaSection } from "./Spha";
 import { Field, shortPk } from "../ui";
 
 type BalRow = { pk: string; sol: number };
@@ -228,8 +230,8 @@ export function WalletsSection() {
         <div className="font-mono text-[10px] tracking-[0.28em] text-mute">PROTOCOL WALLETS</div>
         <h2 className="mt-1 font-display text-3xl text-ghost">Where SOL sits</h2>
         <p className="mt-1 max-w-2xl text-sm text-mute">
-          Treasury takes seats and clip fees. Owner is the payout address. Trading wallets are bot-only — they never
-          hold the treasury key.
+          Treasury takes seats and clip fees. Dev holdings are $SPHA. Foundation / airdrop and LP wallets are for the
+          protocol mint. Trading wallets are bot-only.
         </p>
       </div>
 
@@ -281,6 +283,8 @@ export function WalletsSection() {
           solUsd={solUsd}
         />
       </div>
+
+      <SphaLaunch />
 
       <div className="rounded-3xl border border-acid/25 bg-acid/[0.04] p-5">
         <div className="font-mono text-[10px] tracking-[0.22em] text-acid">WITHDRAW TREASURY → OWNER</div>
@@ -592,6 +596,8 @@ export function WalletsSection() {
           </table>
         </div>
       </div>
+
+      <SphaSection />
     </div>
   );
 }

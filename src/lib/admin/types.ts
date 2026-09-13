@@ -137,6 +137,20 @@ export type AdminDesk = {
   ownerWallet: string;
   devWallet: string;
   sphaMint: string;
+  foundationWallet: string;
+  airdropWallet: string;
+  lpWallet: string;
+  sphaNetwork: "devnet" | "mainnet-beta";
+  sphaLaunch: {
+    mint: string;
+    network: "devnet" | "mainnet-beta";
+    name: string;
+    symbol: string;
+    supply: number;
+    launchedAt: number;
+    sigs: string[];
+    allocations: { id: string; wallet: string; tokens: number }[];
+  } | null;
   sphaSocials: { x: string; telegram: string; discord: string };
   ownerEarningsSol: number;
   launchCount: number;

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { ADMIN_GROUPS, ADMIN_NAV, filterAdminNav, isAdminSection } from "../lib/admin/nav";
+import { ADMIN_GROUPS, ADMIN_NAV, filterAdminNav, isAdminSection, resolveAdminSection } from "../lib/admin/nav";
 
 describe("admin nav", () => {
   it("has unique ids", () => {
@@ -15,7 +15,7 @@ describe("admin nav", () => {
 
   it("filters by label and group", () => {
     const spha = filterAdminNav("spha");
-    assert.ok(spha.some((n) => n.id === "spha"));
+    assert.ok(spha.some((n) => n.id === "wallets"));
     const proto = filterAdminNav("protocol");
     assert.ok(proto.some((n) => n.group === "protocol"));
     assert.equal(filterAdminNav("zzzz-nope").length, 0);
@@ -25,6 +25,8 @@ describe("admin nav", () => {
     assert.equal(isAdminSection("overview"), true);
     assert.equal(isAdminSection("users"), true);
     assert.equal(isAdminSection("health"), true);
+    assert.equal(isAdminSection("spha"), true);
+    assert.equal(resolveAdminSection("spha"), "wallets");
     assert.equal(isAdminSection("not-a-tool"), false);
   });
 });

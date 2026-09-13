@@ -8,6 +8,7 @@ import { SphaSocials } from "@/components/SphaSocials";
 import { SolphiaConstellation } from "@/components/SolphiaConstellation";
 import { solphiaTokenDesk } from "@/lib/token/solphia";
 import { Reveal } from "@/components/Reveal";
+import { Tokenomics } from "@/components/Tokenomics";
 
 function tick(symbol: string) {
   const s = symbol.replace(/^\$+/, "").replace(/\*+$/, "").trim();
@@ -78,6 +79,10 @@ export default function TokenPage() {
           {t.extra.map((s) => (
             <Bubble key={s.k} k={s.k} v={s.v} />
           ))}
+        </div>
+
+        <div className="mt-10">
+          <Tokenomics />
         </div>
 
         <div className="mt-10 flex flex-col gap-3 sm:flex-row">

@@ -50,7 +50,10 @@ export async function GET(req: NextRequest) {
     }))
     .filter((t) => t.tradingPubkey)
     .slice(0, 40);
-  const keys = [treasury, owner, dev, ...admins, ...traders.map((t) => t.tradingPubkey)];
+  const foundation = state.foundationWallet || "";
+  const airdrop = state.airdropWallet || foundation;
+  const lp = state.lpWallet || "";
+  const keys = [treasury, owner, dev, foundation, airdrop, lp, ...admins, ...traders.map((t) => t.tradingPubkey)];
   const bal = await solBalances(keys);
   const solUsd = lastPairPrices().solUsd || 0;
   let tokens = 0;
@@ -76,6 +79,9 @@ export async function GET(req: NextRequest) {
     treasury: { pk: treasury, sol: bal[treasury] || 0 },
     owner: { pk: owner, sol: owner ? bal[owner] || 0 : 0 },
     dev: { pk: dev, sol: dev ? bal[dev] || 0 : 0, tokens, mint, decimals },
+    foundation: { pk: foundation, sol: foundation ? bal[foundation] || 0 : 0 },
+    airdrop: { pk: airdrop, sol: airdrop ? bal[airdrop] || 0 : 0 },
+    lp: { pk: lp, sol: lp ? bal[lp] || 0 : 0 },
     admins: admins.map((pk) => ({ pk, sol: bal[pk] || 0 })),
     traders: traders.map((t) => ({ ...t, sol: bal[t.tradingPubkey] || 0 })),
   });

@@ -38,6 +38,10 @@ const Patch = z.object({
   ownerWallet: z.string().nullable().optional(),
   devWallet: z.string().nullable().optional(),
   sphaMint: z.string().nullable().optional(),
+  foundationWallet: z.string().nullable().optional(),
+  airdropWallet: z.string().nullable().optional(),
+  lpWallet: z.string().nullable().optional(),
+  sphaNetwork: z.enum(["devnet", "mainnet-beta"]).optional(),
   sphaSocials: z
     .object({
       x: z.string().max(160).optional(),
@@ -119,6 +123,21 @@ export async function POST(req: NextRequest) {
     await mutateState((s) => {
       s.sphaMint = next;
       pushBounded(s.audit, audit("admin", "spha_mint", next ? next : "cleared", ip), 400);
+    });
+  }
+  for (const key of ["foundationWallet", "airdropWallet", "lpWallet"] as const) {
+    if (body[key] === undefined) continue;
+    const next = (body[key] || "").trim();
+    if (next && !isSolanaAddress(next)) return NextResponse.json({ error: `bad_${key}` }, { status: 400 });
+    await mutateState((s) => {
+      s[key] = next;
+      pushBounded(s.audit, audit("admin", key, next ? next : "cleared", ip), 400);
+    });
+  }
+  if (body.sphaNetwork) {
+    await mutateState((s) => {
+      s.sphaNetwork = body.sphaNetwork;
+      pushBounded(s.audit, audit("admin", "spha_network", body.sphaNetwork!, ip), 400);
     });
   }
   if (body.sphaSocials) {

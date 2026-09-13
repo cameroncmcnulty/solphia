@@ -1,13 +1,10 @@
 "use client";
 
-import { FieldError, useConfirmErrors } from "@/components/form/confirm";
-import { walletOk } from "@/lib/launch/validate";
 import { useAdmin } from "../AdminProvider";
-import { Field, Mini, shortPk } from "../ui";
+import { Mini } from "../ui";
 
 export function LaunchSection() {
-  const { data, busy, patch, ownerPk, setOwnerPk, go } = useAdmin();
-  const err = useConfirmErrors<"ownerPk">();
+  const { data, go } = useAdmin();
   if (!data) return null;
 
   return (
@@ -18,46 +15,13 @@ export function LaunchSection() {
         <Mini k="Split" v="50 / 25 / 25" />
       </div>
       <section className="panel rounded-2xl p-5">
-        <div className="font-mono text-[10px] tracking-[0.3em] text-mute">OWNER EARNINGS · 25% OF LAUNCH SWAPS</div>
+        <div className="font-mono text-[10px] tracking-[0.3em] text-mute">USER LAUNCH PAD</div>
         <p className="mt-2 max-w-2xl text-sm text-mute">
-          Your pay bubble. 25% of every launch-curve swap lands here so you do not dip into project treasury. Creator keeps 50%.
-          Treasury keeps 25%. {data.launchCount} coins on the pad.
+          This is the public pad for coins other people launch. $SPHA itself launches from Project. Owner SOL from pad
+          swaps still accrues here: {data.ownerEarningsSol.toFixed(4)} SOL.
         </p>
-        <div className="mt-3 font-display text-3xl text-acid">{data.ownerEarningsSol.toFixed(4)} SOL</div>
-        <Field
-          field="ownerPk"
-          value={ownerPk}
-          error={err.errors.ownerPk}
-          onChange={(v) => {
-            setOwnerPk(v.trim());
-            err.clear("ownerPk");
-          }}
-          placeholder="Owner Solana address"
-          className="mt-3"
-        />
-        <FieldError error={err.errors.ownerPk} />
-        <div className="mt-3 flex flex-wrap gap-2">
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => {
-              if (ownerPk && !walletOk(ownerPk)) {
-                err.fail({ ownerPk: "That is not a valid Solana address." });
-                return;
-              }
-              err.ok();
-              patch({ ownerWallet: ownerPk || null });
-            }}
-            className="btn-acid rounded-full px-5 py-2 text-sm disabled:opacity-40"
-          >
-            Save owner wallet
-          </button>
-        </div>
-        <p className="mt-3 font-mono text-[11px] text-mute">
-          {data.ownerWallet ? `Pays to ${shortPk(data.ownerWallet, 6)}` : "No owner wallet set."}
-        </p>
-        <button type="button" onClick={() => go("wallets")} className="mt-3 font-mono text-[11px] text-acid">
-          Treasury withdraw and live balances →
+        <button type="button" onClick={() => go("wallets")} className="mt-4 font-mono text-[11px] text-acid">
+          Project wallets and $SPHA launcher →
         </button>
       </section>
     </div>

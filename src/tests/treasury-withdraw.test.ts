@@ -5,7 +5,7 @@ import {
   TREASURY_KEEP_LAMPORTS,
   TREASURY_MIN_SEND_LAMPORTS,
   planTreasuryWithdraw,
-} from "../lib/treasury/withdraw";
+} from "../lib/treasury/plan";
 
 describe("treasury withdraw plan", () => {
   it("keeps 0.002 SOL in the treasury on a 100 percent pull", () => {

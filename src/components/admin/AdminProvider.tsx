@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { AdminDesk } from "@/lib/admin/types";
-import { isAdminSection, type AdminSectionId } from "@/lib/admin/nav";
+import { resolveAdminSection, type AdminSectionId } from "@/lib/admin/nav";
 import { useOwner } from "@/lib/hooks";
 import { mergeDesk } from "./ui";
 
@@ -89,7 +89,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
   const applyHash = useCallback(() => {
     if (typeof window === "undefined") return;
     const h = window.location.hash.replace(/^#/, "");
-    setSection(isAdminSection(h) ? h : "overview");
+    setSection(resolveAdminSection(h));
   }, []);
 
   useEffect(() => {

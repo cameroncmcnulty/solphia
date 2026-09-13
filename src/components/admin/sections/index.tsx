@@ -6,7 +6,6 @@ import { useAdmin } from "../AdminProvider";
 import { OverviewSection } from "./Overview";
 import { DeskSection } from "./Desk";
 import { TradersSection } from "./Traders";
-import { SphaSection } from "./Spha";
 import { LaunchSection } from "./Launch";
 import { ContentSection } from "./Content";
 import { BacktestSection } from "./Backtest";
@@ -20,7 +19,6 @@ export const ADMIN_SECTIONS: Record<AdminSectionId, ComponentType> = {
   overview: OverviewSection,
   desk: DeskSection,
   traders: TradersSection,
-  spha: SphaSection,
   launch: LaunchSection,
   content: ContentSection,
   backtest: BacktestSection,
