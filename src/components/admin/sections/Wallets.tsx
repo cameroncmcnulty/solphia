@@ -15,6 +15,7 @@ type Pack = {
   hot: boolean;
   treasury: BalRow;
   owner: BalRow;
+  dev?: BalRow & { tokens?: number; mint?: string; decimals?: number };
   admins: BalRow[];
   traders: { owner: string; tradingPubkey: string; mode: string; killed: boolean; sol: number }[];
 };
@@ -26,6 +27,14 @@ function solStr(n: number) {
   if (n >= 100) return n.toFixed(2);
   if (n >= 1) return n.toFixed(3);
   return n.toFixed(4);
+}
+
+function tokStr(n: number) {
+  if (!(n > 0)) return "0";
+  if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(2)}B`;
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+  return n.toLocaleString(undefined, { maximumFractionDigits: 2 });
 }
 
 function usdStr(sol: number, px: number) {
@@ -68,6 +77,7 @@ function WalletCard({
   sol,
   solUsd,
   tone,
+  hold,
   children,
 }: {
   kicker: string;
@@ -77,6 +87,7 @@ function WalletCard({
   sol: number;
   solUsd: number;
   tone?: "acid" | "ghost";
+  hold?: { label: string; amount: string };
   children?: ReactNode;
 }) {
   return (
@@ -84,10 +95,23 @@ function WalletCard({
       <div className="font-mono text-[10px] tracking-[0.22em] text-mute">{kicker}</div>
       <div className="mt-1 font-display text-2xl text-ghost">{title}</div>
       <p className="mt-1 text-sm text-mute">{blurb}</p>
-      <div className={`mt-4 font-display text-3xl ${tone === "acid" ? "text-acid" : "text-ghost"}`}>
-        {solStr(sol)} <span className="text-lg text-mute">SOL</span>
-      </div>
-      <div className="font-mono text-[11px] text-mute">{usdStr(sol, solUsd).replace(/^ · /, "") || "—"}</div>
+      {hold ? (
+        <>
+          <div className={`mt-4 font-display text-3xl ${tone === "acid" ? "text-acid" : "text-ghost"}`}>
+            {hold.amount} <span className="text-lg text-mute">{hold.label}</span>
+          </div>
+          <div className="font-mono text-[11px] text-mute">
+            {solStr(sol)} SOL{usdStr(sol, solUsd)} gas
+          </div>
+        </>
+      ) : (
+        <>
+          <div className={`mt-4 font-display text-3xl ${tone === "acid" ? "text-acid" : "text-ghost"}`}>
+            {solStr(sol)} <span className="text-lg text-mute">SOL</span>
+          </div>
+          <div className="font-mono text-[11px] text-mute">{usdStr(sol, solUsd).replace(/^ · /, "") || "—"}</div>
+        </>
+      )}
       <div className="mt-3">
         <CopyPk pk={pk} />
       </div>
@@ -102,10 +126,26 @@ function WalletCard({
 }
 
 export function WalletsSection() {
-  const { data, busy, patch, adminPk, setAdminPk, treasuryPk, setTreasuryPk, ownerPk, setOwnerPk, owner } = useAdmin();
+  const {
+    data,
+    busy,
+    patch,
+    adminPk,
+    setAdminPk,
+    treasuryPk,
+    setTreasuryPk,
+    ownerPk,
+    setOwnerPk,
+    devPk,
+    setDevPk,
+    sphaMint,
+    setSphaMint,
+    owner,
+  } = useAdmin();
   const adminErr = useConfirmErrors<"adminPk">();
   const treasErr = useConfirmErrors<"treasuryPk">();
   const ownErr = useConfirmErrors<"ownerPk">();
+  const devErr = useConfirmErrors<"devPk" | "sphaMint">();
   const [pack, setPack] = useState<Pack | null>(null);
   const [kind, setKind] = useState<"pct" | "sol">("pct");
   const [pct, setPct] = useState<number>(25);
@@ -122,7 +162,7 @@ export function WalletsSection() {
 
   useEffect(() => {
     loadBal().catch(() => {});
-  }, [loadBal, data?.treasury, data?.ownerWallet]);
+  }, [loadBal, data?.treasury, data?.ownerWallet, data?.devWallet, data?.sphaMint]);
 
   const treasSol = pack?.treasury.sol ?? 0;
   const solUsd = pack?.solUsd || data?.prices.solUsd || 0;
@@ -193,7 +233,7 @@ export function WalletsSection() {
         </p>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <WalletCard
           kicker="TREASURY · IN"
           title="Treasury"
@@ -213,6 +253,25 @@ export function WalletsSection() {
           sol={pack?.owner.sol ?? 0}
           solUsd={solUsd}
         />
+        <WalletCard
+          kicker="DEV · $SPHA"
+          title="Dev holdings"
+          blurb="Team $SPHA lives here. Separate from treasury SOL and from trading keys."
+          pk={pack?.dev?.pk || data.devWallet}
+          sol={pack?.dev?.sol ?? 0}
+          solUsd={solUsd}
+          tone="acid"
+          hold={{
+            label: "$SPHA",
+            amount: pack?.dev?.mint ? tokStr(pack.dev.tokens || 0) : "—",
+          }}
+        >
+          {pack?.dev?.mint ? (
+            <p className="mt-2 font-mono text-[10px] text-mute">CA {shortPk(pack.dev.mint, 6)}</p>
+          ) : (
+            <p className="mt-2 font-mono text-[10px] text-mute">Set the CA below when the mint is live.</p>
+          )}
+        </WalletCard>
         <WalletCard
           kicker="ADMIN · FREE SEAT"
           title="Founder seats"
@@ -355,6 +414,78 @@ export function WalletsSection() {
                 Use connected
               </button>
             )}
+          </div>
+        </div>
+
+        <div className="rounded-3xl border border-violet/20 bg-void/40 p-5 lg:col-span-2">
+          <div className="font-mono text-[10px] tracking-[0.2em] text-mute">SET DEV · $SPHA HOLDINGS</div>
+          <p className="mt-1 text-sm text-mute">
+            This wallet holds team $SPHA. Not the treasury. Paste the CA when the mint is live so the card can count tokens.
+          </p>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <div>
+              <Field
+                field="devPk"
+                value={devPk}
+                error={devErr.errors.devPk}
+                onChange={(v) => {
+                  setDevPk(v.trim());
+                  devErr.clear("devPk");
+                }}
+                placeholder="Dev wallet address"
+              />
+              <FieldError error={devErr.errors.devPk} />
+            </div>
+            <div>
+              <Field
+                field="sphaMint"
+                value={sphaMint}
+                error={devErr.errors.sphaMint}
+                onChange={(v) => {
+                  setSphaMint(v.trim());
+                  devErr.clear("sphaMint");
+                }}
+                placeholder="SPHA mint (CA)"
+              />
+              <FieldError error={devErr.errors.sphaMint} />
+            </div>
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => {
+                const issues: Partial<Record<"devPk" | "sphaMint", string>> = {};
+                if (devPk && !walletOk(devPk)) issues.devPk = "That is not a valid Solana address.";
+                if (sphaMint && !walletOk(sphaMint)) issues.sphaMint = "That is not a valid mint address.";
+                if (Object.keys(issues).length) {
+                  devErr.fail(issues);
+                  return;
+                }
+                devErr.ok();
+                patch({ devWallet: devPk || null, sphaMint: sphaMint || null });
+              }}
+              className="btn-acid rounded-full px-5 py-2 text-sm disabled:opacity-40"
+            >
+              Save dev wallet
+            </button>
+            {owner && (
+              <button type="button" disabled={busy} onClick={() => setDevPk(owner)} className="btn-ghost rounded-full px-5 py-2 text-sm">
+                Fill connected
+              </button>
+            )}
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => {
+                setDevPk("");
+                setSphaMint("");
+                patch({ devWallet: null, sphaMint: null });
+              }}
+              className="btn-ghost rounded-full px-5 py-2 text-sm"
+            >
+              Clear
+            </button>
           </div>
         </div>
       </div>

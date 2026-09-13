@@ -511,6 +511,10 @@ export interface AppState {
   backtestLev3?: BacktestReport | null;
   launch?: import("./launch/engine").LaunchBook;
   ownerWallet?: string;
+  /** Wallet that holds the team's $SPHA. Not treasury, not trading. */
+  devWallet?: string;
+  /** Live CA. Empty until mint. Overrides SOLPHIA_TOKEN.mint when set. */
+  sphaMint?: string;
   sphaSocials?: { x?: string; telegram?: string; discord?: string };
   healthLog?: {
     t: number;

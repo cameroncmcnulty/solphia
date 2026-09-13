@@ -29,6 +29,10 @@ type AdminContextValue = {
   setTreasuryPk: (v: string) => void;
   ownerPk: string;
   setOwnerPk: (v: string) => void;
+  devPk: string;
+  setDevPk: (v: string) => void;
+  sphaMint: string;
+  setSphaMint: (v: string) => void;
   sphaX: string;
   setSphaX: (v: string) => void;
   sphaTg: string;
@@ -69,6 +73,8 @@ export function AdminProvider({ children }: { children: ReactNode }) {
   const [adminPk, setAdminPk] = useState("");
   const [treasuryPk, setTreasuryPk] = useState("");
   const [ownerPk, setOwnerPk] = useState("");
+  const [devPk, setDevPk] = useState("");
+  const [sphaMint, setSphaMint] = useState("");
   const [sphaX, setSphaX] = useState("");
   const [sphaTg, setSphaTg] = useState("");
   const [sphaDc, setSphaDc] = useState("");
@@ -103,6 +109,8 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     setData((prev) => mergeDesk(prev, next));
     setTreasuryPk(next.treasury || "");
     setOwnerPk(next.ownerWallet || "");
+    setDevPk(next.devWallet || "");
+    setSphaMint(next.sphaMint || "");
     setSphaX(next.sphaSocials?.x || "");
     setSphaTg(next.sphaSocials?.telegram || "");
     setSphaDc(next.sphaSocials?.discord || "");
@@ -239,6 +247,10 @@ export function AdminProvider({ children }: { children: ReactNode }) {
       setTreasuryPk,
       ownerPk,
       setOwnerPk,
+      devPk,
+      setDevPk,
+      sphaMint,
+      setSphaMint,
       sphaX,
       setSphaX,
       sphaTg,
@@ -276,6 +288,8 @@ export function AdminProvider({ children }: { children: ReactNode }) {
       adminPk,
       treasuryPk,
       ownerPk,
+      devPk,
+      sphaMint,
       sphaX,
       sphaTg,
       sphaDc,

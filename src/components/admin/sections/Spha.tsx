@@ -6,7 +6,7 @@ import { useAdmin } from "../AdminProvider";
 import { Field } from "../ui";
 
 export function SphaSection() {
-  const { data, busy, patch, sphaX, setSphaX, sphaTg, setSphaTg, sphaDc, setSphaDc } = useAdmin();
+  const { data, busy, patch, sphaX, setSphaX, sphaTg, setSphaTg, sphaDc, setSphaDc, go } = useAdmin();
   const err = useConfirmErrors<"x" | "telegram" | "discord">();
   if (!data) return null;
 
@@ -77,6 +77,16 @@ export function SphaSection() {
       >
         Save $SPHA socials
       </button>
+      <div className="mt-6 rounded-2xl border border-violet/20 bg-void/30 p-4">
+        <div className="font-mono text-[10px] tracking-[0.2em] text-mute">DEV WALLET · HOLDINGS</div>
+        <p className="mt-1 text-sm text-mute">
+          Team $SPHA sits on a separate dev wallet, not treasury. CA {data.sphaMint ? "is set" : "pending"}.
+        </p>
+        <p className="mt-2 font-mono text-[11px] text-ghost">{data.devWallet || "No dev wallet yet."}</p>
+        <button type="button" onClick={() => go("wallets")} className="mt-2 font-mono text-[11px] text-acid">
+          Manage on Wallets →
+        </button>
+      </div>
     </section>
   );
 }

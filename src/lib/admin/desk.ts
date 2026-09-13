@@ -11,6 +11,7 @@ import { loadState, storeInfo } from "../store";
 import { latestBacktest } from "../pair/backtest";
 import { lastPairDesk, lastPairPrices, publicBook } from "../tick";
 import { treasuryAddress } from "../treasury";
+import { sphaMintOf } from "../token/solphia";
 import { seatSol } from "../seat";
 import { promoDataUrl, promoViewToken } from "./promoFile";
 import { bookHoldingUsd, sumWindows, tradingNow, uniqueWallets } from "./stats";
@@ -109,6 +110,8 @@ export function buildAdminDesk(opts?: { light?: boolean }): AdminDesk {
     treasury,
     treasurySet: Boolean(treasury),
     ownerWallet: s.ownerWallet || s.launch?.ownerWallet || "",
+    devWallet: s.devWallet || "",
+    sphaMint: sphaMintOf(s.sphaMint),
     sphaSocials: {
       x: s.sphaSocials?.x || "",
       telegram: s.sphaSocials?.telegram || "",

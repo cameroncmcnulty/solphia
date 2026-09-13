@@ -15,7 +15,7 @@ function tick(symbol: string) {
 }
 
 export default function TokenPage() {
-  const t = solphiaTokenDesk();
+  const [t, setT] = useState(() => solphiaTokenDesk());
   const [socials, setSocials] = useState({ x: "", telegram: "", discord: "" });
 
   useEffect(() => {
@@ -23,6 +23,7 @@ export default function TokenPage() {
       .then((r) => r.json())
       .then((j) => {
         if (j?.socials) setSocials({ x: j.socials.x || "", telegram: j.socials.telegram || "", discord: j.socials.discord || "" });
+        if (typeof j?.mint === "string") setT(solphiaTokenDesk(j.mint));
       })
       .catch(() => {});
   }, []);

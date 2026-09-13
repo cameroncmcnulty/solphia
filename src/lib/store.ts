@@ -64,6 +64,8 @@ export function emptyState(): AppState {
     backtestLev3: null,
     launch: emptyLaunchBook(),
     ownerWallet: "",
+    devWallet: "",
+    sphaMint: "",
     sphaSocials: { x: "", telegram: "", discord: "" },
     healthLog: [],
     healthTiers: {},
@@ -117,6 +119,8 @@ function hydrateFromRaw(raw: AppState): AppState {
         ? { ...emptyLaunchBook(), ...raw.launch, accounts: raw.launch.accounts || {} }
         : emptyLaunchBook(),
     ownerWallet: raw.ownerWallet || raw.launch?.ownerWallet || "",
+    devWallet: raw.devWallet || "",
+    sphaMint: raw.sphaMint || "",
     sphaSocials: {
       x: raw.sphaSocials?.x || "",
       telegram: raw.sphaSocials?.telegram || "",

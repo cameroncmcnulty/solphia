@@ -36,6 +36,8 @@ const Patch = z.object({
   removeAdminWallet: z.string().optional(),
   treasuryWallet: z.string().nullable().optional(),
   ownerWallet: z.string().nullable().optional(),
+  devWallet: z.string().nullable().optional(),
+  sphaMint: z.string().nullable().optional(),
   sphaSocials: z
     .object({
       x: z.string().max(160).optional(),
@@ -101,6 +103,22 @@ export async function POST(req: NextRequest) {
       s.ownerWallet = next;
       s.launch.ownerWallet = next;
       pushBounded(s.audit, audit("admin", "owner_wallet", next ? next : "cleared", ip), 400);
+    });
+  }
+  if (body.devWallet !== undefined) {
+    const next = (body.devWallet || "").trim();
+    if (next && !isSolanaAddress(next)) return NextResponse.json({ error: "bad_dev_wallet" }, { status: 400 });
+    await mutateState((s) => {
+      s.devWallet = next;
+      pushBounded(s.audit, audit("admin", "dev_wallet", next ? next : "cleared", ip), 400);
+    });
+  }
+  if (body.sphaMint !== undefined) {
+    const next = (body.sphaMint || "").trim();
+    if (next && !isSolanaAddress(next)) return NextResponse.json({ error: "bad_spha_mint" }, { status: 400 });
+    await mutateState((s) => {
+      s.sphaMint = next;
+      pushBounded(s.audit, audit("admin", "spha_mint", next ? next : "cleared", ip), 400);
     });
   }
   if (body.sphaSocials) {

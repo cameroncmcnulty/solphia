@@ -21,8 +21,13 @@ function dash(n: number | null | undefined, fmt?: (n: number) => string) {
   return fmt ? fmt(n) : String(n);
 }
 
-export function solphiaTokenDesk() {
-  const mint = (SOLPHIA_TOKEN.mint || "").trim();
+/** Admin can set the CA in state; code default is SOLPHIA_TOKEN.mint. */
+export function sphaMintOf(stored?: string | null): string {
+  return (stored || SOLPHIA_TOKEN.mint || "").trim();
+}
+
+export function solphiaTokenDesk(storedMint?: string | null) {
+  const mint = sphaMintOf(storedMint);
   return {
     name: SOLPHIA_TOKEN.name,
     symbol: SOLPHIA_TOKEN.symbol,

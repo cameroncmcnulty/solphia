@@ -8,6 +8,7 @@ import { treasuryAddress } from "@/lib/treasury";
 import { planTreasuryWithdraw, treasuryHot, treasuryKeypair } from "@/lib/treasury/withdraw";
 import { audit, loadAllTraders, mutateState, pushBounded, readyState } from "@/lib/store";
 import { lastPairPrices } from "@/lib/tick";
+import { sphaMintOf } from "@/lib/token/solphia";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -37,6 +38,8 @@ export async function GET(req: NextRequest) {
   await loadAllTraders(state);
   const treasury = treasuryAddress();
   const owner = state.ownerWallet || state.launch?.ownerWallet || "";
+  const dev = state.devWallet || "";
+  const mint = sphaMintOf(state.sphaMint);
   const admins = state.adminWallets || [];
   const traders = Object.values(state.traders || {})
     .map((t) => ({
@@ -47,15 +50,32 @@ export async function GET(req: NextRequest) {
     }))
     .filter((t) => t.tradingPubkey)
     .slice(0, 40);
-  const keys = [treasury, owner, ...admins, ...traders.map((t) => t.tradingPubkey)];
+  const keys = [treasury, owner, dev, ...admins, ...traders.map((t) => t.tradingPubkey)];
   const bal = await solBalances(keys);
   const solUsd = lastPairPrices().solUsd || 0;
+  let tokens = 0;
+  let decimals = 9;
+  if (dev && mint && isSolanaAddress(dev) && isSolanaAddress(mint)) {
+    try {
+      const conn = new Connection(rpcUrl(), { commitment: "confirmed" });
+      const rows = await conn.getParsedTokenAccountsByOwner(new PublicKey(dev), { mint: new PublicKey(mint) });
+      for (const row of rows.value) {
+        const info = row.account.data.parsed?.info?.tokenAmount;
+        if (!info) continue;
+        decimals = Number(info.decimals) || decimals;
+        tokens += Number(info.uiAmount) || 0;
+      }
+    } catch {
+      tokens = 0;
+    }
+  }
   return NextResponse.json({
     ok: true,
     solUsd,
     hot: treasuryHot(),
     treasury: { pk: treasury, sol: bal[treasury] || 0 },
     owner: { pk: owner, sol: owner ? bal[owner] || 0 : 0 },
+    dev: { pk: dev, sol: dev ? bal[dev] || 0 : 0, tokens, mint, decimals },
     admins: admins.map((pk) => ({ pk, sol: bal[pk] || 0 })),
     traders: traders.map((t) => ({ ...t, sol: bal[t.tradingPubkey] || 0 })),
   });

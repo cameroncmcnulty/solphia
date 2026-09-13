@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { readyState } from "@/lib/store";
-import { SOLPHIA_TOKEN } from "@/lib/token/solphia";
+import { SOLPHIA_TOKEN, sphaMintOf } from "@/lib/token/solphia";
 
 export const dynamic = "force-dynamic";
 
@@ -10,7 +10,7 @@ export async function GET() {
   return NextResponse.json({
     name: SOLPHIA_TOKEN.name,
     symbol: SOLPHIA_TOKEN.symbol,
-    mint: SOLPHIA_TOKEN.mint,
+    mint: sphaMintOf(s.sphaMint),
     socials: {
       x: socials.x || "",
       telegram: socials.telegram || "",
