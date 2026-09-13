@@ -110,7 +110,7 @@ export const ADMIN_NAV = [
     id: "wallets",
     group: "access",
     label: "Wallets",
-    hint: "Admin wallets and treasury",
+    hint: "Balances, treasury withdraw, trading keys",
     icon: "wallets" as const,
   },
 ] as const;

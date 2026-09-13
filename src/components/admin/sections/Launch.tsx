@@ -6,7 +6,7 @@ import { useAdmin } from "../AdminProvider";
 import { Field, Mini, shortPk } from "../ui";
 
 export function LaunchSection() {
-  const { data, busy, patch, ownerPk, setOwnerPk } = useAdmin();
+  const { data, busy, patch, ownerPk, setOwnerPk, go } = useAdmin();
   const err = useConfirmErrors<"ownerPk">();
   if (!data) return null;
 
@@ -56,6 +56,9 @@ export function LaunchSection() {
         <p className="mt-3 font-mono text-[11px] text-mute">
           {data.ownerWallet ? `Pays to ${shortPk(data.ownerWallet, 6)}` : "No owner wallet set."}
         </p>
+        <button type="button" onClick={() => go("wallets")} className="mt-3 font-mono text-[11px] text-acid">
+          Treasury withdraw and live balances →
+        </button>
       </section>
     </div>
   );
