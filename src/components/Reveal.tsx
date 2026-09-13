@@ -23,17 +23,22 @@ export function Reveal({
       setOn(true);
       return;
     }
+    const show = () => setOn(true);
     const io = new IntersectionObserver(
       (entries) => {
-        if (entries.some((e) => e.isIntersecting)) {
-          setOn(true);
+        if (entries.some((e) => e.isIntersecting || e.intersectionRatio > 0)) {
+          show();
           io.disconnect();
         }
       },
-      { threshold: 0.12, rootMargin: "0px 0px -8% 0px" },
+      { threshold: [0, 0.01, 0.08], rootMargin: "80px 0px 80px 0px" },
     );
     io.observe(el);
-    return () => io.disconnect();
+    const fallback = window.setTimeout(show, 900);
+    return () => {
+      io.disconnect();
+      window.clearTimeout(fallback);
+    };
   }, []);
 
   return (

@@ -47,8 +47,14 @@ export function BacktestBrochure() {
       .then((j) => {
         if (stop) return;
         const pack = j?.reports as Partial<Record<1 | 2 | 3, PublicBt>> | undefined;
-        if (pack?.[1] && pack?.[2] && pack?.[3]) {
-          setReports({ 1: pack[1], 2: pack[2], 3: pack[3] });
+        const next: Partial<Record<1 | 2 | 3, PublicBt>> = {};
+        if (pack?.[1]?.ready) next[1] = pack[1];
+        if (pack?.[2]?.ready) next[2] = pack[2];
+        if (pack?.[3]?.ready) next[3] = pack[3];
+        if (next[1] || next[2] || next[3]) {
+          setReports(next);
+          if (!next[1] && next[2]) setLev(2);
+          else if (!next[1] && !next[2] && next[3]) setLev(3);
           return;
         }
         if (j?.ready && j?.curve) setReports({ 1: j, 2: j, 3: j });
@@ -105,8 +111,14 @@ export function BacktestBrochure() {
           </div>
         </div>
 
-        <div className="mt-8 min-h-[180px]">
-          {ready && data?.curve ? <EquityCurve curve={data.curve} up={up} /> : <div className="h-48 rounded-2xl bg-void/50" />}
+        <div className="mt-8 min-h-[160px] sm:min-h-[200px]">
+          {ready && data?.curve ? (
+            <EquityCurve curve={data.curve} up={up} />
+          ) : (
+            <div className="flex h-40 items-center justify-center rounded-2xl bg-void/50 font-mono text-[11px] text-mute sm:h-48">
+              Loading the last engine replay…
+            </div>
+          )}
         </div>
 
         <div className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-4">

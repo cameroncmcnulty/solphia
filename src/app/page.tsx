@@ -12,9 +12,9 @@ export default function Home() {
     <main className="relative">
       <section className="relative">
         <div className="mx-auto grid max-w-6xl items-center gap-8 px-4 pt-4 md:px-12 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] lg:min-h-[78vh] lg:py-10">
-          <div className="relative order-1 mx-auto w-full max-w-[220px] sm:max-w-[360px] lg:order-2 lg:max-w-[500px]">
+          <div className="relative order-1 mx-auto w-full max-w-[20rem] overflow-visible sm:max-w-[380px] lg:order-2 lg:max-w-[520px]">
             <HoverMarks />
-            <div className="mark-float">
+            <div className="mark-float px-8 sm:px-10">
               <SolphiaFace mode="hero" />
             </div>
           </div>
@@ -105,7 +105,7 @@ export default function Home() {
         </Reveal>
       </section>
 
-      <Reveal><BacktestBrochure /></Reveal>
+      <BacktestBrochure />
 
       <section className="px-4 py-10 md:px-12">
         <Reveal>

@@ -22,8 +22,8 @@ export const SERVICES: ServiceDef[] = [
   {
     id: "vercel",
     name: "Vercel",
-    why: "Hosts the site, APIs, and cron. Hobby only fires the bot once a day.",
-    defaultTier: "hobby",
+    why: "Hosts the site, APIs, and cron. Pro minute cron keeps the bot clipping with the tab closed.",
+    defaultTier: "pro",
     tiers: [
       {
         id: "hobby",

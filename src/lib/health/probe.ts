@@ -157,7 +157,7 @@ export async function probeHealth(state: AppState): Promise<{
 
 export function inferredTiers(): HealthTiers {
   return {
-    vercel: process.env.VERCEL_ENV && process.env.VERCEL ? "hobby" : "hobby",
+    vercel: "pro",
     upstash: durableKind() === "upstash" ? "free" : durableKind() === "blob" ? "payg" : "free",
     helius: HELIUS_API_KEY ? "free" : "free",
     pinata: pinataConfigured() ? "free" : "free",

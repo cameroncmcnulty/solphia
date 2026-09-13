@@ -14,6 +14,9 @@ describe("health catalog", () => {
       assert.ok(cur.limits);
       assert.ok(cur.label);
     }
+    const vercel = SERVICES.find((s) => s.id === "vercel")!;
+    assert.equal(tierOf(vercel).id, "pro");
+    assert.equal(tierOf(vercel).limits.cronPerDay, 1440);
     const pin = SERVICES.find((s) => s.id === "pinata")!;
     assert.equal(tierOf(pin, "free").limits.storageGb, 1);
     assert.equal(tierOf(pin, "picnic").limits.storageGb, 1024);
