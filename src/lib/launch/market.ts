@@ -1,4 +1,5 @@
 import { ingestPublicTape } from "../feeds";
+import { isNativeSolSnapshot } from "../feeds/normalize";
 import { scoreToken } from "../risk/engine";
 import type { TokenSnapshot } from "../types";
 import { smoothSpark } from "./chart";
@@ -100,6 +101,8 @@ export function filterMarketSnapshots(tokens: TokenSnapshot[], solUsd: number): 
   const scored: MarketRow[] = [];
   for (const t of tokens) {
     if (!t.mint || t.mint.length < 32) continue;
+    if (isNativeSolSnapshot(t)) continue;
+    if (!t.symbol || t.symbol === "???" || !t.name) continue;
     if (
       !marketPasses({
         born: false,

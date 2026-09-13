@@ -819,8 +819,10 @@ function CoinCard({
       <TokenArt src={c.image} mint={c.mint} label={c.symbol} className="relative z-[1] h-11 w-11 shrink-0 rounded-xl" />
       <div className="relative z-[1] min-w-0 flex-1">
         <div className="flex min-w-0 items-center gap-2">
-          <span className="truncate font-display text-base text-ghost sm:text-lg">{tick(c.symbol)}</span>
-          <span className="hidden truncate text-sm text-mute sm:inline">{c.name}</span>
+          <span className="truncate font-display text-base text-ghost sm:text-lg">{tick(c.symbol) || c.name}</span>
+          {c.name && c.name.replace(/^\$+/, "").toUpperCase() !== (c.symbol || "").replace(/^\$+/, "").toUpperCase() ? (
+            <span className="truncate text-xs text-mute sm:text-sm">{c.name}</span>
+          ) : null}
           <span className={`shrink-0 rounded-full px-1.5 py-0.5 font-mono text-[9px] ${c.born ? "bg-acid/15 text-acid" : "bg-white/10 text-mute"}`}>
             {venueLabel(c)}
           </span>

@@ -1,7 +1,7 @@
 import type { CreatorStat, FeedHealth, TokenSnapshot } from "../types";
 import { copyTape, markMints, type LeaderBook } from "../copy/flow";
 import { getJson, num, str } from "./http";
-import { blankSnapshot, dexToVenue, mergeSnapshots } from "./normalize";
+import { blankSnapshot, dexToVenue, isNativeSolSnapshot, mergeSnapshots, WSOL_MINT } from "./normalize";
 
 interface PumpCoin {
   mint: string;
@@ -122,7 +122,7 @@ function fromDex(pair: DexPair): TokenSnapshot | null {
   if (pair.chainId !== "solana") return null;
   const base = pair.baseToken;
   if (!base?.address) return null;
-  if (base.address === "So11111111111111111111111111111111111111112") return null;
+  if (isNativeSolSnapshot({ mint: base.address, symbol: base.symbol, name: base.name })) return null;
   const buys = num(pair.txns?.h1?.buys);
   const sells = num(pair.txns?.h1?.sells);
   const socials: TokenSnapshot["socials"] = {};
@@ -167,7 +167,7 @@ function fromGecko(pool: GeckoPool): TokenSnapshot | null {
   const attrs = pool.attributes || {};
   const name = str(attrs.name);
   const baseId = str(pool.relationships?.base_token?.data?.id).replace(/^solana_/, "");
-  if (!baseId || baseId.includes("so11111111111111111111111111111111111111112")) return null;
+  if (!baseId || isNativeSolSnapshot({ mint: baseId, symbol: name.split(" / ")[0], name })) return null;
   const dex = str(pool.relationships?.dex?.data?.id);
   const created = Date.parse(str(attrs.pool_created_at)) || Date.now();
   const txnsH1 = (attrs.transactions as { h1?: { buys?: number; sells?: number; buyers?: number } } | undefined)?.h1;
@@ -237,7 +237,7 @@ export async function solPriceUsd(): Promise<number> {
   );
   if (cg.ok && cg.data?.solana?.usd) return cg.data.solana.usd;
   const ds = await getJson<{ pairs?: DexPair[] }>(
-    "https://api.dexscreener.com/latest/dex/tokens/So11111111111111111111111111111111111111112",
+    `https://api.dexscreener.com/latest/dex/tokens/${WSOL_MINT}`,
   );
   const p = ds.data?.pairs?.find((x) => x.quoteToken?.symbol === "USDC" || x.quoteToken?.symbol === "USDT");
   return p ? num(p.priceUsd, 100) : 100;
@@ -293,7 +293,7 @@ export async function ingestMarket(
       rows.forEach((row) => put(fromLaunch(row)));
     })(),
     (async () => {
-      const r = await getJson<{ pairs?: DexPair[] }>("https://api.dexscreener.com/latest/dex/search?q=SOL");
+      const r = await getJson<{ pairs?: DexPair[] }>("https://api.dexscreener.com/latest/dex/search?q=pump");
       const pairs = (r.data?.pairs || []).filter((p) => p.chainId === "solana");
       health.push({ source: "dexscreener", ok: r.ok, ms: r.ms, count: pairs.length, error: r.error, at: Date.now() });
       pairs.slice(0, 40).forEach((p) => put(fromDex(p)));
@@ -329,7 +329,7 @@ export async function ingestMarket(
     }
   }
   const tokens = applyCreators([...map.values()], creators)
-    .filter((t) => t.mint.length >= 32)
+    .filter((t) => t.mint.length >= 32 && !isNativeSolSnapshot(t) && t.symbol && t.symbol !== "???")
     .sort((a, b) => (b.volume1h || b.marketCapUsd) - (a.volume1h || a.marketCapUsd));
 
   return { tokens, health, solUsd, copyBook: tape.book };
@@ -352,10 +352,18 @@ export async function ingestPublicTape(): Promise<{ tokens: TokenSnapshot[]; sol
       "https://frontend-api-v3.pump.fun/coins?offset=0&limit=40&sort=last_trade_timestamp&order=desc&includeNsfw=false",
       4500,
     ).then((r) => (r.data || []).forEach((c) => put(fromPump(c)))),
-    getJson<{ pairs?: DexPair[] }>("https://api.dexscreener.com/latest/dex/search?q=SOL", 4500).then((r) => {
+    getJson<{ pairs?: DexPair[] }>("https://api.dexscreener.com/latest/dex/search?q=pump", 4500).then((r) => {
       const pairs = (r.data?.pairs || []).filter((p) => p.chainId === "solana");
       pairs.slice(0, 50).forEach((p) => put(fromDex(p)));
     }),
+    getJson<{ chainId?: string; tokenAddress?: string; icon?: string }[]>("https://api.dexscreener.com/token-boosts/latest/v1", 4500).then(
+      (r) => {
+        for (const row of r.data || []) {
+          if (row.chainId !== "solana" || !row.tokenAddress) continue;
+          put(blankSnapshot({ mint: row.tokenAddress, name: "", symbol: "", image: row.icon }));
+        }
+      },
+    ),
   ];
   const [solUsd] = await Promise.all([solPriceUsd().catch(() => 100), Promise.allSettled(jobs)]);
   const mints = [...map.keys()];
@@ -369,5 +377,8 @@ export async function ingestPublicTape(): Promise<{ tokens: TokenSnapshot[]; sol
       pairs.forEach((p) => put(fromDex(p)));
     }),
   );
-  return { tokens: [...map.values()].filter((t) => t.mint.length >= 32), solUsd: solUsd || 100 };
+  return {
+    tokens: [...map.values()].filter((t) => t.mint.length >= 32 && !isNativeSolSnapshot(t) && t.symbol && t.symbol !== "???"),
+    solUsd: solUsd || 100,
+  };
 }

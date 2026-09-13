@@ -1,5 +1,21 @@
 import type { TokenSnapshot, Venue } from "../types";
 
+export const WSOL_MINT = "So11111111111111111111111111111111111111112";
+
+const STUB_TICKER = /^(sol|wsol|solana|wrappedsol|wrapped.?sol)$/i;
+
+/** Native SOL, wrap-SOL, or a tape row that is just tickered SOL with no coin of its own. */
+export function isNativeSolSnapshot(t: { mint?: string; symbol?: string; name?: string; born?: boolean }): boolean {
+  if (t.born) return false;
+  const mint = (t.mint || "").trim();
+  if (mint === WSOL_MINT || mint.toLowerCase() === WSOL_MINT.toLowerCase()) return true;
+  const sym = (t.symbol || "").replace(/^\$+/g, "").trim();
+  const name = (t.name || "").replace(/^\$+/g, "").trim();
+  if (STUB_TICKER.test(sym)) return true;
+  if (STUB_TICKER.test(name) && (!sym || STUB_TICKER.test(sym))) return true;
+  return false;
+}
+
 export function blankSnapshot(partial: Partial<TokenSnapshot> & Pick<TokenSnapshot, "mint" | "name" | "symbol">): TokenSnapshot {
   return {
     venue: "unknown",

@@ -3,7 +3,9 @@ import { describe, it } from "node:test";
 import { buyCoin, createCoin, emptyLaunchBook, publicCoin } from "../lib/launch/engine";
 import { auditLaunchCoin, rankTape } from "../lib/launch/audit";
 import { TAPE_BOARD, filterTape, sortTape, volumeIn } from "../lib/launch/tape";
-import { marketPasses, MARKET_MIN_SCORE } from "../lib/launch/market";
+import { marketPasses, MARKET_MIN_SCORE, filterMarketSnapshots } from "../lib/launch/market";
+import { isNativeSolSnapshot, WSOL_MINT } from "../lib/feeds/normalize";
+import type { TokenSnapshot } from "../lib/types";
 
 const A = "CyaE1VxvBrahnPWkqm5VsdCvyS2QmNht2UFrKJHga54o";
 const B = "D4uCNcBKAbG9NAkmhQg7pBiztuejNzbWrZDcZmFGut81";
@@ -116,5 +118,62 @@ describe("market tape gate", () => {
     assert.equal(marketPasses({ score: 30, marketCapUsd: 50_000 }), true);
     assert.equal(marketPasses({ score: 90, nsfw: true, marketCapUsd: 50_000 }), false);
     assert.equal(marketPasses({ score: 90, marketCapUsd: 10, liquidityUsd: 10, volume1hUsd: 10 }), false);
+  });
+
+  it("drops native SOL and ticker-SOL stubs so the tape is not a wall of $SOL", () => {
+    assert.equal(isNativeSolSnapshot({ mint: WSOL_MINT, symbol: "BONK", name: "Bonk" }), true);
+    assert.equal(isNativeSolSnapshot({ mint: "FbLaAw9wxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", symbol: "SOL", name: "Solana" }), true);
+    assert.equal(isNativeSolSnapshot({ mint: "9yP2ZT8kxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", symbol: "SOL", name: "Sexy Older Ladies" }), true);
+    assert.equal(isNativeSolSnapshot({ mint: "PepeMintxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", symbol: "PEPE", name: "Pepe" }), false);
+    const stub = {
+      venue: "raydium",
+      createdAt: NOW,
+      priceUsd: 1,
+      volume5m: 0,
+      volume24h: 0,
+      txns5m: 0,
+      txns1h: 0,
+      buys1h: 0,
+      sells1h: 0,
+      uniqueTraders1h: 0,
+      priceChange5m: 0,
+      priceChange1h: 0,
+      priceChange6h: 0,
+      priceChange24h: 0,
+      bondingProgress: 1,
+      graduated: true,
+      replyCount: 0,
+      verified: false,
+      socials: {},
+    };
+    const tokens = [
+      {
+        ...stub,
+        mint: WSOL_MINT,
+        name: "Solana",
+        symbol: "SOL",
+        marketCapUsd: 1_000_000,
+        liquidityUsd: 50_000,
+        volume1h: 10_000,
+        nsfw: false,
+        banned: false,
+        livestream: false,
+      },
+      {
+        ...stub,
+        mint: "PepeMintxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx1",
+        name: "Pepe",
+        symbol: "PEPE",
+        marketCapUsd: 80_000,
+        liquidityUsd: 12_000,
+        volume1h: 4_000,
+        nsfw: false,
+        banned: false,
+        livestream: false,
+      },
+    ] as TokenSnapshot[];
+    const { rows } = filterMarketSnapshots(tokens, 150);
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].coin.symbol, "PEPE");
   });
 });
