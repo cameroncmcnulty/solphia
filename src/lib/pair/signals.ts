@@ -10,7 +10,7 @@ import type { ScalpFrames } from "./frames";
 import { scoreScalp } from "./scalp";
 import type { Bias, Setup } from "./scalp";
 
-export const RISK_SLEEVES: Exclude<Sleeve, "USDC">[] = ["SOL", "SPYx", "QQQx", "GLDx"];
+export const RISK_SLEEVES: Exclude<Sleeve, "USDC">[] = ["SPYx", "QQQx", "GLDx"];
 
 export const ROUND_TRIP = (PAIR_FEE_BPS + PROTOCOL_FEE_BPS + PAIR_SLIP_BPS) * 2 * 0.0001;
 

@@ -1,14 +1,14 @@
-export const PUZZLE_W = 360;
-export const PUZZLE_H = 200;
-export const PIECE = 56;
-export const PUZZLE_TOL = 7;
+export const PUZZLE_W = 520;
+export const PUZZLE_H = 280;
+export const PIECE = 72;
+export const KNOB = 11;
+export const PIECE_BOX = PIECE + KNOB;
+export const PUZZLE_TOL = 6;
 export const HUMAN_KEY = "solphia_human";
 
 export type PuzzleChallenge = {
   seed: string;
-  /** Piece left edge, in canvas pixels. */
   targetX: number;
-  /** Piece top edge, in canvas pixels. */
   targetY: number;
 };
 
@@ -28,9 +28,9 @@ export function rng(seed: string) {
 
 export function makePuzzle(seed = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`): PuzzleChallenge {
   const n = rng(seed);
-  const pad = 18;
-  const targetX = Math.round(pad + n() * (PUZZLE_W - PIECE - pad * 2));
-  const targetY = Math.round(28 + n() * (PUZZLE_H - PIECE - 48));
+  const pad = 24;
+  const targetX = Math.round(pad + n() * (PUZZLE_W - PIECE_BOX - pad * 2));
+  const targetY = Math.round(36 + n() * (PUZZLE_H - PIECE - 56));
   return { seed, targetX, targetY };
 }
 
@@ -39,7 +39,7 @@ export function puzzleHit(x: number, targetX: number, tol = PUZZLE_TOL): boolean
 }
 
 export function clampSlide(x: number): number {
-  return Math.max(0, Math.min(PUZZLE_W - PIECE, x));
+  return Math.max(0, Math.min(PUZZLE_W - PIECE_BOX, x));
 }
 
 export function humanVerified(): boolean {

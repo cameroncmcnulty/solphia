@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { paySeatFromPhantom } from "@/lib/wallet/trading";
-import { ROCKET_PACKS, rocketSol } from "@/lib/launch/boost";
+import { ROCKET_PACKS, rocketSol, type BoostRank } from "@/lib/launch/boost";
 
 export function BoostBuy({
   owner,
@@ -40,7 +40,7 @@ export function BoostBuy({
         body: JSON.stringify({ pubkey: owner, coinId, rockets, signature: sig }),
       }).then((r) => r.json());
       if (!done.ok) throw new Error(done.message || "Boost did not confirm.");
-      setNote(done.status === "queued" ? "Queued. Watch your dashboard for the countdown." : "Live at the top.");
+      setNote("Live for 24 hours. Add more any time.");
       onDone?.();
     } catch (e) {
       const msg = e instanceof Error ? e.message : "boost failed";
@@ -53,7 +53,7 @@ export function BoostBuy({
   return (
     <div className="rounded-2xl border border-acid/25 bg-acid/[0.04] p-3">
       <div className="font-mono text-[10px] tracking-[0.18em] text-acid">BOOST · ${symbol.replace(/^\$/, "")}</div>
-      <p className="mt-1 text-[12px] text-mute">More rockets, longer at the top. 10 live spots. Extra buys wait in queue.</p>
+      <p className="mt-1 text-[12px] text-mute">Each buy is 24 hours. More rockets, higher on the rail.</p>
       <div className="mt-2 flex flex-wrap gap-1">
         {ROCKET_PACKS.map((p) => (
           <button
@@ -62,15 +62,40 @@ export function BoostBuy({
             onClick={() => setRockets(p.rockets)}
             className={`rounded-full px-3 py-1 font-mono text-[11px] ${rockets === p.rockets ? "bg-acid/20 text-acid" : "border border-violet/30 text-mute"}`}
           >
-            {p.rockets} 🚀 · {p.label}
+            {p.rockets} ⚡
           </button>
         ))}
       </div>
       <button type="button" disabled={busy} onClick={buy} className="btn-acid mt-3 w-full rounded-full py-2 text-sm disabled:opacity-40">
-        {busy ? "Paying…" : `Boost · ${rocketSol(pack.rockets)} SOL`}
+        {busy ? "Paying…" : `Boost · ${rocketSol(pack.rockets)} SOL · 24h`}
       </button>
       {note && <p className="mt-2 text-[12px] text-acid">{note}</p>}
       {err && <p className="mt-2 text-[12px] text-blood">{err}</p>}
+    </div>
+  );
+}
+
+export function BoostRail({
+  rows,
+  onOpen,
+}: {
+  rows: BoostRank[];
+  onOpen: (mint: string, coinId: string) => void;
+}) {
+  if (!rows.length) return null;
+  return (
+    <div className="boost-rail">
+      {rows.map((b, i) => (
+        <button
+          key={`${b.mint || b.coinId}-${i}`}
+          type="button"
+          onClick={() => onOpen(b.mint, b.coinId)}
+          className="boost-chip"
+        >
+          <span className="font-mono text-[10px] text-acid">⚡ {b.rockets}</span>
+          <span className="truncate font-display text-sm text-ghost">${(b.symbol || "").replace(/^\$/, "")}</span>
+        </button>
+      ))}
     </div>
   );
 }

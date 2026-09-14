@@ -314,7 +314,7 @@ body {
   backdrop-filter: blur(10px);
 }
 .human-card {
-  width: min(420px, 100%);
+  width: min(560px, 100%);
   border-radius: 1.75rem;
   border: 1px solid rgba(153, 69, 255, 0.35);
   background: #0b0614;
@@ -325,13 +325,6 @@ body {
   display: block;
   width: 100%;
   height: auto;
-}
-.human-piece {
-  position: absolute;
-  width: calc(56 / 360 * 100%);
-  height: auto;
-  pointer-events: none;
-  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.45));
 }
 .human-track {
   position: relative;
@@ -363,6 +356,31 @@ body {
   font-weight: 600;
   pointer-events: none;
 }
+.boost-rail {
+  display: flex;
+  gap: 0.5rem;
+  overflow-x: auto;
+  padding-bottom: 0.25rem;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
+}
+.boost-chip {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex: 0 0 auto;
+  min-width: 7.5rem;
+  max-width: 11rem;
+  border-radius: 999px;
+  border: 1px solid rgba(20, 241, 149, 0.35);
+  background: rgba(20, 241, 149, 0.08);
+  padding: 0.45rem 0.75rem;
+  text-align: left;
+}
+.boost-chip:hover {
+  border-color: rgba(20, 241, 149, 0.7);
+}
+
 .human-shake {
   animation: human-wiggle 0.4s ease;
 }

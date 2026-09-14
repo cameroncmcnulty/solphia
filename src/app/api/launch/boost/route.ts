@@ -7,15 +7,15 @@ import { confirmedSolTransfer } from "@/lib/solana/connection";
 import { withLaunch } from "@/lib/store";
 import { emptyLaunchBook } from "@/lib/launch/engine";
 import {
-  BOOST_SLOTS,
+  ROCKET_MAX,
   ROCKET_PACKS,
   buyBoost,
   clampRockets,
   liveBoosts,
   ownerBoosts,
   publicLiveBoost,
+  rankedBoosts,
   rocketSol,
-  slotsOpen,
   tickBoosts,
 } from "@/lib/launch/boost";
 
@@ -24,7 +24,7 @@ export const dynamic = "force-dynamic";
 const Body = z.object({
   pubkey: z.string(),
   coinId: z.string().max(80),
-  rockets: z.number().int().min(1).max(24),
+  rockets: z.number().int().min(1).max(ROCKET_MAX),
   signature: z.string().min(32).max(128).optional(),
 });
 
@@ -48,23 +48,18 @@ export async function GET(req: NextRequest) {
   }
   const book = first.book;
   const now = Date.now();
+  const ranked = rankedBoosts(book, now);
   const live = liveBoosts(book, now).map((b) => publicLiveBoost(b, now));
   const mine = isSolanaAddress(pubkey) ? ownerBoosts(book, pubkey, now) : { live: [], queued: [] };
   return NextResponse.json({
-    slots: BOOST_SLOTS,
-    open: slotsOpen(book, now),
     packs: ROCKET_PACKS.map((p) => ({ ...p, sol: rocketSol(p.rockets) })),
     rocketSol: rocketSol(1),
+    hours: 24,
+    ranked,
     live,
     mine: {
       live: mine.live.map((b) => publicLiveBoost(b, now)),
-      queued: mine.queued.map((row) => ({
-        ...publicLiveBoost(row.boost, now),
-        position: row.position,
-        etaMs: row.etaMs,
-        rockets: row.boost.rockets,
-        symbol: row.boost.symbol,
-      })),
+      queued: [],
     },
   });
 }
@@ -96,8 +91,6 @@ export async function POST(req: NextRequest) {
       treasury,
       sol,
       rockets,
-      open: slotsOpen(book),
-      queued: slotsOpen(book) === 0,
     });
   }
   const pay = await confirmedSolTransfer({
@@ -131,16 +124,10 @@ export async function POST(req: NextRequest) {
     ok: true,
     boost: publicLiveBoost(out.boost, now),
     status: out.boost.status,
-    open: slotsOpen(book, now),
+    ranked: rankedBoosts(book, now),
     mine: {
       live: mine.live.map((b) => publicLiveBoost(b, now)),
-      queued: mine.queued.map((row) => ({
-        ...publicLiveBoost(row.boost, now),
-        position: row.position,
-        etaMs: row.etaMs,
-        rockets: row.boost.rockets,
-        symbol: row.boost.symbol,
-      })),
+      queued: [],
     },
   });
 }

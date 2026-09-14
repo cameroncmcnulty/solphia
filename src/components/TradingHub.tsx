@@ -248,20 +248,10 @@ export function TradingHub() {
   const uptime = book?.startedAt ? fmtDur(now - book.startedAt) : auto?.armedAt ? fmtDur(now - auto.armedAt) : "on";
   const status = book?.killed ? "STOPPED" : "RUNNING";
   const halted = book?.haltReason && (book.haltedUntil || 0) > Date.now();
-  const solPerp = book?.pair?.solPerp as
-    | { leverage: 2 | 3; collateralUsd: number; notionalUsd: number; entryPx: number }
-    | null
-    | undefined;
-  const solQty = solPerp
-    ? solPerp.entryPx > 0
-      ? solPerp.notionalUsd / solPerp.entryPx
-      : 0
-    : book?.pair?.solQty ?? pair?.solQty ?? 0;
   const spyxQty = book?.pair?.spyxQty ?? pair?.spyxQty ?? 0;
   const qqqxQty = book?.pair?.qqqxQty ?? pair?.qqqxQty ?? 0;
   const gldxQty = book?.pair?.gldxQty ?? pair?.gldxQty ?? 0;
   const usdcQty = book?.pair?.usdcQty ?? pair?.usdcQty ?? book?.cashUsd ?? 0;
-  const solUsd = pair?.solUsd || 0;
   const spyxUsd = pair?.spyxUsd || 0;
   const qqqxUsd = pair?.qqqxUsd || 0;
   const gldxUsd = pair?.gldxUsd || 0;
@@ -270,10 +260,10 @@ export function TradingHub() {
     <main className="mx-auto max-w-7xl px-4 pb-6 pt-2 md:px-8">
       <header className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <p className="font-mono text-[11px] tracking-[0.28em] text-violet">SOL · S&P 500 · NASDAQ · GOLD</p>
+          <p className="font-mono text-[11px] tracking-[0.28em] text-violet">USDC · S&P 500 · NASDAQ · GOLD</p>
           <h1 className="mt-1 font-display text-3xl leading-none text-ghost sm:text-4xl md:text-6xl">Operate</h1>
           <p className="mt-3 max-w-xl text-base text-mute sm:text-lg">
-            Connect, move SOL into the trading wallet, turn her on. She trades 24/7 from the server — close the tab.
+            Connect, fund the trading wallet, turn her on. She scalps tokenized S&P, Nasdaq, and gold from USDC. 24/7.
           </p>
         </div>
         <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-row sm:items-center sm:gap-3">
@@ -332,17 +322,6 @@ export function TradingHub() {
         </div>
         <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-3">
           <Huge k="USDC" v={money(usdcQty)} sub="PnL home · dry powder" />
-          <Huge
-            k={solPerp ? `SOL ${solPerp.leverage}×` : "SOL"}
-            v={solPerp ? money(solPerp.collateralUsd) : solQty ? solQty.toFixed(4) : "0"}
-            sub={
-              solPerp
-                ? `notional ${money(solPerp.notionalUsd)}`
-                : solUsd
-                  ? money(solQty * solUsd)
-                  : "sleeve"
-            }
-          />
           <Huge
             k="PnL (USDC)"
             v={`${pnlPct >= 0 ? "+" : ""}${(pnlPct * 100).toFixed(1)}%`}
@@ -468,33 +447,6 @@ export function TradingHub() {
             </div>
           </div>
         ) : null}
-
-        <div className="mt-4 rounded-2xl border border-violet/20 p-4">
-          <div className="font-mono text-[10px] tracking-[0.2em] text-mute">SOL SLEEVE</div>
-          <p className="mt-1 text-sm text-mute">
-            SPYx, QQQx, and GLDx stay spot. SOL 2×/3× needs the 0.15 SOL seat — borrow, fees, liquidation.
-          </p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {([1, 2, 3] as const).map((n) => (
-              <button
-                key={n}
-                type="button"
-                disabled={n > 1 && auto?.mode === "live" && !seat?.levSeat && !seat?.founder}
-                onClick={() => patch({ leverage: n })}
-                className={`min-h-[40px] rounded-full px-4 font-mono text-[12px] ${
-                  (auto?.leverage || 1) === n ? "btn-on" : "btn-ghost"
-                } disabled:opacity-40`}
-              >
-                {n === 1 ? "SOL 1× spot" : `SOL ${n}×`}
-              </button>
-            ))}
-          </div>
-          {(auto?.leverage || 1) > 1 && (
-            <p className="mt-2 font-mono text-[11px] text-acid">
-              SOL {(auto?.leverage || 2)}× · 6 bps in/out · borrow on · liq if SOL dumps hard. Not fake size on SPYx.
-            </p>
-          )}
-        </div>
       </section>
 
       {halted && <p className="mt-3 font-mono text-sm text-blood">{book.haltReason}</p>}
@@ -511,9 +463,9 @@ export function TradingHub() {
           <div className="font-mono text-[10px] tracking-[0.22em] text-violet">HOW SHE TRADES</div>
           <h3 className="font-display text-2xl text-ghost">0.5% clips. 40% of a sleeve.</h3>
           <p className="text-sm leading-relaxed text-mute">
-            She routes every swap in-house, then spends at most half of a holding so the rest can rotate into SPYx,
-            QQQx, or GLDx. Target is about 1.2% after fees. 1% of the SOL clip goes to the treasury. An 8% drawdown
-            flattens to USDC and pauses.
+            She keeps PnL in USDC and scalps tokenized S&P, Nasdaq, and gold. SOL stays in the trading wallet for
+            gas and fees — it is not a sleeve. 1% of each in-house swap goes to the treasury. An 8% drawdown flattens
+            to USDC and pauses.
           </p>
           <div className="grid grid-cols-3 gap-2">
             <Mini k="S&P 500" v={spyxUsd ? `$${Number(spyxUsd).toFixed(0)}` : "—"} />

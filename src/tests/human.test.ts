@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { clampSlide, makePuzzle, PIECE, PUZZLE_W, puzzleHit } from "../lib/human/puzzle";
+import { clampSlide, makePuzzle, PIECE_BOX, PUZZLE_W, puzzleHit } from "../lib/human/puzzle";
 
 describe("human puzzle", () => {
   it("same seed always lands the piece in the same slot", () => {
@@ -9,7 +9,7 @@ describe("human puzzle", () => {
     assert.equal(a.targetX, b.targetX);
     assert.equal(a.targetY, b.targetY);
     assert.ok(a.targetX >= 18);
-    assert.ok(a.targetX <= PUZZLE_W - PIECE - 18);
+    assert.ok(a.targetX <= PUZZLE_W - PIECE_BOX - 18);
   });
 
   it("accepts a slide that fits and rejects one that does not", () => {
@@ -22,7 +22,7 @@ describe("human puzzle", () => {
 
   it("keeps the slider on the board", () => {
     assert.equal(clampSlide(-40), 0);
-    assert.equal(clampSlide(PUZZLE_W), PUZZLE_W - PIECE);
+    assert.equal(clampSlide(PUZZLE_W), PUZZLE_W - PIECE_BOX);
     assert.equal(clampSlide(40), 40);
   });
 

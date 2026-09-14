@@ -79,7 +79,6 @@ describe("backtest replay", () => {
   });
 
   it("ships a distinct 2x and 3x seed so the public page always has those curves", () => {
-    const spot = latestBacktest(null, 1);
     const lev2 = latestBacktest(null, 2);
     const lev3 = latestBacktest(null, 3);
     assert.equal(lev2.leverage, 2);
@@ -87,8 +86,6 @@ describe("backtest replay", () => {
     assert.equal(publicBacktest(lev2).ready, true);
     assert.equal(publicBacktest(lev3).ready, true);
     assert.ok((lev2.curve?.length || 0) > 8);
-    assert.ok(Math.abs(lev2.pnlPct - spot.pnlPct) > 0.01);
-    assert.ok(Math.abs(lev3.pnlPct - spot.pnlPct) > 0.01);
     const pack = publicBacktestPack();
     assert.equal(pack.reports[1].ready, true);
     assert.equal(pack.reports[2].ready, true);

@@ -31,7 +31,8 @@ import { FieldError, FormAlert, fieldClass, useConfirmErrors } from "@/component
 import { loadOwner, signAndSendPhantom } from "@/lib/wallet/trading";
 import { SWAP_FEE_BPS } from "@/lib/launch/curve";
 import { auditLaunchCoin, rankTape, scoreTape, type LaunchAudit } from "@/lib/launch/audit";
-import { BoostBuy, fmtLeft } from "@/components/BoostBuy";
+import { BoostBuy, BoostRail, fmtLeft } from "@/components/BoostBuy";
+import type { BoostRank } from "@/lib/launch/boost";
 import { filterTape, sortTape, volumeIn, type AgeFilter, type VolWindow } from "@/lib/launch/tape";
 import { isSolanaAddress } from "@/lib/wallet/addr";
 
@@ -238,7 +239,7 @@ export default function LaunchPage() {
   const [vol, setVol] = useState<VolWindow | null>(null);
   const [ranked, setRanked] = useState(false);
   const [boostOpen, setBoostOpen] = useState(false);
-  const [boostLive, setBoostLive] = useState<{ coinId: string; mint: string; rockets: number; leftMs: number; symbol: string }[]>([]);
+  const [boostRank, setBoostRank] = useState<BoostRank[]>([]);
   const [boostMine, setBoostMine] = useState<{
     live: { symbol: string; leftMs: number; rockets: number }[];
     queued: { symbol: string; position: number; etaMs: number; rockets: number }[];
@@ -268,14 +269,15 @@ export default function LaunchPage() {
   async function refreshBoosts() {
     const q = owner ? `?pubkey=${encodeURIComponent(owner)}` : "";
     const j = await fetch(`/api/launch/boost${q}`, { cache: "no-store" }).then((r) => r.json());
-    setBoostLive(Array.isArray(j.live) ? j.live : []);
-    if (j.mine) setBoostMine({ live: j.mine.live || [], queued: j.mine.queued || [] });
+    setBoostRank(Array.isArray(j.ranked) ? j.ranked : Array.isArray(j.live) ? j.live : []);
+    if (j.mine) setBoostMine({ live: j.mine.live || [], queued: [] });
   }
 
   async function refreshTape() {
     try {
       const tape = await fetch("/api/launch/tape", { cache: "no-store" }).then((r) => r.json());
       if (tape.solUsd) setSolUsd((s) => s || tape.solUsd);
+      if (Array.isArray(tape.ranked)) setBoostRank(tape.ranked);
       const market: Coin[] = Array.isArray(tape.coins) ? tape.coins : [];
       setCoins((prev) => {
         const padCoins = prev.filter((c) => c.born);
@@ -461,7 +463,7 @@ export default function LaunchPage() {
     const boosted = [];
     const rest = [];
     for (const row of rows) {
-      const b = boostLive.find((x) => x.coinId === row.coin.id || (x.mint && x.mint === row.coin.mint));
+      const b = boostRank.find((x) => x.coinId === row.coin.id || (x.mint && x.mint === row.coin.mint));
       if (b) boosted.push({ ...row, boost: b });
       else rest.push({ ...row, boost: undefined as undefined });
     }
@@ -479,7 +481,7 @@ export default function LaunchPage() {
       }
     }
     return next;
-  }, [pool, age, vol, ranked, solUsd, source, tab, boostLive, lookedMint, coins]);
+  }, [pool, age, vol, ranked, solUsd, source, tab, boostRank, lookedMint, coins]);
   const rows = board.map((r) => r.coin);
 
   return (
@@ -695,6 +697,18 @@ export default function LaunchPage() {
               )}
             </div>
             <div className="mt-3 space-y-2">
+              {tab === "tape" && (
+                <BoostRail
+                  rows={boostRank}
+                  onOpen={(mint, coinId) => {
+                    const hit = coins.find((c) => c.mint === mint || c.id === coinId || c.id === mint);
+                    if (hit) {
+                      setOpen(hit);
+                      setLookedMint(hit.mint || hit.id);
+                    }
+                  }}
+                />
+              )}
               <form
                 className="flex gap-2"
                 onSubmit={(e) => {
@@ -799,16 +813,11 @@ export default function LaunchPage() {
                 <p className="text-[12px] text-mute">Open a token, then boost it.</p>
               )}
               {boostOpen && !owner && <p className="text-[12px] text-mute">Connect to boost a token to the top.</p>}
-              {tab === "mine" && (boostMine.live.length > 0 || boostMine.queued.length > 0) && (
+              {tab === "mine" && boostMine.live.length > 0 && (
                 <div className="space-y-1 text-[12px] text-mute">
                   {boostMine.live.map((b) => (
                     <div key={`l-${b.symbol}`} className="text-acid">
-                      ${b.symbol} live · {fmtLeft(b.leftMs)} left · {b.rockets} 🚀
-                    </div>
-                  ))}
-                  {boostMine.queued.map((b) => (
-                    <div key={`q-${b.symbol}-${b.position}`}>
-                      ${b.symbol} queued #{b.position} · live in {fmtLeft(b.etaMs)}
+                      ${b.symbol} · {fmtLeft(b.leftMs)} left · {b.rockets} ⚡
                     </div>
                   ))}
                 </div>
@@ -973,7 +982,7 @@ function CoinCard({
           </span>
           {rockets ? (
             <span className="shrink-0 rounded-full bg-acid/20 px-1.5 py-0.5 font-mono text-[9px] text-acid">
-              🚀 {rockets}
+              ⚡ {rockets}
               {boostLeft ? ` · ${fmtLeft(boostLeft)}` : ""}
             </span>
           ) : null}

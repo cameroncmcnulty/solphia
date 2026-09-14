@@ -383,9 +383,13 @@ export function decidePair(opts: {
   const usdOf = (s: Sleeve) => sleeveUsd(h, s, prices);
   if (!h.stops) h.stops = {};
 
-  const sigs = RISK_SLEEVES.map((s) =>
-    readAsset(s, samples, prices, study, now, opts.shortTape, learn[s] || DEFAULT_LEARN, opts.frames),
-  ).filter((s): s is NonNullable<typeof s> => Boolean(s));
+  const buySleeves = RISK_SLEEVES;
+  const exitSleeves: Exclude<Sleeve, "USDC">[] = [...RISK_SLEEVES];
+  if ((h.solQty || 0) > 0 || h.solPerp) exitSleeves.push("SOL");
+  const sigs = exitSleeves
+    .map((s) => readAsset(s, samples, prices, study, now, opts.shortTape, learn[s] || DEFAULT_LEARN, opts.frames))
+    .filter((s): s is NonNullable<typeof s> => Boolean(s));
+  const buySigs = sigs.filter((s) => (buySleeves as string[]).includes(s.sleeve));
 
   for (const sig of sigs) {
     const pos = usdOf(sig.sleeve);
@@ -455,9 +459,11 @@ export function decidePair(opts: {
     }
   }
 
-  const openSet = new Set(RISK_SLEEVES.filter((s) => usdOf(s) >= PAIR_MIN_CLIP_USD));
+  const openSet = new Set(buySleeves.filter((s) => usdOf(s) >= PAIR_MIN_CLIP_USD));
+  const heldSet = new Set(openSet);
+  if (usdOf("SOL") >= PAIR_MIN_CLIP_USD) heldSet.add("SOL");
   const clipUsd = Math.max(PAIR_MIN_CLIP_USD, Math.min(allocated * SLEEVE_WEIGHT, h.usdcQty * HOLDING_CLIP_MAX));
-  const ranked = [...sigs].sort((a, b) => b.buy - a.buy);
+  const ranked = [...buySigs].sort((a, b) => b.buy - a.buy);
   for (const best of ranked) {
     if (openSet.has(best.sleeve)) continue;
     const pairId = `usdc-${best.sleeve.toLowerCase()}`;
@@ -485,8 +491,8 @@ export function decidePair(opts: {
     }
   }
 
-  if (openSet.size) {
-    const s = [...openSet][0];
+  if (heldSet.size) {
+    const s = [...heldSet][0];
     const trail = h.stops?.[s];
     const px = livePx(prices, s);
     const pnl = trail && trail.entryPx > 0 ? ((px / trail.entryPx - 1) * 100).toFixed(1) : "0.0";

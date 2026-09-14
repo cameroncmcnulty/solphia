@@ -28,7 +28,7 @@ export default function Home() {
               SOLPHIA
             </h1>
             <p className="mt-6 max-w-xl text-xl leading-snug text-ghost sm:text-3xl sm:leading-tight">
-              She auto-trades tokenized S&amp;P 500, Nasdaq-100, and gold — for profit.
+              She auto-trades tokenized S&amp;P 500, Nasdaq, and gold — for profit.
             </p>
             <p className="mt-4 max-w-lg text-base leading-relaxed text-mute sm:text-lg">
               Connect your wallet. She trades tokenized S&P 500, Nasdaq, and gold. Launch and $SPHA sit around that desk.

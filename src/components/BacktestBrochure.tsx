@@ -71,7 +71,6 @@ function asLevPack(raw: unknown): LevPack | null {
 export function BacktestBrochure() {
   const [windows, setWindows] = useState<Partial<Record<WindowKey, LevPack>>>({});
   const [win, setWin] = useState<WindowKey>("1m");
-  const [lev, setLev] = useState<Lev>(1);
   const [live, setLive] = useState<LiveBook | null>(null);
 
   useEffect(() => {
@@ -99,7 +98,7 @@ export function BacktestBrochure() {
   }, []);
 
   const pack = windows[win] || windows["1m"] || {};
-  const data = pack[lev] || pack[1] || null;
+  const data = pack[1] || null;
   const ready = Boolean(data?.ready && data.curve?.length);
   const up = (data?.pnlPct || 0) >= 0;
   const pct = ready ? `${up ? "+" : ""}${((data?.pnlPct || 0) * 100).toFixed(1)}%` : "…";
@@ -116,7 +115,7 @@ export function BacktestBrochure() {
               The curve is the point.
             </h2>
             <p className="mt-3 max-w-xl text-sm text-mute sm:text-lg">
-              How she marked SOL, S&P 500, Nasdaq, and gold. Past days are not a promise.
+              How she marked tokenized S&P 500, Nasdaq, and gold from USDC. Past days are not a promise.
             </p>
           </div>
           <div className="text-left lg:text-right">
@@ -129,18 +128,6 @@ export function BacktestBrochure() {
                   className={`rounded-full px-3 py-1 font-mono text-[11px] ${win === w.id ? "btn-on" : "btn-ghost"}`}
                 >
                   {w.label}
-                </button>
-              ))}
-            </div>
-            <div className="mb-3 flex flex-wrap gap-2 lg:justify-end">
-              {([1, 2, 3] as const).map((n) => (
-                <button
-                  key={n}
-                  type="button"
-                  onClick={() => setLev(n)}
-                  className={`rounded-full px-3 py-1 font-mono text-[11px] ${lev === n ? "btn-on" : "btn-ghost"}`}
-                >
-                  {n === 1 ? "Spot 1×" : `SOL ${n}×`}
                 </button>
               ))}
             </div>
@@ -170,23 +157,9 @@ export function BacktestBrochure() {
           <Stat k="Win rate" v={ready ? `${Math.round((data?.winRate || 0) * 100)}%` : "—"} sub="closed to USDC" />
           <Stat k="Max DD" v={ready ? `−${((data?.maxDdPct || 0) * 100).toFixed(1)}%` : "—"} sub="from peak" />
           <Stat
-            k={lev > 1 ? "Liquidations" : "Best day"}
-            v={
-              lev > 1
-                ? ready
-                  ? String(data?.liquidations || 0)
-                  : "—"
-                : ready
-                  ? `+$${Math.abs(data?.bestDayUsd || 0).toFixed(0)}`
-                  : "—"
-            }
-            sub={
-              lev > 1
-                ? "SOL-PERP stopped out"
-                : ready
-                  ? `${data?.daysGe2 || 0} days ≥ $2`
-                  : "on a $1,000 book"
-            }
+            k="Best day"
+            v={ready ? `+$${Math.abs(data?.bestDayUsd || 0).toFixed(0)}` : "—"}
+            sub={ready ? `${data?.daysGe2 || 0} days ≥ $2` : "on a $1,000 book"}
           />
         </div>
 
