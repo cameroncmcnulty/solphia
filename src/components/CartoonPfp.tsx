@@ -1,6 +1,6 @@
 "use client";
 
-import { useId } from "react";
+import { useEffect, useId, useState } from "react";
 
 /** Deterministic cartoon PFP from a wallet seed until they upload their own. */
 export function CartoonPfp({
@@ -13,10 +13,20 @@ export function CartoonPfp({
   className?: string;
 }) {
   const uid = useId().replace(/:/g, "");
-  if (src) {
+  const [dead, setDead] = useState(false);
+  useEffect(() => {
+    setDead(false);
+  }, [src]);
+  if (src && !dead) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
-      <img src={src} alt="" draggable={false} className={`shrink-0 rounded-full object-cover ${className}`} />
+      <img
+        src={src}
+        alt=""
+        draggable={false}
+        onError={() => setDead(true)}
+        className={`shrink-0 rounded-full object-cover ${className}`}
+      />
     );
   }
   const a = avatar(seed || "solphia", uid);

@@ -4,6 +4,7 @@ import {
   CIRCLE_BOOST_PCT,
   CIRCLE_COLORS,
   CIRCLE_DEFAULT_CAP,
+  CIRCLE_KEEP_MS,
   CIRCLE_MSG_MAX,
   type CircleBook,
   type CircleMember,
@@ -26,8 +27,30 @@ export function ensureCircle(book?: CircleBook | null): CircleBook {
   if (!b.messages) b.messages = [];
   if (!b.airdrops) b.airdrops = [];
   if (!b.typing) b.typing = {};
+  b.typing = {};
   if (!(b.cap > 0)) b.cap = CIRCLE_DEFAULT_CAP;
+  pruneCircle(b);
   return b;
+}
+
+export function pruneCircle(book: CircleBook, now = Date.now()) {
+  const cut = now - CIRCLE_KEEP_MS;
+  if (book.messages.length) book.messages = book.messages.filter((m) => m.at >= cut);
+  if (book.messages.length > CIRCLE_MSG_MAX) book.messages.splice(0, book.messages.length - CIRCLE_MSG_MAX);
+  for (const m of book.messages) {
+    if (!m.reactions) m.reactions = {};
+    for (const [emoji, pks] of Object.entries(m.reactions)) {
+      if (!pks?.length) delete m.reactions[emoji];
+    }
+  }
+}
+
+/** True when Redis still holds expired chat or leftover typing. */
+export function circleStale(raw: CircleBook | null | undefined, pruned: CircleBook): boolean {
+  if (!raw) return false;
+  if ((raw.messages?.length || 0) !== pruned.messages.length) return true;
+  if (raw.typing && Object.keys(raw.typing).length) return true;
+  return false;
 }
 
 export function circleColor(pubkey: string): string {
@@ -87,7 +110,6 @@ export function joinCircle(
     existing.lastReadAt = now;
     return { ok: true, member: existing, created: false };
   }
-  if (spotsLeft(book) <= 0) return { ok: false, error: "full" };
   let referrer = (opts.referrer || "").trim();
   if (referrer === pubkey || !isSolanaAddress(referrer) || !book.members[referrer] || book.members[referrer].status === "banned") {
     referrer = "";
@@ -139,6 +161,7 @@ export function postMessage(
     replyTo: opts.replyTo,
     reactions: {},
   };
+  pruneCircle(book, msg.at);
   pushMax(book.messages, msg, CIRCLE_MSG_MAX);
   return { ok: true, message: msg };
 }

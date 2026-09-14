@@ -56,18 +56,18 @@ export async function pinataUsage(): Promise<PinataUsage> {
   }
 }
 
-export async function pinDataUrl(dataUrl: string, name: string): Promise<{ cid: string; url: string } | null> {
-  if (!pinataConfigured() || !dataUrl.startsWith("data:")) return null;
-  const comma = dataUrl.indexOf(",");
-  if (comma < 0) return null;
-  const meta = dataUrl.slice(5, comma);
-  const b64 = dataUrl.slice(comma + 1);
-  const mime = (meta.split(";")[0] || "image/png").trim();
-  const buf = Buffer.from(b64, "base64");
-  if (buf.length < 32 || buf.length > 4_000_000) return null;
+export async function pinBytes(
+  buf: Buffer | Uint8Array,
+  mime: string,
+  name: string,
+): Promise<{ cid: string; url: string } | null> {
+  if (!pinataConfigured()) return null;
+  const bytes = Buffer.isBuffer(buf) ? buf : Buffer.from(buf);
+  if (bytes.length < 32 || bytes.length > 4_000_000) return null;
+  const type = (mime || "image/jpeg").split(";")[0].trim() || "image/jpeg";
   const form = new FormData();
-  const blob = new Blob([new Uint8Array(buf)], { type: mime });
-  const ext = mime.includes("png") ? "png" : mime.includes("webp") ? "webp" : "jpg";
+  const blob = new Blob([new Uint8Array(bytes)], { type });
+  const ext = type.includes("png") ? "png" : type.includes("webp") ? "webp" : "jpg";
   form.append("file", blob, `${name.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 24) || "token"}.${ext}`);
   form.append("pinataMetadata", JSON.stringify({ name: `solphia-${name.slice(0, 24)}` }));
   try {
@@ -83,4 +83,14 @@ export async function pinDataUrl(dataUrl: string, name: string): Promise<{ cid: 
   } catch {
     return null;
   }
+}
+
+export async function pinDataUrl(dataUrl: string, name: string): Promise<{ cid: string; url: string } | null> {
+  if (!dataUrl.startsWith("data:")) return null;
+  const comma = dataUrl.indexOf(",");
+  if (comma < 0) return null;
+  const meta = dataUrl.slice(5, comma);
+  const b64 = dataUrl.slice(comma + 1);
+  const mime = (meta.split(";")[0] || "image/png").trim();
+  return pinBytes(Buffer.from(b64, "base64"), mime, name);
 }

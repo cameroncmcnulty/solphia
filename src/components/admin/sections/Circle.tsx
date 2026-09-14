@@ -19,8 +19,6 @@ type Row = {
 };
 
 type Pack = {
-  cap: number;
-  spots: number;
   active: number;
   members: Row[];
   airdrops: { id: string; at: number; total: number; heads: number }[];
@@ -29,7 +27,6 @@ type Pack = {
 export function CircleSection() {
   const { data } = useAdmin();
   const [pack, setPack] = useState<Pack | null>(null);
-  const [cap, setCap] = useState("100");
   const [amount, setAmount] = useState("1000");
   const [note, setNote] = useState("");
   const [err, setErr] = useState("");
@@ -40,7 +37,6 @@ export function CircleSection() {
     const j = await r.json();
     if (r.ok) {
       setPack(j);
-      setCap(String(j.cap));
     }
   }, []);
 
@@ -75,23 +71,19 @@ export function CircleSection() {
         <div className="font-mono text-[10px] tracking-[0.28em] text-mute">FOUNDERS CIRCLE</div>
         <h2 className="mt-1 font-display text-3xl text-ghost">The exclusive hang</h2>
         <p className="mt-1 max-w-2xl text-sm text-mute">
-          Limited seats. Wallet + email to enter. Referrals add 5% airdrop weight for life. Mods can keep the chat
+          Spots are limited. Wallet + email to enter. Referrals add 5% airdrop weight for life. Mods can keep the chat
           clean. Admins can ban and drop.
         </p>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2">
         <div className="rounded-2xl border border-violet/20 bg-void/40 px-4 py-3">
-          <div className="font-mono text-[10px] text-mute">SEATED</div>
+          <div className="font-mono text-[10px] text-mute">FOUNDERS IN</div>
           <div className="font-display text-2xl text-ghost">{pack?.active ?? data?.circle.members ?? 0}</div>
         </div>
         <div className="rounded-2xl border border-violet/20 bg-void/40 px-4 py-3">
-          <div className="font-mono text-[10px] text-mute">CAP</div>
-          <div className="font-display text-2xl text-ghost">{pack?.cap ?? data?.circle.cap ?? 100}</div>
-        </div>
-        <div className="rounded-2xl border border-violet/20 bg-void/40 px-4 py-3">
-          <div className="font-mono text-[10px] text-mute">OPEN</div>
-          <div className="font-display text-2xl text-acid">{pack?.spots ?? data?.circle.spots ?? 0}</div>
+          <div className="font-mono text-[10px] text-mute">DROPS</div>
+          <div className="font-display text-2xl text-ghost">{pack?.airdrops?.length ?? 0}</div>
         </div>
       </div>
 
@@ -119,18 +111,6 @@ export function CircleSection() {
         </div>
         {note && <p className="mt-2 text-sm text-acid">{note}</p>}
         {err && <p className="mt-2 text-sm text-blood">{err}</p>}
-      </div>
-
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="font-mono text-[10px] text-mute">SEAT CAP</span>
-        <input
-          value={cap}
-          onChange={(e) => setCap(e.target.value)}
-          className="w-24 rounded-full border border-violet/30 bg-void px-3 py-1 font-mono text-sm text-ghost"
-        />
-        <button type="button" disabled={busy} onClick={() => post({ cap: Number(cap) })} className="btn-ghost rounded-full px-4 py-1 text-sm">
-          Save cap
-        </button>
       </div>
 
       <div className="overflow-x-auto rounded-3xl border border-violet/20">

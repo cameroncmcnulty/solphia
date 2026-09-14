@@ -5,11 +5,13 @@ import { mutateState, readyState } from "@/lib/store";
 import { pinDataUrl } from "@/lib/pinata";
 import { sphaMintOf } from "@/lib/token/solphia";
 import { SITE_URL } from "@/lib/config";
+import { treasuryAddress } from "@/lib/treasury";
 import {
   activeMembers,
   airdropWeight,
   boostPct,
   canModerate,
+  circleStale,
   claimAmount,
   deleteMessage,
   ensureCircle,
@@ -19,13 +21,14 @@ import {
   postMessage,
   reactMessage,
   referralCount,
-  spotsLeft,
 } from "@/lib/circle/engine";
 import { CIRCLE_REACTS, CIRCLE_STICKERS } from "@/lib/circle/types";
 import { sendCircleDrop } from "@/lib/circle/payout";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
+
+const typingMem = new Map<string, number>();
 
 const Body = z.object({
   action: z.enum(["join", "chat", "react", "typing", "read", "claim", "media", "delete"]),
@@ -55,36 +58,51 @@ function publicMember(m: ReturnType<typeof activeMembers>[number], book: ReturnT
 export async function GET(req: NextRequest) {
   const pubkey = req.nextUrl.searchParams.get("pubkey") || "";
   const s = await readyState();
-  const book = ensureCircle(s.circle);
+  const raw = s.circle;
+  const book = ensureCircle(raw);
+  if (circleStale(raw, book)) {
+    await mutateState((st) => {
+      st.circle = ensureCircle(st.circle);
+    });
+  }
   const since = Number(req.nextUrl.searchParams.get("since") || 0);
-  const spots = spotsLeft(book);
   const me = isSolanaAddress(pubkey) ? book.members[pubkey] : undefined;
   const banned = me?.status === "banned";
+  const official = [
+    treasuryAddress(),
+    s.treasuryWallet,
+    s.ownerWallet,
+    s.devWallet,
+    s.foundationWallet,
+    s.airdropWallet,
+    s.lpWallet,
+    s.launch?.ownerWallet,
+    ...(s.adminWallets || []),
+  ].filter(Boolean) as string[];
   const base = {
-    cap: book.cap,
-    spots,
     members: activeMembers(book).length,
     stickers: CIRCLE_STICKERS,
     reacts: CIRCLE_REACTS,
     mint: sphaMintOf(s.sphaMint),
+    official,
     link: `${SITE_URL}/circle?ref=${pubkey || ""}`,
   };
   if (!me || banned) {
     return NextResponse.json({ ...base, member: null, banned: Boolean(banned) });
   }
   const now = Date.now();
-  const typing = Object.entries(book.typing)
+  const typing = [...typingMem.entries()]
     .filter(([pk, until]) => pk !== pubkey && until > now && book.members[pk]?.status !== "banned")
     .map(([pk]) => pk);
-  const messages = book.messages.filter((m) => m.at > since).slice(-200);
+  const messages = book.messages.filter((m) => m.at > since).slice(-80);
   const people = [...new Set(messages.map((m) => m.owner).concat(typing, [pubkey]))];
-  const profiles: Record<string, { username: string; pfp: string; color: string }> = {};
+  const profiles: Record<string, { username: string; hasPfp: boolean; color: string }> = {};
   for (const pk of people) {
     const acc = s.launch?.accounts?.[pk];
     const mem = book.members[pk];
     profiles[pk] = {
       username: acc?.username || "",
-      pfp: acc?.pfp || "",
+      hasPfp: Boolean(acc?.pfp),
       color: mem?.color || "#14f195",
     };
   }
@@ -112,6 +130,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "bad_request" }, { status: 400 });
   }
   const b = parsed.data;
+  if (b.action === "typing") {
+    const s = await readyState();
+    const me = ensureCircle(s.circle).members[b.pubkey];
+    if (!me || me.status === "banned") return NextResponse.json({ error: "not_member" }, { status: 400 });
+    typingMem.set(b.pubkey, Date.now() + 4000);
+    return NextResponse.json({ ok: true });
+  }
   if (b.action === "join") {
     if (!b.email || !isEmail(b.email)) return NextResponse.json({ error: "bad_email", message: "Enter a real email for updates." }, { status: 400 });
     const out = await mutateState((s) => {
@@ -135,9 +160,7 @@ export async function POST(req: NextRequest) {
     });
     if (!out.ok) {
       const message =
-        out.error === "full"
-          ? "Founders Circle is full."
-          : out.error === "banned"
+        out.error === "banned"
             ? "This wallet is banned from Founders Circle."
             : "Could not join.";
       return NextResponse.json({ error: out.error, message }, { status: 400 });
@@ -164,10 +187,6 @@ export async function POST(req: NextRequest) {
     const book = s.circle;
     const me = book.members[b.pubkey];
     if (!me || me.status === "banned") return { ok: false as const, error: "not_member" };
-    if (b.action === "typing") {
-      book.typing[b.pubkey] = Date.now() + 4000;
-      return { ok: true as const };
-    }
     if (b.action === "read") {
       me.lastReadAt = Date.now();
       return { ok: true as const };
