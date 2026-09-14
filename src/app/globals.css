@@ -279,6 +279,29 @@ body {
   filter: drop-shadow(0 0 28px rgba(20, 241, 149, 0.28)) drop-shadow(0 0 48px rgba(153, 69, 255, 0.22));
 }
 
+@keyframes confetti-fall {
+  0% { transform: translate3d(0, -10vh, 0) rotate(0deg); opacity: 1; }
+  100% { transform: translate3d(var(--cx, 0px), 110vh, 0) rotate(540deg); opacity: 0; }
+}
+
+.teal-confetti {
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  overflow: hidden;
+}
+.teal-confetti i {
+  position: absolute;
+  top: -8px;
+  left: var(--cl);
+  width: var(--cw);
+  height: var(--ch);
+  border-radius: 3px;
+  background: var(--cc);
+  animation: confetti-fall var(--cd) ease-in forwards;
+}
+
 @keyframes sol-flow {
   0% { background-position: 0% 50%; }
   50% { background-position: 100% 50%; }

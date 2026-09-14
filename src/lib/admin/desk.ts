@@ -12,6 +12,7 @@ import { latestBacktest } from "../pair/backtest";
 import { lastPairDesk, lastPairPrices, publicBook } from "../tick";
 import { treasuryAddress } from "../treasury";
 import { sphaMintOf } from "../token/solphia";
+import { activeMembers, ensureCircle, spotsLeft } from "../circle/engine";
 import { seatSol } from "../seat";
 import { promoDataUrl, promoViewToken } from "./promoFile";
 import { bookHoldingUsd, sumWindows, tradingNow, uniqueWallets } from "./stats";
@@ -117,6 +118,10 @@ export function buildAdminDesk(opts?: { light?: boolean }): AdminDesk {
     lpWallet: s.lpWallet || "",
     sphaNetwork: s.sphaNetwork === "mainnet-beta" ? "mainnet-beta" : "devnet",
     sphaLaunch: s.sphaLaunch || null,
+    circle: (() => {
+      const c = ensureCircle(s.circle);
+      return { cap: c.cap, members: activeMembers(c).length, spots: spotsLeft(c) };
+    })(),
     sphaSocials: {
       x: s.sphaSocials?.x || "",
       telegram: s.sphaSocials?.telegram || "",

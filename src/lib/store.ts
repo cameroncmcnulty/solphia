@@ -19,6 +19,7 @@ import {
 } from "./persist";
 import type { AppState, AuditEvent, BacktestReport, PairHoldings, TraderAccount } from "./types";
 import { pruneBookLogs } from "./pair/bookLog";
+import { emptyCircle, ensureCircle } from "./circle/engine";
 
 export const DATA_DIR = process.env.DATA_DIR || (process.env.VERCEL ? "/tmp/solphia" : path.join(process.cwd(), "data"));
 const FILE = path.join(DATA_DIR, "state.json");
@@ -71,6 +72,7 @@ export function emptyState(): AppState {
     lpWallet: "",
     sphaNetwork: "devnet",
     sphaLaunch: null,
+    circle: emptyCircle(),
     sphaSocials: { x: "", telegram: "", discord: "" },
     healthLog: [],
     healthTiers: {},
@@ -131,6 +133,7 @@ function hydrateFromRaw(raw: AppState): AppState {
     lpWallet: raw.lpWallet || "",
     sphaNetwork: raw.sphaNetwork === "mainnet-beta" ? "mainnet-beta" : "devnet",
     sphaLaunch: raw.sphaLaunch || null,
+    circle: ensureCircle(raw.circle),
     sphaSocials: {
       x: raw.sphaSocials?.x || "",
       telegram: raw.sphaSocials?.telegram || "",

@@ -14,6 +14,7 @@ const LINKS = [
   { href: "/account#pfp", label: "Change PFP" },
   { href: "/account#launches", label: "Launched coins" },
   { href: "/account#referrals", label: "Referrals" },
+  { href: "/circle?welcome=1", label: "🎁 Founders Circle" },
 ];
 
 export function AccountMenu() {

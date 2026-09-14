@@ -29,7 +29,8 @@ export type AdminIcon =
   | "system"
   | "wallets"
   | "users"
-  | "health";
+  | "health"
+  | "circle";
 
 export const ADMIN_NAV = [
   {
@@ -105,6 +106,14 @@ export const ADMIN_NAV = [
     label: "Project",
     hint: "Wallets, SPHA launch, tokenomics",
     icon: "wallets" as const,
+  },
+  {
+    id: "circle",
+    group: "protocol",
+    label: "Founders Circle",
+    hint: "Members, mods, bans, airdrops",
+    icon: "circle" as const,
+    badge: (d: AdminDesk) => d.circle?.members || null,
   },
 ] as const;
 

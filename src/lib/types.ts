@@ -530,6 +530,7 @@ export interface AppState {
     allocations: { id: string; wallet: string; tokens: number }[];
   } | null;
   sphaSocials?: { x?: string; telegram?: string; discord?: string };
+  circle?: import("./circle/types").CircleBook;
   healthLog?: {
     t: number;
     tickAgeMs: number;

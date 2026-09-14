@@ -1,0 +1,197 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import { Gift } from "lucide-react";
+import { useAdmin } from "../AdminProvider";
+import { shortPk } from "../ui";
+
+type Row = {
+  pubkey: string;
+  email: string;
+  role: string;
+  status: string;
+  joinedAt: number;
+  boostPct: number;
+  refs: number;
+  unclaimed: number;
+  claimed: number;
+  username: string;
+};
+
+type Pack = {
+  cap: number;
+  spots: number;
+  active: number;
+  members: Row[];
+  airdrops: { id: string; at: number; total: number; heads: number }[];
+};
+
+export function CircleSection() {
+  const { data } = useAdmin();
+  const [pack, setPack] = useState<Pack | null>(null);
+  const [cap, setCap] = useState("100");
+  const [amount, setAmount] = useState("1000");
+  const [note, setNote] = useState("");
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(async () => {
+    const r = await fetch("/api/admin/circle", { cache: "no-store" });
+    const j = await r.json();
+    if (r.ok) {
+      setPack(j);
+      setCap(String(j.cap));
+    }
+  }, []);
+
+  useEffect(() => {
+    load().catch(() => {});
+  }, [load]);
+
+  async function post(body: Record<string, unknown>) {
+    setBusy(true);
+    setErr("");
+    setNote("");
+    try {
+      const r = await fetch("/api/admin/circle", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.message || j.error || "failed");
+      if (j.drop) setNote(`Drop ${j.drop.id} · ${j.drop.heads} founders`);
+      await load();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <div className="font-mono text-[10px] tracking-[0.28em] text-mute">FOUNDERS CIRCLE</div>
+        <h2 className="mt-1 font-display text-3xl text-ghost">The exclusive hang</h2>
+        <p className="mt-1 max-w-2xl text-sm text-mute">
+          Limited seats. Wallet + email to enter. Referrals add 5% airdrop weight for life. Mods can keep the chat
+          clean. Admins can ban and drop.
+        </p>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div className="rounded-2xl border border-violet/20 bg-void/40 px-4 py-3">
+          <div className="font-mono text-[10px] text-mute">SEATED</div>
+          <div className="font-display text-2xl text-ghost">{pack?.active ?? data?.circle.members ?? 0}</div>
+        </div>
+        <div className="rounded-2xl border border-violet/20 bg-void/40 px-4 py-3">
+          <div className="font-mono text-[10px] text-mute">CAP</div>
+          <div className="font-display text-2xl text-ghost">{pack?.cap ?? data?.circle.cap ?? 100}</div>
+        </div>
+        <div className="rounded-2xl border border-violet/20 bg-void/40 px-4 py-3">
+          <div className="font-mono text-[10px] text-mute">OPEN</div>
+          <div className="font-display text-2xl text-acid">{pack?.spots ?? data?.circle.spots ?? 0}</div>
+        </div>
+      </div>
+
+      <div className="rounded-3xl border border-acid/25 bg-acid/[0.04] p-5">
+        <div className="font-mono text-[10px] tracking-[0.2em] text-acid">AIRDROP TO THE CIRCLE</div>
+        <p className="mt-1 text-sm text-mute">
+          Splits the amount by seat count and referral boost, then parks it on each founder’s withdraw button.
+        </p>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <input
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            className="w-36 rounded-full border border-violet/30 bg-void px-4 py-2 font-mono text-sm text-ghost"
+            placeholder="token amount"
+          />
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => post({ airdrop: Number(amount) })}
+            className="btn-acid inline-flex items-center gap-2 rounded-full px-5 py-2 text-sm disabled:opacity-40"
+          >
+            <Gift className="h-4 w-4" />
+            Airdrop
+          </button>
+        </div>
+        {note && <p className="mt-2 text-sm text-acid">{note}</p>}
+        {err && <p className="mt-2 text-sm text-blood">{err}</p>}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-mono text-[10px] text-mute">SEAT CAP</span>
+        <input
+          value={cap}
+          onChange={(e) => setCap(e.target.value)}
+          className="w-24 rounded-full border border-violet/30 bg-void px-3 py-1 font-mono text-sm text-ghost"
+        />
+        <button type="button" disabled={busy} onClick={() => post({ cap: Number(cap) })} className="btn-ghost rounded-full px-4 py-1 text-sm">
+          Save cap
+        </button>
+      </div>
+
+      <div className="overflow-x-auto rounded-3xl border border-violet/20">
+        <table className="w-full min-w-[720px] text-left text-sm">
+          <thead className="font-mono text-[10px] tracking-[0.14em] text-mute">
+            <tr>
+              <th className="px-3 py-2">Founder</th>
+              <th className="px-3 py-2">Boost</th>
+              <th className="px-3 py-2">Unclaimed</th>
+              <th className="px-3 py-2">Role</th>
+              <th className="px-3 py-2">Status</th>
+              <th className="px-3 py-2">Tools</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(pack?.members || []).map((m) => (
+              <tr key={m.pubkey} className="border-t border-violet/15">
+                <td className="px-3 py-2">
+                  <div className="text-ghost">{m.username ? `@${m.username}` : shortPk(m.pubkey, 5)}</div>
+                  <div className="font-mono text-[10px] text-mute">{m.email}</div>
+                </td>
+                <td className="px-3 py-2 font-mono text-[11px]">
+                  {m.boostPct}% · {m.refs} refs
+                </td>
+                <td className="px-3 py-2">{m.unclaimed.toFixed(2)}</td>
+                <td className="px-3 py-2">
+                  <select
+                    value={m.role}
+                    onChange={(e) => post({ pubkey: m.pubkey, role: e.target.value })}
+                    className="rounded-full border border-violet/30 bg-void px-2 py-1 font-mono text-[11px] text-ghost"
+                  >
+                    <option value="member">member</option>
+                    <option value="mod">mod</option>
+                    <option value="admin">admin</option>
+                  </select>
+                </td>
+                <td className="px-3 py-2 font-mono text-[11px] text-mute">{m.status}</td>
+                <td className="px-3 py-2">
+                  <div className="flex flex-wrap gap-1">
+                    <button type="button" className="rounded-full border border-violet/30 px-2 py-0.5 text-[11px]" onClick={() => post({ pubkey: m.pubkey, muteMs: 3_600_000 })}>
+                      Mute 1h
+                    </button>
+                    <button type="button" className="rounded-full border border-violet/30 px-2 py-0.5 text-[11px]" onClick={() => post({ pubkey: m.pubkey, muteMs: 0 })}>
+                      Unmute
+                    </button>
+                    {m.status === "banned" ? (
+                      <button type="button" className="rounded-full border border-acid/40 px-2 py-0.5 text-[11px] text-acid" onClick={() => post({ pubkey: m.pubkey, ban: false })}>
+                        Unban
+                      </button>
+                    ) : (
+                      <button type="button" className="rounded-full border border-blood/40 px-2 py-0.5 text-[11px] text-blood" onClick={() => post({ pubkey: m.pubkey, ban: true })}>
+                        Ban
+                      </button>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}

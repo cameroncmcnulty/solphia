@@ -9,6 +9,7 @@ import { SolphiaConstellation } from "@/components/SolphiaConstellation";
 import { solphiaTokenDesk } from "@/lib/token/solphia";
 import { Reveal } from "@/components/Reveal";
 import { Tokenomics } from "@/components/Tokenomics";
+import { JoinFoundersButton } from "@/components/JoinFoundersButton";
 
 function tick(symbol: string) {
   const s = symbol.replace(/^\$+/, "").replace(/\*+$/, "").trim();
@@ -86,10 +87,11 @@ export default function TokenPage() {
         </div>
 
         <div className="mt-10 flex flex-col gap-3 sm:flex-row">
-          <Link href="/trading" className="btn-acid inline-flex min-h-[48px] items-center justify-center rounded-full px-8">
+          <JoinFoundersButton />
+          <Link href="/trading" className="btn-ghost inline-flex min-h-[52px] items-center justify-center rounded-full px-8">
             Open the desk
           </Link>
-          <Link href="/launch" className="btn-ghost inline-flex min-h-[48px] items-center justify-center rounded-full px-8">
+          <Link href="/launch" className="btn-ghost inline-flex min-h-[52px] items-center justify-center rounded-full px-8">
             Launch
           </Link>
         </div>

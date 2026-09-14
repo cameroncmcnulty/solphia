@@ -152,6 +152,7 @@ export type AdminDesk = {
     allocations: { id: string; wallet: string; tokens: number }[];
   } | null;
   sphaSocials: { x: string; telegram: string; discord: string };
+  circle: { cap: number; members: number; spots: number };
   ownerEarningsSol: number;
   launchCount: number;
   durable: boolean;
