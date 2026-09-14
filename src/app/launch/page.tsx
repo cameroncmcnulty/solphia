@@ -33,6 +33,7 @@ import { SWAP_FEE_BPS } from "@/lib/launch/curve";
 import { auditLaunchCoin, rankTape, scoreTape, type LaunchAudit } from "@/lib/launch/audit";
 import { BoostBuy, fmtLeft } from "@/components/BoostBuy";
 import { filterTape, sortTape, volumeIn, type AgeFilter, type VolWindow } from "@/lib/launch/tape";
+import { isSolanaAddress } from "@/lib/wallet/addr";
 
 
 const TOKEN_PX = TOKEN_IMAGE_PX;
@@ -244,6 +245,10 @@ export default function LaunchPage() {
   }>({ live: [], queued: [] });
   const [source, setSource] = useState<"all" | "born" | "market">("all");
   const [tapeLoading, setTapeLoading] = useState(true);
+  const [caQuery, setCaQuery] = useState("");
+  const [caBusy, setCaBusy] = useState(false);
+  const [caErr, setCaErr] = useState("");
+  const [lookedMint, setLookedMint] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const devPct = buySupplyPct(emptyCurve(), devBuy);
 
@@ -300,6 +305,59 @@ export default function LaunchPage() {
       clearInterval(boostT);
     };
   }, [owner]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const q = new URLSearchParams(window.location.search).get("mint") || "";
+    if (isSolanaAddress(q)) {
+      setCaQuery(q);
+      searchMint(q).catch(() => {});
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function searchMint(raw?: string) {
+    const q = (raw ?? caQuery).trim();
+    setCaErr("");
+    if (!q) {
+      setCaErr("Paste a mint address.");
+      return;
+    }
+    const local = coins.find((c) => {
+      if (c.mint && c.mint === q) return true;
+      const sym = (c.symbol || "").replace(/^\$+/, "").toLowerCase();
+      return sym && sym === q.replace(/^\$+/, "").toLowerCase();
+    });
+    if (local) {
+      setOpen(local);
+      setLookedMint(local.mint || local.id);
+      setTab("tape");
+      return;
+    }
+    if (!isSolanaAddress(q)) {
+      setCaErr("Paste a mint address to look up a token off the tape.");
+      return;
+    }
+    setCaBusy(true);
+    try {
+      const r = await fetch(`/api/launch/lookup?mint=${encodeURIComponent(q)}`, { cache: "no-store" });
+      const j = await r.json();
+      if (!r.ok || !j.coin) {
+        setCaErr(j.error === "not_found" ? "No token at that mint." : j.error || "Lookup failed.");
+        return;
+      }
+      const coin = j.coin as Coin;
+      if (j.solUsd) setSolUsd((s) => s || j.solUsd);
+      setCoins((prev) => [coin, ...prev.filter((c) => c.mint !== coin.mint && c.id !== coin.id)]);
+      setOpen(coin);
+      setLookedMint(coin.mint || coin.id);
+      setTab("tape");
+    } catch (e) {
+      setCaErr(e instanceof Error ? e.message : "Lookup failed.");
+    } finally {
+      setCaBusy(false);
+    }
+  }
 
   function launchToken() {
     const issues = validateLaunchCreate({
@@ -408,8 +466,20 @@ export default function LaunchPage() {
       else rest.push({ ...row, boost: undefined as undefined });
     }
     boosted.sort((a, b) => (b.boost?.rockets || 0) - (a.boost?.rockets || 0));
-    return [...boosted, ...rest];
-  }, [pool, age, vol, ranked, solUsd, source, tab, boostLive]);
+    let next = [...boosted, ...rest];
+    if (lookedMint) {
+      const pinned = coins.find((c) => c.mint === lookedMint || c.id === lookedMint);
+      if (pinned) {
+        const already = next.find((r) => r.coin.id === pinned.id || r.coin.mint === pinned.mint);
+        if (already) next = [already, ...next.filter((r) => r !== already)];
+        else {
+          const extra = scoreTape([pinned], solUsd)[0];
+          if (extra) next = [{ ...extra, boost: undefined }, ...next];
+        }
+      }
+    }
+    return next;
+  }, [pool, age, vol, ranked, solUsd, source, tab, boostLive, lookedMint, coins]);
   const rows = board.map((r) => r.coin);
 
   return (
@@ -625,6 +695,27 @@ export default function LaunchPage() {
               )}
             </div>
             <div className="mt-3 space-y-2">
+              <form
+                className="flex gap-2"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  searchMint().catch(() => {});
+                }}
+              >
+                <input
+                  value={caQuery}
+                  onChange={(e) => {
+                    setCaQuery(e.target.value);
+                    setCaErr("");
+                  }}
+                  placeholder="Search mint (CA)"
+                  className="min-h-[40px] min-w-0 flex-1 rounded-full border border-violet/30 bg-void px-4 font-mono text-[11px] text-ghost"
+                />
+                <button type="submit" disabled={caBusy} className="btn-ghost min-h-[40px] rounded-full px-4 font-mono text-[11px] disabled:opacity-40">
+                  {caBusy ? "…" : "Search"}
+                </button>
+              </form>
+              {caErr && <p className="font-mono text-[11px] text-blood">{caErr}</p>}
               <div>
                 <div className="font-mono text-[10px] tracking-[0.22em] text-mute">SOURCE</div>
                 <div className="mt-1 flex flex-wrap gap-1 rounded-2xl border border-violet/25 p-1">

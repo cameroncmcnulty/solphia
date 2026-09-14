@@ -41,7 +41,7 @@ describe("backtest replay", () => {
     assert.equal(report.startingUsd, 1000);
     assert.ok(report.endingUsd > 0);
     assert.ok(report.maxDdPct >= 0);
-    assert.match(report.note, /historical paper/i);
+    assert.match(report.note, /replay/i);
     assert.match(report.horizon, /fees/i);
     assert.ok(Array.isArray(report.daily));
     assert.ok(typeof report.bestDayUsd === "number");
@@ -93,6 +93,14 @@ describe("backtest replay", () => {
     assert.equal(pack.reports[1].ready, true);
     assert.equal(pack.reports[2].ready, true);
     assert.equal(pack.reports[3].ready, true);
+    assert.equal(pack.windows["1m"].ready, true);
+    assert.equal(pack.windows["3m"].ready, true);
+    assert.equal(pack.windows["6m"].ready, true);
+    if (pack.windows["1m"].ready && pack.windows["3m"].ready && pack.windows["6m"].ready) {
+      assert.ok((pack.windows["1m"].trades || 0) >= 1);
+      assert.ok((pack.windows["3m"].curve?.length || 0) > 8);
+      assert.ok((pack.windows["6m"].curve?.length || 0) > 8);
+    }
     if (pack.reports[1].ready && pack.reports[2].ready && pack.reports[3].ready) {
       assert.equal(pack.reports[2].leverage, 2);
       assert.equal(pack.reports[3].leverage, 3);

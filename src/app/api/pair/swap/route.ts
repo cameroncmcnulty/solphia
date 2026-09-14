@@ -6,7 +6,7 @@ import { quoteBestRoute } from "@/lib/pair/jupiter";
 import { isAllowedMint, SOL_MINT } from "@/lib/pair/mints";
 import { assembleSwapTx } from "@/lib/swap/build";
 import { BOT_SLIPPAGE_BPS } from "@/lib/config";
-import { protocolFeeSol } from "@/lib/swap/route";
+import { liveClipFeeSol, liveSwapFeeSol } from "@/lib/swap/route";
 
 export const dynamic = "force-dynamic";
 
@@ -35,11 +35,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "mint_not_allowed" }, { status: 400 });
   }
   const slip = parsed.data.slippageBps || BOT_SLIPPAGE_BPS;
-  const feeSol =
+  const solIn = parsed.data.inputMint === SOL_MINT;
+  const solOut = parsed.data.outputMint === SOL_MINT;
+  let feeSol =
     parsed.data.feeSol ??
-    (parsed.data.clipUsd && parsed.data.solUsd ? protocolFeeSol(parsed.data.clipUsd, parsed.data.solUsd) : 0);
+    (parsed.data.clipUsd && parsed.data.solUsd
+      ? liveClipFeeSol(parsed.data.clipUsd, parsed.data.solUsd)
+      : solIn
+        ? liveSwapFeeSol(parsed.data.amount)
+        : 0);
   let spend = parsed.data.amount;
-  if (parsed.data.inputMint === SOL_MINT && feeSol > 0) {
+  if (solIn && feeSol > 0) {
     spend = Math.max(0, parsed.data.amount - feeSol);
   }
   const q = await quoteBestRoute({
@@ -49,6 +55,7 @@ export async function POST(req: NextRequest) {
     slippageBps: slip,
   });
   if (!q.ok) return NextResponse.json({ error: q.reason }, { status: 400 });
+  if (!feeSol && solOut) feeSol = liveSwapFeeSol(q.outAmount);
   if (q.viaUsdc && q.midAmount) {
     return NextResponse.json({
       viaUsdc: true,
@@ -58,7 +65,12 @@ export async function POST(req: NextRequest) {
       feeSol,
     });
   }
-  const tx = await assembleSwapTx({ owner: parsed.data.tradingPubkey, quote: q.quote, feeSol });
+  const tx = await assembleSwapTx({
+    owner: parsed.data.tradingPubkey,
+    quote: q.quote,
+    feeSol,
+    feeAfter: Boolean(solOut && !solIn),
+  });
   if (!tx.ok) return NextResponse.json({ error: tx.reason }, { status: 400 });
   return NextResponse.json({
     transaction: tx.transaction,

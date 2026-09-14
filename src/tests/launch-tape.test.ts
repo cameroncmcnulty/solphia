@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 import { buyCoin, createCoin, emptyLaunchBook, publicCoin } from "../lib/launch/engine";
 import { auditLaunchCoin, rankTape } from "../lib/launch/audit";
 import { filterTape, sortTape, volumeIn } from "../lib/launch/tape";
-import { marketPasses, MARKET_MIN_SCORE, filterMarketSnapshots } from "../lib/launch/market";
+import { marketPasses, MARKET_MIN_SCORE, filterMarketSnapshots, snapshotToTape } from "../lib/launch/market";
 import { isNativeSolSnapshot, WSOL_MINT } from "../lib/feeds/normalize";
 import type { TokenSnapshot } from "../lib/types";
 
@@ -175,5 +175,43 @@ describe("market tape gate", () => {
     const { rows } = filterMarketSnapshots(tokens, 150);
     assert.equal(rows.length, 1);
     assert.equal(rows[0].coin.symbol, "PEPE");
+  });
+
+  it("still builds a tape row for a searched mint that would fail the public gate", () => {
+    const dust: TokenSnapshot = {
+      mint: "DustMintxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx1",
+      name: "Dust Coin",
+      symbol: "DUST",
+      venue: "pumpfun",
+      createdAt: NOW,
+      priceUsd: 0.0001,
+      marketCapUsd: 10,
+      liquidityUsd: 5,
+      volume5m: 0,
+      volume1h: 1,
+      volume24h: 2,
+      txns5m: 0,
+      txns1h: 1,
+      buys1h: 1,
+      sells1h: 0,
+      uniqueTraders1h: 1,
+      priceChange5m: 0,
+      priceChange1h: 0,
+      priceChange6h: 0,
+      priceChange24h: 0,
+      bondingProgress: 0.1,
+      graduated: false,
+      nsfw: false,
+      banned: false,
+      livestream: false,
+      replyCount: 0,
+      verified: false,
+      socials: {},
+    };
+    assert.equal(marketPasses({ score: 90, marketCapUsd: 10, liquidityUsd: 5, volume1hUsd: 1 }), false);
+    const row = snapshotToTape(dust, 150);
+    assert.equal(row.mint, dust.mint);
+    assert.equal(row.symbol, "DUST");
+    assert.equal(row.born, false);
   });
 });

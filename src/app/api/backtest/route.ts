@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { latestBacktest, publicBacktest } from "@/lib/pair/backtest";
+import { latestBacktest, latestHorizon, publicBacktest } from "@/lib/pair/backtest";
 import { loadAllTraders, readyState } from "@/lib/store";
 import { publicBook } from "@/lib/tick";
 import { isFounder } from "@/lib/access";
@@ -14,11 +14,17 @@ export async function GET() {
     2: publicBacktest(latestBacktest(s.backtestLev2, 2)),
     3: publicBacktest(latestBacktest(s.backtestLev3, 3)),
   };
+  const windows = {
+    "1m": publicBacktest(latestHorizon("1m", s.backtest)),
+    "3m": publicBacktest(latestHorizon("3m")),
+    "6m": publicBacktest(latestHorizon("6m")),
+  };
   const liveTrader = Object.values(s.traders || {}).find((t) => isFounder(s, t.owner) && t.auto?.mode === "live");
   const liveBook = liveTrader ? publicBook(liveTrader.book) : null;
   return NextResponse.json({
     reports,
-    ...reports[1],
+    windows,
+    ...windows["1m"],
     live:
       s.publishLiveWallet && liveBook
         ? {

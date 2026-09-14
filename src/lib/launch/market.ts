@@ -1,4 +1,4 @@
-import { ingestPublicTape } from "../feeds";
+import { ingestPublicTape, lookupTokenMint, solPriceUsd } from "../feeds";
 import { isNativeSolSnapshot } from "../feeds/normalize";
 import { scoreToken } from "../risk/engine";
 import type { TokenSnapshot } from "../types";
@@ -143,4 +143,13 @@ export async function loadMarketTape(force = false): Promise<{
   const { rows, scanned } = filterMarketSnapshots(tokens, solUsd);
   cache = { at: Date.now(), rows, solUsd, scanned };
   return { rows, solUsd, scanned, minScore: MARKET_MIN_SCORE };
+}
+
+/** One mint, even when the public tape would hide it. Search must still open the token. */
+export async function lookupMarketMint(mint: string): Promise<(MarketRow & { solUsd: number }) | null> {
+  const snap = await lookupTokenMint(mint);
+  if (!snap?.mint) return null;
+  const solUsd = (await solPriceUsd().catch(() => 100)) || 100;
+  const report = scoreToken(snap);
+  return { coin: snapshotToTape(snap, solUsd), score: report.score, grade: report.grade, solUsd };
 }

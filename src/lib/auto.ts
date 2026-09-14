@@ -2,15 +2,15 @@ import type { AutoSettings, PaperBook, TraderAccount } from "./types";
 import { PAPER_STARTING_USD } from "./config";
 import { clampLev, SPOT_LEVERAGE, type Lev } from "./leverage";
 
-/** Locked knobs. The hub does not expose these — mean-revert, normal band, 2m cooldown. */
+/** Locked knobs. The hub does not expose these — scalp, normal band, 60m cooldown. */
 export const DEFAULT_AUTO: AutoSettings = {
   armed: true,
-  mode: "paper",
+  mode: "live",
   allocationPct: 0.88,
   style: "scalp",
   band: "normal",
   clipPct: 0.5,
-  cooldownMin: 240,
+  cooldownMin: 60,
   stopPct: 0.08,
   takeProfitPct: 0.012,
   targetSolPct: 0.2,
@@ -19,11 +19,11 @@ export const DEFAULT_AUTO: AutoSettings = {
   leverage: SPOT_LEVERAGE,
 };
 
-/** Production settings: user may only flip paper/live. Everything else is the better default. */
+/** Production settings: live unless explicitly paper. Everything else is the better default. */
 export function lockedAuto(partial?: Partial<AutoSettings>): AutoSettings {
   return {
     ...DEFAULT_AUTO,
-    mode: partial?.mode === "live" ? "live" : "paper",
+    mode: partial?.mode === "paper" ? "paper" : "live",
     armed: partial?.armed !== false,
     armedAt: partial?.armedAt,
     tradingPubkey: partial?.tradingPubkey,

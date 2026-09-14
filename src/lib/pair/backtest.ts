@@ -9,6 +9,7 @@ import type {
   BacktestPoint,
   BacktestReport,
   BacktestSleeve,
+  BacktestWindow,
   PaperBook,
   PaperFill,
 } from "../types";
@@ -22,6 +23,8 @@ import { equityOf, markPair, pairOf } from "./engine";
 import seed from "./backtestSeed.json";
 import seedLev2 from "./backtestSeedLev2.json";
 import seedLev3 from "./backtestSeedLev3.json";
+import seed3m from "./backtestSeed3m.json";
+import seed6m from "./backtestSeed6m.json";
 
 function normalizeDay(d: BacktestDay): BacktestDay {
   const entries = d.entries ?? 0;
@@ -292,7 +295,15 @@ export function monthlyStats(curve: BacktestPoint[], fills: PaperFill[]): Backte
   return rows;
 }
 
-function reportOf(book: PaperBook, curve: BacktestPoint[], from: number, to: number, bars: number, maxDdPct: number): BacktestReport {
+function reportOf(
+  book: PaperBook,
+  curve: BacktestPoint[],
+  from: number,
+  to: number,
+  bars: number,
+  maxDdPct: number,
+  extra?: { horizonLabel?: string; window?: BacktestWindow },
+): BacktestReport {
   const sells = closedClips(book.fills);
   const wins = sells.filter((f) => (f.pnlUsd || 0) > 0);
   const losses = sells.filter((f) => (f.pnlUsd || 0) < 0);
@@ -305,6 +316,8 @@ function reportOf(book: PaperBook, curve: BacktestPoint[], from: number, to: num
   const days = Math.max(1, (to - from) / 86_400_000);
   const daily = dailyStats(curve, book.fills, start);
   const monthly = monthlyStats(curve, book.fills);
+  const window = extra?.window;
+  const barLabel = days >= 80 ? "1h clips" : "15m clips";
   return {
     ranAt: Date.now(),
     from,
@@ -312,7 +325,8 @@ function reportOf(book: PaperBook, curve: BacktestPoint[], from: number, to: num
     bars,
     leverage: clampLev((book as { solLeverage?: Lev }).solLeverage),
     liquidations: book.fills.filter((f) => /liquidat/i.test(f.reason || "")).length,
-    horizon: `${Math.round(days)}d · 15m clips · Daily/4H bias · fees in`,
+    window,
+    horizon: extra?.horizonLabel || `${Math.round(days)}d · ${barLabel} · Daily/4H bias · fees in`,
     startingUsd: start,
     endingUsd: Math.round(end * 100) / 100,
     pnlUsd,
@@ -349,7 +363,7 @@ function reportOf(book: PaperBook, curve: BacktestPoint[], from: number, to: num
         pnlUsd: f.pnlUsd != null ? Math.round(f.pnlUsd * 100) / 100 : undefined,
         reason: f.reason.slice(0, 140),
       })),
-    note: `Historical paper of this engine on SOL, SPY, QQQ, and gold. ${levNote(clampLev((book as { solLeverage?: Lev }).solLeverage))} Fees and the 0.1% clip are in the mark. Daily PnL is the marked book. Past days are not a promise.`,
+    note: `Replay of this engine on SOL, S&P 500, Nasdaq, and gold. ${levNote(clampLev((book as { solLeverage?: Lev }).solLeverage))} Fees are in the mark. Daily PnL is the marked book. Past days are not a promise.`,
   };
 }
 
@@ -373,6 +387,7 @@ export function publicBacktest(report: BacktestReport | null | undefined) {
     daysGe2: report.daysGe2,
     leverage: report.leverage || 1,
     liquidations: report.liquidations || 0,
+    window: report.window,
     curve: report.curve,
     note: report.note,
   };
@@ -380,27 +395,63 @@ export function publicBacktest(report: BacktestReport | null | undefined) {
 
 export type PublicBacktest = ReturnType<typeof publicBacktest>;
 
-/** Same pack the homepage uses for 1×, 2×, and 3×. Seeds, not a live store read. */
+function seedForWindow(window: BacktestWindow): BacktestReport {
+  if (window === "6m") return seed6m as BacktestReport;
+  if (window === "3m") return seed3m as BacktestReport;
+  return seed as BacktestReport;
+}
+
+export function latestHorizon(window: BacktestWindow, stored?: BacktestReport | null): BacktestReport {
+  const report = normalizeBacktest(usableStored(stored) ? stored : seedForWindow(window));
+  report.window = window;
+  if (!report.leverage) report.leverage = 1;
+  return report;
+}
+
+/** Same pack the homepage uses: 1m / 3m / 6m plus 1× / 2× / 3× seeds. */
 export function publicBacktestPack() {
   const reports = {
     1: publicBacktest(latestBacktest(null, 1)),
     2: publicBacktest(latestBacktest(null, 2)),
     3: publicBacktest(latestBacktest(null, 3)),
   };
-  return { ready: true as const, reports };
+  const windows = {
+    "1m": publicBacktest(latestHorizon("1m")),
+    "3m": publicBacktest(latestHorizon("3m")),
+    "6m": publicBacktest(latestHorizon("6m")),
+  };
+  return { ready: true as const, reports, windows };
 }
 
+export type BacktestOpts = {
+  from?: number;
+  to?: number;
+  cooldownMin?: number;
+  horizonLabel?: string;
+  window?: BacktestWindow;
+};
+
 /** Replay the live scalp engine on a historical tape. */
-export function runBacktest(tape: BacktestTape, startingUsd = PAPER_STARTING_USD, lev: Lev = 1): BacktestReport {
+export function runBacktest(tape: BacktestTape, startingUsd = PAPER_STARTING_USD, lev: Lev = 1, opts?: BacktestOpts): BacktestReport {
   const spy0 = tape.spy[0]?.t || 0;
-  const clock = tape.sol.filter((c) => c.t >= spy0 && lastAt(tape.spy, c.t) && lastAt(tape.qqq, c.t) && lastAt(tape.gld, c.t));
+  const fromBound = opts?.from || 0;
+  const toBound = opts?.to || Number.POSITIVE_INFINITY;
+  const clock = tape.sol.filter(
+    (c) => c.t >= spy0 && c.t >= fromBound && c.t <= toBound && lastAt(tape.spy, c.t) && lastAt(tape.qqq, c.t) && lastAt(tape.gld, c.t),
+  );
   const warmup = 80;
   const packed = {
     h4: { sol: pack4h(tape.sol), spy: pack4h(tape.spy), qqq: pack4h(tape.qqq), gld: pack4h(tape.gld) },
     d1: { sol: packDaily(tape.sol), spy: packDaily(tape.spy), qqq: packDaily(tape.qqq), gld: packDaily(tape.gld) },
   };
   const book = emptyBook(startingUsd);
-  const auto = { ...DEFAULT_AUTO, armed: true, mode: "paper" as const, leverage: clampLev(lev) };
+  const auto = {
+    ...DEFAULT_AUTO,
+    armed: true,
+    mode: "paper" as const,
+    leverage: clampLev(lev),
+    cooldownMin: opts?.cooldownMin ?? DEFAULT_AUTO.cooldownMin,
+  };
   book.solLeverage = clampLev(lev);
   const curve: BacktestPoint[] = [{ t: clock[warmup]?.t || Date.now(), equity: startingUsd }];
   let peak = startingUsd;
@@ -441,5 +492,8 @@ export function runBacktest(tape: BacktestTape, startingUsd = PAPER_STARTING_USD
   if (curve[curve.length - 1]?.t !== to) {
     curve.push({ t: to, equity: Math.round(book.equityUsd * 100) / 100 });
   }
-  return reportOf(book, curve, from, to, ticks, maxDd);
+  return reportOf(book, curve, from, to, ticks, maxDd, {
+    horizonLabel: opts?.horizonLabel,
+    window: opts?.window,
+  });
 }

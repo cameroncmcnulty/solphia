@@ -148,7 +148,7 @@ export function AutoPilot({ owner }: { owner: string | null }) {
         <h2 className="mt-1 font-display text-2xl text-ghost">Turn her on. Close the phone.</h2>
         <p className="mt-2 text-sm leading-relaxed text-mute">
           Scout finds a setup. Risk has to agree. Policy caps size and daily loss. Keys stay on this device — never in
-          the model. She paper-trades first. Live stays off until a desk stays green.
+          the model. Backtest is the proof. Live spends the trading wallet.
         </p>
         <button
           onClick={() => patch({ armed: !auto?.armed })}

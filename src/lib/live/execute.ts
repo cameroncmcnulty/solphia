@@ -1,7 +1,7 @@
 import { Connection, Keypair, Transaction, VersionedTransaction } from "@solana/web3.js";
 import { applyPairDecision, BOOK_TAPE_MAX, tapeOf } from "../pair/paper";
 import { quoteBestRoute } from "../pair/jupiter";
-import { USDC_MINT } from "../pair/mints";
+import { SOL_MINT, USDC_MINT } from "../pair/mints";
 import type { PairPrices } from "../pair/prices";
 import { pushBounded } from "../store";
 import type { Mind, PaperBook, PairIntent, TraderAccount } from "../types";
@@ -9,7 +9,7 @@ import { decisionFromIntent } from "./fill";
 import { planIntentSwaps } from "./intent";
 import { loadDelegatedKeypair } from "./signer";
 import { assembleSwapTx } from "../swap/build";
-import { protocolFeeSol } from "../swap/route";
+import { liveClipFeeSol } from "../swap/route";
 import { BOT_SLIPPAGE_BPS, rpcUrl } from "../config";
 
 export const MAX_LIVE_FILLS_PER_TICK = 2;
@@ -36,10 +36,16 @@ async function swapDirect(
   outputMint: string,
   amount: number,
   feeSol = 0,
+  feeAfter = false,
 ): Promise<string> {
-  const q = await quoteBestRoute({ inputMint, outputMint, amount, slippageBps: BOT_SLIPPAGE_BPS });
+  let spend = amount;
+  if (!feeAfter && inputMint === SOL_MINT && feeSol > 0) {
+    spend = Math.max(0, amount - feeSol);
+    if (spend < 0.002) throw new Error("Amount is too small after the protocol fee.");
+  }
+  const q = await quoteBestRoute({ inputMint, outputMint, amount: spend, slippageBps: BOT_SLIPPAGE_BPS });
   if (!q.ok) throw new Error(q.reason);
-  const built = await assembleSwapTx({ owner: kp.publicKey.toBase58(), quote: q.quote, feeSol });
+  const built = await assembleSwapTx({ owner: kp.publicKey.toBase58(), quote: q.quote, feeSol, feeAfter });
   if (!built.ok) throw new Error(built.reason);
   return signAndSend(conn, kp, built.transaction);
 }
@@ -55,10 +61,12 @@ async function swapLeg(
   const q = await quoteBestRoute({ inputMint, outputMint, amount, slippageBps: BOT_SLIPPAGE_BPS });
   if (!q.ok) throw new Error(q.reason);
   if (q.viaUsdc && q.midAmount && q.midAmount > 0) {
-    await swapDirect(conn, kp, inputMint, USDC_MINT, amount, feeSol);
-    return swapDirect(conn, kp, USDC_MINT, outputMint, q.midAmount, 0);
+    const solOut = outputMint === SOL_MINT;
+    await swapDirect(conn, kp, inputMint, USDC_MINT, amount, solOut ? 0 : feeSol, false);
+    return swapDirect(conn, kp, USDC_MINT, outputMint, q.midAmount, solOut ? feeSol : 0, solOut);
   }
-  return swapDirect(conn, kp, inputMint, outputMint, amount, feeSol);
+  const feeAfter = outputMint === SOL_MINT && inputMint !== SOL_MINT;
+  return swapDirect(conn, kp, inputMint, outputMint, amount, feeSol, feeAfter);
 }
 
 export async function executeIntentOnchain(opts: {
@@ -73,7 +81,7 @@ export async function executeIntentOnchain(opts: {
   const legs = planIntentSwaps(opts);
   if (!legs.length) throw new Error("no live swap built");
   const conn = new Connection(rpcUrl(), { commitment: "confirmed" });
-  const feeSol = protocolFeeSol(opts.intent.clipUsd, opts.solUsd);
+  const feeSol = liveClipFeeSol(opts.intent.clipUsd, opts.solUsd);
   let sig = "";
   for (let i = 0; i < legs.length; i++) {
     const leg = legs[i];

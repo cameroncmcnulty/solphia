@@ -101,7 +101,7 @@ const KICKERS = [
   "solphia.io",
   "NON-CUSTODIAL",
   "PHANTOM ONLY",
-  "PAPER FIRST",
+  "BACKTEST FIRST",
   "SHE SITS WHEN IT’S NOISE",
 ];
 
@@ -110,7 +110,7 @@ const BEATS = [
   "When SOL looks expensive vs a market she sells SOL for that token. When it looks cheap she buys SOL back.",
   "She skips crash knives, weekend fake prints, and any clip fees would eat.",
   "PnL stays in USDC. Kill switch always on.",
-  "Live is 0.1 SOL / 30 days. SOL 2×/3× is 0.15. Plus 0.1% a clip. Paper is free.",
+  "Live is 0.1 SOL / 30 days. SOL 2×/3× is 0.15. 1% of each in-house swap goes to the treasury.",
   "These tokens are not the New York print after 16:00 ET. You can lose SOL.",
   "No memecoins, no copy list, no sniper. Ten pairs among five official sleeves.",
   "Connect and add SOL once. The trading wallet on your device signs. Phantom is not asked again until you withdraw.",
@@ -121,7 +121,7 @@ const MOODS: Mood[] = ["acid", "violet", "cyan"];
 const ASSETS: Asset[] = ["solphia-face.png", "solphia-hero.png"];
 const COMPOSES: Compose[] = ["bleed-bottom", "bleed-side", "bleed-top", "type-hero", "tape-sky", "orbit"];
 const FADES: Art["fade"][] = ["left", "right", "bottom", "top", "center"];
-const CHIPS = ["SPOT xSTOCKS", "OPT 2×/3×", "PHANTOM", "USDC PnL", "2m WAIT", "KILL ON", "xSTOCKS", "PAPER FIRST"];
+const CHIPS = ["SPOT xSTOCKS", "OPT 2×/3×", "PHANTOM", "USDC PnL", "60m WAIT", "KILL ON", "xSTOCKS", "LIVE DESK"];
 
 const ALL_LAYOUTS: Layout[] = [
   "face",

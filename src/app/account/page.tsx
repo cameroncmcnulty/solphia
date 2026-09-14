@@ -6,6 +6,7 @@ import { CartoonPfp } from "@/components/CartoonPfp";
 import { WalletConnect } from "@/components/WalletConnect";
 import { useOwner } from "@/lib/hooks";
 import { exportSecret, importSecret, tradingPubkey } from "@/lib/wallet/trading";
+import { WalletMove } from "@/components/WalletMove";
 import { IMAGE_DATA_MAX } from "@/lib/launch/validate";
 import { launchError } from "@/lib/launch/errors";
 import { usernameIssue } from "@/lib/launch/username";
@@ -246,9 +247,25 @@ export default function AccountPage() {
           <p className="text-sm text-mute">Phantom is login. The trading wallet lives on this device and signs her clips.</p>
           <WalletRow k="Phantom" pk={owner} bal={ownerBal} />
           <WalletRow k="Trading" pk={tradePk} bal={tradeBal} />
+          {tradePk ? (
+            <WalletMove
+              owner={owner}
+              tradePk={tradePk}
+              tradeBal={tradeBal}
+              onDone={() => {
+                Promise.all([
+                  fetch(`/api/sol/balance?pubkey=${owner}`).then((r) => r.json()),
+                  fetch(`/api/sol/balance?pubkey=${tradePk}`).then((r) => r.json()),
+                ]).then(([a, b]) => {
+                  setOwnerBal(a.sol || 0);
+                  setTradeBal(b.sol || 0);
+                });
+              }}
+            />
+          ) : null}
           <div className="flex flex-wrap gap-2">
-            <Link href="/trading" className="btn-acid rounded-full px-5 py-2 text-sm">
-              Add SOL
+            <Link href="/trading" className="btn-ghost rounded-full px-5 py-2 text-sm">
+              Open the desk
             </Link>
             <button
               type="button"

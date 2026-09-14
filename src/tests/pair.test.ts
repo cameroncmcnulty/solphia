@@ -514,11 +514,11 @@ describe("paper fills + kill", () => {
     }
   });
 
-  it("default leverage is spot 1x and cooldown is 2 minutes", () => {
+  it("default leverage is spot 1x and cooldown is 60 minutes", () => {
     assert.equal(DEFAULT_AUTO.leverage, 1);
-    assert.equal(DEFAULT_AUTO.mode, "paper");
+    assert.equal(DEFAULT_AUTO.mode, "live");
     assert.equal(DEFAULT_AUTO.style, "scalp");
-    assert.equal(DEFAULT_AUTO.cooldownMin, 240);
+    assert.equal(DEFAULT_AUTO.cooldownMin, 60);
     assert.equal(DEFAULT_AUTO.band, "normal");
     assert.equal(DEFAULT_AUTO.clipPct, 0.5);
     assert.equal(DEFAULT_AUTO.takeProfitPct, 0.012);

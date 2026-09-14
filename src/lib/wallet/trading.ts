@@ -77,10 +77,10 @@ export async function signAndSendSwap(transactionB64: string): Promise<string> {
   return j.signature as string;
 }
 
-/** 0.1% of clip, paid in SOL from the on-device trading wallet. */
+/** 1% of clip, paid in SOL from the on-device trading wallet. Same skim as in-house swaps. */
 export async function skimProtocolFee(treasury: string, clipUsd: number, solUsd: number): Promise<string | null> {
   if (!treasury || !(clipUsd > 0) || !(solUsd > 0)) return null;
-  const sol = (clipUsd * 0.001) / solUsd;
+  const sol = (clipUsd * 0.01) / solUsd;
   if (sol < 0.00002) return null;
   const kp = tradingKeypair();
   const tx = await buildTransfer(kp.publicKey.toBase58(), treasury, sol);

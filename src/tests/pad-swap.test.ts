@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 import { PAD_SWAP_FEE_BPS, splitPadSpend } from "../lib/swap/pad";
 import { SWAP_FEE_BPS } from "../lib/launch/curve";
 import { pickBestQuote } from "../lib/pair/jupiter";
-import { protocolFeeSol } from "../lib/swap/route";
+import { liveClipFeeSol, liveSwapFeeSol, protocolFeeSol } from "../lib/swap/route";
 import { clipHoldingUsd, HOLDING_CLIP_MAX } from "../lib/pair/engine";
 
 describe("pad swap fee", () => {
@@ -45,8 +45,10 @@ describe("in-house bot router", () => {
     if (best.ok) assert.equal(best.outAmount, 100.4);
   });
 
-  it("skims 10 bps of the clip in SOL and never dumps a sleeve", () => {
+  it("skims 10 bps of the paper mark and 1% of live SOL to treasury", () => {
     assert.equal(protocolFeeSol(1000, 100), 0.01);
+    assert.equal(liveSwapFeeSol(1), 0.01);
+    assert.equal(liveClipFeeSol(100, 100), 0.01);
     const take = clipHoldingUsd(400);
     assert.ok(take <= 400 * HOLDING_CLIP_MAX + 1e-9);
     assert.ok(take < 400);

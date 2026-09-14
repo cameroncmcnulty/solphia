@@ -6,23 +6,16 @@ import {
   loadOwner,
   saveOwner,
   tradingPubkey,
-  buildTransfer,
-  withdrawToOwner,
   signAndSendSwap,
   exportSecret,
   importSecret,
 } from "@/lib/wallet/trading";
 import { unsubscribeSeat } from "@/lib/wallet/seatPay";
 import { WalletConnect } from "./WalletConnect";
+import { WalletMove } from "./WalletMove";
 import { FieldError, FormAlert, useConfirmErrors } from "./form/confirm";
 import { useMarket, useOwner } from "@/lib/hooks";
 import { SOL_MINT, USDC_MINT, XSTOCKS, xstockMint } from "@/lib/pair/mints";
-
-function pickProvider() {
-  if (typeof window === "undefined") return null;
-  const w = window as any;
-  return w.phantom?.solana?.isPhantom ? w.phantom.solana : w.solana?.isPhantom ? w.solana : null;
-}
 
 type Auto = {
   armed?: boolean;
@@ -73,7 +66,6 @@ export function TradingHub() {
   const [delegated, setDelegated] = useState(false);
   const [tradePk, setTradePk] = useState("");
   const [bal, setBal] = useState(0);
-  const [solAmt, setSolAmt] = useState(0.5);
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
   const [now, setNow] = useState(Date.now());
@@ -106,7 +98,7 @@ export function TradingHub() {
       const s = await fetch(`/api/access?pubkey=${pk}`).then((r) => r.json());
       setSeat(s);
     } catch {
-      /* seat is optional for paper */
+      /* seat is optional until they pay */
     }
     const tpk = a.tradingPubkey || tradingPubkey();
     setTradePk(tpk);
@@ -248,52 +240,6 @@ export function TradingHub() {
     }
   }
 
-  async function deposit() {
-    const provider = pickProvider();
-    if (!owner) {
-      fundErr.fail({ wallet: "Connect Phantom first." });
-      return;
-    }
-    if (!provider) {
-      fundErr.fail({ wallet: "Open this page in Phantom (browser or in-app)." });
-      return;
-    }
-    if (!(solAmt > 0)) {
-      fundErr.fail({ amount: "Pick how much SOL to add." });
-      return;
-    }
-    fundErr.ok();
-    setBusy(true);
-    try {
-      const tpk = tradingPubkey();
-      const tx = await buildTransfer(owner, tpk, solAmt);
-      const sent = await provider.signAndSendTransaction(tx);
-      setMsg(`Added ${solAmt} SOL · ${String(sent.signature || sent).slice(0, 16)}…`);
-      setTimeout(() => {
-        refreshAuto(owner);
-        ensureLive();
-      }, 2500);
-    } catch (e) {
-      fundErr.fail({}, e instanceof Error ? e.message : "deposit rejected");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function withdraw() {
-    if (!owner || bal <= 0.001) return;
-    setBusy(true);
-    try {
-      const sig = await withdrawToOwner(owner, Math.max(0, bal - 0.003));
-      setMsg(`Withdraw sent · ${sig.slice(0, 16)}…`);
-      setTimeout(() => refreshAuto(owner), 2500);
-    } catch (e) {
-      setMsg(e instanceof Error ? e.message : "withdraw failed");
-    } finally {
-      setBusy(false);
-    }
-  }
-
   const live = Boolean(data?.lastTickAt) && Date.now() - data.lastTickAt < 45_000;
   const tape = book?.tape || [];
   const fills = book?.fills || [];
@@ -327,7 +273,7 @@ export function TradingHub() {
           <p className="font-mono text-[11px] tracking-[0.28em] text-violet">SOL · S&P 500 · NASDAQ · GOLD</p>
           <h1 className="mt-1 font-display text-3xl leading-none text-ghost sm:text-4xl md:text-6xl">Operate</h1>
           <p className="mt-3 max-w-xl text-base text-mute sm:text-lg">
-            Connect, add SOL, turn her on. She trades tokenized S&P, Nasdaq, and gold until you hit KILL.
+            Connect, move SOL into the trading wallet, turn her on. She trades live until you hit KILL.
           </p>
         </div>
         <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-row sm:items-center sm:gap-3">
@@ -350,7 +296,7 @@ export function TradingHub() {
             </button>
           ) : (
             <div className="btn-on col-span-1 inline-flex min-h-[48px] w-full items-center justify-center rounded-full px-4 py-3 text-sm sm:min-h-[56px] sm:w-auto sm:px-8 sm:text-lg">
-              {liveTrading && auto?.mode === "live" ? "LIVE" : "ON"}
+              {liveTrading && auto?.mode === "live" ? "LIVE" : liveTrading ? "READY" : "LIVE OFF"}
             </div>
           )}
           <button
@@ -366,8 +312,8 @@ export function TradingHub() {
 
       <ol className="mt-5 grid gap-3 sm:grid-cols-3">
         <How n="1" t="Connect" d="Your wallet is login. We never hold a key." />
-        <How n="2" t="Add SOL" d="Funds the trading wallet. Back up that key." />
-        <How n="3" t="Leave her on" d="She trades until you hit KILL." />
+        <How n="2" t="Move SOL" d="Connected wallet ↔ trading wallet. Back up that key." />
+        <How n="3" t="Leave her on" d="She trades live until you hit KILL." />
       </ol>
 
       <div className="mt-5 rounded-2xl border border-blood/40 bg-blood/10 px-4 py-3 text-sm text-ghost">
@@ -420,41 +366,19 @@ export function TradingHub() {
         )}
 
         <div className="mt-6 border-t border-violet/20 pt-5">
-          <div className="font-mono text-[10px] tracking-[0.2em] text-mute">
-            TRADING WALLET · {tradePk ? `${tradePk.slice(0, 4)}…${tradePk.slice(-4)}` : "connect first"}
-          </div>
-          <div data-field="amount" className={`mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4 ${fundErr.errors.amount ? "rounded-2xl p-1 ring-1 ring-blood/60" : ""}`}>
-            {[0.1, 0.5, 1, 2].map((n) => (
-              <button
-                key={n}
-                type="button"
-                onClick={() => {
-                  setSolAmt(n);
-                  fundErr.clear("amount");
-                }}
-                className={`min-h-[40px] rounded-full py-2 font-mono text-[12px] ${solAmt === n ? "btn-on" : "btn-ghost"}`}
-              >
-                {n} SOL
-              </button>
-            ))}
-          </div>
-          <FieldError error={fundErr.errors.amount} />
-          <div className="mt-3 grid grid-cols-2 gap-2">
-            <button
-              disabled={busy}
-              onClick={deposit}
-              className="btn-acid min-h-[48px] rounded-full py-3 font-mono text-[12px] disabled:opacity-40"
-            >
-              Add {solAmt} SOL
-            </button>
-            <button
-              disabled={busy || bal < 0.01 || !book?.killed}
-              onClick={withdraw}
-              className="btn-ghost min-h-[48px] rounded-full py-3 font-mono text-[12px] disabled:opacity-40"
-            >
-              {book?.killed ? "Withdraw" : "KILL to withdraw"}
-            </button>
-          </div>
+          {owner && tradePk ? (
+            <WalletMove
+              owner={owner}
+              tradePk={tradePk}
+              tradeBal={bal}
+              onDone={() => {
+                refreshAuto(owner);
+                ensureLive();
+              }}
+            />
+          ) : (
+            <p className="text-sm text-mute">Connect Phantom to move SOL between your wallet and the trading wallet.</p>
+          )}
           <div className="mt-3 flex flex-col gap-2 sm:flex-row">
             <button
               type="button"
@@ -585,8 +509,8 @@ export function TradingHub() {
           <h3 className="font-display text-2xl text-ghost">0.5% clips. 40% of a sleeve.</h3>
           <p className="text-sm leading-relaxed text-mute">
             She routes every swap in-house, then spends at most half of a holding so the rest can rotate into SPYx,
-            QQQx, or GLDx. Target is about 0.5% after fees. 0.1% protocol skim on the clip. An 8% drawdown flattens to
-            USDC and pauses.
+            QQQx, or GLDx. Target is about 1.2% after fees. 1% of the SOL clip goes to the treasury. An 8% drawdown
+            flattens to USDC and pauses.
           </p>
           <div className="grid grid-cols-3 gap-2">
             <Mini k="S&P 500" v={spyxUsd ? `$${Number(spyxUsd).toFixed(0)}` : "—"} />

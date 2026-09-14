@@ -263,26 +263,19 @@ export function nextTrail(opts: {
   const profit = opts.entryPx > 0 ? opts.px / opts.entryPx - 1 : 0;
   const peakProfit = opts.entryPx > 0 ? peakPx / opts.entryPx - 1 : 0;
   const swing = Boolean(opts.swing);
-  const armAt = swing ? CLIP_MIN : CLIP_AIM;
-  if (!armed && profit >= armAt) {
+  /** Arm after a real scalp. Swing used to lock 0.4% and scratch out to fees. */
+  if (!armed && profit >= CLIP_AIM) {
     armed = true;
-    stopPx = Math.max(stopPx, swing ? breakeven : opts.entryPx * (1 + CLIP_AIM * 0.85));
+    stopPx = Math.max(stopPx, opts.entryPx * (1 + CLIP_MIN));
   }
   if (armed) {
     const k = trailGiveback(peakProfit, opts.atrPct, opts.trailK, swing);
     const raw = peakPx * (1 - k);
-    let lock = 0;
-    if (!swing) {
-      lock = opts.entryPx * (1 + CLIP_MIN);
-      if (peakProfit >= 0.02) lock = opts.entryPx * (1 + CLIP_AIM);
-      if (peakProfit >= 0.035) lock = opts.entryPx * (1 + 0.02);
-    } else if (peakProfit >= 0.04) {
-      lock = opts.entryPx * (1 + 0.015);
-    } else if (peakProfit >= 0.02) {
-      lock = breakeven;
-    }
-    stopPx = Math.max(stopPx, raw);
-    if (lock > 0) stopPx = Math.max(stopPx, lock);
+    let lock = opts.entryPx * (1 + CLIP_MIN);
+    if (peakProfit >= 0.02) lock = opts.entryPx * (1 + CLIP_AIM);
+    if (peakProfit >= 0.035) lock = opts.entryPx * (1 + (swing ? 0.015 : 0.02));
+    else if (swing && peakProfit >= 0.02) lock = Math.max(lock, breakeven);
+    stopPx = Math.max(stopPx, raw, lock);
   }
   return { peakPx, stopPx, armed };
 }

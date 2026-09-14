@@ -1,4 +1,5 @@
 import { BOT_SLIPPAGE_BPS, PROTOCOL_FEE_BPS } from "../config";
+import { SWAP_FEE_BPS } from "../launch/curve";
 import { assembleSwapTx } from "./build";
 import { quoteBestRoute, type QuoteResult } from "../pair/jupiter";
 import { SOL_MINT } from "../pair/mints";
@@ -8,6 +9,17 @@ export { BOT_SLIPPAGE_BPS };
 export function protocolFeeSol(clipUsd: number, solUsd: number): number {
   if (!(clipUsd > 0) || !(solUsd > 0)) return 0;
   return (clipUsd * PROTOCOL_FEE_BPS) / 10_000 / solUsd;
+}
+
+/** Live in-house skim: 1% of SOL, paid to treasury in the same swap tx. */
+export function liveSwapFeeSol(solAmount: number): number {
+  if (!(solAmount > 0)) return 0;
+  return Math.floor(solAmount * SWAP_FEE_BPS) / 10_000;
+}
+
+export function liveClipFeeSol(clipUsd: number, solUsd: number): number {
+  if (!(clipUsd > 0) || !(solUsd > 0)) return 0;
+  return liveSwapFeeSol(clipUsd / solUsd);
 }
 
 export async function buildBotSwap(opts: {

@@ -600,6 +600,8 @@ export type BacktestFillLite = {
   reason: string;
 };
 
+export type BacktestWindow = "1m" | "3m" | "6m";
+
 export type BacktestReport = {
   ranAt: number;
   from: number;
@@ -607,6 +609,7 @@ export type BacktestReport = {
   bars: number;
   leverage?: 1 | 2 | 3;
   liquidations?: number;
+  window?: BacktestWindow;
   horizon: string;
   startingUsd: number;
   endingUsd: number;

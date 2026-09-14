@@ -35,38 +35,68 @@ function parseYahoo(raw: any): Candle[] {
   return out;
 }
 
-async function binance15m(days = 40): Promise<Candle[]> {
+async function binanceKlines(interval: "15m" | "1h", days: number): Promise<Candle[]> {
+  const barMs = interval === "15m" ? 15 * 60_000 : 60 * 60_000;
   const end = Date.now();
   const start = end - days * 86_400_000;
   const out: Candle[] = [];
   let t = start;
-  for (let n = 0; n < 8 && t < end; n++) {
-    const url = `https://data-api.binance.vision/api/v3/klines?symbol=SOLUSDT&interval=15m&startTime=${t}&limit=1000`;
+  for (let n = 0; n < 12 && t < end; n++) {
+    const url = `https://data-api.binance.vision/api/v3/klines?symbol=SOLUSDT&interval=${interval}&startTime=${t}&limit=1000`;
     const r = await getJson<unknown[]>(url, 8000);
     let rows = r.ok && r.data ? parseBinance(r.data) : [];
     if (!rows.length) {
       const r2 = await getJson<unknown[]>(
-        `https://api.binance.com/api/v3/klines?symbol=SOLUSDT&interval=15m&startTime=${t}&limit=1000`,
+        `https://api.binance.com/api/v3/klines?symbol=SOLUSDT&interval=${interval}&startTime=${t}&limit=1000`,
         8000,
       );
       rows = r2.ok && r2.data ? parseBinance(r2.data) : [];
     }
     if (!rows.length) break;
     out.push(...rows);
-    t = rows[rows.length - 1].t + 15 * 60_000;
+    t = rows[rows.length - 1].t + barMs;
     if (rows.length < 1000) break;
   }
   return out.sort((a, b) => a.t - b.t);
 }
 
-async function yahoo15m(symbol: string): Promise<Candle[]> {
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=15m&range=1mo`;
+async function yahooChart(symbol: string, interval: string, range: string): Promise<Candle[]> {
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=${interval}&range=${range}`;
   const r = await getJson<unknown>(url, 8000);
   if (!r.ok || !r.data) return [];
   return parseYahoo(r.data);
 }
 
 export async function loadBacktestTape(): Promise<BacktestTape> {
-  const [sol, spy, qqq, gld] = await Promise.all([binance15m(40), yahoo15m("SPY"), yahoo15m("QQQ"), yahoo15m("GLD")]);
+  const [sol, spy, qqq, gld] = await Promise.all([
+    binanceKlines("15m", 40),
+    yahooChart("SPY", "15m", "1mo"),
+    yahooChart("QQQ", "15m", "1mo"),
+    yahooChart("GLD", "15m", "1mo"),
+  ]);
   return { sol, spy, qqq, gld };
+}
+
+/** 1h tape for 3-month and 6-month windows. */
+export async function loadBacktestTapeLong(days = 190): Promise<BacktestTape> {
+  const range = days >= 180 ? "6mo" : days >= 90 ? "3mo" : "3mo";
+  const [sol, spy, qqq, gld] = await Promise.all([
+    binanceKlines("1h", days),
+    yahooChart("SPY", "1h", range),
+    yahooChart("QQQ", "1h", range),
+    yahooChart("GLD", "1h", range),
+  ]);
+  return { sol, spy, qqq, gld };
+}
+
+export function sliceTapeDays(tape: BacktestTape, days: number): BacktestTape {
+  const to = Math.max(
+    tape.sol[tape.sol.length - 1]?.t || 0,
+    tape.spy[tape.spy.length - 1]?.t || 0,
+    tape.qqq[tape.qqq.length - 1]?.t || 0,
+    tape.gld[tape.gld.length - 1]?.t || 0,
+  );
+  const from = to - days * 86_400_000;
+  const cut = (cs: Candle[]) => cs.filter((c) => c.t >= from);
+  return { sol: cut(tape.sol), spy: cut(tape.spy), qqq: cut(tape.qqq), gld: cut(tape.gld) };
 }

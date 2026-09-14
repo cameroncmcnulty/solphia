@@ -33,7 +33,16 @@ type PublicBt = {
   note?: string;
   leverage?: 1 | 2 | 3;
   liquidations?: number;
+  window?: "1m" | "3m" | "6m";
 };
+
+type WindowKey = "1m" | "3m" | "6m";
+
+const WINDOWS: { id: WindowKey; label: string }[] = [
+  { id: "1m", label: "1 month" },
+  { id: "3m", label: "3 months" },
+  { id: "6m", label: "6 months" },
+];
 
 function money(n: number) {
   const sign = n < 0 ? "−" : "";
@@ -46,8 +55,8 @@ function when(ms?: number) {
 }
 
 export function BacktestBrochure() {
-  const [reports, setReports] = useState<Partial<Record<1 | 2 | 3, PublicBt>>>({});
-  const [lev, setLev] = useState<1 | 2 | 3>(1);
+  const [windows, setWindows] = useState<Partial<Record<WindowKey, PublicBt>>>({});
+  const [win, setWin] = useState<WindowKey>("1m");
   const [live, setLive] = useState<LiveBook | null>(null);
 
   useEffect(() => {
@@ -56,29 +65,27 @@ export function BacktestBrochure() {
       .then((r) => r.json())
       .then((j) => {
         if (stop) return;
-        const pack = j?.reports as Partial<Record<1 | 2 | 3, PublicBt>> | undefined;
-        const next: Partial<Record<1 | 2 | 3, PublicBt>> = {};
-        if (pack?.[1]?.ready) next[1] = pack[1];
-        if (pack?.[2]?.ready) next[2] = pack[2];
-        if (pack?.[3]?.ready) next[3] = pack[3];
-        if (next[1] || next[2] || next[3]) {
-          setReports(next);
-          if (!next[1] && next[2]) setLev(2);
-          else if (!next[1] && !next[2] && next[3]) setLev(3);
-          return;
+        const pack = j?.windows as Partial<Record<WindowKey, PublicBt>> | undefined;
+        const next: Partial<Record<WindowKey, PublicBt>> = {};
+        if (pack?.["1m"]?.ready) next["1m"] = pack["1m"];
+        if (pack?.["3m"]?.ready) next["3m"] = pack["3m"];
+        if (pack?.["6m"]?.ready) next["6m"] = pack["6m"];
+        if (next["1m"] || next["3m"] || next["6m"]) {
+          setWindows(next);
+        } else if (j?.ready && j?.curve) {
+          setWindows({ "1m": j, "3m": j, "6m": j });
         }
         if (j?.live?.on) setLive(j.live);
-        if (j?.ready && j?.curve) setReports({ 1: j, 2: j, 3: j });
       })
       .catch(() => {
-        if (!stop) setReports({});
+        if (!stop) setWindows({});
       });
     return () => {
       stop = true;
     };
   }, []);
 
-  const data = reports[lev] || null;
+  const data = windows[win] || windows["1m"] || null;
   const ready = Boolean(data?.ready && data.curve?.length);
   const up = (data?.pnlPct || 0) >= 0;
   const pct = ready ? `${up ? "+" : ""}${((data?.pnlPct || 0) * 100).toFixed(1)}%` : "…";
@@ -95,19 +102,19 @@ export function BacktestBrochure() {
               The curve is the point.
             </h2>
             <p className="mt-3 max-w-xl text-sm text-mute sm:text-lg">
-              How she would have marked SOL, S&P 500, Nasdaq, and gold. Past days are not a promise.
+              How she marked SOL, S&P 500, Nasdaq, and gold. Past days are not a promise.
             </p>
           </div>
           <div className="text-left lg:text-right">
             <div className="mb-3 flex flex-wrap gap-2 lg:justify-end">
-              {([1, 2, 3] as const).map((n) => (
+              {WINDOWS.map((w) => (
                 <button
-                  key={n}
+                  key={w.id}
                   type="button"
-                  onClick={() => setLev(n)}
-                  className={`rounded-full px-3 py-1 font-mono text-[11px] ${lev === n ? "btn-on" : "btn-ghost"}`}
+                  onClick={() => setWin(w.id)}
+                  className={`rounded-full px-3 py-1 font-mono text-[11px] ${win === w.id ? "btn-on" : "btn-ghost"}`}
                 >
-                  {n === 1 ? "Spot 1×" : `SOL ${n}×`}
+                  {w.label}
                 </button>
               ))}
             </div>
@@ -133,33 +140,19 @@ export function BacktestBrochure() {
         </div>
 
         <div className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Stat k="Clips" v={ready ? String(data?.trades || 0) : "—"} sub={data?.horizon || "15m marks"} />
+          <Stat k="Clips" v={ready ? String(data?.trades || 0) : "—"} sub={data?.horizon || "engine marks"} />
           <Stat k="Win rate" v={ready ? `${Math.round((data?.winRate || 0) * 100)}%` : "—"} sub="closed to USDC" />
           <Stat k="Max DD" v={ready ? `−${((data?.maxDdPct || 0) * 100).toFixed(1)}%` : "—"} sub="from peak" />
           <Stat
-            k={lev > 1 ? "Liquidations" : "Best day"}
-            v={
-              lev > 1
-                ? ready
-                  ? String(data?.liquidations || 0)
-                  : "—"
-                : ready
-                  ? `+$${Math.abs(data?.bestDayUsd || 0).toFixed(0)}`
-                  : "—"
-            }
-            sub={
-              lev > 1
-                ? "SOL-PERP stopped out"
-                : ready
-                  ? `${data?.daysGe2 || 0} days ≥ $2`
-                  : "on a $1,000 book"
-            }
+            k="Best day"
+            v={ready ? `+$${Math.abs(data?.bestDayUsd || 0).toFixed(0)}` : "—"}
+            sub={ready ? `${data?.daysGe2 || 0} days ≥ $2` : "on a $1,000 book"}
           />
         </div>
 
         <p className="mt-6 max-w-3xl text-xs leading-relaxed text-mute sm:text-sm">
           {data?.note ||
-            "Same rules she trades with now. A $2–3 day showed up on this replay — it is not a guarantee she prints that every session. Fees are already in the line."}
+            "Same rules she trades with now. Fees are already in the line. Past days are not a promise."}
         </p>
 
         <div className="mt-8 flex flex-col gap-3 sm:flex-row">
@@ -167,13 +160,13 @@ export function BacktestBrochure() {
             href="/trading"
             className="btn-acid inline-flex min-h-[48px] items-center justify-center rounded-full px-8 py-3 text-base sm:min-h-[56px] sm:text-lg"
           >
-            Watch her paper
+            Go live
           </Link>
           <Link
             href="/pricing"
             className="btn-ghost inline-flex min-h-[48px] items-center justify-center rounded-full px-8 py-3 text-base sm:min-h-[56px] sm:text-lg"
           >
-            Go live · from 0.1 SOL
+            Seat from 0.1 SOL
           </Link>
         </div>
       </div>

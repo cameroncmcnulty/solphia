@@ -335,6 +335,22 @@ export async function ingestMarket(
   return { tokens, health, solUsd, copyBook: tape.book };
 }
 
+/** One mint, even if it would not pass the public tape gate. */
+export async function lookupTokenMint(mint: string): Promise<TokenSnapshot | null> {
+  const m = (mint || "").trim();
+  if (m.length < 32) return null;
+  const dex = await getJson<{ pairs?: DexPair[] }>(`https://api.dexscreener.com/latest/dex/tokens/${encodeURIComponent(m)}`, 6000);
+  const pairs = (dex.data?.pairs || []).filter((p) => p.chainId === "solana");
+  pairs.sort((a, b) => num(b.liquidity?.usd) - num(a.liquidity?.usd));
+  if (pairs[0]) {
+    const snap = fromDex(pairs[0]);
+    if (snap) return snap;
+  }
+  const pump = await getJson<PumpCoin>(`https://frontend-api-v3.pump.fun/coins/${encodeURIComponent(m)}`, 6000);
+  if (pump.ok && pump.data?.mint) return fromPump(pump.data);
+  return null;
+}
+
 /** Fast tape ingest. Three sources, short timeouts — the list must paint even if one feed is slow. */
 export async function ingestPublicTape(): Promise<{ tokens: TokenSnapshot[]; solUsd: number }> {
   const map = new Map<string, TokenSnapshot>();
