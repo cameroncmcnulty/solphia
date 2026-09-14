@@ -24,7 +24,11 @@ import seed from "./backtestSeed.json";
 import seedLev2 from "./backtestSeedLev2.json";
 import seedLev3 from "./backtestSeedLev3.json";
 import seed3m from "./backtestSeed3m.json";
+import seed3mLev2 from "./backtestSeed3mLev2.json";
+import seed3mLev3 from "./backtestSeed3mLev3.json";
 import seed6m from "./backtestSeed6m.json";
+import seed6mLev2 from "./backtestSeed6mLev2.json";
+import seed6mLev3 from "./backtestSeed6mLev3.json";
 
 function normalizeDay(d: BacktestDay): BacktestDay {
   const entries = d.entries ?? 0;
@@ -395,30 +399,45 @@ export function publicBacktest(report: BacktestReport | null | undefined) {
 
 export type PublicBacktest = ReturnType<typeof publicBacktest>;
 
-function seedForWindow(window: BacktestWindow): BacktestReport {
-  if (window === "6m") return seed6m as BacktestReport;
-  if (window === "3m") return seed3m as BacktestReport;
-  return seed as BacktestReport;
+function seedForHorizon(window: BacktestWindow, lev: Lev): BacktestReport {
+  if (window === "3m") {
+    if (lev === 3) return seed3mLev3 as BacktestReport;
+    if (lev === 2) return seed3mLev2 as BacktestReport;
+    return seed3m as BacktestReport;
+  }
+  if (window === "6m") {
+    if (lev === 3) return seed6mLev3 as BacktestReport;
+    if (lev === 2) return seed6mLev2 as BacktestReport;
+    return seed6m as BacktestReport;
+  }
+  return seedFor(lev);
 }
 
-export function latestHorizon(window: BacktestWindow, stored?: BacktestReport | null): BacktestReport {
-  const report = normalizeBacktest(usableStored(stored) ? stored : seedForWindow(window));
+export function latestHorizon(window: BacktestWindow, lev: Lev = 1, stored?: BacktestReport | null): BacktestReport {
+  const report = normalizeBacktest(usableStored(stored) ? stored : seedForHorizon(window, lev));
   report.window = window;
-  if (!report.leverage) report.leverage = 1;
+  report.leverage = clampLev(lev);
   return report;
 }
 
-/** Same pack the homepage uses: 1m / 3m / 6m plus 1× / 2× / 3× seeds. */
+export type HorizonLevPack = Record<1 | 2 | 3, PublicBacktest>;
+
+/** Same pack the homepage uses: 1m / 3m / 6m × spot 1× / SOL 2× / SOL 3×. */
 export function publicBacktestPack() {
   const reports = {
     1: publicBacktest(latestBacktest(null, 1)),
     2: publicBacktest(latestBacktest(null, 2)),
     3: publicBacktest(latestBacktest(null, 3)),
   };
+  const one = (window: BacktestWindow): HorizonLevPack => ({
+    1: publicBacktest(latestHorizon(window, 1)),
+    2: publicBacktest(latestHorizon(window, 2)),
+    3: publicBacktest(latestHorizon(window, 3)),
+  });
   const windows = {
-    "1m": publicBacktest(latestHorizon("1m")),
-    "3m": publicBacktest(latestHorizon("3m")),
-    "6m": publicBacktest(latestHorizon("6m")),
+    "1m": one("1m"),
+    "3m": one("3m"),
+    "6m": one("6m"),
   };
   return { ready: true as const, reports, windows };
 }

@@ -353,23 +353,28 @@ export function decidePair(opts: {
   const equity = equityOf(h, prices);
   const start = book.startingUsd || equity;
   const dd = start > 0 ? (start - equity) / start : 0;
-  const stop = auto.stopPct || 0.08;
+  const lev = clampLev(book.solLeverage || auto.leverage || 1);
+  const stop = (auto.stopPct || 0.08) * (lev <= 1 ? 1 : Math.sqrt(lev));
   const anyX = XSTOCKS.some((x) => qtyOf(h, x.id) > 0);
-  if (dd >= stop && (h.solQty > 0 || Boolean(h.solPerp) || anyX)) {
-    return {
-      action: "flatten",
-      reason: `Down ${(dd * 100).toFixed(1)}%. Selling everything back to USDC and pausing.`,
-      clipUsd: equity,
-      from: "both",
-      to: "USDC",
-      z7: primary.z7,
-      z24: primary.z24,
-      ratio: primary.ratio,
-      bandK,
-      session,
-      read: primary,
-      reads,
-    };
+  const riskOn = h.solQty > 0 || Boolean(h.solPerp) || anyX;
+  if (dd >= stop) {
+    if (riskOn) {
+      return {
+        action: "flatten",
+        reason: `Down ${(dd * 100).toFixed(1)}%. Selling everything back to USDC and pausing.`,
+        clipUsd: equity,
+        from: "both",
+        to: "USDC",
+        z7: primary.z7,
+        z24: primary.z24,
+        ratio: primary.ratio,
+        bandK,
+        session,
+        read: primary,
+        reads,
+      };
+    }
+    return empty("skip", `Down ${(dd * 100).toFixed(1)}%. Sitting in USDC until the book recovers.`);
   }
 
   const cooldownMs = (auto.cooldownMin ?? 2) * 60_000;

@@ -273,7 +273,7 @@ export function TradingHub() {
           <p className="font-mono text-[11px] tracking-[0.28em] text-violet">SOL · S&P 500 · NASDAQ · GOLD</p>
           <h1 className="mt-1 font-display text-3xl leading-none text-ghost sm:text-4xl md:text-6xl">Operate</h1>
           <p className="mt-3 max-w-xl text-base text-mute sm:text-lg">
-            Connect, move SOL into the trading wallet, turn her on. She trades live until you hit KILL.
+            Connect, move SOL into the trading wallet, turn her on. She trades 24/7 from the server — close the tab.
           </p>
         </div>
         <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-row sm:items-center sm:gap-3">
@@ -296,7 +296,7 @@ export function TradingHub() {
             </button>
           ) : (
             <div className="btn-on col-span-1 inline-flex min-h-[48px] w-full items-center justify-center rounded-full px-4 py-3 text-sm sm:min-h-[56px] sm:w-auto sm:px-8 sm:text-lg">
-              {liveTrading && auto?.mode === "live" ? "LIVE" : liveTrading ? "READY" : "LIVE OFF"}
+              {liveTrading && auto?.mode === "live" ? (delegated ? "24/7" : "LIVE") : liveTrading ? "READY" : "LIVE OFF"}
             </div>
           )}
           <button
@@ -313,7 +313,7 @@ export function TradingHub() {
       <ol className="mt-5 grid gap-3 sm:grid-cols-3">
         <How n="1" t="Connect" d="Your wallet is login. We never hold a key." />
         <How n="2" t="Move SOL" d="Connected wallet ↔ trading wallet. Back up that key." />
-        <How n="3" t="Leave her on" d="She trades live until you hit KILL." />
+        <How n="3" t="Leave her on" d="24/7 from the server. Close the tab. KILL stops her." />
       </ol>
 
       <div className="mt-5 rounded-2xl border border-blood/40 bg-blood/10 px-4 py-3 text-sm text-ghost">
@@ -327,7 +327,7 @@ export function TradingHub() {
             <h2 className="mt-1 font-display text-3xl text-ghost md:text-4xl">What she holds</h2>
           </div>
           <div className="font-mono text-[12px] text-mute">
-            {status} {armed ? "· watching" : live ? "· prices live" : ""} · {uptime}
+            {status} {liveTrading && auto?.mode === "live" && delegated ? "· 24/7 server" : armed ? "· watching" : live ? "· prices live" : ""} · {uptime}
           </div>
         </div>
         <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-3">
@@ -361,6 +361,9 @@ export function TradingHub() {
         <p className="mt-4 text-sm leading-relaxed text-mute">
           {(owner && book?.lastAction) || pair?.reason || book?.lastAction || "Waiting on prices…"}
         </p>
+        {liveTrading && auto?.mode === "live" && delegated && (
+          <p className="mt-2 font-mono text-sm text-acid">24/7 is on. Server signs. You can close the tab or switch wallets.</p>
+        )}
         {book?.pendingIntent && auto?.mode === "live" && (
           <p className="mt-2 font-mono text-sm text-acid">Clip going out. You can close the tab.</p>
         )}

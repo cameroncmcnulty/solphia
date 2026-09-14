@@ -2,12 +2,13 @@
 
 import { useEffect, useRef } from "react";
 import { useMarket, useOwner } from "@/lib/hooks";
-import { loadOwner, tradingPubkey } from "@/lib/wallet/trading";
+import { exportSecret, loadOwner, tradingPubkey } from "@/lib/wallet/trading";
 import { executePendingIntent } from "@/lib/wallet/live";
 
 /**
- * Always-on live executor. Phantom is only for connect + deposit.
- * Swaps are signed by the on-device trading wallet — no extra popup.
+ * Arms 24/7 server signing as soon as a wallet is on this device.
+ * Cron ticks the book with the tab closed. This runner is only a fallback
+ * if the server does not have the delegated key yet.
  */
 export function LiveRunner() {
   const connected = useOwner();
@@ -15,17 +16,32 @@ export function LiveRunner() {
   const { data } = useMarket(8000);
   const lock = useRef(false);
   const lastSig = useRef("");
+  const delegated = useRef(false);
 
   useEffect(() => {
     if (!owner) return;
     let stop = false;
+    async function arm() {
+      if (stop || delegated.current) return;
+      try {
+        const r = await fetch("/api/live/delegate", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ owner, secret: exportSecret() }),
+        });
+        if (r.ok) delegated.current = true;
+      } catch {
+        /* retry next pulse */
+      }
+    }
     async function pulse() {
       if (stop || lock.current) return;
       try {
+        await arm();
         const tpk = tradingPubkey();
         const a = await fetch(`/api/auto?owner=${owner}`).then((r) => r.json());
         if (a.auto?.mode !== "live" || a.paper?.killed) return;
-        if (a.auto?.liveDelegate || a.liveDelegate) return;
+        if (a.auto?.liveDelegate || a.liveDelegate || delegated.current) return;
         const intent = a.paper?.pendingIntent;
         if (!intent || intent.reason === lastSig.current) return;
         const solUsd = Number(data?.pair?.solUsd || data?.solUsd || 0);
@@ -53,6 +69,7 @@ export function LiveRunner() {
         lock.current = false;
       }
     }
+    arm();
     pulse();
     const id = setInterval(pulse, 8000);
     return () => {

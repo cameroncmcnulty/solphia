@@ -93,14 +93,15 @@ describe("backtest replay", () => {
     assert.equal(pack.reports[1].ready, true);
     assert.equal(pack.reports[2].ready, true);
     assert.equal(pack.reports[3].ready, true);
-    assert.equal(pack.windows["1m"].ready, true);
-    assert.equal(pack.windows["3m"].ready, true);
-    assert.equal(pack.windows["6m"].ready, true);
-    if (pack.windows["1m"].ready && pack.windows["3m"].ready && pack.windows["6m"].ready) {
-      assert.ok((pack.windows["1m"].trades || 0) >= 1);
-      assert.ok((pack.windows["3m"].curve?.length || 0) > 8);
-      assert.ok((pack.windows["6m"].curve?.length || 0) > 8);
+    for (const w of ["1m", "3m", "6m"] as const) {
+      assert.equal(pack.windows[w][1].ready, true);
+      assert.equal(pack.windows[w][2].ready, true);
+      assert.equal(pack.windows[w][3].ready, true);
+      assert.equal(pack.windows[w][2].leverage, 2);
+      assert.equal(pack.windows[w][3].leverage, 3);
+      assert.ok((pack.windows[w][1].curve?.length || 0) > 8);
     }
+    if (pack.windows["1m"][1].ready) assert.ok((pack.windows["1m"][1].trades || 0) >= 1);
     if (pack.reports[1].ready && pack.reports[2].ready && pack.reports[3].ready) {
       assert.equal(pack.reports[2].leverage, 2);
       assert.equal(pack.reports[3].leverage, 3);

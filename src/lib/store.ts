@@ -444,6 +444,11 @@ export async function loadHotTraders(state: AppState): Promise<TraderAccount[]> 
 
 export async function loadEngineTraders(state: AppState): Promise<TraderAccount[]> {
   await loadAllTraders(state);
+  const live = state.liveOwners || [];
+  if (live.length) {
+    const extra = await loadTraderMap(live.filter((o) => !state.traders[o]));
+    Object.assign(state.traders, extra);
+  }
   const ids = engineOwners(state);
   return ids.map((o) => state.traders[o]).filter((t): t is TraderAccount => Boolean(t) && !t.book?.killed);
 }

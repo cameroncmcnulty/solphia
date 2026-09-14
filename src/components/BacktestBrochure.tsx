@@ -37,6 +37,8 @@ type PublicBt = {
 };
 
 type WindowKey = "1m" | "3m" | "6m";
+type Lev = 1 | 2 | 3;
+type LevPack = Partial<Record<Lev, PublicBt>>;
 
 const WINDOWS: { id: WindowKey; label: string }[] = [
   { id: "1m", label: "1 month" },
@@ -54,9 +56,22 @@ function when(ms?: number) {
   return new Date(ms).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
+function asLevPack(raw: unknown): LevPack | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, PublicBt>;
+  if (o[1]?.ready || o[2]?.ready || o[3]?.ready) {
+    return { 1: o[1], 2: o[2], 3: o[3] };
+  }
+  if ((raw as PublicBt).ready && (raw as PublicBt).curve) {
+    return { 1: raw as PublicBt };
+  }
+  return null;
+}
+
 export function BacktestBrochure() {
-  const [windows, setWindows] = useState<Partial<Record<WindowKey, PublicBt>>>({});
+  const [windows, setWindows] = useState<Partial<Record<WindowKey, LevPack>>>({});
   const [win, setWin] = useState<WindowKey>("1m");
+  const [lev, setLev] = useState<Lev>(1);
   const [live, setLive] = useState<LiveBook | null>(null);
 
   useEffect(() => {
@@ -65,16 +80,14 @@ export function BacktestBrochure() {
       .then((r) => r.json())
       .then((j) => {
         if (stop) return;
-        const pack = j?.windows as Partial<Record<WindowKey, PublicBt>> | undefined;
-        const next: Partial<Record<WindowKey, PublicBt>> = {};
-        if (pack?.["1m"]?.ready) next["1m"] = pack["1m"];
-        if (pack?.["3m"]?.ready) next["3m"] = pack["3m"];
-        if (pack?.["6m"]?.ready) next["6m"] = pack["6m"];
-        if (next["1m"] || next["3m"] || next["6m"]) {
-          setWindows(next);
-        } else if (j?.ready && j?.curve) {
-          setWindows({ "1m": j, "3m": j, "6m": j });
+        const pack = j?.windows as Record<string, unknown> | undefined;
+        const next: Partial<Record<WindowKey, LevPack>> = {};
+        for (const k of ["1m", "3m", "6m"] as const) {
+          const row = asLevPack(pack?.[k]);
+          if (row) next[k] = row;
         }
+        if (next["1m"] || next["3m"] || next["6m"]) setWindows(next);
+        else if (j?.ready && j?.curve) setWindows({ "1m": { 1: j }, "3m": { 1: j }, "6m": { 1: j } });
         if (j?.live?.on) setLive(j.live);
       })
       .catch(() => {
@@ -85,7 +98,8 @@ export function BacktestBrochure() {
     };
   }, []);
 
-  const data = windows[win] || windows["1m"] || null;
+  const pack = windows[win] || windows["1m"] || {};
+  const data = pack[lev] || pack[1] || null;
   const ready = Boolean(data?.ready && data.curve?.length);
   const up = (data?.pnlPct || 0) >= 0;
   const pct = ready ? `${up ? "+" : ""}${((data?.pnlPct || 0) * 100).toFixed(1)}%` : "…";
@@ -106,7 +120,7 @@ export function BacktestBrochure() {
             </p>
           </div>
           <div className="text-left lg:text-right">
-            <div className="mb-3 flex flex-wrap gap-2 lg:justify-end">
+            <div className="mb-2 flex flex-wrap gap-2 lg:justify-end">
               {WINDOWS.map((w) => (
                 <button
                   key={w.id}
@@ -115,6 +129,18 @@ export function BacktestBrochure() {
                   className={`rounded-full px-3 py-1 font-mono text-[11px] ${win === w.id ? "btn-on" : "btn-ghost"}`}
                 >
                   {w.label}
+                </button>
+              ))}
+            </div>
+            <div className="mb-3 flex flex-wrap gap-2 lg:justify-end">
+              {([1, 2, 3] as const).map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => setLev(n)}
+                  className={`rounded-full px-3 py-1 font-mono text-[11px] ${lev === n ? "btn-on" : "btn-ghost"}`}
+                >
+                  {n === 1 ? "Spot 1×" : `SOL ${n}×`}
                 </button>
               ))}
             </div>
@@ -144,15 +170,28 @@ export function BacktestBrochure() {
           <Stat k="Win rate" v={ready ? `${Math.round((data?.winRate || 0) * 100)}%` : "—"} sub="closed to USDC" />
           <Stat k="Max DD" v={ready ? `−${((data?.maxDdPct || 0) * 100).toFixed(1)}%` : "—"} sub="from peak" />
           <Stat
-            k="Best day"
-            v={ready ? `+$${Math.abs(data?.bestDayUsd || 0).toFixed(0)}` : "—"}
-            sub={ready ? `${data?.daysGe2 || 0} days ≥ $2` : "on a $1,000 book"}
+            k={lev > 1 ? "Liquidations" : "Best day"}
+            v={
+              lev > 1
+                ? ready
+                  ? String(data?.liquidations || 0)
+                  : "—"
+                : ready
+                  ? `+$${Math.abs(data?.bestDayUsd || 0).toFixed(0)}`
+                  : "—"
+            }
+            sub={
+              lev > 1
+                ? "SOL-PERP stopped out"
+                : ready
+                  ? `${data?.daysGe2 || 0} days ≥ $2`
+                  : "on a $1,000 book"
+            }
           />
         </div>
 
         <p className="mt-6 max-w-3xl text-xs leading-relaxed text-mute sm:text-sm">
-          {data?.note ||
-            "Same rules she trades with now. Fees are already in the line. Past days are not a promise."}
+          {data?.note || "Same rules she trades with now. Fees are already in the line. Past days are not a promise."}
         </p>
 
         <div className="mt-8 flex flex-col gap-3 sm:flex-row">

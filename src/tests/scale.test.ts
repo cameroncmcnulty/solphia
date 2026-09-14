@@ -28,6 +28,10 @@ describe("scale store", () => {
     s.traders[dead].book.killed = true;
     const hot = hotOwners(s, now);
     assert.ok(hot.includes(live));
+    s.hotAt = s.hotAt || {};
+    delete s.hotAt[live];
+    const still = hotOwners(s, now + 8 * 60 * 60_000);
+    assert.ok(still.includes(live), "live 24/7 books tick after the hub goes cold");
     assert.ok(hot.includes(cold), "closed-tab paper books still get ticks");
     assert.ok(!hot.includes(dead), "killed books stay off");
     assert.ok(hot.length <= MAX_TICK_TRADERS);

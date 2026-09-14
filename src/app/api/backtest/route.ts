@@ -6,6 +6,19 @@ import { isFounder } from "@/lib/access";
 
 export const dynamic = "force-dynamic";
 
+function windowPack(
+  window: "1m" | "3m" | "6m",
+  stored1?: Parameters<typeof latestHorizon>[2],
+  stored2?: Parameters<typeof latestHorizon>[2],
+  stored3?: Parameters<typeof latestHorizon>[2],
+) {
+  return {
+    1: publicBacktest(latestHorizon(window, 1, window === "1m" ? stored1 : undefined)),
+    2: publicBacktest(latestHorizon(window, 2, window === "1m" ? stored2 : undefined)),
+    3: publicBacktest(latestHorizon(window, 3, window === "1m" ? stored3 : undefined)),
+  };
+}
+
 export async function GET() {
   const s = await readyState();
   await loadAllTraders(s);
@@ -15,16 +28,16 @@ export async function GET() {
     3: publicBacktest(latestBacktest(s.backtestLev3, 3)),
   };
   const windows = {
-    "1m": publicBacktest(latestHorizon("1m", s.backtest)),
-    "3m": publicBacktest(latestHorizon("3m")),
-    "6m": publicBacktest(latestHorizon("6m")),
+    "1m": windowPack("1m", s.backtest, s.backtestLev2, s.backtestLev3),
+    "3m": windowPack("3m"),
+    "6m": windowPack("6m"),
   };
   const liveTrader = Object.values(s.traders || {}).find((t) => isFounder(s, t.owner) && t.auto?.mode === "live");
   const liveBook = liveTrader ? publicBook(liveTrader.book) : null;
   return NextResponse.json({
     reports,
     windows,
-    ...windows["1m"],
+    ...windows["1m"][1],
     live:
       s.publishLiveWallet && liveBook
         ? {

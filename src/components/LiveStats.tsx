@@ -17,7 +17,7 @@ export function LiveStats({ compact = false }: { compact?: boolean }) {
       .then((r) => r.json())
       .then((j) => {
         if (stop) return;
-        const one = j?.windows?.["1m"] || j;
+        const one = j?.windows?.["1m"]?.[1] || j?.windows?.["1m"] || j;
         if (one?.ready) setBt(one);
       })
       .catch(() => {});

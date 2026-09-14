@@ -361,6 +361,22 @@ describe("USDC-home engine", () => {
     assert.equal(d.to, "USDC");
   });
 
+  it("does not re-enter while the book is still under the stack stop", () => {
+    const book = emptyBook(1000);
+    book.equityUsd = 880;
+    book.pair = { solQty: 0, spyxQty: 0, qqqxQty: 0, gldxQty: 0, usdcQty: 880 };
+    const d = decidePair({
+      auto: auto({ cooldownMin: 0, stopPct: 0.08 }),
+      book,
+      prices: px(118, 770),
+      samples: uptrend(),
+      study: DEFAULT_STUDY,
+      now: CASH,
+    });
+    assert.equal(d.action, "skip");
+    assert.match(d.reason, /Sitting in USDC/i);
+  });
+
   it("respects cooldown while in USDC", () => {
     const book = emptyBook(1000);
     book.lastTradeAt = CASH - 60_000;

@@ -8,6 +8,7 @@ import { BottomNav } from "./BottomNav";
 import { LiveRunner } from "./LiveRunner";
 import { SeatRunner } from "./SeatRunner";
 import { ReferralCapture } from "./ReferralCapture";
+import { HumanGate } from "./HumanGate";
 
 export function Shell({ children }: { children: React.ReactNode }) {
   const path = usePathname();
@@ -27,6 +28,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
       </div>
       <LiveRunner />
       <SeatRunner />
+      {!isAdmin && <HumanGate />}
       {!isAdmin && <BottomNav />}
     </div>
   );

@@ -12,6 +12,7 @@ import { loadShortTape } from "./pair/shortTape";
 import { loadScalpFrames } from "./pair/frames";
 import { readyState, saveOps, saveTrader, loadHotTraders } from "./store";
 import { fillLiveIntent, MAX_LIVE_FILLS_PER_TICK } from "./live/execute";
+import { maybeRenewLiveSeats } from "./live/renew";
 import { liveSeatOk, levSeatOk } from "./access";
 import { leverageUnlocked } from "./leverage";
 import { treasuryAddress } from "./treasury";
@@ -241,6 +242,11 @@ export async function runMarketTick(): Promise<{
     let liveFills = 0;
 
     const hot = await loadHotTraders(state);
+    try {
+      await maybeRenewLiveSeats(state, hot, 1);
+    } catch {
+      /* trading still runs */
+    }
     for (const trader of hot) {
       // Armed paper books keep clipping even if the owner closed the browser.
       const owner = trader.owner;
