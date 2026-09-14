@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { buyCoin, createCoin, emptyLaunchBook, publicCoin } from "../lib/launch/engine";
 import { auditLaunchCoin, rankTape } from "../lib/launch/audit";
-import { TAPE_BOARD, filterTape, sortTape, volumeIn } from "../lib/launch/tape";
+import { filterTape, sortTape, volumeIn } from "../lib/launch/tape";
 import { marketPasses, MARKET_MIN_SCORE, filterMarketSnapshots } from "../lib/launch/market";
 import { isNativeSolSnapshot, WSOL_MINT } from "../lib/feeds/normalize";
 import type { TokenSnapshot } from "../lib/types";
@@ -79,8 +79,8 @@ describe("launch tape audit rank", () => {
       },
     );
     const naked = pub("NAKED", NOW - 8 * 60_000, [], { name: "xx", blurb: "" });
-    const board = rankTape([naked, built], 150, NOW, TAPE_BOARD);
-    assert.ok(board.length <= TAPE_BOARD);
+    const board = rankTape([naked, built], 150, NOW);
+    assert.equal(board.length, 2);
     assert.equal(board[0].coin.symbol, "BUILT");
     assert.equal(board[0].rank, 1);
     assert.ok(board[0].audit.score > board[1].audit.score);

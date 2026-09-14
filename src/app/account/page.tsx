@@ -61,6 +61,10 @@ export default function AccountPage() {
   const [noteErr, setNoteErr] = useState(false);
   const [username, setUsername] = useState("");
   const fieldErr = useConfirmErrors<"username" | "restore" | "pfp">();
+  const [boosts, setBoosts] = useState<{
+    live: { symbol: string; leftMs: number; rockets: number }[];
+    queued: { symbol: string; position: number; etaMs: number; rockets: number }[];
+  }>({ live: [], queued: [] });
   const [tradePk, setTradePk] = useState("");
   const [ownerBal, setOwnerBal] = useState(0);
   const [tradeBal, setTradeBal] = useState(0);
@@ -71,6 +75,8 @@ export default function AccountPage() {
     const j = await fetch(`/api/account?pubkey=${encodeURIComponent(owner)}`).then((r) => r.json());
     setDesk(j);
     if (typeof j.username === "string") setUsername(j.username);
+    const b = await fetch(`/api/launch/boost?pubkey=${encodeURIComponent(owner)}`).then((r) => r.json());
+    if (b.mine) setBoosts({ live: b.mine.live || [], queued: b.mine.queued || [] });
   }, [owner]);
 
   useEffect(() => {
@@ -343,6 +349,20 @@ export default function AccountPage() {
       {tab === "launches" && (
         <section className="panel-bubble mt-6 overflow-hidden rounded-3xl p-5">
           <h2 className="font-display text-2xl text-ghost">Launched coins</h2>
+          {(boosts.live.length > 0 || boosts.queued.length > 0) && (
+            <div className="mt-3 space-y-1 rounded-2xl border border-acid/25 bg-acid/[0.04] px-3 py-2 font-mono text-[12px]">
+              {boosts.live.map((b) => (
+                <div key={`bl-${b.symbol}`} className="text-acid">
+                  ${b.symbol} boosted · {Math.max(0, Math.floor(b.leftMs / 60000))}m left · {b.rockets} rockets
+                </div>
+              ))}
+              {boosts.queued.map((b) => (
+                <div key={`bq-${b.symbol}-${b.position}`} className="text-mute">
+                  ${b.symbol} in queue #{b.position} · live in {Math.max(0, Math.floor(b.etaMs / 60000))}m
+                </div>
+              ))}
+            </div>
+          )}
           {(!desk?.launched || desk.launched.length === 0) && <p className="mt-3 text-sm text-mute">None yet.</p>}
           <div className="mt-4 space-y-2">
             {(desk?.launched || []).map((c) => (
@@ -375,8 +395,7 @@ export default function AccountPage() {
         <section className="panel-bubble mt-6 overflow-hidden rounded-3xl p-5">
           <h2 className="font-display text-2xl text-ghost">Referrals</h2>
           <p className="mt-2 text-sm text-mute">
-            Share your link. When they connect Phantom, they are yours for life. Every coin they launch pays you 25% of
-            swap fees — on top of the 50% the actual dev keeps. Withdraw anytime.
+            Share your link. When they join, they are yours. You earn a cut of their launch fees. Withdraw anytime.
           </p>
           <div className="mt-4 flex flex-col gap-2 sm:flex-row">
             <input readOnly value={invite} className="min-h-[44px] flex-1 rounded-full border border-violet/30 bg-void px-4 font-mono text-[11px] text-ghost" />

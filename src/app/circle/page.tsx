@@ -487,7 +487,7 @@ function CircleInner() {
           <div className="rounded-3xl border border-acid/25 bg-acid/[0.06] p-4">
             <div className="font-mono text-[10px] tracking-[0.22em] text-acid">FOUNDERS CIRCLE</div>
             <h1 className="mt-1 font-display text-2xl text-ghost">The hangout hub</h1>
-            <p className="mt-1 text-sm text-mute">Spots are limited. Early supporters. One day a thin slice of top holders.</p>
+            <p className="mt-1 text-sm text-mute">Spots are limited. Early supporters only.</p>
             <div className="mt-3 font-mono text-[11px] text-ghost">{pack ? `${pack.members} founders in` : "…"}</div>
           </div>
           {member && (

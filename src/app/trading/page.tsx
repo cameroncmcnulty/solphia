@@ -3,7 +3,7 @@ import { TradingHub } from "@/components/TradingHub";
 
 export const metadata: Metadata = {
   title: "Trading",
-  description: "Operate Solphia. Connect Phantom, add SOL, let her trade official SPYx, QQQx, and GLDx.",
+  description: "Turn her on. She trades tokenized S&P 500, Nasdaq, and gold.",
 };
 
 export default function TradingPage() {

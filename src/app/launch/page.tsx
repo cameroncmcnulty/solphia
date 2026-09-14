@@ -30,8 +30,9 @@ import {
 import { FieldError, FormAlert, fieldClass, useConfirmErrors } from "@/components/form/confirm";
 import { loadOwner, signAndSendPhantom } from "@/lib/wallet/trading";
 import { SWAP_FEE_BPS } from "@/lib/launch/curve";
-import { auditLaunchCoin, rankTape, type LaunchAudit } from "@/lib/launch/audit";
-import { TAPE_BOARD, filterTape, sortTape, volumeIn, type AgeFilter, type VolWindow } from "@/lib/launch/tape";
+import { auditLaunchCoin, rankTape, scoreTape, type LaunchAudit } from "@/lib/launch/audit";
+import { BoostBuy, fmtLeft } from "@/components/BoostBuy";
+import { filterTape, sortTape, volumeIn, type AgeFilter, type VolWindow } from "@/lib/launch/tape";
 
 
 const TOKEN_PX = TOKEN_IMAGE_PX;
@@ -235,6 +236,12 @@ export default function LaunchPage() {
   const [age, setAge] = useState<AgeFilter>("newest");
   const [vol, setVol] = useState<VolWindow | null>(null);
   const [ranked, setRanked] = useState(false);
+  const [boostOpen, setBoostOpen] = useState(false);
+  const [boostLive, setBoostLive] = useState<{ coinId: string; mint: string; rockets: number; leftMs: number; symbol: string }[]>([]);
+  const [boostMine, setBoostMine] = useState<{
+    live: { symbol: string; leftMs: number; rockets: number }[];
+    queued: { symbol: string; position: number; etaMs: number; rockets: number }[];
+  }>({ live: [], queued: [] });
   const [source, setSource] = useState<"all" | "born" | "market">("all");
   const [tapeLoading, setTapeLoading] = useState(true);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -251,6 +258,13 @@ export default function LaunchPage() {
       setOpen((cur) => (cur ? next.find((c) => c.id === cur.id) || cur : cur));
       return mergeCoins(next, prev.filter((c) => c.born));
     });
+  }
+
+  async function refreshBoosts() {
+    const q = owner ? `?pubkey=${encodeURIComponent(owner)}` : "";
+    const j = await fetch(`/api/launch/boost${q}`, { cache: "no-store" }).then((r) => r.json());
+    setBoostLive(Array.isArray(j.live) ? j.live : []);
+    if (j.mine) setBoostMine({ live: j.mine.live || [], queued: j.mine.queued || [] });
   }
 
   async function refreshTape() {
@@ -276,11 +290,14 @@ export default function LaunchPage() {
   useEffect(() => {
     refreshPad().catch(() => {});
     refreshTape().catch(() => setTapeLoading(false));
+    refreshBoosts().catch(() => {});
     const padT = setInterval(() => refreshPad().catch(() => {}), 8_000);
     const tapeT = setInterval(() => refreshTape().catch(() => {}), 40_000);
+    const boostT = setInterval(() => refreshBoosts().catch(() => {}), 8_000);
     return () => {
       clearInterval(padT);
       clearInterval(tapeT);
+      clearInterval(boostT);
     };
   }, [owner]);
 
@@ -382,17 +399,25 @@ export default function LaunchPage() {
             ? pool.filter((c) => !c.born)
             : pool;
     const aged = filterTape(sourced, age);
-    if (ranked) return rankTape(aged.filter((c) => c.born), solUsd);
-    return sortTape(aged, vol).map((coin, i) => ({ coin, audit: coin.born ? auditLaunchCoin(coin, solUsd) : null, rank: i + 1 }));
-  }, [pool, age, vol, ranked, solUsd, source, tab]);
+    const rows = ranked ? rankTape(aged, solUsd) : scoreTape(sortTape(aged, vol), solUsd);
+    const boosted = [];
+    const rest = [];
+    for (const row of rows) {
+      const b = boostLive.find((x) => x.coinId === row.coin.id || (x.mint && x.mint === row.coin.mint));
+      if (b) boosted.push({ ...row, boost: b });
+      else rest.push({ ...row, boost: undefined as undefined });
+    }
+    boosted.sort((a, b) => (b.boost?.rockets || 0) - (a.boost?.rockets || 0));
+    return [...boosted, ...rest];
+  }, [pool, age, vol, ranked, solUsd, source, tab, boostLive]);
   const rows = board.map((r) => r.coin);
 
   return (
     <main className="relative min-h-[calc(100vh-4rem)] overflow-x-hidden pb-24">
       <SolphiaConstellation />
       <div className="relative z-10 mx-auto max-w-6xl px-4 pt-6 md:px-8 md:pt-10">
-        <p className="font-mono text-[11px] tracking-[0.28em] text-acid">LAUNCH · 1B · 1% SWAP · 50% TO DEV · 25% TO INVITER</p>
-        <h1 className="mt-2 font-display text-4xl text-ghost sm:text-5xl">Fair launch. Swap tokens.</h1>
+        <p className="font-mono text-[11px] tracking-[0.28em] text-acid">LAUNCH</p>
+        <h1 className="mt-2 font-display text-4xl text-ghost sm:text-5xl">Launch a token. Swap it.</h1>
 
         <div className="mt-8 grid gap-5 lg:grid-cols-[minmax(280px,0.72fr)_minmax(0,1.28fr)]">
           <section className="panel-bubble overflow-hidden rounded-3xl p-5">
@@ -419,7 +444,7 @@ export default function LaunchPage() {
                     )}
                   </button>
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm text-mute">Square art, 512px min. We crop 1000×1000 for X, Telegram, Discord. Optional.</p>
+                    <p className="text-sm text-mute">Square art. Optional.</p>
                     <FieldError error={createErr.errors.image} />
                   </div>
                   <input
@@ -607,10 +632,7 @@ export default function LaunchPage() {
                     <button
                       key={k}
                       type="button"
-                      onClick={() => {
-                        setSource(k);
-                        if (k === "market") setRanked(false);
-                      }}
+                      onClick={() => setSource(k)}
                       className={`rounded-full px-3 py-1 font-mono text-[10px] ${source === k ? "bg-acid/20 text-acid" : "text-mute hover:text-ghost"}`}
                     >
                       {k === "all" ? "ALL" : k === "born" ? "SOLPHIA" : "MARKET"}
@@ -651,31 +673,57 @@ export default function LaunchPage() {
                   ))}
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setRanked((v) => !v);
-                  if (!ranked) setVol(null);
-                }}
-                className={`w-full rounded-full px-4 py-2 font-mono text-[11px] tracking-[0.16em] ${
-                  ranked ? "btn-on" : "btn-ghost"
-                }`}
-              >
-                RANKED · FULL AUDIT
-              </button>
-              {ranked && (
-                <p className="text-[11px] leading-relaxed text-mute">
-                  Solphia-born tokens are ranked by Solphia’s risk engine. Top {TAPE_BOARD} fill the board.
-                </p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRanked((v) => !v);
+                    if (!ranked) setVol(null);
+                  }}
+                  className={`flex-1 rounded-full px-4 py-2 font-mono text-[11px] tracking-[0.16em] ${
+                    ranked ? "btn-on" : "btn-ghost"
+                  }`}
+                >
+                  Rank
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBoostOpen((v) => !v)}
+                  className={`flex-1 rounded-full px-4 py-2 font-mono text-[11px] tracking-[0.16em] ${
+                    boostOpen ? "btn-on" : "btn-ghost"
+                  }`}
+                >
+                  Boost
+                </button>
+              </div>
+              {boostOpen && owner && (open || mine[0]) && (
+                <BoostBuy
+                  owner={owner}
+                  coinId={(open || mine[0]).id}
+                  symbol={(open || mine[0]).symbol}
+                  onDone={() => refreshBoosts().catch(() => {})}
+                />
               )}
-              {!ranked && (
-                <p className="text-[11px] leading-relaxed text-mute">
-                  NSFW, banned, and livestream junk is cut. Safety score is on every row. The board fills with the next-best
-                  live names so it is never empty.
-                </p>
+              {boostOpen && owner && !open && !mine[0] && (
+                <p className="text-[12px] text-mute">Open a token, then boost it.</p>
+              )}
+              {boostOpen && !owner && <p className="text-[12px] text-mute">Connect to boost a token to the top.</p>}
+              {tab === "mine" && (boostMine.live.length > 0 || boostMine.queued.length > 0) && (
+                <div className="space-y-1 text-[12px] text-mute">
+                  {boostMine.live.map((b) => (
+                    <div key={`l-${b.symbol}`} className="text-acid">
+                      ${b.symbol} live · {fmtLeft(b.leftMs)} left · {b.rockets} 🚀
+                    </div>
+                  ))}
+                  {boostMine.queued.map((b) => (
+                    <div key={`q-${b.symbol}-${b.position}`}>
+                      ${b.symbol} queued #{b.position} · live in {fmtLeft(b.etaMs)}
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
-            <div className={`mt-3 space-y-1.5 ${ranked ? "" : "max-h-[44rem] overflow-y-auto overflow-x-hidden"}`}>
+            <div className="mt-3 max-h-[44rem] space-y-1.5 overflow-y-auto overflow-x-hidden">
               {rows.length === 0 && tapeLoading && tab !== "mine" && (
                 <div className="space-y-2">
                   {Array.from({ length: 8 }).map((_, i) => (
@@ -702,6 +750,8 @@ export default function LaunchPage() {
                   rank={ranked ? row.rank : 0}
                   audit={row.audit}
                   vol={ranked ? null : vol}
+                  rockets={row.boost?.rockets}
+                  boostLeft={row.boost?.leftMs}
                 />
               ))}
             </div>
@@ -785,6 +835,8 @@ function CoinCard({
   rank,
   audit,
   vol,
+  rockets,
+  boostLeft,
 }: {
   c: Coin;
   solUsd: number;
@@ -793,6 +845,8 @@ function CoinCard({
   rank: number;
   audit: LaunchAudit | null;
   vol: VolWindow | null;
+  rockets?: number;
+  boostLeft?: number;
 }) {
   const elite = rank > 0 && rank <= 3;
   const score = audit?.score ?? c.score;
@@ -826,6 +880,12 @@ function CoinCard({
           <span className={`shrink-0 rounded-full px-1.5 py-0.5 font-mono text-[9px] ${c.born ? "bg-acid/15 text-acid" : "bg-white/10 text-mute"}`}>
             {venueLabel(c)}
           </span>
+          {rockets ? (
+            <span className="shrink-0 rounded-full bg-acid/20 px-1.5 py-0.5 font-mono text-[9px] text-acid">
+              🚀 {rockets}
+              {boostLeft ? ` · ${fmtLeft(boostLeft)}` : ""}
+            </span>
+          ) : null}
         </div>
         <div className="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 font-mono text-[11px] text-mute">
           <span>{fmtAge(Date.now() - c.createdAt)}</span>
@@ -835,16 +895,14 @@ function CoinCard({
         </div>
       </div>
       <MiniSpark candles={spark} up={up} />
-      {score != null && (
-        <span
-          className={`relative z-[1] hidden shrink-0 rounded-full px-2 py-1 font-mono text-[11px] sm:inline ${
-            grade === "S" || grade === "A" ? "bg-acid/20 text-acid" : grade === "B" ? "bg-cyan/20 text-cyan" : "bg-white/10 text-mute"
-          }`}
-        >
-          {grade ? `${grade} ` : ""}
-          {score}
-        </span>
-      )}
+      <span
+        className={`relative z-[1] shrink-0 rounded-full px-2 py-1 font-mono text-[11px] ${
+          grade === "S" || grade === "A" ? "bg-acid/20 text-acid" : grade === "B" ? "bg-cyan/20 text-cyan" : "bg-white/10 text-mute"
+        }`}
+      >
+        {grade ? `${grade} ` : ""}
+        {score ?? "—"}
+      </span>
     </div>
   );
 }
@@ -922,6 +980,10 @@ function CoinDesk({
           Close
         </button>
       </div>
+
+      {owner && (
+        <BoostBuy owner={owner} coinId={open.id} symbol={open.symbol} />
+      )}
 
       <TokenChart
         key={open.mint || open.id}

@@ -16,6 +16,7 @@ import {
   withdrawReferral,
 } from "@/lib/launch/engine";
 import { lastPairPrices } from "@/lib/tick";
+import { liveBoosts, publicLiveBoost, tickBoosts } from "@/lib/launch/boost";
 import { IMAGE_DATA_MAX } from "@/lib/launch/validate";
 import { pinDataUrl } from "@/lib/pinata";
 
@@ -61,12 +62,13 @@ export async function GET(req: NextRequest) {
     if (!coin) return fail("not_found", 404);
     return NextResponse.json({ coin: publicCoin(coin, solUsd, viewer, book), solUsd });
   }
+  tickBoosts(book);
   return NextResponse.json({
     coins: book.coins.slice(0, 80).map((c) => publicCoin(c, solUsd, viewer, book)),
     solUsd,
     ownerWallet: book.ownerWallet || null,
     ownerEarningsSol: book.ownerEarningsSol,
-    fee: { swapBps: 100, devShare: "50% of swap fees paid to the dev", createSol: 0 },
+    boosts: liveBoosts(book).map((b) => publicLiveBoost(b)),
   });
 }
 

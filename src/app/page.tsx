@@ -31,9 +31,7 @@ export default function Home() {
               She auto-trades tokenized S&amp;P 500, Nasdaq-100, and gold — for profit.
             </p>
             <p className="mt-4 max-w-lg text-base leading-relaxed text-mute sm:text-lg">
-              Connect your wallet. She clips SOL against official SPYx, QQQx, and GLDx when a book is stretched. Jupiter
-              finds the route. You sign. Launch pad and $SPHA sit around that desk. Every swap funds listings,
-              buybacks, and burns.
+              Connect your wallet. She trades tokenized S&P 500, Nasdaq, and gold. Launch and $SPHA sit around that desk.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <Link href="/trading" className="btn-acid inline-flex min-h-[52px] items-center justify-center rounded-full px-8 text-base">
@@ -55,28 +53,27 @@ export default function Home() {
           Products that actually run.
         </h2>
         <p className="mt-4 max-w-2xl text-lg text-mute">
-          The Solphia ecosystem is the desk, the launch pad, and $SPHA. She auto-trades tokenized stocks for profit.
-          The other products feed the token.
+          Trading desk, launch pad, and $SPHA. She trades. The rest feeds the token.
         </p>
         <div className="mt-12 grid gap-4 lg:grid-cols-3">
           <Reveal delay={40} from="left"><Eco
             n="01"
             t="Auto-trade"
-            d="She watches SOL vs tokenized S&P 500, Nasdaq-100, and gold — and clips for profit when a pair stretches. Set it and close the tab. Paper runs 24/7 until you kill her or an 8% drop flattens the book."
+            d="She trades tokenized S&P 500, Nasdaq, and gold. Turn her on and close the tab."
             href="/trading"
             c="Trade"
           /></Reveal>
           <Reveal delay={120}><Eco
             n="02"
             t="Launch"
-            d="Fair bonding curve. 1B supply. Mint and freeze locked. 1% swap. 50% of fees to the creator."
+            d="Launch a token. Swap it. Boost it to the top."
             href="/launch"
             c="Launch"
           /></Reveal>
           <Reveal delay={200} from="right"><Eco
             n="03"
             t="$SPHA"
-            d="The protocol token. 1% of $SPHA and pad swaps route through Solphia. Community-market float, buybacks, and burns."
+            d="The protocol token. Swaps fund listings, buybacks, and burns."
             href="/token"
             c="Token"
           /></Reveal>
@@ -94,13 +91,12 @@ export default function Home() {
           Every swap has a job after the fill.
         </h2>
         <p className="mt-4 max-w-2xl text-lg text-mute">
-          Desk clips and launch swaps take a protocol cut. That cut is reserved three ways: listings, buybacks, and
-          burns — automatically, by design. The on-chain router ships after the mint. The rule is the product now.
+          A cut of every swap goes to listings, buybacks, and burns.
         </p>
         <div className="mt-12 grid gap-4 sm:grid-cols-3">
-          <Reveal delay={40} from="left"><Note t="Listings" d="A share of swap proceeds is earmarked for future exchange listing fees so $SPHA can show up where it should." /></Reveal>
-          <Reveal delay={120}><Note t="Buybacks" d="A share is used to buy $SPHA on the open market. Demand from the products, not from a promise." /></Reveal>
-          <Reveal delay={200} from="right"><Note t="Burns" d="A share is retired forever. More volume through the utilities, smaller circulating supply." /></Reveal>
+          <Reveal delay={40} from="left"><Note t="Listings" d="A share is saved for future listings." /></Reveal>
+          <Reveal delay={120}><Note t="Buybacks" d="A share buys $SPHA on the open market." /></Reveal>
+          <Reveal delay={200} from="right"><Note t="Burns" d="A share is taken out of supply." /></Reveal>
         </div>
         </Reveal>
       </section>
@@ -111,11 +107,10 @@ export default function Home() {
         <Reveal>
         <div className="rounded-3xl border border-acid/25 bg-acid/[0.06] px-6 py-8 md:flex md:items-center md:justify-between md:px-10">
           <div className="max-w-xl">
-            <p className="font-mono text-[11px] tracking-[0.22em] text-acid">REFERRALS · 25% FOR LIFE</p>
-            <h2 className="mt-2 font-display text-2xl text-ghost sm:text-3xl">Invite once. Get paid on every coin they launch.</h2>
+            <p className="font-mono text-[11px] tracking-[0.22em] text-acid">REFERRALS</p>
+            <h2 className="mt-2 font-display text-2xl text-ghost sm:text-3xl">Invite once. Get paid when they launch.</h2>
             <p className="mt-2 text-sm leading-relaxed text-mute sm:text-base">
-              First inviter locks forever. You earn 25% of swap fees on top of the 50% the actual dev keeps. Share the
-              link, then withdraw from your dashboard.
+              Share your link. Withdraw from your account.
             </p>
           </div>
           <Link
@@ -133,9 +128,9 @@ export default function Home() {
         <p className="text-sm tracking-[0.2em] text-acid">HOW IT WORKS</p>
         <h2 className="mt-3 font-display text-4xl text-ghost sm:text-5xl">Three steps.</h2>
         <div className="mt-12 grid gap-4 md:grid-cols-3">
-          <Reveal delay={40} from="left"><Chip t="01 · Connect" d="Connect your wallet. That is login. She never holds a key." /></Reveal>
-          <Reveal delay={120}><Chip t="02 · She trades" d="Auto-clips tokenized S&P, Nasdaq, and gold for profit. Launch sits beside that desk." /></Reveal>
-          <Reveal delay={200} from="right"><Chip t="03 · Swap proceeds work" d="A portion of every swap is reserved for listings, buybacks, and burns." /></Reveal>
+          <Reveal delay={40} from="left"><Chip t="01 · Connect" d="Connect your wallet. We never hold a key." /></Reveal>
+          <Reveal delay={120}><Chip t="02 · She trades" d="Tokenized S&P, Nasdaq, and gold. Launch sits next to the desk." /></Reveal>
+          <Reveal delay={200} from="right"><Chip t="03 · $SPHA" d="Swaps fund listings, buybacks, and burns." /></Reveal>
         </div>
         </Reveal>
       </section>
@@ -150,7 +145,7 @@ export default function Home() {
             </p>
             <h2 className="mt-3 font-display text-4xl text-ghost sm:text-5xl md:text-6xl">Turn her on.</h2>
             <p className="mt-4 max-w-lg text-lg text-mute">
-              She auto-trades tokenized stocks for profit. Keys stay in your wallet. Every swap: listings, buybacks, burns.
+              She trades. Keys stay in your wallet.
             </p>
           </div>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row md:mt-0">

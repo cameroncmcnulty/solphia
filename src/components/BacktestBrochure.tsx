@@ -95,9 +95,7 @@ export function BacktestBrochure() {
               The curve is the point.
             </h2>
             <p className="mt-3 max-w-xl text-sm text-mute sm:text-lg">
-              Same engine she runs now. Official SOL, S&P 500, Nasdaq-100, and gold. She sits in USDC, scalps a 15m
-              setup that agrees with Daily/4H, and trails the stop up. 2×/3× is the same tape with Jupiter Perps fees
-              and liquidation. Historical paper — not a live book.
+              How she would have marked SOL, S&P 500, Nasdaq, and gold. Past days are not a promise.
             </p>
           </div>
           <div className="text-left lg:text-right">

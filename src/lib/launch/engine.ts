@@ -20,6 +20,8 @@ import {
 } from "./curve";
 import { socialHref } from "./links";
 import { imageOk, validateLaunchCreate } from "./validate";
+import type { LaunchBoost } from "./boost";
+import { ensureBoosts, tickBoosts } from "./boost";
 
 export { launchError, LAUNCH_ERRORS } from "./errors";
 export { imageOk, nameOk, tickerOk, validateLaunchCreate } from "./validate";
@@ -93,10 +95,11 @@ export type LaunchBook = {
   ownerEarningsSol: number;
   treasuryFeesSol: number;
   accounts: Record<string, LaunchAccount>;
+  boosts?: LaunchBoost[];
 };
 
 export function emptyLaunchBook(): LaunchBook {
-  return { coins: [], ownerWallet: "", ownerEarningsSol: 0, treasuryFeesSol: 0, accounts: {} };
+  return { coins: [], ownerWallet: "", ownerEarningsSol: 0, treasuryFeesSol: 0, accounts: {}, boosts: [] };
 }
 
 export function emptyAccount(pubkey: string): LaunchAccount {
@@ -208,9 +211,11 @@ export function slimLaunch(book: LaunchBook): LaunchBook {
       pfp: (a.pfp || "").length > 90_000 ? "" : a.pfp,
     };
   }
+  tickBoosts(book);
   return {
     ...book,
     accounts,
+    boosts: ensureBoosts(book).slice(-80),
     coins: (book.coins || []).slice(0, 120).map((c) => ({
       ...c,
       image: (c.image || "").length > 90_000 ? "" : c.image,
@@ -253,12 +258,16 @@ export function mergeLaunch(local: LaunchBook, remote: LaunchBook): LaunchBook {
       referralRewardsSol: Math.max(a.referralRewardsSol || 0, r.referralRewardsSol || 0),
     };
   }
+  const boostMap = new Map<string, NonNullable<LaunchBook["boosts"]>[number]>();
+  for (const b of remote.boosts || []) boostMap.set(b.id, b);
+  for (const b of local.boosts || []) boostMap.set(b.id, b);
   return {
     coins,
     ownerWallet: local.ownerWallet || remote.ownerWallet,
     ownerEarningsSol: Math.max(local.ownerEarningsSol || 0, remote.ownerEarningsSol || 0),
     treasuryFeesSol: Math.max(local.treasuryFeesSol || 0, remote.treasuryFeesSol || 0),
     accounts,
+    boosts: [...boostMap.values()],
   };
 }
 

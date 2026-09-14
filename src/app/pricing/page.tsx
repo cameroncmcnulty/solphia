@@ -150,8 +150,7 @@ export default function PricingPage() {
           <div className="panel rounded-3xl p-5">
             <div className="font-mono text-[11px] tracking-[0.2em] text-violet">CHECKOUT · {selected.name.toUpperCase()}</div>
             <p className="mt-2 text-base text-mute">
-              Connect Phantom, agree to the terms, pay {selected.sol} SOL. Later months leave the trading wallet while
-              this site is open, until you unsubscribe.
+              Connect, agree, pay {selected.sol} SOL. Later months renew from the trading wallet while this site is open.
             </p>
             {paid && (
               <p className="mt-3 font-mono text-sm text-acid">

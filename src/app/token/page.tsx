@@ -48,8 +48,7 @@ export default function TokenPage() {
           <h1 className="font-display text-5xl text-ghost sm:text-7xl">{tick(t.symbol)}</h1>
         </div>
         <p className="mt-5 max-w-2xl text-lg text-mute sm:text-xl">
-          {blurb ||
-            `Every swap in the stack sets aside a portion of proceeds for three jobs: future listing fees, market buybacks, and ${tick(t.symbol)} burns. 1% on $SPHA and pad swaps routes through Solphia.`}
+          {blurb || `Swaps fund listings, buybacks, and ${tick(t.symbol)} burns.`}
         </p>
 
         <div className="mt-8 flex flex-wrap items-center gap-5">
@@ -61,19 +60,19 @@ export default function TokenPage() {
           <Reveal delay={40} from="left">
             <Story
               t="Listings"
-              d="A share of every swap is reserved for future exchange listing fees — so $SPHA can list without a surprise raise."
+              d="A share is saved for future listings."
             />
           </Reveal>
           <Reveal delay={120}>
             <Story
               t="Buybacks"
-              d="A share buys $SPHA on the open market. Desk clips and launch swaps are the bid."
+              d="A share buys $SPHA on the open market."
             />
           </Reveal>
           <Reveal delay={200} from="right">
             <Story
               t="Burns"
-              d="A share is taken out of circulation. Volume in the utilities is what tightens the float."
+              d="A share is taken out of supply."
             />
           </Reveal>
         </div>

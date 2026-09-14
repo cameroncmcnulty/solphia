@@ -1,7 +1,7 @@
 import type { RiskFactor, RiskReport, TokenSnapshot } from "../types";
 import { scoreToken } from "../risk/engine";
 import { hasTelegram, hasTwitter } from "../desk/grad";
-import { TAPE_BOARD, type TapeCoin } from "./tape";
+import type { TapeCoin } from "./tape";
 
 const COPYCAT = ["SPHA", "SOLPHIA", "SOLANA", "PUMPFUN", "BONK", "WIF", "TRUMP", "LAUNCHCOIN"];
 
@@ -230,7 +230,6 @@ export function rankTape<T extends TapeCoin>(
   coins: T[],
   solUsd: number,
   now = Date.now(),
-  board = TAPE_BOARD,
 ): { coin: T; audit: LaunchAudit; rank: number }[] {
   const scored = coins.map((coin) => ({ coin, audit: auditLaunchCoin(coin, solUsd, now) }));
   scored.sort((a, b) => {
@@ -241,5 +240,13 @@ export function rankTape<T extends TapeCoin>(
     if (vb !== va) return vb - va;
     return b.coin.createdAt - a.coin.createdAt;
   });
-  return scored.slice(0, board).map((row, i) => ({ ...row, rank: i + 1 }));
+  return scored.map((row, i) => ({ ...row, rank: i + 1 }));
+}
+
+export function scoreTape<T extends TapeCoin>(
+  coins: T[],
+  solUsd: number,
+  now = Date.now(),
+): { coin: T; audit: LaunchAudit; rank: number }[] {
+  return coins.map((coin, i) => ({ coin, audit: auditLaunchCoin(coin, solUsd, now), rank: i + 1 }));
 }

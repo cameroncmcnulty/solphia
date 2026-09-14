@@ -22,11 +22,11 @@ export const metadata: Metadata = {
     template: "%s · SOLPHIA",
   },
   description:
-    "The Solphia ecosystem: she auto-trades tokenized S&P 500, Nasdaq-100, and gold for profit. Fair launch pad and $SPHA. Every swap funds listings, buybacks, and burns.",
+    "She auto-trades tokenized S&P 500, Nasdaq, and gold. Launch pad and $SPHA.",
   applicationName: "SOLPHIA",
   openGraph: {
     title: "SOLPHIA",
-    description: "The Solphia ecosystem. She auto-trades tokenized S&P, Nasdaq, and gold for profit. $SPHA.",
+    description: "She auto-trades tokenized S&P, Nasdaq, and gold. Launch pad and $SPHA.",
     url: "https://solphia.io",
     siteName: "SOLPHIA",
     images: [{ url: "/og.jpg", width: 1376, height: 768 }],
@@ -35,7 +35,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "SOLPHIA",
-    description: "The Solphia ecosystem. She auto-trades tokenized S&P, Nasdaq, and gold for profit. $SPHA.",
+    description: "She auto-trades tokenized S&P, Nasdaq, and gold. Launch pad and $SPHA.",
     images: ["/og.jpg"],
   },
   icons: {

@@ -327,7 +327,7 @@ export function TradingHub() {
           <p className="font-mono text-[11px] tracking-[0.28em] text-violet">SOL · S&P 500 · NASDAQ · GOLD</p>
           <h1 className="mt-1 font-display text-3xl leading-none text-ghost sm:text-4xl md:text-6xl">Operate</h1>
           <p className="mt-3 max-w-xl text-base text-mute sm:text-lg">
-            Connect Phantom, add SOL, turn her on. She clips official SPYx, QQQx, and GLDx for about 0.5% and keeps going until you kill her or the book drops 8%.
+            Connect, add SOL, turn her on. She trades tokenized S&P, Nasdaq, and gold until you hit KILL.
           </p>
         </div>
         <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-row sm:items-center sm:gap-3">
@@ -365,9 +365,9 @@ export function TradingHub() {
       </header>
 
       <ol className="mt-5 grid gap-3 sm:grid-cols-3">
-        <How n="1" t="Connect Phantom" d="Login only. Keys stay in Phantom." />
-        <How n="2" t="Add SOL" d="Funds the trading wallet. Backup that key." />
-        <How n="3" t="Leave her on" d="Paid seat, then she clips until you kill her." />
+        <How n="1" t="Connect" d="Your wallet is login. We never hold a key." />
+        <How n="2" t="Add SOL" d="Funds the trading wallet. Back up that key." />
+        <How n="3" t="Leave her on" d="She trades until you hit KILL." />
       </ol>
 
       <div className="mt-5 rounded-2xl border border-blood/40 bg-blood/10 px-4 py-3 text-sm text-ghost">
