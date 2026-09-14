@@ -63,6 +63,8 @@ export async function assembleSwapTx(opts: {
   owner: string;
   quote: JupiterQuote;
   feeSol?: number;
+  /** Sell routes take the 1% skim after SOL lands. Buys skim first. */
+  feeAfter?: boolean;
 }): Promise<{ ok: true; transaction: string } | { ok: false; reason: string }> {
   const ixPayload = await fetchSwapInstructions(opts.quote, opts.owner);
   if (!ixPayload) return { ok: false, reason: "Could not build the swap." };
@@ -75,17 +77,18 @@ export async function assembleSwapTx(opts: {
   const ixs: TransactionInstruction[] = [...compute];
   const treasury = treasuryAddress();
   const feeLamports = Math.round((opts.feeSol || 0) * LAMPORTS_PER_SOL);
-  if (treasury && feeLamports >= 5_000) {
-    ixs.push(
-      SystemProgram.transfer({
-        fromPubkey: new PublicKey(opts.owner),
-        toPubkey: new PublicKey(treasury),
-        lamports: feeLamports,
-      }),
-    );
-  }
+  const feeIx =
+    treasury && feeLamports >= 5_000 && opts.owner !== treasury
+      ? SystemProgram.transfer({
+          fromPubkey: new PublicKey(opts.owner),
+          toPubkey: new PublicKey(treasury),
+          lamports: feeLamports,
+        })
+      : null;
+  if (feeIx && !opts.feeAfter) ixs.push(feeIx);
   ixs.push(...setup, swap);
   if (cleanup) ixs.push(cleanup);
+  if (feeIx && opts.feeAfter) ixs.push(feeIx);
 
   const conn = new Connection(rpcUrl(), { commitment: "confirmed" });
   const altAddrs = (ixPayload.addressLookupTableAddresses as string[]) || [];

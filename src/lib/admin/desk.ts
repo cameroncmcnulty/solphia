@@ -166,7 +166,8 @@ export function buildAdminDesk(opts?: { light?: boolean }): AdminDesk {
     promos,
     promoPending: Boolean(s.promoPending),
     lastPromoDay: s.lastPromoDay || "",
-    contentBot: true,
+    contentBot: false,
+    publishLiveWallet: Boolean(s.publishLiveWallet),
     xai: Boolean(XAI_API_KEY),
     audit: (s.audit || []).slice(-40).reverse(),
     locked: {

@@ -21,6 +21,7 @@ export async function quotePadSwap(opts: {
   mint: string;
   amount: number;
   slippageBps?: number;
+  skipFee?: boolean;
 }): Promise<
   | {
       ok: true;
@@ -38,7 +39,7 @@ export async function quotePadSwap(opts: {
   if (!(opts.amount > 0)) return { ok: false, reason: "Enter an amount." };
   const slip = opts.slippageBps || 100;
   if (opts.side === "buy") {
-    const { feeSol, swapSol } = splitPadSpend(opts.amount);
+    const { feeSol, swapSol } = opts.skipFee ? { feeSol: 0, swapSol: opts.amount } : splitPadSpend(opts.amount);
     if (swapSol < 0.005) return { ok: false, reason: "Amount is too small after the 1% protocol fee." };
     const q = await quoteOpenSwap({
       inputMint: SOL_MINT,
@@ -67,7 +68,7 @@ export async function quotePadSwap(opts: {
     inDecimals: 6,
   });
   if (!q.ok) return q;
-  const feeSol = feeSolOf(q.outAmount);
+  const feeSol = opts.skipFee ? 0 : feeSolOf(q.outAmount);
   return {
     ok: true,
     quote: q.quote,
@@ -84,7 +85,8 @@ export async function buildPadSwapTx(opts: {
   owner: string;
   quote: JupiterQuote;
   feeSol: number;
+  feeAfter?: boolean;
 }): Promise<{ ok: true; transaction: string } | { ok: false; reason: string }> {
   if (!isSolanaAddress(opts.owner)) return { ok: false, reason: "Connect Phantom first." };
-  return assembleSwapTx({ owner: opts.owner, quote: opts.quote, feeSol: opts.feeSol });
+  return assembleSwapTx({ owner: opts.owner, quote: opts.quote, feeSol: opts.feeSol, feeAfter: opts.feeAfter });
 }

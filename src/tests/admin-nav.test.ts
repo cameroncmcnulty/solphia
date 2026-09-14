@@ -29,4 +29,9 @@ describe("admin nav", () => {
     assert.equal(resolveAdminSection("spha"), "wallets");
     assert.equal(isAdminSection("not-a-tool"), false);
   });
+
+  it("does not list a content bot", () => {
+    const ids: string[] = ADMIN_NAV.map((n) => n.id);
+    assert.equal(ids.includes("content"), false);
+  });
 });

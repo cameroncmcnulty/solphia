@@ -16,12 +16,23 @@ export async function GET() {
     decimals: SPHA_DECIMALS,
     tokenomics: SPHA_SLICES,
     launch: s.sphaLaunch
-      ? { mint: s.sphaLaunch.mint, network: s.sphaLaunch.network, launchedAt: s.sphaLaunch.launchedAt }
+      ? {
+          mint: s.sphaLaunch.mint,
+          network: s.sphaLaunch.network,
+          launchedAt: s.sphaLaunch.launchedAt,
+          name: s.sphaLaunch.name,
+          symbol: s.sphaLaunch.symbol,
+          image: s.sphaLaunch.image || "",
+          blurb: s.sphaLaunch.blurb || "",
+        }
       : null,
+    image: s.sphaLaunch?.image || "",
+    blurb: s.sphaLaunch?.blurb || "",
     socials: {
       x: socials.x || "",
       telegram: socials.telegram || "",
       discord: socials.discord || "",
+      website: socials.website || "",
     },
   });
 }

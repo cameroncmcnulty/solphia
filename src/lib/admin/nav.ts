@@ -24,7 +24,6 @@ export type AdminIcon =
   | "traders"
   | "spha"
   | "launch"
-  | "content"
   | "backtest"
   | "system"
   | "wallets"
@@ -59,17 +58,9 @@ export const ADMIN_NAV = [
     id: "launch",
     group: "protocol",
     label: "Launch pad",
-    hint: "User coins on the pad",
+    hint: "Bonding curve, same as the site",
     icon: "launch" as const,
     badge: (d: AdminDesk) => d.launchCount || null,
-  },
-  {
-    id: "content",
-    group: "protocol",
-    label: "Content bot",
-    hint: "Daily posts she writes and paints",
-    icon: "content" as const,
-    badge: (d: AdminDesk) => (d.promos.length ? `${d.promos.length}/24` : null),
   },
   {
     id: "backtest",

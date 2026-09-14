@@ -49,7 +49,7 @@ export function solphiaTokenDesk(storedMint?: string | null) {
       { k: "Circulating", v: "—" },
       { k: "Burned", v: "—", hint: "tokens" },
       { k: "% burned", v: "—" },
-      { k: "LP locked", v: "—" },
+      { k: "Community market", v: "—" },
       { k: "Mint", v: "—" },
       { k: "Freeze", v: "—" },
     ] satisfies TokenStat[],

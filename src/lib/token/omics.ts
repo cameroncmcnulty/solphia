@@ -40,10 +40,10 @@ export const SPHA_SLICES: SphaSlice[] = [
   },
   {
     id: "lp",
-    label: "Liquidity pool",
+    label: "Community market",
     pct: "77.1%",
     bps: 7710,
-    note: "Locked and tradeable in the pool. Seeds the LP wallet at launch.",
+    note: "Tradeable float. Lands in the community-market wallet so the public can buy and sell through Solphia’s 1% router.",
   },
 ];
 

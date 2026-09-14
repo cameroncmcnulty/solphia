@@ -76,7 +76,7 @@ export default function Home() {
           <Reveal delay={200} from="right"><Eco
             n="03"
             t="$SPHA"
-            d="The protocol token. CA coming soon. Burns, holders, and liquidity live here the moment the mint is public."
+            d="The protocol token. 1% of $SPHA and pad swaps route through Solphia. Community-market float, buybacks, and burns."
             href="/token"
             c="Token"
           /></Reveal>

@@ -25,6 +25,7 @@ import {
   type SphaDestinations,
   type SphaNetwork,
 } from "./omics";
+import { createMetadataV3Ix } from "./metadata";
 
 export function sphaRpc(network: SphaNetwork, mainnetRpc: string): string {
   if (network === "devnet") return "https://api.devnet.solana.com";
@@ -44,6 +45,9 @@ export async function buildSphaLaunchTxs(opts: {
   dest: SphaDestinations;
   supply?: number;
   decimals?: number;
+  name?: string;
+  symbol?: string;
+  uri?: string;
 }): Promise<LaunchTxSet> {
   const payer = new PublicKey(opts.payer);
   const mint = opts.mint.publicKey;
@@ -69,6 +73,19 @@ export async function buildSphaLaunchTxs(opts: {
   const seed = new Transaction();
   seed.feePayer = payer;
   seed.recentBlockhash = blockhash;
+  if (opts.uri) {
+    seed.add(
+      createMetadataV3Ix({
+        mint,
+        mintAuthority: payer,
+        payer,
+        updateAuthority: payer,
+        name: (opts.name || "Solphia").slice(0, 32),
+        symbol: (opts.symbol || "SPHA").slice(0, 10),
+        uri: opts.uri,
+      }),
+    );
+  }
   for (const row of allocations) {
     const owner = new PublicKey(row.wallet);
     const ata = getAssociatedTokenAddressSync(mint, owner, false, TOKEN_PROGRAM_ID);

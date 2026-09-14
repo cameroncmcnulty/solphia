@@ -10,6 +10,7 @@ import { useAdmin } from "../AdminProvider";
 import { SphaLaunch } from "../SphaLaunch";
 import { SphaSection } from "./Spha";
 import { Field, shortPk } from "../ui";
+import { BuybackPanel } from "../BuybackPanel";
 
 type BalRow = { pk: string; sol: number };
 type Pack = {
@@ -18,6 +19,9 @@ type Pack = {
   treasury: BalRow;
   owner: BalRow;
   dev?: BalRow & { tokens?: number; mint?: string; decimals?: number };
+  foundation?: BalRow;
+  airdrop?: BalRow;
+  lp?: BalRow;
   admins: BalRow[];
   traders: { owner: string; tradingPubkey: string; mode: string; killed: boolean; sol: number }[];
 };
@@ -230,8 +234,9 @@ export function WalletsSection() {
         <div className="font-mono text-[10px] tracking-[0.28em] text-mute">PROTOCOL WALLETS</div>
         <h2 className="mt-1 font-display text-3xl text-ghost">Where SOL sits</h2>
         <p className="mt-1 max-w-2xl text-sm text-mute">
-          Treasury takes seats and clip fees. Dev holdings are $SPHA. Foundation / airdrop and LP wallets are for the
-          protocol mint. Trading wallets are bot-only.
+          Treasury takes seats, 1% pad/$SPHA swap fees, and is the buyback SOL source. Dev holdings are team $SPHA.
+          Community market holds the 77.1% tradeable float. Foundation / airdrop fund Circle. Trading keys are bot-only
+          — never mix them with protocol SOL.
         </p>
       </div>
 
@@ -239,7 +244,7 @@ export function WalletsSection() {
         <WalletCard
           kicker="TREASURY · IN"
           title="Treasury"
-          blurb={`${data.seatSol} SOL spot seats, ${data.seatSolLev} SOL lev seats, and 0.1% clip fees land here.`}
+          blurb={`${data.seatSol} SOL spot seats, ${data.seatSolLev} SOL lev seats, 0.1% desk clips, and 1% pad/$SPHA swap fees land here. Buybacks spend from this wallet.`}
           pk={pack?.treasury.pk || data.treasury}
           sol={treasSol}
           solUsd={solUsd}
@@ -250,7 +255,7 @@ export function WalletsSection() {
         <WalletCard
           kicker="OWNER · OUT"
           title="Owner"
-          blurb="Launch-curve owner cut and treasury withdrawals pay to this address."
+          blurb="Pad owner cut (25% of the 1% curve fee) and treasury withdrawals pay here."
           pk={pack?.owner.pk || data.ownerWallet}
           sol={pack?.owner.sol ?? 0}
           solUsd={solUsd}
@@ -275,6 +280,14 @@ export function WalletsSection() {
           )}
         </WalletCard>
         <WalletCard
+          kicker="COMMUNITY MARKET · 77.1%"
+          title="Community market"
+          blurb="Tradeable $SPHA float after launch. Not an AMM vault until listed — the tokens sit here so the public can buy through Solphia’s 1% router."
+          pk={pack?.lp?.pk || data.lpWallet}
+          sol={pack?.lp?.sol ?? 0}
+          solUsd={solUsd}
+        />
+        <WalletCard
           kicker="ADMIN · FREE SEAT"
           title="Founder seats"
           blurb="Connected Phantom that skips the paid seat. Keys stay in the wallet."
@@ -285,6 +298,7 @@ export function WalletsSection() {
       </div>
 
       <SphaLaunch />
+      <BuybackPanel />
 
       <div className="rounded-3xl border border-acid/25 bg-acid/[0.04] p-5">
         <div className="font-mono text-[10px] tracking-[0.22em] text-acid">WITHDRAW TREASURY → OWNER</div>

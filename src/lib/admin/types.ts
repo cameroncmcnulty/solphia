@@ -178,6 +178,7 @@ export type AdminDesk = {
   promoPending: boolean;
   lastPromoDay: string;
   contentBot: boolean;
+  publishLiveWallet: boolean;
   xai: boolean;
   audit: AuditEvent[];
   locked: {

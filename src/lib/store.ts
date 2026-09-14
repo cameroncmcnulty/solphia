@@ -73,7 +73,9 @@ export function emptyState(): AppState {
     sphaNetwork: "devnet",
     sphaLaunch: null,
     circle: emptyCircle(),
-    sphaSocials: { x: "", telegram: "", discord: "" },
+    sphaSocials: { x: "", telegram: "", discord: "", website: "" },
+    publishLiveWallet: false,
+    buybacks: [],
     healthLog: [],
     healthTiers: {},
   };
@@ -138,7 +140,10 @@ function hydrateFromRaw(raw: AppState): AppState {
       x: raw.sphaSocials?.x || "",
       telegram: raw.sphaSocials?.telegram || "",
       discord: raw.sphaSocials?.discord || "",
+      website: raw.sphaSocials?.website || "",
     },
+    publishLiveWallet: Boolean(raw.publishLiveWallet),
+    buybacks: Array.isArray(raw.buybacks) ? raw.buybacks.slice(-40) : [],
   };
 }
 

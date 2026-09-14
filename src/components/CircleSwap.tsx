@@ -1,11 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { isSolanaAddress } from "@/lib/wallet/addr";
 import { signAndSendPhantom } from "@/lib/wallet/trading";
 
 export function CircleSwap({ owner }: { owner: string }) {
   const [mint, setMint] = useState("");
+  useEffect(() => {
+    fetch("/api/spha", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => {
+        if (typeof j?.mint === "string" && j.mint) setMint((m) => m || j.mint);
+      })
+      .catch(() => {});
+  }, []);
   const [side, setSide] = useState<"buy" | "sell">("buy");
   const [amount, setAmount] = useState("0.1");
   const [busy, setBusy] = useState(false);
@@ -43,7 +51,7 @@ export function CircleSwap({ owner }: { owner: string }) {
 
   return (
     <div className="rounded-2xl border border-violet/20 bg-void/50 p-3">
-      <div className="font-mono text-[10px] tracking-[0.18em] text-mute">SWAP</div>
+      <div className="font-mono text-[10px] tracking-[0.18em] text-mute">SWAP · 1% TO SOLPHIA</div>
       <input
         value={mint}
         onChange={(e) => setMint(e.target.value.trim())}

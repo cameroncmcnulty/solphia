@@ -19,6 +19,8 @@ function tick(symbol: string) {
 export default function TokenPage() {
   const [t, setT] = useState(() => solphiaTokenDesk());
   const [socials, setSocials] = useState({ x: "", telegram: "", discord: "" });
+  const [art, setArt] = useState("");
+  const [blurb, setBlurb] = useState("");
 
   useEffect(() => {
     fetch("/api/spha", { cache: "no-store" })
@@ -26,6 +28,8 @@ export default function TokenPage() {
       .then((j) => {
         if (j?.socials) setSocials({ x: j.socials.x || "", telegram: j.socials.telegram || "", discord: j.socials.discord || "" });
         if (typeof j?.mint === "string") setT(solphiaTokenDesk(j.mint));
+        if (j?.image) setArt(j.image);
+        if (j?.blurb) setBlurb(j.blurb);
       })
       .catch(() => {});
   }, []);
@@ -36,12 +40,17 @@ export default function TokenPage() {
       <div className="relative z-10 mx-auto max-w-6xl px-4 pt-8 md:px-8 md:pt-14">
         <p className="font-mono text-[11px] tracking-[0.28em] text-acid">PROTOCOL TOKEN</p>
         <div className="mt-3 flex items-center gap-4">
-          <SphaMark className="h-14 w-14 sm:h-16 sm:w-16" />
+          {art ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={art} alt="" className="h-14 w-14 rounded-2xl object-cover sm:h-16 sm:w-16" />
+          ) : (
+            <SphaMark className="h-14 w-14 sm:h-16 sm:w-16" />
+          )}
           <h1 className="font-display text-5xl text-ghost sm:text-7xl">{tick(t.symbol)}</h1>
         </div>
         <p className="mt-5 max-w-2xl text-lg text-mute sm:text-xl">
-          Every swap in the stack sets aside a portion of proceeds for three jobs: future listing fees, market
-          buybacks, and {tick(t.symbol)} burns. Automatic by design. The router ships after mint. CA coming soon.
+          {blurb ||
+            `Every swap in the stack sets aside a portion of proceeds for three jobs: future listing fees, market buybacks, and ${tick(t.symbol)} burns. 1% on $SPHA and pad swaps routes through Solphia.`}
         </p>
 
         <div className="mt-8 flex flex-wrap items-center gap-5">

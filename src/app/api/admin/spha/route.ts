@@ -57,6 +57,10 @@ const Recorded = z.object({
   supply: z.number().int().positive(),
   sigs: z.array(z.string().min(32).max(128)).min(1).max(8),
   allocations: z.array(z.object({ id: z.string(), wallet: z.string(), tokens: z.number() })),
+  image: z.string().max(400).optional(),
+  blurb: z.string().max(280).optional(),
+  uri: z.string().max(400).optional(),
+  website: z.string().max(160).optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -78,6 +82,10 @@ export async function POST(req: NextRequest) {
       launchedAt: Date.now(),
       sigs: b.sigs,
       allocations: b.allocations,
+      image: b.image,
+      blurb: b.blurb,
+      uri: b.uri,
+      website: b.website,
     };
     pushBounded(s.audit, audit("admin", "spha_launch", `${b.network} ${b.mint}`, clientIp(req)), 400);
   });

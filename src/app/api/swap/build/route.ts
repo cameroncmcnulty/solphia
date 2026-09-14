@@ -24,7 +24,12 @@ export async function POST(req: NextRequest) {
   }
   const q = await quotePadSwap(parsed.data);
   if (!q.ok) return NextResponse.json({ error: q.reason }, { status: 400 });
-  const tx = await buildPadSwapTx({ owner: parsed.data.owner, quote: q.quote, feeSol: q.feeSol });
+  const tx = await buildPadSwapTx({
+    owner: parsed.data.owner,
+    quote: q.quote,
+    feeSol: q.feeSol,
+    feeAfter: parsed.data.side === "sell",
+  });
   if (!tx.ok) return NextResponse.json({ error: tx.reason }, { status: 400 });
   return NextResponse.json({
     transaction: tx.transaction,

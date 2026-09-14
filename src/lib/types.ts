@@ -528,8 +528,23 @@ export interface AppState {
     launchedAt: number;
     sigs: string[];
     allocations: { id: string; wallet: string; tokens: number }[];
+    image?: string;
+    blurb?: string;
+    uri?: string;
+    website?: string;
   } | null;
-  sphaSocials?: { x?: string; telegram?: string; discord?: string };
+  sphaSocials?: { x?: string; telegram?: string; discord?: string; website?: string };
+  /** Publish the live founder book on the public site instead of paper-only copy. */
+  publishLiveWallet?: boolean;
+  buybacks?: {
+    at: number;
+    mint: string;
+    sol: number;
+    tokens: number;
+    swapSig: string;
+    burnSig?: string;
+    feeSol: number;
+  }[];
   circle?: import("./circle/types").CircleBook;
   healthLog?: {
     t: number;

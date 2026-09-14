@@ -85,6 +85,12 @@ export async function pinBytes(
   }
 }
 
+export async function pinJson(value: unknown, name: string): Promise<{ cid: string; url: string } | null> {
+  const body = JSON.stringify(value);
+  if (body.length < 8 || body.length > 400_000) return null;
+  return pinBytes(Buffer.from(body, "utf8"), "application/json", name);
+}
+
 export async function pinDataUrl(dataUrl: string, name: string): Promise<{ cid: string; url: string } | null> {
   if (!dataUrl.startsWith("data:")) return null;
   const comma = dataUrl.indexOf(",");

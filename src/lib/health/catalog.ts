@@ -130,7 +130,7 @@ export const SERVICES: ServiceDef[] = [
   {
     id: "xai",
     name: "xAI",
-    why: "Content bot copy. No key means she cannot write posts.",
+    why: "Optional Grok copy for ops. Not required for trading or launches.",
     defaultTier: "none",
     tiers: [
       {
@@ -138,7 +138,7 @@ export const SERVICES: ServiceDef[] = [
         label: "Off",
         price: "$0",
         limits: { requestsPerDay: 0 },
-        notes: "Set XAI_API_KEY to turn the content bot on.",
+        notes: "Set XAI_API_KEY only if you want Grok copy helpers.",
         next: "grok",
       },
       {

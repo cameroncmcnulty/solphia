@@ -4,7 +4,7 @@ import { useAdmin } from "../AdminProvider";
 import { money, shortPk } from "../ui";
 
 export function TradersSection() {
-  const { data } = useAdmin();
+  const { data, patch, busy } = useAdmin();
   if (!data) return null;
 
   return (
@@ -29,6 +29,27 @@ export function TradersSection() {
                 {(t.pnlPct * 100).toFixed(2)}% · {t.depositedSol.toFixed(3)} SOL in · {t.trades} trades
               </div>
               {t.lastAction && <div className="mt-1 text-mute">{t.lastAction}</div>}
+              <div className="mt-2 flex flex-wrap gap-1">
+                {([1, 2, 3] as const).map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    disabled={busy}
+                    onClick={() => patch({ traderLive: { owner: t.owner, leverage: n } })}
+                    className={`rounded-full px-2 py-0.5 ${t.leverage === n ? "bg-acid/20 text-acid" : "border border-violet/30 text-mute"}`}
+                  >
+                    {n}×
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => patch({ traderLive: { owner: t.owner, mode: t.mode === "live" ? "paper" : "live" } })}
+                  className={`rounded-full px-2 py-0.5 ${t.mode === "live" ? "bg-acid/20 text-acid" : "border border-violet/30 text-mute"}`}
+                >
+                  {t.mode === "live" ? "LIVE" : "arm live"}
+                </button>
+              </div>
             </div>
           ))}
         </div>

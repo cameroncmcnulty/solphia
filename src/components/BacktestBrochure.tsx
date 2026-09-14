@@ -4,6 +4,15 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { EquityCurve } from "./EquityCurve";
 
+type LiveBook = {
+  on?: boolean;
+  equityUsd?: number;
+  pnlPct?: number;
+  trades?: number;
+  leverage?: number;
+  lastAction?: string;
+};
+
 type PublicBt = {
   ready: boolean;
   from?: number;
@@ -39,6 +48,7 @@ function when(ms?: number) {
 export function BacktestBrochure() {
   const [reports, setReports] = useState<Partial<Record<1 | 2 | 3, PublicBt>>>({});
   const [lev, setLev] = useState<1 | 2 | 3>(1);
+  const [live, setLive] = useState<LiveBook | null>(null);
 
   useEffect(() => {
     let stop = false;
@@ -57,6 +67,7 @@ export function BacktestBrochure() {
           else if (!next[1] && !next[2] && next[3]) setLev(3);
           return;
         }
+        if (j?.live?.on) setLive(j.live);
         if (j?.ready && j?.curve) setReports({ 1: j, 2: j, 3: j });
       })
       .catch(() => {
@@ -77,7 +88,9 @@ export function BacktestBrochure() {
       <div className="panel overflow-hidden rounded-[2rem] p-5 sm:p-8 md:p-12">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="font-mono text-[11px] tracking-[0.28em] text-acid">PAPER BACKTEST · FEES IN · $1,000 START</p>
+            <p className="font-mono text-[11px] tracking-[0.28em] text-acid">
+              {live?.on ? `LIVE WALLET · SOL ${live.leverage || 1}× · ${live.trades || 0} CLIPS` : "ENGINE BACKTEST · FEES IN · $1,000 START"}
+            </p>
             <h2 className="mt-2 max-w-2xl font-display text-3xl leading-tight text-ghost sm:text-5xl md:text-6xl">
               The curve is the point.
             </h2>

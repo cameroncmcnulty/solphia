@@ -2,13 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/admin/auth";
 import { buildAdminDesk } from "@/lib/admin/desk";
-import { generatePromoPack, settlePendingPromo } from "@/lib/admin/promo";
 import { grantFounder, revokeFounder } from "@/lib/access";
 import { isSolanaAddress, isEmail, clientIp } from "@/lib/security";
-import { emptyBook } from "@/lib/auto";
+import { lockedAuto } from "@/lib/auto";
 import { runBacktest } from "@/lib/pair/backtest";
 import { loadBacktestTape } from "@/lib/pair/backtestTape";
-import { mutateState, audit, pushBounded, readyState, loadAllTraders, deleteTrader, withLaunch } from "@/lib/store";
+import { mutateState, audit, pushBounded, readyState, loadAllTraders, deleteTrader, withLaunch, saveTrader } from "@/lib/store";
 import { emptyLaunchBook } from "@/lib/launch/engine";
 import { setUsername } from "@/lib/launch/username";
 import { launchError } from "@/lib/launch/errors";
@@ -23,11 +22,6 @@ export async function GET(req: NextRequest) {
   if (denied) return denied;
   const state = await readyState();
   await loadAllTraders(state);
-  try {
-    await settlePendingPromo(0);
-  } catch {
-    /* still serve the desk */
-  }
   return NextResponse.json(buildAdminDesk());
 }
 
@@ -47,12 +41,18 @@ const Patch = z.object({
       x: z.string().max(160).optional(),
       telegram: z.string().max(160).optional(),
       discord: z.string().max(160).optional(),
+      website: z.string().max(160).optional(),
     })
     .optional(),
   liveTrading: z.boolean().optional(),
-  generatePromo: z.boolean().optional(),
-  contentHint: z.string().max(280).optional(),
-  resetPaper: z.boolean().optional(),
+  publishLiveWallet: z.boolean().optional(),
+  traderLive: z
+    .object({
+      owner: z.string(),
+      leverage: z.union([z.literal(1), z.literal(2), z.literal(3)]).optional(),
+      mode: z.enum(["paper", "live"]).optional(),
+    })
+    .optional(),
   runBacktest: z.boolean().optional(),
   user: z
     .object({
@@ -191,25 +191,30 @@ export async function POST(req: NextRequest) {
       );
     }
   }
-  if (body.resetPaper) {
+  if (typeof body.publishLiveWallet === "boolean") {
     await mutateState((s) => {
-      const start = s.paper?.startingUsd || 1000;
-      s.paper = emptyBook(start);
-      for (const t of Object.values(s.traders || {})) {
-        if (t.auto?.mode === "live") continue;
-        t.book = emptyBook(t.book?.startingUsd || start);
-        t.auto = { ...t.auto, armedAt: Date.now(), armed: true };
-      }
-      pushBounded(s.audit, audit("admin", "paper_reset", "new paper session", ip), 400);
+      s.publishLiveWallet = body.publishLiveWallet;
+      pushBounded(s.audit, audit("admin", "publish_live", String(body.publishLiveWallet), ip), 400);
     });
-    return NextResponse.json({ ok: true, note: "Paper session restarted.", desk: buildAdminDesk() });
+    return NextResponse.json({ ok: true, note: body.publishLiveWallet ? "Public live stats on." : "Public live stats off.", desk: buildAdminDesk() });
   }
-  if (body.generatePromo) {
-    const result = await generatePromoPack({ force: true, hint: body.contentHint });
-    if (result.error && result.made === 0) {
-      return NextResponse.json({ error: result.error, note: result.note, desk: buildAdminDesk() }, { status: 400 });
-    }
-    return NextResponse.json({ ok: true, made: result.made, note: result.note, desk: buildAdminDesk() });
+  if (body.traderLive) {
+    const pk = body.traderLive.owner;
+    if (!isSolanaAddress(pk)) return NextResponse.json({ error: "bad_wallet", desk: buildAdminDesk() }, { status: 400 });
+    const state = await readyState();
+    await loadAllTraders(state);
+    const t = state.traders[pk];
+    if (!t) return NextResponse.json({ error: "missing", message: "No book for that wallet.", desk: buildAdminDesk() }, { status: 400 });
+    t.auto = lockedAuto({
+      ...t.auto,
+      mode: body.traderLive.mode || t.auto?.mode,
+      leverage: body.traderLive.leverage || t.auto?.leverage,
+    });
+    await saveTrader(t);
+    await mutateState((s) => {
+      pushBounded(s.audit, audit("admin", "trader_live", `${pk} ${t.auto.mode} ${t.auto.leverage}x`, ip), 400);
+    });
+    return NextResponse.json({ ok: true, note: `${t.auto.mode} · SOL ${t.auto.leverage}×`, desk: buildAdminDesk() });
   }
   if (body.user) {
     const u = body.user;

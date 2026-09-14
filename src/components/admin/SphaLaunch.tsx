@@ -26,6 +26,9 @@ export function SphaLaunch() {
   const [prep, setPrep] = useState<Prep | null>(null);
   const [name, setName] = useState(SPHA_NAME);
   const [symbol, setSymbol] = useState(SPHA_SYMBOL);
+  const [blurb, setBlurb] = useState("");
+  const [website, setWebsite] = useState("https://solphia.io");
+  const [art, setArt] = useState<{ image: string; uri: string } | null>(null);
   const [run, setRun] = useState(false);
   const [log, setLog] = useState("");
   const [err, setErr] = useState("");
@@ -101,12 +104,15 @@ export function SphaLaunch() {
         }
       }
       const mint = Keypair.generate();
-      setLog(`Mint ${mint.publicKey.toBase58().slice(0, 8)}… building three txs`);
+      setLog(`Mint ${mint.publicKey.toBase58().slice(0, 8)}… building launch txs`);
       const set = await buildSphaLaunchTxs({
         conn,
         payer: owner,
         mint,
         dest: fresh.dest,
+        name,
+        symbol,
+        uri: art?.uri,
       });
       const sigs: string[] = [];
       for (let i = 0; i < set.txs.length; i++) {
@@ -128,6 +134,10 @@ export function SphaLaunch() {
           supply: SPHA_SUPPLY,
           sigs,
           allocations: set.allocations.map((a) => ({ id: a.id, wallet: a.wallet, tokens: a.tokens })),
+          image: art?.image,
+          blurb,
+          uri: art?.uri,
+          website,
         }),
       });
       setLog(`Live. CA ${set.mint}`);
@@ -150,8 +160,9 @@ export function SphaLaunch() {
           <div>
             <div className="font-mono text-[10px] tracking-[0.22em] text-acid">SOLPHIA TOKEN LAUNCHER</div>
             <p className="mt-1 max-w-xl text-sm text-mute">
-              Creates the mint, sends 8.6 / 9.7 / 4.6 / 77.1 in one sequence, then revokes mint and freeze. Switch to
-              mainnet only after a burner test.
+              Same data as the public pad: art, name, ticker, blurb, socials. Creates the mint with Metaplex metadata,
+              sends 8.6 / 9.7 / 4.6 / 77.1 into the launch wallets, then revokes mint and freeze. Community-market
+              tokens are the tradeable float. Switch to mainnet only after a burner test.
             </p>
           </div>
           <div className="flex rounded-full border border-violet/30 p-0.5">
@@ -179,6 +190,52 @@ export function SphaLaunch() {
           <Field value={name} onChange={setName} placeholder="Name (Solphia or a test ticker)" />
           <Field value={symbol} onChange={setSymbol} placeholder="Symbol (SPHA or TEST)" />
         </div>
+        <textarea
+          value={blurb}
+          onChange={(e) => setBlurb(e.target.value.slice(0, 280))}
+          placeholder="One-line blurb — same field as a pad launch"
+          className="mt-3 w-full rounded-2xl border border-violet/30 bg-void px-4 py-2 text-sm text-ghost outline-none"
+          rows={2}
+        />
+        <Field value={website} onChange={setWebsite} placeholder="https://solphia.io" className="mt-3" />
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <label className="btn-ghost cursor-pointer rounded-full px-4 py-2 text-sm">
+            {art ? "Replace art" : "Upload token art"}
+            <input
+              type="file"
+              accept="image/*"
+              hidden
+              onChange={async (e) => {
+                const f = e.target.files?.[0];
+                e.target.value = "";
+                if (!f) return;
+                setErr("");
+                setLog("Pinning art + metadata…");
+                try {
+                  const fd = new FormData();
+                  fd.append("file", f, "spha.jpg");
+                  fd.append("name", name);
+                  fd.append("symbol", symbol);
+                  fd.append("blurb", blurb);
+                  fd.append("website", website);
+                  const r = await fetch("/api/admin/spha/art", { method: "POST", body: fd });
+                  const j = await r.json();
+                  if (!r.ok) throw new Error(j.message || j.error || "art failed");
+                  setArt({ image: j.image, uri: j.uri });
+                  setLog("Art pinned. Metadata URI ready for the mint.");
+                } catch (er) {
+                  setErr(er instanceof Error ? er.message : "art failed");
+                }
+              }}
+            />
+          </label>
+          {art?.image ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={art.image} alt="" className="h-12 w-12 rounded-xl object-cover" />
+          ) : (
+            <span className="font-mono text-[11px] text-mute">Square JPEG/PNG. Same as the public pad.</span>
+          )}
+        </div>
 
         <div className="mt-4 grid gap-3 sm:grid-cols-3">
           <div>
@@ -192,8 +249,8 @@ export function SphaLaunch() {
             <FieldError error={fErr.errors.airdrop} />
           </div>
           <div>
-            <div className="font-mono text-[10px] text-mute">LP WALLET</div>
-            <Field field="lp" value={lp} error={fErr.errors.lp} onChange={(v) => { setLp(v.trim()); fErr.clear("lp"); }} placeholder="Pool seed wallet" />
+            <div className="font-mono text-[10px] text-mute">COMMUNITY MARKET</div>
+            <Field field="lp" value={lp} error={fErr.errors.lp} onChange={(v) => { setLp(v.trim()); fErr.clear("lp"); }} placeholder="Tradeable float wallet" />
             <FieldError error={fErr.errors.lp} />
           </div>
         </div>
