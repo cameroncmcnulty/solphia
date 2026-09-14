@@ -273,3 +273,75 @@ export function sparkUp(spark: Spark[], fallbackChange = 0): boolean {
   if (spark.length >= 2) return (spark[spark.length - 1]?.c || 0) >= (spark[0]?.c || 0);
   return fallbackChange >= 0;
 }
+
+export function closesOf(rows: Spark[]): number[] {
+  return rows.map((c) => c.c).filter((n) => Number.isFinite(n) && n > 0);
+}
+
+/** Fake pad mints never have Pump/Gecko candles. */
+export function chartMintLive(mint?: string, venue?: string): boolean {
+  if (!mint || mint.startsWith("curve:")) return false;
+  const v = (venue || "").toLowerCase();
+  if (v === "launchlab" || v === "solphia") return false;
+  return mint.length >= 32;
+}
+
+export function downsampleCloses(xs: number[], max: number): number[] {
+  if (xs.length <= max || max < 3) return xs;
+  const out: number[] = [];
+  const last = xs.length - 1;
+  for (let i = 0; i < max; i++) {
+    const idx = i === max - 1 ? last : Math.round((i / (max - 1)) * last);
+    out.push(xs[idx]);
+  }
+  return out;
+}
+
+export type LineGeom = {
+  d: string;
+  area: string;
+  lastX: number;
+  lastY: number;
+  min: number;
+  max: number;
+  y: (v: number) => number;
+  pts: { x: number; y: number; i: number; v: number }[];
+};
+
+function catmullSvg(pts: { x: number; y: number }[]): string {
+  if (!pts.length) return "";
+  if (pts.length === 1) return `M${pts[0].x.toFixed(2)} ${pts[0].y.toFixed(2)}`;
+  if (pts.length === 2) {
+    return `M${pts[0].x.toFixed(2)} ${pts[0].y.toFixed(2)} L${pts[1].x.toFixed(2)} ${pts[1].y.toFixed(2)}`;
+  }
+  let d = `M${pts[0].x.toFixed(2)} ${pts[0].y.toFixed(2)}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i - 1] || pts[i];
+    const p1 = pts[i];
+    const p2 = pts[i + 1];
+    const p3 = pts[i + 2] || p2;
+    const c1x = p1.x + (p2.x - p0.x) / 6;
+    const c1y = p1.y + (p2.y - p0.y) / 6;
+    const c2x = p2.x - (p3.x - p1.x) / 6;
+    const c2y = p2.y - (p3.y - p1.y) / 6;
+    d += ` C${c1x.toFixed(2)} ${c1y.toFixed(2)} ${c2x.toFixed(2)} ${c2y.toFixed(2)} ${p2.x.toFixed(2)} ${p2.y.toFixed(2)}`;
+  }
+  return d;
+}
+
+/** Phantom-style smooth close line in the plot box. */
+export function lineGeom(closes: number[], w: number, h: number, padX = 8, padY = 16): LineGeom | null {
+  const xs = closes.filter((n) => Number.isFinite(n) && n > 0);
+  if (w < 8 || h < 8 || !xs.length) return null;
+  const min = Math.min(...xs);
+  const max = Math.max(...xs);
+  const span = max - min || Math.abs(max) * 0.08 || 1;
+  const xAt = (i: number) => padX + (xs.length === 1 ? (w - padX * 2) / 2 : (i / (xs.length - 1)) * (w - padX * 2));
+  const yAt = (v: number) => padY + ((max - v) / span) * (h - padY * 2);
+  const pts = xs.map((v, i) => ({ x: xAt(i), y: yAt(v), i, v }));
+  const d = catmullSvg(pts);
+  const last = pts[pts.length - 1];
+  const first = pts[0];
+  const area = `${d} L${last.x.toFixed(2)} ${(h - 1).toFixed(2)} L${first.x.toFixed(2)} ${(h - 1).toFixed(2)} Z`;
+  return { d, area, lastX: last.x, lastY: last.y, min, max, y: yAt, pts };
+}

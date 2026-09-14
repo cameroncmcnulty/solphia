@@ -31,13 +31,13 @@ export default function Home() {
               She auto-trades tokenized S&amp;P 500, Nasdaq-100, and gold — for profit.
             </p>
             <p className="mt-4 max-w-lg text-base leading-relaxed text-mute sm:text-lg">
-              Connect Phantom. She clips SOL against official SPYx, QQQx, and GLDx when a book is stretched. Jupiter
+              Connect your wallet. She clips SOL against official SPYx, QQQx, and GLDx when a book is stretched. Jupiter
               finds the route. You sign. Launch pad and $SPHA sit around that desk. Every swap funds listings,
               buybacks, and burns.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <Link href="/trading" className="btn-acid inline-flex min-h-[52px] items-center justify-center rounded-full px-8 text-base">
-                Open the desk
+                Trading desk
               </Link>
               <Link href="/token" className="btn-ghost inline-flex min-h-[52px] items-center justify-center rounded-full px-8 text-base">
                 $SPHA
@@ -133,7 +133,7 @@ export default function Home() {
         <p className="text-sm tracking-[0.2em] text-acid">HOW IT WORKS</p>
         <h2 className="mt-3 font-display text-4xl text-ghost sm:text-5xl">Three steps.</h2>
         <div className="mt-12 grid gap-4 md:grid-cols-3">
-          <Reveal delay={40} from="left"><Chip t="01 · Connect" d="Phantom only. That wallet is login. She never holds a key." /></Reveal>
+          <Reveal delay={40} from="left"><Chip t="01 · Connect" d="Connect your wallet. That is login. She never holds a key." /></Reveal>
           <Reveal delay={120}><Chip t="02 · She trades" d="Auto-clips tokenized S&P, Nasdaq, and gold for profit. Launch sits beside that desk." /></Reveal>
           <Reveal delay={200} from="right"><Chip t="03 · Swap proceeds work" d="A portion of every swap is reserved for listings, buybacks, and burns." /></Reveal>
         </div>
@@ -150,12 +150,12 @@ export default function Home() {
             </p>
             <h2 className="mt-3 font-display text-4xl text-ghost sm:text-5xl md:text-6xl">Turn her on.</h2>
             <p className="mt-4 max-w-lg text-lg text-mute">
-              She auto-trades tokenized stocks for profit. Keys in Phantom. Every swap: listings, buybacks, burns.
+              She auto-trades tokenized stocks for profit. Keys stay in your wallet. Every swap: listings, buybacks, burns.
             </p>
           </div>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row md:mt-0">
             <Link href="/trading" className="btn-acid inline-flex min-h-[52px] items-center justify-center rounded-full px-8">
-              Open the desk
+              Trading desk
             </Link>
             <Link href="/token" className="btn-ghost inline-flex min-h-[52px] items-center justify-center rounded-full px-8">
               $SPHA

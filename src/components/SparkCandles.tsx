@@ -1,8 +1,7 @@
 "use client";
 
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
-
-export type Spark = { t: number; o: number; h: number; l: number; c: number };
+import { useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { closesOf, lineGeom, sparkUp, type Spark } from "@/lib/launch/chart";
 
 const BULL = "#14f195";
 const BEAR = "#ff4d7a";
@@ -22,41 +21,34 @@ function useBox() {
   return [ref, box] as const;
 }
 
-function closes(candles: Spark[]): number[] {
-  return candles.map((c) => c.c).filter((n) => Number.isFinite(n) && n > 0);
-}
-
-/** Tape-row spark. Drawn in the row's real pixels — not a stretched SVG copy of the desk chart. */
+/** Tape-row spark. Phantom-style line in the row's real pixels. */
 export function MiniSpark({ candles, up }: { candles: Spark[]; up: boolean }) {
+  const gid = useId().replace(/:/g, "");
   const [ref, { w, h }] = useBox();
   const tone = up ? BULL : BEAR;
-  const xs = useMemo(() => closes(candles), [candles]);
-  const path = useMemo(() => {
-    if (w < 8 || h < 8 || xs.length < 2) return null;
-    const min = Math.min(...xs);
-    const max = Math.max(...xs);
-    const span = max - min || Math.abs(max) * 0.08 || 1;
-    const padY = 4;
-    const y = (v: number) => padY + ((max - v) / span) * (h - padY * 2);
-    const x = (i: number) => 2 + (i / (xs.length - 1)) * (w - 4);
-    const line = xs.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)} ${y(v).toFixed(1)}`).join(" ");
-    const lastX = x(xs.length - 1);
-    const lastY = y(xs[xs.length - 1]);
-    return { line, lastX, lastY };
-  }, [xs, w, h]);
+  const xs = useMemo(() => closesOf(candles), [candles]);
+  const geom = useMemo(() => lineGeom(xs, w, h, 3, 4), [xs, w, h]);
+  const rising = xs.length >= 2 ? sparkUp(candles, 0) : up;
+  const color = rising ? BULL : BEAR;
 
   return (
     <div ref={ref} className="h-10 w-[108px] shrink-0 sm:h-11 sm:w-[152px]">
       {w > 8 && h > 8 && (
         <svg width={w} height={h} aria-hidden>
-          {path ? (
+          {geom ? (
             <>
-              <path d={`${path.line} L${w - 2} ${h} L2 ${h} Z`} fill={tone} fillOpacity="0.14" />
-              <path d={path.line} fill="none" stroke={tone} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
-              <circle cx={path.lastX} cy={path.lastY} r="2.4" fill={tone} />
+              <defs>
+                <linearGradient id={`ms${gid}`} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={color} stopOpacity="0.28" />
+                  <stop offset="100%" stopColor={color} stopOpacity="0" />
+                </linearGradient>
+              </defs>
+              <path d={geom.area} fill={`url(#ms${gid})`} />
+              <path d={geom.d} fill="none" stroke={color} strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round" />
+              <circle cx={geom.lastX} cy={geom.lastY} r="2.2" fill={color} />
             </>
           ) : (
-            <line x1={2} x2={w - 2} y1={h / 2} y2={h / 2} stroke={tone} strokeOpacity="0.4" strokeWidth="1.75" />
+            <line x1={2} x2={w - 2} y1={h / 2} y2={h / 2} stroke={tone} strokeOpacity="0.35" strokeWidth="1.75" />
           )}
         </svg>
       )}
@@ -65,6 +57,5 @@ export function MiniSpark({ candles, up }: { candles: Spark[]; up: boolean }) {
 }
 
 export function SparkCandles(props: { candles: Spark[]; up: boolean; className?: string; variant?: "candles" | "line"; axis?: boolean }) {
-  if (props.variant === "line") return <MiniSpark candles={props.candles} up={props.up} />;
-  return null;
+  return <MiniSpark candles={props.candles} up={props.up} />;
 }

@@ -53,7 +53,7 @@ export function imageOk(raw?: string): string {
 export function validateLaunchCreate(input: LaunchCreateInput): Partial<Record<LaunchField, string>> {
   const errors: Partial<Record<LaunchField, string>> = {};
   if (!input.creator || !walletOk(input.creator)) {
-    errors.wallet = "Connect Phantom to launch.";
+    errors.wallet = "Connect your wallet to launch.";
   }
   const name = (input.name || "").trim();
   if (!name) errors.name = "Add a name (2–24 characters).";

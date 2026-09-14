@@ -273,7 +273,7 @@ function CircleInner() {
       <div className="mx-auto flex max-w-6xl flex-col gap-3 px-3 pt-3 md:h-[calc(100vh-5rem)] md:flex-row md:px-6">
         <section className="flex min-h-[70vh] min-w-0 flex-1 flex-col overflow-hidden rounded-3xl border border-violet/25 bg-[#0b0614]/90 shadow-[0_24px_80px_rgba(0,0,0,0.35)] md:order-1">
           {!owner ? (
-            <Gate title="Connect Phantom" body="Founders Circle is wallet-in. Then drop an email for project updates.">
+            <Gate title="Connect your wallet" body="Founders Circle is wallet-in. Then drop an email for project updates.">
               <WalletConnect />
             </Gate>
           ) : pack?.banned ? (

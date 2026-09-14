@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { CopyCa } from "@/components/CopyCa";
 import { SphaMark } from "@/components/SphaMark";
 import { SphaSocials } from "@/components/SphaSocials";
@@ -95,14 +94,8 @@ export default function TokenPage() {
           <Tokenomics />
         </div>
 
-        <div className="mt-10 flex flex-col gap-3 sm:flex-row">
+        <div className="mt-10">
           <JoinFoundersButton />
-          <Link href="/trading" className="btn-ghost inline-flex min-h-[52px] items-center justify-center rounded-full px-8">
-            Open the desk
-          </Link>
-          <Link href="/launch" className="btn-ghost inline-flex min-h-[52px] items-center justify-center rounded-full px-8">
-            Launch
-          </Link>
         </div>
       </div>
     </main>

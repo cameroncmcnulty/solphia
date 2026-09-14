@@ -319,8 +319,8 @@ export default function LaunchPage() {
 
   async function act(body: Record<string, unknown>) {
     if (!owner) {
-      if (body.action === "create") createErr.fail({ wallet: "Connect Phantom to launch." });
-      else setErr("Connect Phantom to launch or swap.");
+      if (body.action === "create") createErr.fail({ wallet: "Connect your wallet to launch." });
+      else setErr("Connect your wallet to launch or swap.");
       return;
     }
     setBusy(true);
@@ -392,14 +392,14 @@ export default function LaunchPage() {
       <SolphiaConstellation />
       <div className="relative z-10 mx-auto max-w-6xl px-4 pt-6 md:px-8 md:pt-10">
         <p className="font-mono text-[11px] tracking-[0.28em] text-acid">LAUNCH · 1B · 1% SWAP · 50% TO DEV · 25% TO INVITER</p>
-        <h1 className="mt-2 font-display text-4xl text-ghost sm:text-5xl">Fair launch. Swap like Phantom.</h1>
+        <h1 className="mt-2 font-display text-4xl text-ghost sm:text-5xl">Fair launch. Swap tokens.</h1>
 
         <div className="mt-8 grid gap-5 lg:grid-cols-[minmax(280px,0.72fr)_minmax(0,1.28fr)]">
           <section className="panel-bubble overflow-hidden rounded-3xl p-5">
             <h2 className="font-display text-2xl text-ghost">Create</h2>
             {!owner ? (
               <div className="mt-6 space-y-3">
-                <p className="text-sm text-mute">Phantom is the login.</p>
+                <p className="text-sm text-mute">Connect your wallet to launch.</p>
                 <WalletConnect />
               </div>
             ) : (
@@ -1058,7 +1058,7 @@ function CoinDesk({
                     disabled={busy}
                     onClick={() => {
                       if (!owner) {
-                        tradeErr.fail({ wallet: "Connect Phantom to swap." });
+                        tradeErr.fail({ wallet: "Connect your wallet to swap." });
                         return;
                       }
                       if (blocked) {
@@ -1164,7 +1164,7 @@ function MarketSwap({
 
   async function go() {
     if (!owner) {
-      tradeErr.fail({ wallet: "Connect Phantom to swap. Tokens land in that wallet." });
+      tradeErr.fail({ wallet: "Connect your wallet to swap. Tokens land in that wallet." });
       return;
     }
     if (!mint) {
@@ -1177,7 +1177,7 @@ function MarketSwap({
       return;
     }
     if (side === "sell" && !(held > 0)) {
-      tradeErr.fail({ amount: "You have none of this token in Phantom." });
+      tradeErr.fail({ amount: "You have none of this token in your wallet." });
       return;
     }
     tradeErr.ok();
@@ -1192,7 +1192,7 @@ function MarketSwap({
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || "Could not build the swap.");
       const sig = await signAndSendPhantom(j.transaction);
-      setMsg(`Filled · ${sig.slice(0, 8)}… Tokens are in Phantom.`);
+      setMsg(`Filled · ${sig.slice(0, 8)}… Tokens landed in your wallet.`);
       if (owner && mint) {
         const b = await fetch(`/api/sol/token?owner=${encodeURIComponent(owner)}&mint=${encodeURIComponent(mint)}`).then((x) => x.json());
         setHeld(Number(b.amount) || 0);
@@ -1215,7 +1215,7 @@ function MarketSwap({
         </button>
       </div>
       <p className="mt-3 text-sm text-mute">
-        Phantom signs. Tokens land in that wallet — not the bot trading wallet. {SWAP_FEE_BPS / 100}% protocol fee on the route
+        You sign. Tokens land in that wallet — not the bot trading wallet. {SWAP_FEE_BPS / 100}% protocol fee on the route
         funds listings, buybacks, and burns.
       </p>
       {!owner ? (

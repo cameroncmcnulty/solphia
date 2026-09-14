@@ -2,7 +2,7 @@ import { DEV_BUY_MAX_SOL } from "./curve";
 
 export const LAUNCH_ERRORS: Record<string, string> = {
   not_found: "That coin is not on the tape. Refresh and try again.",
-  bad_wallet: "Connect a valid Phantom wallet first.",
+  bad_wallet: "Connect a valid wallet first.",
   bad_name: "Name must be 2–24 characters.",
   bad_ticker: "Ticker must be 2–10 letters or numbers.",
   ticker_taken: "That ticker is already live on the curve.",

@@ -1,6 +1,18 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { axisTicks, bucketCandles, fmtAxisPx, normalizeCandles, scaleSpark, smoothSpark, sparkUp, syntheticSpark } from "../lib/launch/chart";
+import {
+  axisTicks,
+  bucketCandles,
+  chartMintLive,
+  downsampleCloses,
+  fmtAxisPx,
+  lineGeom,
+  normalizeCandles,
+  scaleSpark,
+  smoothSpark,
+  sparkUp,
+  syntheticSpark,
+} from "../lib/launch/chart";
 import { rewriteImageUrl } from "../components/TokenArt";
 
 describe("token sparks", () => {
@@ -56,6 +68,22 @@ describe("token sparks", () => {
     assert.equal(ticks[0], 1.2);
     assert.equal(ticks[ticks.length - 1], 0.8);
     assert.ok(fmtAxisPx(0.00042).startsWith("0.000"));
+  });
+
+  it("draws a smooth line that keeps the last close", () => {
+    const g = lineGeom([1, 1.2, 0.9, 1.4], 200, 80, 8, 8);
+    assert.ok(g);
+    assert.equal(g.pts.length, 4);
+    assert.equal(g.pts[g.pts.length - 1].v, 1.4);
+    assert.match(g.d, /^M/);
+    assert.match(g.area, /Z$/);
+  });
+
+  it("does not fetch live candles for pad curve mints", () => {
+    assert.equal(chartMintLive("curve:SPHA:abc"), false);
+    assert.equal(chartMintLive("So11111111111111111111111111111111111111112", "launchlab"), false);
+    assert.equal(chartMintLive("So11111111111111111111111111111111111111112", "pumpfun"), true);
+    assert.deepEqual(downsampleCloses([1, 2, 3, 4, 5], 3), [1, 3, 5]);
   });
 });
 
