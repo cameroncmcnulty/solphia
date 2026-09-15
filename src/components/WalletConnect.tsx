@@ -49,6 +49,42 @@ function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   });
 }
 
+let switching = false;
+
+function openPhantomBrowse() {
+  const target = encodeURIComponent(window.location.href);
+  window.location.href = `https://phantom.app/ul/browse/${target}?ref=https://solphia.io`;
+}
+
+/** Disconnect then connect so Phantom opens the account picker. */
+export async function switchPhantom(): Promise<string | null> {
+  const found = phantom();
+  if (!found) {
+    openPhantomBrowse();
+    return null;
+  }
+  switching = true;
+  try {
+    if (found.publicKey && found.disconnect) {
+      try {
+        await withTimeout(found.disconnect(), 4000, "disconnect");
+      } catch {
+        /* still open the picker */
+      }
+    }
+    const res = await withTimeout(found.connect(), 20000, "connect");
+    const pubkey = res.publicKey.toString();
+    setOwner(pubkey);
+    return pubkey;
+  } catch {
+    const cur = found.publicKey?.toString() || (typeof window !== "undefined" ? localStorage.getItem("solphia_owner") : null);
+    if (cur) setOwner(cur);
+    return cur;
+  } finally {
+    switching = false;
+  }
+}
+
 export function WalletConnect({ compact: _compact = false }: { compact?: boolean }) {
   const [addr, setAddr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -76,69 +112,59 @@ export function WalletConnect({ compact: _compact = false }: { compact?: boolean
     }
     const onAccount = (pk?: { toString(): string } | null) => {
       const next = pk ? pk.toString() : null;
-      if (!next) return;
+      if (!next) {
+        if (switching) return;
+        setAddr(null);
+        setOwner(null);
+        return;
+      }
       setAddr(next);
       setOwner(next);
     };
     found?.on?.("accountChanged", onAccount);
+    const onOwner = (e: Event) => {
+      const pk = (e as CustomEvent<string | null>).detail || null;
+      setAddr(pk);
+    };
+    window.addEventListener("solphia-owner", onOwner as EventListener);
     return () => {
       mounted.current = false;
       found?.off?.("accountChanged", onAccount);
+      window.removeEventListener("solphia-owner", onOwner as EventListener);
     };
   }, []);
 
   async function connect() {
     const found = phantom();
     if (!found) {
-      const target = encodeURIComponent(window.location.href);
-      window.location.href = `https://phantom.app/ul/browse/${target}?ref=https://solphia.io`;
+      openPhantomBrowse();
       return;
     }
     setBusy(true);
-    const prev = addr;
     try {
-      if (addr && found.publicKey?.toString() === addr && found.disconnect) {
-        try {
-          await withTimeout(found.disconnect(), 4000, "disconnect");
-        } catch {
-          /* still try connect */
-        }
-      }
       const res = await withTimeout(found.connect(), 20000, "connect");
       const pubkey = res.publicKey.toString();
       setAddr(pubkey);
       setOwner(pubkey);
     } catch {
-      if (prev) {
-        setAddr(prev);
-        setOwner(prev);
-      }
+      /* user closed Phantom */
     } finally {
       if (mounted.current) setBusy(false);
     }
   }
+
+  if (addr) return null;
 
   return (
     <button
       type="button"
       disabled={busy}
       onClick={connect}
-      title={addr ? "Switch Phantom wallet" : "Connect Phantom"}
+      title="Connect Phantom"
       className="btn-ghost inline-flex h-10 shrink-0 items-center gap-1.5 rounded-full px-2.5 py-2 font-mono text-[10px] tracking-widest sm:h-11 sm:gap-2 sm:px-4 sm:text-[11px]"
     >
       <PhantomMark className="h-4 w-4 shrink-0 text-white sm:h-5 sm:w-5" />
-      {busy ? (
-        <span>…</span>
-      ) : addr ? (
-        <span className="flex flex-col items-start leading-tight">
-          <span className="font-mono text-[11px] tracking-normal text-ghost">
-            {addr.slice(0, 4)}…{addr.slice(-4)}
-          </span>
-          <span className="text-[9px] tracking-[0.18em] text-acid">SWITCH WALLET</span>
-        </span>
-      ) : (
-        <span className="whitespace-nowrap">CONNECT</span>
-      )}
+      <span className="whitespace-nowrap">{busy ? "…" : "CONNECT"}</span>
     </button>
   );
 }

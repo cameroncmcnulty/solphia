@@ -131,7 +131,7 @@ export function ProfileOverlay({
             <div className="h-full bg-acid" style={{ width: `${Math.round((pack?.pct || 0) * 100)}%` }} />
           </div>
           {pack?.intro ? <p className="mt-3 text-sm leading-relaxed text-ghost">{pack.intro}</p> : <p className="mt-3 text-sm text-mute">No intro yet.</p>}
-          {fav?.mint && (
+          {fav?.mint ? (
             <div className="mt-3 flex items-center gap-2 rounded-2xl border border-acid/30 bg-acid/[0.08] p-2">
               {fav.image ? (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -158,17 +158,7 @@ export function ProfileOverlay({
                 {copied ? "Copied" : "Copy CA"}
               </button>
             </div>
-          )}
-          <div className="mt-3 grid grid-cols-2 gap-2 font-mono text-[11px] text-mute">
-            <div className="rounded-xl border border-violet/20 px-3 py-2">
-              <div>Launched</div>
-              <div className="font-display text-lg text-ghost">{pack?.launched ?? "—"}</div>
-            </div>
-            <div className="rounded-xl border border-violet/20 px-3 py-2">
-              <div>Invited</div>
-              <div className="font-display text-lg text-ghost">{pack?.referred ?? "—"}</div>
-            </div>
-          </div>
+          ) : null}
           {pack?.canModerate && viewer && viewer !== pubkey && pack.role !== "admin" && (
             <div className="mt-4 grid grid-cols-2 gap-2">
               <button

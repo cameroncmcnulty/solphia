@@ -4,14 +4,15 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useOwner } from "@/lib/hooks";
 import { CartoonPfp } from "./CartoonPfp";
-import { WalletConnect } from "./WalletConnect";
+import { PhantomMark } from "./PhantomMark";
+import { WalletConnect, switchPhantom } from "./WalletConnect";
 
-type Desk = { pfp?: string; username?: string; referralRewardsSol?: number; referredCount?: number };
+type Desk = { pfp?: string; username?: string };
 
 const LINKS = [
   { href: "/account", label: "Account" },
   { href: "/account#wallets", label: "Trading wallets" },
-  { href: "/account#pfp", label: "Change PFP" },
+  { href: "/account#profile", label: "Profile" },
   { href: "/account#launches", label: "Launched coins" },
   { href: "/account#referrals", label: "Referrals" },
   { href: "/circle?welcome=1", label: "🎁 Founders Circle" },
@@ -21,6 +22,7 @@ export function AccountMenu() {
   const owner = useOwner();
   const [open, setOpen] = useState(false);
   const [desk, setDesk] = useState<Desk | null>(null);
+  const [busy, setBusy] = useState(false);
   const box = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -50,7 +52,7 @@ export function AccountMenu() {
     };
   }, [open]);
 
-  if (!owner) return <WalletConnect compact />;
+  if (!owner) return <WalletConnect />;
 
   return (
     <div ref={box} className="relative">
@@ -78,8 +80,8 @@ export function AccountMenu() {
               <div className="truncate font-mono text-xs text-ghost">
                 {desk?.username ? `@${desk.username}` : `${owner.slice(0, 6)}…${owner.slice(-6)}`}
               </div>
-              <div className="font-mono text-[10px] text-mute">
-                {desk?.referredCount || 0} invited · {(desk?.referralRewardsSol || 0).toFixed(4)} SOL
+              <div className="truncate font-mono text-[10px] text-mute">
+                {owner.slice(0, 4)}…{owner.slice(-4)}
               </div>
             </div>
           </div>
@@ -98,10 +100,25 @@ export function AccountMenu() {
                 {l.label}
               </Link>
             ))}
+            <button
+              type="button"
+              role="menuitem"
+              disabled={busy}
+              onClick={async () => {
+                setBusy(true);
+                try {
+                  await switchPhantom();
+                } finally {
+                  setBusy(false);
+                  setOpen(false);
+                }
+              }}
+              className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-mute hover:bg-white/5 hover:text-ghost disabled:opacity-40"
+            >
+              <PhantomMark className="h-4 w-4 text-white" />
+              {busy ? "Opening Phantom…" : "Switch wallet"}
+            </button>
           </nav>
-          <div className="border-t border-violet/20 px-3 py-2">
-            <WalletConnect compact />
-          </div>
         </div>
       )}
     </div>
