@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { DEFAULT_TREASURY, TREASURY } from "../lib/config";
+import { DEFAULT_TREASURY, LIVE_TRADING, TREASURY } from "../lib/config";
 import { durableKind } from "../lib/persist";
 import { treasuryAddress } from "../lib/treasury";
+import { emptyState } from "../lib/store";
 
 describe("treasury default", () => {
   it("pins the founder treasury when env/state are empty", () => {
@@ -14,5 +15,12 @@ describe("treasury default", () => {
 
   it("reports filesystem store when no Upstash/Blob env is set in tests", () => {
     assert.equal(durableKind(), "fs");
+  });
+
+  it("does not keep a stale liveTrading false on a fresh desk", () => {
+    assert.equal(LIVE_TRADING, true);
+    const s = emptyState();
+    assert.equal(s.liveTrading, undefined);
+    assert.equal(s.liveV, 2);
   });
 });

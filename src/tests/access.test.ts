@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { grantFounder, isFounder, levSeatOk, liveSeatOk, revokeFounder } from "../lib/access";
+import { circleVip, grantFounder, isFounder, levSeatOk, liveSeatOk, revokeFounder } from "../lib/access";
+import { LIVE_TRADING } from "../lib/config";
 import { emptyState } from "../lib/store";
 
 describe("founder access", () => {
@@ -36,5 +37,21 @@ describe("founder access", () => {
     assert.equal(levSeatOk(s, pk), false);
     s.users[0].plan = "lev";
     assert.equal(levSeatOk(s, pk), true);
+  });
+
+  it("treats project wallets as founders so they skip Circle invite and the seat", () => {
+    const s = emptyState();
+    const pk = "CyaE1VxvBrahnPWkqm5VsdCvyS2QmNht2UFrKJHga54o";
+    s.ownerWallet = pk;
+    assert.equal(isFounder(s, pk), true);
+    assert.equal(circleVip(s, pk), true);
+    assert.equal(liveSeatOk(s, pk), true);
+    s.ownerWallet = "";
+    s.devWallet = pk;
+    assert.equal(circleVip(s, pk), true);
+  });
+
+  it("defaults the live desk on", () => {
+    assert.equal(LIVE_TRADING, true);
   });
 });

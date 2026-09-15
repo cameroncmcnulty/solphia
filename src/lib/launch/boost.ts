@@ -237,10 +237,14 @@ export function fillHouseBoosts(book: LaunchBook, candidates: HouseCoin[], now =
     const j = Math.floor(Math.random() * (i + 1));
     [pool[i], pool[j]] = [pool[j], pool[i]];
   }
+  const picks = pool.slice(0, add);
+  const hasMega = ranked.some((r) => r.mega || r.rockets >= MEGA_ROCKETS);
+  const megaN = hasMega ? 0 : Math.min(2, picks.length);
   let dirty = false;
-  for (const c of pool.slice(0, add)) {
+  picks.forEach((c, i) => {
     const id = c.mint || c.id || "";
-    const rockets = Math.random() < 0.25 ? 30 : 10;
+    const roll = Math.random();
+    const rockets = i < megaN ? MEGA_ROCKETS : roll < 0.2 ? 100 : roll < 0.5 ? 30 : 10;
     const r = buyBoost(book, {
       owner: HOUSE_OWNER,
       coinId: id,
@@ -255,7 +259,7 @@ export function fillHouseBoosts(book: LaunchBook, candidates: HouseCoin[], now =
       house: true,
     });
     if (r.ok) dirty = true;
-  }
+  });
   return dirty;
 }
 

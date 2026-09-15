@@ -41,12 +41,6 @@ type WindowKey = "1m" | "3m" | "6m";
 type Lev = 1 | 2 | 3;
 type LevPack = Partial<Record<Lev, PublicBt>>;
 
-const WINDOWS: { id: WindowKey; label: string }[] = [
-  { id: "1m", label: "1 month" },
-  { id: "3m", label: "3 months" },
-  { id: "6m", label: "6 months" },
-];
-
 function money(n: number) {
   const sign = n < 0 ? "−" : "";
   return `${sign}$${Math.abs(n).toFixed(0)}`;
@@ -71,7 +65,7 @@ function asLevPack(raw: unknown): LevPack | null {
 
 export function BacktestBrochure() {
   const [windows, setWindows] = useState<Partial<Record<WindowKey, LevPack>>>({});
-  const [win, setWin] = useState<WindowKey>("1m");
+  const win: WindowKey = "1m";
   const [lev, setLev] = useState<Lev>(1);
   const [err, setErr] = useState("");
   const [live, setLive] = useState<LiveBook | null>(null);
@@ -126,18 +120,7 @@ export function BacktestBrochure() {
             </p>
           </div>
           <div className="text-left lg:text-right">
-            <div className="mb-2 flex flex-wrap gap-2 lg:justify-end">
-              {WINDOWS.map((w) => (
-                <button
-                  key={w.id}
-                  type="button"
-                  onClick={() => setWin(w.id)}
-                  className={`rounded-full px-3 py-1 font-mono text-[11px] ${win === w.id ? "btn-on" : "btn-ghost"}`}
-                >
-                  {w.label}
-                </button>
-              ))}
-            </div>
+            <div className="mb-2 font-mono text-[11px] tracking-[0.18em] text-mute lg:text-right">LAST 30 DAYS</div>
             <div className="mb-2 flex flex-wrap gap-2 lg:justify-end">
               {([1, 2, 3] as const).map((n) => (
                 <button

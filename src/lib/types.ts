@@ -503,6 +503,8 @@ export interface AppState {
   lastPair?: unknown;
   treasuryWallet?: string;
   liveTrading?: boolean;
+  /** Bumps past the old default-off live flag so a stale Redis false cannot keep the desk on paper. */
+  liveV?: number;
   promos?: PromoItem[];
   promoPending?: PromoPending | null;
   lastPromoDay?: string;

@@ -9,12 +9,29 @@ export function envFounders(): string[] {
     .filter(Boolean);
 }
 
+export function projectWallets(state: AppState): string[] {
+  return [
+    state.ownerWallet,
+    state.devWallet,
+    state.treasuryWallet,
+    state.foundationWallet,
+    state.airdropWallet,
+    state.lpWallet,
+    ...(state.adminWallets || []),
+  ].filter((w): w is string => Boolean(w));
+}
+
 export function isFounder(state: AppState, pubkey?: string | null): boolean {
   if (!pubkey) return false;
   if (envFounders().includes(pubkey)) return true;
-  if ((state.adminWallets || []).includes(pubkey)) return true;
+  if (projectWallets(state).includes(pubkey)) return true;
   const u = state.users.find((x) => x.pubkey === pubkey);
   return Boolean(u?.comped);
+}
+
+/** Owner / project / admin wallets skip the Circle invite gate. */
+export function circleVip(state: AppState, pubkey?: string | null): boolean {
+  return isFounder(state, pubkey);
 }
 
 export function grantFounder(state: AppState, pubkey: string) {

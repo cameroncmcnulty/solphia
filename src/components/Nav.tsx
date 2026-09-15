@@ -10,7 +10,7 @@ import { useOwner } from "@/lib/hooks";
 const LINKS = [
   ["/", "Home"],
   ["/launch", "Launch"],
-  ["/trading", "Trade"],
+  ["/trading", "Automate"],
   ["/token", "$SPHA"],
 ];
 
@@ -37,10 +37,8 @@ export function Nav() {
         ))}
       </nav>
       <div className="flex shrink-0 items-center gap-2">
-        <div className="md:hidden">{!owner ? <WalletConnect compact /> : null}</div>
-        <div className="hidden md:block">
-          <AccountMenu />
-        </div>
+        <WalletConnect compact />
+        <div className="hidden md:block">{owner ? <AccountMenu /> : null}</div>
       </div>
     </header>
   );

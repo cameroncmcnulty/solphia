@@ -7,7 +7,7 @@ import { Activity, CircleUser, Home, Rocket, Sparkles } from "lucide-react";
 const TABS = [
   { href: "/", label: "Home", Icon: Home },
   { href: "/launch", label: "Launch", Icon: Rocket },
-  { href: "/trading", label: "Trade", Icon: Activity },
+  { href: "/trading", label: "Automate", Icon: Activity },
   { href: "/token", label: "$SPHA", Icon: Sparkles },
   { href: "/account", label: "You", Icon: CircleUser },
 ] as const;

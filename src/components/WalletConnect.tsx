@@ -127,9 +127,18 @@ export function WalletConnect({ compact: _compact = false }: { compact?: boolean
       className="btn-ghost inline-flex h-10 shrink-0 items-center gap-1.5 rounded-full px-2.5 py-2 font-mono text-[10px] tracking-widest sm:h-11 sm:gap-2 sm:px-4 sm:text-[11px]"
     >
       <PhantomMark className="h-4 w-4 shrink-0 text-white sm:h-5 sm:w-5" />
-      <span className="whitespace-nowrap">
-        {busy ? "…" : addr ? `${addr.slice(0, 4)}…${addr.slice(-4)}` : "CONNECT"}
-      </span>
+      {busy ? (
+        <span>…</span>
+      ) : addr ? (
+        <span className="flex flex-col items-start leading-tight">
+          <span className="font-mono text-[11px] tracking-normal text-ghost">
+            {addr.slice(0, 4)}…{addr.slice(-4)}
+          </span>
+          <span className="text-[9px] tracking-[0.18em] text-acid">SWITCH WALLET</span>
+        </span>
+      ) : (
+        <span className="whitespace-nowrap">CONNECT</span>
+      )}
     </button>
   );
 }

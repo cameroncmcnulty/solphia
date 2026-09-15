@@ -7,6 +7,7 @@ import { sphaMintOf } from "@/lib/token/solphia";
 import { SITE_URL } from "@/lib/config";
 import { displayMedia } from "@/lib/pinata";
 import { treasuryAddress } from "@/lib/treasury";
+import { circleVip } from "@/lib/access";
 import {
   activeMembers,
   airdropWeight,
@@ -62,7 +63,16 @@ function publicMember(m: ReturnType<typeof activeMembers>[number], book: ReturnT
 
 export async function GET(req: NextRequest) {
   const pubkey = req.nextUrl.searchParams.get("pubkey") || "";
-  const s = await withCircle((st) => st, false);
+  let s = await withCircle((st) => st, false);
+  const vip = isSolanaAddress(pubkey) && circleVip(s, pubkey);
+  if (vip) {
+    s = await withCircle((st) => {
+      st.circle = ensureCircle(st.circle);
+      const email = st.users.find((u) => u.pubkey === pubkey)?.email || "founder@solphia.io";
+      joinCircle(st.circle, { pubkey, email, vip: true });
+      return st;
+    }, true);
+  }
   const raw = s.circle;
   const book = ensureCircle(raw);
   if (circleStale(raw, book)) {
@@ -130,7 +140,12 @@ export async function POST(req: NextRequest) {
     if (!b.email || !isEmail(b.email)) return NextResponse.json({ error: "bad_email", message: "Enter a real email for updates." }, { status: 400 });
     const out = await withCircle((s) => {
       s.circle = ensureCircle(s.circle);
-      const r = joinCircle(s.circle, { pubkey: b.pubkey, email: b.email || "", referrer: b.referrer });
+      const r = joinCircle(s.circle, {
+        pubkey: b.pubkey,
+        email: b.email || "",
+        referrer: b.referrer,
+        vip: circleVip(s, b.pubkey),
+      });
       if (r.ok) {
         let u = s.users.find((x) => x.pubkey === b.pubkey);
         if (!u) {

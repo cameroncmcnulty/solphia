@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { CopyCa } from "@/components/CopyCa";
 import { SolphiaConstellation } from "@/components/SolphiaConstellation";
 import { MiniSpark } from "@/components/SparkCandles";
@@ -32,6 +32,8 @@ import { loadOwner, signAndSendPhantom } from "@/lib/wallet/trading";
 
 import { auditLaunchCoin, rankTape, scoreTape, type LaunchAudit } from "@/lib/launch/audit";
 import { BoostBuy, BoostRail, fmtLeft } from "@/components/BoostBuy";
+import { ShillMark } from "@/components/ShillMark";
+import { SwapBox, SwapShell, SwapTabs, SwapWidget } from "@/components/SwapWidget";
 import type { BoostRank } from "@/lib/launch/boost";
 import { filterTape, sortTape, volumeIn, type AgeFilter, type VolWindow } from "@/lib/launch/tape";
 import { isSolanaAddress } from "@/lib/wallet/addr";
@@ -492,13 +494,18 @@ export default function LaunchPage() {
         <h1 className="mt-2 font-display text-4xl text-ghost sm:text-5xl">Launch a token. Swap it.</h1>
         <a
           href="/shill"
-          className="btn-acid mt-5 inline-flex min-h-[52px] items-center justify-center gap-2 rounded-full px-7 text-base"
+          className="group mt-6 flex items-center gap-4 overflow-hidden rounded-[1.7rem] border border-cyan/35 bg-gradient-to-r from-cyan/20 via-acid/10 to-[#ff4fd8]/20 p-4 shadow-[0_16px_40px_rgba(128,234,255,0.12)] transition hover:border-acid/50"
         >
-          <span aria-hidden>🪩</span>
-          SHILL ZONE
+          <ShillMark className="h-14 w-14 shrink-0 sm:h-16 sm:w-16" />
+          <span className="min-w-0 flex-1 text-left">
+            <span className="block font-display text-2xl leading-none text-ghost sm:text-3xl">Shill Zone</span>
+            <span className="mt-1 block text-sm text-mute">Come talk your bag. Share clips. Hype with the room.</span>
+          </span>
+          <span className="btn-acid hidden shrink-0 rounded-full px-5 py-2.5 text-sm sm:inline-flex">Jump in</span>
         </a>
 
         <div className="mt-8 grid gap-5 lg:grid-cols-[minmax(280px,0.72fr)_minmax(0,1.28fr)]">
+          <div className="space-y-5">
           <section className="panel-bubble overflow-hidden rounded-3xl p-5">
             <h2 className="font-display text-2xl text-ghost">Create</h2>
             {!owner ? (
@@ -688,6 +695,8 @@ export default function LaunchPage() {
               </>
             )}
           </section>
+          <SwapWidget owner={owner} title="Swap a token" />
+          </div>
 
           <section className="panel-bubble overflow-hidden rounded-3xl p-5">
             <div className="flex items-center justify-between">
@@ -839,10 +848,11 @@ export default function LaunchPage() {
               )}
             </div>
             <div className="mt-3 max-h-[44rem] space-y-1.5 overflow-y-auto overflow-x-hidden">
+              {rows.length > 0 && <TapeHead />}
               {rows.length === 0 && tapeLoading && tab !== "mine" && (
                 <div className="space-y-2">
                   {Array.from({ length: 8 }).map((_, i) => (
-                    <div key={i} className="h-[52px] animate-pulse rounded-2xl bg-violet/10" />
+                    <div key={i} className="h-[88px] animate-pulse rounded-2xl bg-violet/10" />
                   ))}
                 </div>
               )}
@@ -942,6 +952,36 @@ function eliteGlow(rank: number) {
   return undefined;
 }
 
+function TapeHead() {
+  return (
+    <div className="sticky top-0 z-[2] hidden grid-cols-[minmax(0,1.5fr)_repeat(8,minmax(3.4rem,1fr))] gap-2 border-b border-violet/20 bg-void/90 px-3 py-2 font-mono text-[9px] tracking-[0.14em] text-mute backdrop-blur xl:grid">
+      <span>TOKEN</span>
+      <span>AGE</span>
+      <span>MC</span>
+      <span>LIQ</span>
+      <span>VOL</span>
+      <span>5M</span>
+      <span>1H</span>
+      <span>6H</span>
+      <span>24H</span>
+    </div>
+  );
+}
+
+function Chg({ n }: { n?: number }) {
+  const up = (n || 0) >= 0;
+  return <span className={up ? "text-acid" : "text-blood"}>{fmtPct(n)}</span>;
+}
+
+function StatCell({ k, v, tone }: { k: string; v: ReactNode; tone?: string }) {
+  return (
+    <div className="min-w-0">
+      <div className="font-mono text-[9px] tracking-[0.14em] text-mute">{k}</div>
+      <div className={`truncate font-mono text-[12px] ${tone || "text-ghost"}`}>{v}</div>
+    </div>
+  );
+}
+
 function CoinCard({
   c,
   solUsd,
@@ -968,6 +1008,11 @@ function CoinCard({
   const grade = audit?.grade ?? c.grade;
   const spark = c.spark || [];
   const up = spark.length >= 2 ? spark[spark.length - 1].c >= spark[0].c : (c.change24h || 0) >= 0;
+  const px = fmtPx((c.priceSol || 0) * (solUsd || 0));
+  const mc = c.marketCapUsd ? fmtUsd(c.marketCapUsd) : `${fmtSol(c.marketCapSol, 1)} SOL`;
+  const liq = c.liqUsd ? fmtUsd(c.liqUsd) : `${fmtSol(c.liqSol || c.realSol, 2)} SOL`;
+  const volN = vol ? volumeIn(c, vol) : c.vol24h || c.vol1h || c.volSol || 0;
+  const volShown = solUsd && volN ? fmtUsd(volN * solUsd) : `${fmtSol(volN, 2)} SOL`;
   return (
     <div
       role="button"
@@ -979,45 +1024,77 @@ function CoinCard({
           onOpen();
         }
       }}
-      className={`relative isolate flex w-full min-w-0 cursor-pointer items-center gap-2.5 overflow-hidden rounded-2xl border border-l-[3px] px-2.5 py-2 text-left sm:gap-3 sm:px-3 sm:py-2.5 ${eliteClass(rank, active)} ${
-        up ? "border-l-acid" : "border-l-blood"
-      }`}
+      className={`relative isolate w-full min-w-0 cursor-pointer overflow-hidden rounded-2xl border px-3 py-2.5 text-left ${eliteClass(rank, active)}`}
     >
       {elite && <span aria-hidden className="pointer-events-none absolute inset-0 rounded-2xl" style={{ boxShadow: eliteGlow(rank) }} />}
-      {rank > 0 && <RankMark n={rank} />}
-      <TokenArt src={c.image} mint={c.mint} label={c.symbol} className="relative z-[1] h-11 w-11 shrink-0 rounded-xl" />
-      <div className="relative z-[1] min-w-0 flex-1">
-        <div className="flex min-w-0 items-center gap-2">
-          <span className="truncate font-display text-base text-ghost sm:text-lg">{tick(c.symbol) || c.name}</span>
-          {c.name && c.name.replace(/^\$+/, "").toUpperCase() !== (c.symbol || "").replace(/^\$+/, "").toUpperCase() ? (
-            <span className="truncate text-xs text-mute sm:text-sm">{c.name}</span>
-          ) : null}
-          <span className={`shrink-0 rounded-full px-1.5 py-0.5 font-mono text-[9px] ${c.born ? "bg-acid/15 text-acid" : "bg-white/10 text-mute"}`}>
-            {venueLabel(c)}
-          </span>
-          {rockets ? (
-            <span className="shrink-0 rounded-full bg-acid/20 px-1.5 py-0.5 font-mono text-[9px] text-acid">
-              ⚡ {rockets}
-              {boostLeft ? ` · ${fmtLeft(boostLeft)}` : ""}
+      <div className="relative z-[1] grid items-center gap-2 xl:grid-cols-[minmax(0,1.5fr)_repeat(8,minmax(3.4rem,1fr))]">
+        <div className="flex min-w-0 items-center gap-2.5">
+          {rank > 0 && <RankMark n={rank} />}
+          <TokenArt src={c.image} mint={c.mint} label={c.symbol} className="h-11 w-11 shrink-0 rounded-xl" />
+          <div className="min-w-0 flex-1">
+            <div className="flex min-w-0 items-center gap-1.5">
+              <span className="truncate font-display text-base text-ghost">{tick(c.symbol) || c.name}</span>
+              <span className={`shrink-0 rounded-full px-1.5 py-0.5 font-mono text-[9px] ${c.born ? "bg-acid/15 text-acid" : "bg-white/10 text-mute"}`}>
+                {venueLabel(c)}
+              </span>
+              {rockets ? (
+                <span className="shrink-0 rounded-full bg-acid/20 px-1.5 py-0.5 font-mono text-[9px] text-acid">
+                  {rockets >= 500 ? "⚡" : "🚀"} {rockets}
+                  {boostLeft ? ` · ${fmtLeft(boostLeft)}` : ""}
+                </span>
+              ) : null}
+            </div>
+            <div className="mt-0.5 flex items-center gap-2 text-[12px]">
+              <span className="font-mono text-ghost">{px}</span>
+              {c.name && c.name.replace(/^\$+/, "").toUpperCase() !== (c.symbol || "").replace(/^\$+/, "").toUpperCase() ? (
+                <span className="truncate text-mute">{c.name}</span>
+              ) : null}
+            </div>
+          </div>
+        </div>
+        <div className="hidden xl:block font-mono text-[12px] text-mute">{fmtAge(Date.now() - c.createdAt)}</div>
+        <div className="hidden xl:block font-mono text-[12px] text-ghost">{mc}</div>
+        <div className="hidden xl:block font-mono text-[12px] text-ghost">{liq}</div>
+        <div className="hidden xl:block font-mono text-[12px] text-ghost">{volShown}</div>
+        <div className="hidden xl:block font-mono text-[12px]">
+          <Chg n={c.change5m} />
+        </div>
+        <div className="hidden xl:block font-mono text-[12px]">
+          <Chg n={c.change1h} />
+        </div>
+        <div className="hidden xl:block font-mono text-[12px]">
+          <Chg n={c.change6h} />
+        </div>
+        <div className="hidden xl:block font-mono text-[12px]">
+          <Chg n={c.change24h} />
+        </div>
+      </div>
+      <div className="relative z-[1] mt-2 grid grid-cols-4 gap-2 xl:hidden">
+        <StatCell k="AGE" v={fmtAge(Date.now() - c.createdAt)} />
+        <StatCell k="MC" v={mc} />
+        <StatCell k="LIQ" v={liq} />
+        <StatCell k="VOL" v={volShown} />
+        <StatCell k="5M" v={<Chg n={c.change5m} />} />
+        <StatCell k="1H" v={<Chg n={c.change1h} />} />
+        <StatCell k="6H" v={<Chg n={c.change6h} />} />
+        <StatCell k="24H" v={<Chg n={c.change24h} />} />
+      </div>
+      <div className="relative z-[1] mt-2 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 text-[11px] text-mute">
+          <span>{c.txns1h || c.txns || 0} txns</span>
+          {c.unique1h ? <span>{c.unique1h} makers</span> : null}
+          {grade ? (
+            <span
+              className={`rounded-full px-1.5 py-0.5 font-mono ${
+                grade === "S" || grade === "A" ? "bg-acid/20 text-acid" : grade === "B" ? "bg-cyan/20 text-cyan" : "bg-white/10 text-mute"
+              }`}
+            >
+              {grade} {score ?? ""}
             </span>
           ) : null}
         </div>
-        <div className="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 font-mono text-[11px] text-mute">
-          <span>{fmtAge(Date.now() - c.createdAt)}</span>
-          <span className="text-ghost">{c.marketCapUsd ? fmtUsd(c.marketCapUsd) : `${fmtSol(c.marketCapSol, 1)} SOL`}</span>
-          {(vol || c.vol1h) && <span>{fmtSol(vol ? volumeIn(c, vol) : c.vol1h || 0, 2)} SOL</span>}
-          <span className={up ? "text-acid" : "text-blood"}>{fmtPct(c.change24h)}</span>
-        </div>
+        <MiniSpark candles={spark} up={up} />
       </div>
-      <MiniSpark candles={spark} up={up} />
-      <span
-        className={`relative z-[1] shrink-0 rounded-full px-2 py-1 font-mono text-[11px] ${
-          grade === "S" || grade === "A" ? "bg-acid/20 text-acid" : grade === "B" ? "bg-cyan/20 text-cyan" : "bg-white/10 text-mute"
-        }`}
-      >
-        {grade ? `${grade} ` : ""}
-        {score ?? "—"}
-      </span>
     </div>
   );
 }
@@ -1159,47 +1236,38 @@ function CoinDesk({
           </div>
         </div>
 
-        <div className="rounded-3xl border border-violet/20 bg-void/50 p-4">
+        <SwapShell title={`Trade ${tick(open.symbol)}`} subtitle="You sign. Tokens land in the wallet you connected.">
           {!open.born ? (
             <MarketSwap open={open} owner={owner} sol={sol} setSol={setSol} solUsd={solUsd} />
           ) : (
             <>
-              <div className="grid grid-cols-2 rounded-full border border-violet/30 p-1">
-                <button type="button" onClick={() => setSide("buy")} className={`rounded-full py-2 text-sm ${side === "buy" ? "bg-acid/20 text-acid" : "text-mute"}`}>
-                  Buy
-                </button>
-                <button type="button" onClick={() => setSide("sell")} className={`rounded-full py-2 text-sm ${side === "sell" ? "bg-acid/20 text-acid" : "text-mute"}`}>
-                  Sell
-                </button>
-              </div>
+              <SwapTabs side={side} onSide={setSide} />
               {!owner ? (
-                <div className="mt-6">
+                <div className="mt-6 flex justify-center">
                   <WalletConnect />
                 </div>
               ) : (
                 <>
-                  <p className="mt-5 text-xs tracking-wide text-mute">{side === "buy" ? "You pay" : "You sell"}</p>
-                  <div
-                    data-field="amount"
-                    className={`mt-2 flex items-center justify-between rounded-2xl border bg-void px-4 py-4 ${fieldClass(tradeErr.errors.amount)}`}
-                  >
-                    {side === "buy" ? (
-                      <input
-                        type="number"
-                        min={0.01}
-                        step={0.01}
-                        value={sol}
-                        onChange={(e) => {
-                          setSol(Number(e.target.value));
-                          tradeErr.clear("amount");
-                        }}
-                        aria-invalid={Boolean(tradeErr.errors.amount)}
-                        className="w-full bg-transparent font-display text-3xl text-ghost outline-none"
-                      />
-                    ) : (
-                      <div className="font-display text-3xl text-ghost">{fmtTok(open.myTokens || 0)}</div>
-                    )}
-                    <span className="shrink-0 font-mono text-sm text-mute">{side === "buy" ? "SOL" : tick(open.symbol)}</span>
+                  <div className="mt-3">
+                    <SwapBox label={side === "buy" ? "YOU PAY" : "YOU SELL"} unit={side === "buy" ? "SOL" : tick(open.symbol) || "TOKEN"}>
+                      {side === "buy" ? (
+                        <input
+                          type="number"
+                          min={0.01}
+                          step={0.01}
+                          value={sol}
+                          data-field="amount"
+                          onChange={(e) => {
+                            setSol(Number(e.target.value));
+                            tradeErr.clear("amount");
+                          }}
+                          aria-invalid={Boolean(tradeErr.errors.amount)}
+                          className={`w-full bg-transparent font-display text-3xl text-ghost outline-none ${fieldClass(tradeErr.errors.amount, "")}`}
+                        />
+                      ) : (
+                        <div className="font-display text-3xl text-ghost">{fmtTok(open.myTokens || 0)}</div>
+                      )}
+                    </SwapBox>
                   </div>
                   <FieldError error={tradeErr.errors.amount} />
                   {side === "buy" && (
@@ -1209,7 +1277,7 @@ function CoinDesk({
                           key={p}
                           type="button"
                           onClick={() => setSol(p)}
-                          className={`rounded-full border px-3 py-1 font-mono text-[11px] ${Math.abs(sol - p) < 1e-9 ? "border-acid text-acid" : "border-violet/30 text-mute"}`}
+                          className={`rounded-full border px-3 py-1 font-mono text-[11px] ${Math.abs(sol - p) < 1e-9 ? "border-acid bg-acid/15 text-acid" : "border-violet/30 text-mute"}`}
                         >
                           {p}
                         </button>
@@ -1223,12 +1291,12 @@ function CoinDesk({
                       </button>
                     </div>
                   )}
-                  <p className="mt-5 text-xs tracking-wide text-mute">You receive</p>
-                  <div className="mt-2 flex items-center justify-between rounded-2xl border border-violet/30 bg-void px-4 py-4">
-                    <div className="font-display text-3xl text-ghost">
-                      {quote && quote.ok ? (side === "buy" ? fmtTok(quote.tokensOut || 0) : fmtSol(quote.solOut || 0, 4)) : "—"}
-                    </div>
-                    <span className="font-mono text-sm text-mute">{side === "buy" ? tick(open.symbol) : "SOL"}</span>
+                  <div className="mt-3">
+                    <SwapBox label="YOU GET" unit={side === "buy" ? tick(open.symbol) || "TOKEN" : "SOL"}>
+                      <div className="font-display text-3xl text-ghost">
+                        {quote && quote.ok ? (side === "buy" ? fmtTok(quote.tokensOut || 0) : fmtSol(quote.solOut || 0, 4)) : "—"}
+                      </div>
+                    </SwapBox>
                   </div>
                   <button
                     type="button"
@@ -1246,7 +1314,7 @@ function CoinDesk({
                       if (side === "buy") onAct({ action: "buy", id: open.id, sol });
                       else onAct({ action: "sell", id: open.id, tokens: open.myTokens || 0 });
                     }}
-                    className="btn-acid mt-5 min-h-[52px] w-full rounded-full disabled:opacity-40"
+                    className="btn-acid mt-4 min-h-[52px] w-full rounded-full disabled:opacity-40"
                   >
                     {side === "buy" ? `Buy ${tick(open.symbol)}` : `Sell ${tick(open.symbol)}`}
                   </button>
@@ -1270,7 +1338,7 @@ function CoinDesk({
               )}
             </>
           )}
-        </div>
+        </SwapShell>
       </div>
     </section>
   );
@@ -1382,46 +1450,34 @@ function MarketSwap({
 
   return (
     <div>
-      <div className="grid grid-cols-2 rounded-full border border-violet/30 p-1">
-        <button type="button" onClick={() => setSide("buy")} className={`rounded-full py-2 text-sm ${side === "buy" ? "bg-acid/20 text-acid" : "text-mute"}`}>
-          Buy
-        </button>
-        <button type="button" onClick={() => setSide("sell")} className={`rounded-full py-2 text-sm ${side === "sell" ? "bg-acid/20 text-acid" : "text-mute"}`}>
-          Sell
-        </button>
-      </div>
-      <p className="mt-3 text-sm text-mute">
-        You sign. Tokens land in that wallet — not the bot trading wallet.
-      </p>
+      <SwapTabs side={side} onSide={setSide} />
       {!owner ? (
-        <div className="mt-5">
+        <div className="mt-5 flex justify-center">
           <WalletConnect />
           <FieldError error={tradeErr.errors.wallet} />
         </div>
       ) : (
         <>
-          <p className="mt-5 text-xs tracking-wide text-mute">{side === "buy" ? "You pay" : "You sell"}</p>
-          <div
-            data-field="amount"
-            className={`mt-2 flex items-center justify-between rounded-2xl border bg-void px-4 py-4 ${fieldClass(tradeErr.errors.amount)}`}
-          >
-            {side === "buy" ? (
-              <input
-                type="number"
-                min={0.01}
-                step={0.01}
-                value={sol}
-                onChange={(e) => {
-                  setSol(Number(e.target.value));
-                  tradeErr.clear("amount");
-                }}
-                aria-invalid={Boolean(tradeErr.errors.amount)}
-                className="w-full bg-transparent font-display text-3xl text-ghost outline-none"
-              />
-            ) : (
-              <div className="font-display text-3xl text-ghost">{fmtTok(held)}</div>
-            )}
-            <span className="shrink-0 font-mono text-sm text-mute">{side === "buy" ? "SOL" : tick(open.symbol)}</span>
+          <div className="mt-3">
+            <SwapBox label={side === "buy" ? "YOU PAY" : "YOU SELL"} unit={side === "buy" ? "SOL" : tick(open.symbol) || "TOKEN"}>
+              {side === "buy" ? (
+                <input
+                  type="number"
+                  min={0.01}
+                  step={0.01}
+                  value={sol}
+                  data-field="amount"
+                  onChange={(e) => {
+                    setSol(Number(e.target.value));
+                    tradeErr.clear("amount");
+                  }}
+                  aria-invalid={Boolean(tradeErr.errors.amount)}
+                  className="w-full bg-transparent font-display text-3xl text-ghost outline-none"
+                />
+              ) : (
+                <div className="font-display text-3xl text-ghost">{fmtTok(held)}</div>
+              )}
+            </SwapBox>
           </div>
           <FieldError error={tradeErr.errors.amount} />
           {side === "buy" && (
@@ -1431,26 +1487,26 @@ function MarketSwap({
                   key={p}
                   type="button"
                   onClick={() => setSol(p)}
-                  className={`rounded-full border px-3 py-1 font-mono text-[11px] ${Math.abs(sol - p) < 1e-9 ? "border-acid text-acid" : "border-violet/30 text-mute"}`}
+                  className={`rounded-full border px-3 py-1 font-mono text-[11px] ${Math.abs(sol - p) < 1e-9 ? "border-acid bg-acid/15 text-acid" : "border-violet/30 text-mute"}`}
                 >
                   {p}
                 </button>
               ))}
             </div>
           )}
-          <p className="mt-5 text-xs tracking-wide text-mute">You receive</p>
-          <div className="mt-2 flex items-center justify-between rounded-2xl border border-violet/30 bg-void px-4 py-4">
-            <div className="font-display text-3xl text-ghost">
-              {out == null ? "—" : side === "buy" ? fmtTok(out) : fmtSol(out, 4)}
-            </div>
-            <span className="font-mono text-sm text-mute">{side === "buy" ? tick(open.symbol) : "SOL"}</span>
+          <div className="mt-3">
+            <SwapBox label="YOU GET" unit={side === "buy" ? tick(open.symbol) || "TOKEN" : "SOL"}>
+              <div className="font-display text-3xl text-ghost">
+                {out == null ? "—" : side === "buy" ? fmtTok(out) : fmtSol(out, 4)}
+              </div>
+            </SwapBox>
           </div>
           {feeSol > 0 && (
             <p className="mt-2 font-mono text-[11px] text-mute">
               Protocol fee {fmtSol(feeSol, 4)} SOL{solUsd ? ` · ~$${(feeSol * solUsd).toFixed(3)}` : ""}
             </p>
           )}
-          <button type="button" disabled={busy} onClick={go} className="btn-acid mt-5 min-h-[52px] w-full rounded-full disabled:opacity-40">
+          <button type="button" disabled={busy} onClick={go} className="btn-acid mt-4 min-h-[52px] w-full rounded-full disabled:opacity-40">
             {busy ? "Swapping…" : side === "buy" ? `Buy ${tick(open.symbol)}` : `Sell ${tick(open.symbol)}`}
           </button>
           {msg && <p className="mt-3 font-mono text-sm text-acid">{msg}</p>}

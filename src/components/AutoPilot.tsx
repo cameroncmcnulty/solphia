@@ -144,7 +144,7 @@ export function AutoPilot({ owner }: { owner: string | null }) {
   return (
     <div className="space-y-4">
       <div className="panel rounded-2xl p-5">
-        <div className="font-mono text-[10px] tracking-[0.28em] text-violet">KILL SWITCH ON</div>
+        <div className="font-mono text-[10px] tracking-[0.28em] text-violet">AUTOMATE</div>
         <h2 className="mt-1 font-display text-2xl text-ghost">Turn her on. Close the phone.</h2>
         <p className="mt-2 text-sm leading-relaxed text-mute">
           Scout finds a setup. Risk has to agree. Policy caps size and daily loss. Keys stay on this device — never in

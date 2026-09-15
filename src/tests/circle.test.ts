@@ -56,6 +56,14 @@ describe("founders circle", () => {
     assert.equal(book.messages[0].text, "fresh");
   });
 
+  it("lets a vip wallet in without inviting anyone", () => {
+    const book = emptyCircle();
+    const a = joinCircle(book, { pubkey: A, email: "a@solphia.io", vip: true });
+    assert.equal(a.ok, true);
+    if (!a.ok) return;
+    assert.equal(hasAccess(a.member), true);
+  });
+
   it("unlocks both seats when the invitee registers", () => {
     const book = emptyCircle();
     const a = joinCircle(book, { pubkey: A, email: "a@solphia.io" });

@@ -121,4 +121,15 @@ describe("rocket boosts", () => {
     assert.equal(fillHouseBoosts(book, top, t0 + 1), true);
     assert.ok(rankedBoosts(book, t0 + 1).length >= 8);
   });
+
+  it("plants 1–2 mega 500 packs so the rail can spark", () => {
+    const book = bookWithCoins();
+    const t0 = 11_000_000;
+    const top = book.coins.slice(0, 10).map((c) => ({ id: c.id, mint: c.mint, symbol: c.symbol, name: c.name, image: c.image }));
+    assert.equal(fillHouseBoosts(book, top, t0), true);
+    const megas = rankedBoosts(book, t0).filter((r) => r.rockets >= MEGA_ROCKETS);
+    assert.ok(megas.length >= 1);
+    assert.ok(megas.length <= 2);
+    assert.equal(megas[0].mega, true);
+  });
 });

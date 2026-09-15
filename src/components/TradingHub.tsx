@@ -62,7 +62,6 @@ export function TradingHub() {
   const { data, loading, refresh } = useMarket(12_000);
   const [auto, setAuto] = useState<Auto | null>(null);
   const [paper, setPaper] = useState<any>(null);
-  const [liveTrading, setLiveTrading] = useState(false);
   const [delegated, setDelegated] = useState(false);
   const [tradePk, setTradePk] = useState("");
   const [bal, setBal] = useState(0);
@@ -91,7 +90,6 @@ export function TradingHub() {
     const a = await fetch(`/api/auto?owner=${pk}`).then((r) => r.json());
     setAuto(a.auto);
     setPaper(a.paper);
-    setLiveTrading(Boolean(a.liveTrading));
     setDelegated(Boolean(a.liveDelegate || a.auto?.liveDelegate));
     try {
       const s = await fetch(`/api/access?pubkey=${pk}`).then((r) => r.json());
@@ -123,7 +121,7 @@ export function TradingHub() {
         fetch("/api/auto", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ owner, tradingPubkey: tpk }),
+          body: JSON.stringify({ owner, tradingPubkey: tpk, auto: { armed: true, mode: "live" } }),
         }).then(() => refreshAuto(owner));
       } catch {
         refreshAuto(owner);
@@ -139,9 +137,8 @@ export function TradingHub() {
 
   useEffect(() => {
     if (!owner || delegated || book?.killed) return;
-    if (!liveTrading) return;
     ensureLive();
-  }, [owner, liveTrading, delegated, book?.killed]);
+  }, [owner, delegated, book?.killed]);
 
   useEffect(() => {
     if (!armed) return;
@@ -159,7 +156,6 @@ export function TradingHub() {
     const j = await r.json();
     setAuto(j.auto);
     setPaper(j.paper);
-    setLiveTrading(Boolean(j.liveTrading));
     setDelegated(Boolean(j.liveDelegate || j.auto?.liveDelegate));
   }
 
@@ -183,7 +179,7 @@ export function TradingHub() {
     if (!owner) return setMsg("Connect Phantom first.");
     setBusy(true);
     try {
-      if (liveTrading && auto?.mode === "live") {
+      if (delegated || auto?.mode === "live") {
         const tpk = tradingPubkey();
         const h = paper?.pair;
         for (const x of XSTOCKS) {
@@ -260,9 +256,10 @@ export function TradingHub() {
       <header className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <p className="font-mono text-[11px] tracking-[0.28em] text-violet">USDC · S&P 500 · NASDAQ · GOLD</p>
-          <h1 className="mt-1 font-display text-3xl leading-none text-ghost sm:text-4xl md:text-6xl">Operate</h1>
+          <h1 className="mt-1 font-display text-3xl leading-none text-ghost sm:text-4xl md:text-6xl">Automate</h1>
           <p className="mt-3 max-w-xl text-base text-mute sm:text-lg">
-            Connect, fund the trading wallet, turn her on. She scalps tokenized S&P, Nasdaq, and gold from USDC. 24/7.
+            Connect, fund the trading wallet, leave her running. She scalps tokenized S&P, Nasdaq, and gold from USDC on
+            the live desk.
           </p>
         </div>
         <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-row sm:items-center sm:gap-3">
@@ -276,16 +273,16 @@ export function TradingHub() {
             <button
               type="button"
               onClick={async () => {
-                await patch({ armed: true });
+                await patch({ armed: true, mode: "live" });
                 await ensureLive();
               }}
               className="btn-acid col-span-1 inline-flex min-h-[48px] w-full items-center justify-center rounded-full px-4 py-3 text-sm sm:min-h-[56px] sm:w-auto sm:px-8 sm:text-lg"
             >
-              RESUME
+              START
             </button>
           ) : (
             <div className="btn-on col-span-1 inline-flex min-h-[48px] w-full items-center justify-center rounded-full px-4 py-3 text-sm sm:min-h-[56px] sm:w-auto sm:px-8 sm:text-lg">
-              {liveTrading && auto?.mode === "live" ? (delegated ? "24/7" : "LIVE") : liveTrading ? "READY" : "LIVE OFF"}
+              {delegated ? "RUNNING" : armed ? "STARTING" : "ON"}
             </div>
           )}
           <button
@@ -294,7 +291,7 @@ export function TradingHub() {
             disabled={busy}
             className="inline-flex min-h-[48px] w-full items-center justify-center rounded-full border-2 border-blood px-4 py-3 text-sm text-blood sm:min-h-[56px] sm:w-auto sm:px-6 sm:text-base"
           >
-            KILL
+            STOP
           </button>
         </div>
       </header>
@@ -302,7 +299,7 @@ export function TradingHub() {
       <ol className="mt-5 grid gap-3 sm:grid-cols-3">
         <How n="1" t="Connect" d="Your wallet is login. We never hold a key." />
         <How n="2" t="Move SOL" d="Connected wallet ↔ trading wallet. Back up that key." />
-        <How n="3" t="Leave her on" d="24/7 from the server. Close the tab. KILL stops her." />
+        <How n="3" t="Leave her on" d="The server signs 24/7. Close the tab. Stop flattens and pauses." />
       </ol>
 
       <div className="mt-5 rounded-2xl border border-blood/40 bg-blood/10 px-4 py-3 text-sm text-ghost">
@@ -316,7 +313,7 @@ export function TradingHub() {
             <h2 className="mt-1 font-display text-3xl text-ghost md:text-4xl">What she holds</h2>
           </div>
           <div className="font-mono text-[12px] text-mute">
-            {status} {liveTrading && auto?.mode === "live" && delegated ? "· 24/7 server" : armed ? "· watching" : live ? "· prices live" : ""} · {uptime}
+            {status} {delegated ? "· live desk" : armed ? "· watching" : live ? "· prices live" : ""} · {uptime}
           </div>
         </div>
         <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-3">
@@ -339,10 +336,10 @@ export function TradingHub() {
         <p className="mt-4 text-sm leading-relaxed text-mute">
           {(owner && book?.lastAction) || pair?.reason || book?.lastAction || "Waiting on prices…"}
         </p>
-        {liveTrading && auto?.mode === "live" && delegated && (
-          <p className="mt-2 font-mono text-sm text-acid">24/7 is on. Server signs. You can close the tab or switch wallets.</p>
+        {delegated && (
+          <p className="mt-2 font-mono text-sm text-acid">Live desk is on. Server signs. Close the tab or switch wallets.</p>
         )}
-        {book?.pendingIntent && auto?.mode === "live" && (
+        {book?.pendingIntent && (
           <p className="mt-2 font-mono text-sm text-acid">Clip going out. You can close the tab.</p>
         )}
 

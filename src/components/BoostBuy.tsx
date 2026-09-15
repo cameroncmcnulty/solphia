@@ -95,10 +95,13 @@ export function BoostRail({
       ? [...rows].sort((a, b) => (b.lastBoostAt || 0) - (a.lastBoostAt || 0) || b.rockets - a.rockets)
       : [...rows].sort((a, b) => b.rockets - a.rockets || a.leftMs - b.leftMs);
   return (
-    <div>
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <div className="font-mono text-[10px] tracking-[0.2em] text-acid">BOOSTED</div>
-        <div className="flex gap-1 rounded-full border border-violet/30 p-0.5 font-mono text-[10px]">
+    <div className="overflow-hidden rounded-[1.5rem] border border-acid/35 bg-gradient-to-br from-acid/20 via-cyan/10 to-violet/25 p-3 shadow-[0_0_40px_rgba(20,241,149,0.12)]">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <div>
+          <div className="font-display text-lg leading-none text-ghost">Boosted</div>
+          <p className="mt-0.5 text-[11px] text-mute">Paid rockets pin a token to the front of the tape for 24h.</p>
+        </div>
+        <div className="flex gap-1 rounded-full border border-violet/30 bg-void/50 p-0.5 font-mono text-[10px]">
           <button
             type="button"
             onClick={() => setSort("latest")}
@@ -130,20 +133,23 @@ export function BoostRail({
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={b.image} alt="" className="boost-chip-art" />
               ) : (
-                <div className="boost-chip-art flex items-center justify-center font-display text-sm text-acid">
+                <div className="boost-chip-art flex items-center justify-center font-display text-lg text-acid">
                   {(ticker || "?").slice(0, 2)}
                 </div>
               )}
-              <span className="min-w-0 flex-1">
-                <span className="block truncate font-display text-sm leading-tight text-ghost">
+              <span className="min-w-0 flex-1 text-left">
+                <span className="block truncate font-display text-base leading-tight text-ghost">
                   ${ticker || "TOKEN"}
                 </span>
                 {b.name && b.name.replace(/^\$/, "") !== ticker && (
-                  <span className="block truncate text-[10px] text-mute">{b.name}</span>
+                  <span className="block truncate text-[11px] text-mute">{b.name}</span>
                 )}
-                <span className="mt-0.5 block font-mono text-[10px] text-acid">
-                  🚀 {b.rockets}
-                  {mega ? " · mega" : ""}
+                <span className="mt-1 flex items-center gap-2 font-mono text-[11px] text-acid">
+                  <span className="rounded-full bg-acid/20 px-2 py-0.5">
+                    {mega ? "⚡ " : "🚀 "}
+                    {b.rockets}
+                  </span>
+                  <span className="text-mute">{fmtLeft(b.leftMs)} left</span>
                 </span>
               </span>
             </button>

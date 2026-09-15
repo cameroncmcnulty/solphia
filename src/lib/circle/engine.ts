@@ -141,7 +141,7 @@ export function canAdmin(m: CircleMember | undefined): boolean {
 
 export function joinCircle(
   book: CircleBook,
-  opts: { pubkey: string; email: string; referrer?: string; now?: number },
+  opts: { pubkey: string; email: string; referrer?: string; now?: number; vip?: boolean },
 ): { ok: true; member: CircleMember; created: boolean } | { ok: false; error: string } {
   const pubkey = (opts.pubkey || "").trim();
   const email = (opts.email || "").trim().toLowerCase();
@@ -153,6 +153,7 @@ export function joinCircle(
     if (existing.status === "banned") return { ok: false, error: "banned" };
     existing.email = email;
     existing.lastReadAt = now;
+    if (opts.vip) existing.access = "ready";
     return { ok: true, member: existing, created: false };
   }
   let referrer = (opts.referrer || "").trim();
@@ -168,7 +169,7 @@ export function joinCircle(
     referrer: referrer || undefined,
     role: "member",
     status: "ok",
-    access: hostOpen ? "ready" : "pending",
+    access: opts.vip || hostOpen ? "ready" : "pending",
     color: circleColor(pubkey),
     lastReadAt: now,
     unclaimed: 0,
