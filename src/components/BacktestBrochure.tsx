@@ -34,6 +34,7 @@ type PublicBt = {
   leverage?: 1 | 2 | 3;
   liquidations?: number;
   window?: "1m" | "3m" | "6m";
+  ranAt?: number;
 };
 
 type WindowKey = "1m" | "3m" | "6m";
@@ -71,12 +72,17 @@ function asLevPack(raw: unknown): LevPack | null {
 export function BacktestBrochure() {
   const [windows, setWindows] = useState<Partial<Record<WindowKey, LevPack>>>({});
   const [win, setWin] = useState<WindowKey>("1m");
+  const [lev, setLev] = useState<Lev>(1);
+  const [err, setErr] = useState("");
   const [live, setLive] = useState<LiveBook | null>(null);
 
   useEffect(() => {
     let stop = false;
     fetch("/api/backtest", { cache: "no-store" })
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error(`backtest ${r.status}`);
+        return r.json();
+      })
       .then((j) => {
         if (stop) return;
         const pack = j?.windows as Record<string, unknown> | undefined;
@@ -87,10 +93,11 @@ export function BacktestBrochure() {
         }
         if (next["1m"] || next["3m"] || next["6m"]) setWindows(next);
         else if (j?.ready && j?.curve) setWindows({ "1m": { 1: j }, "3m": { 1: j }, "6m": { 1: j } });
+        else setErr("No replay in this deploy.");
         if (j?.live?.on) setLive(j.live);
       })
       .catch(() => {
-        if (!stop) setWindows({});
+        if (!stop) setErr("Could not load the replay.");
       });
     return () => {
       stop = true;
@@ -98,10 +105,10 @@ export function BacktestBrochure() {
   }, []);
 
   const pack = windows[win] || windows["1m"] || {};
-  const data = pack[1] || null;
+  const data = pack[lev] || pack[1] || null;
   const ready = Boolean(data?.ready && data.curve?.length);
   const up = (data?.pnlPct || 0) >= 0;
-  const pct = ready ? `${up ? "+" : ""}${((data?.pnlPct || 0) * 100).toFixed(1)}%` : "…";
+  const pct = ready ? `${up ? "+" : ""}${((data?.pnlPct || 0) * 100).toFixed(1)}%` : err ? "—" : "…";
 
   return (
     <section id="backtest" className="px-4 py-10 md:px-12 md:py-16">
@@ -131,13 +138,26 @@ export function BacktestBrochure() {
                 </button>
               ))}
             </div>
+            <div className="mb-2 flex flex-wrap gap-2 lg:justify-end">
+              {([1, 2, 3] as const).map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => setLev(n)}
+                  disabled={!pack[n]?.ready}
+                  className={`rounded-full px-3 py-1 font-mono text-[11px] ${lev === n ? "btn-on" : "btn-ghost"} disabled:opacity-40`}
+                >
+                  {n === 1 ? "Spot 1×" : `SOL ${n}×`}
+                </button>
+              ))}
+            </div>
             <div className={`font-display text-5xl sm:text-7xl ${ready ? (up ? "text-acid" : "text-blood") : "text-mute"}`}>
               {pct}
             </div>
             <div className="mt-1 font-mono text-xs text-mute">
               {ready
                 ? `${money(data?.startingUsd || 1000)} → ${money(data?.endingUsd || 0)} USDC · ${when(data?.from)}–${when(data?.to)}`
-                : "Loading the last engine replay…"}
+                : err || "Loading the last engine replay…"}
             </div>
           </div>
         </div>
@@ -147,7 +167,7 @@ export function BacktestBrochure() {
             <EquityCurve curve={data.curve} up={up} />
           ) : (
             <div className="flex h-40 items-center justify-center rounded-2xl bg-void/50 font-mono text-[11px] text-mute sm:h-48">
-              Loading the last engine replay…
+              {err || "Loading the last engine replay…"}
             </div>
           )}
         </div>

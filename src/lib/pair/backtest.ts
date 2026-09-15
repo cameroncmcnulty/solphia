@@ -85,9 +85,19 @@ function usableStored(stored?: BacktestReport | null): stored is BacktestReport 
   return Boolean(stored && Array.isArray(stored.curve) && stored.curve.length > 8 && typeof stored.pnlPct === "number");
 }
 
-/** Stored admin run wins only if it is a full curve. Otherwise the shipped seed for that leverage. */
+/** Redis only wins when it is a full curve AND newer than the seed in this deploy. */
+export function pickReport(stored: BacktestReport | null | undefined, seed: BacktestReport): BacktestReport {
+  const seedN = normalizeBacktest(seed);
+  if (!usableStored(stored)) return seedN;
+  const storedN = normalizeBacktest(stored);
+  const storedAt = Number(storedN.ranAt) || 0;
+  const seedAt = Number(seedN.ranAt) || 0;
+  return storedAt > seedAt ? storedN : seedN;
+}
+
+/** Stored admin run wins only if it is newer than the shipped seed for that leverage. */
 export function latestBacktest(stored?: BacktestReport | null, lev: Lev = 1): BacktestReport {
-  const report = normalizeBacktest(usableStored(stored) ? stored : seedFor(lev));
+  const report = pickReport(stored, seedFor(lev));
   if (!report.leverage) report.leverage = lev;
   return report;
 }
@@ -392,6 +402,7 @@ export function publicBacktest(report: BacktestReport | null | undefined) {
     leverage: report.leverage || 1,
     liquidations: report.liquidations || 0,
     window: report.window,
+    ranAt: report.ranAt,
     curve: report.curve,
     note: report.note,
   };
@@ -414,7 +425,7 @@ function seedForHorizon(window: BacktestWindow, lev: Lev): BacktestReport {
 }
 
 export function latestHorizon(window: BacktestWindow, lev: Lev = 1, stored?: BacktestReport | null): BacktestReport {
-  const report = normalizeBacktest(usableStored(stored) ? stored : seedForHorizon(window, lev));
+  const report = pickReport(stored, seedForHorizon(window, lev));
   report.window = window;
   report.leverage = clampLev(lev);
   return report;

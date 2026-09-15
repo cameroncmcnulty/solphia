@@ -25,7 +25,7 @@ export function EquityCurve({
   const stroke = up === false ? "#ff4d7a" : "#14F195";
   const fill = up === false ? "url(#eqBlood)" : "url(#eqAcid)";
   return (
-    <svg viewBox={`0 0 ${w} ${h}`} className="h-auto min-h-[140px] w-full sm:min-h-[180px]" role="img" aria-label="Paper equity curve">
+    <svg viewBox={`0 0 ${w} ${h}`} className="h-auto min-h-[140px] w-full sm:min-h-[180px]" role="img" aria-label="Engine equity curve">
       <defs>
         <linearGradient id="eqAcid" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor="#14F195" stopOpacity="0.35" />

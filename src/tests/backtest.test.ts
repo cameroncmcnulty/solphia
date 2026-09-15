@@ -106,11 +106,25 @@ describe("backtest replay", () => {
     }
   });
 
-  it("serves a stored 2x report instead of the 1x seed", () => {
+  it("ignores a stale Redis report older than the shipped seed", () => {
+    const seed = latestBacktest(null, 1);
+    const stale = {
+      ...seed,
+      pnlPct: -0.99,
+      ranAt: (seed.ranAt || 1) - 10_000,
+      curve: Array.from({ length: 12 }, (_, i) => ({ t: i, equity: 900 })),
+    };
+    const got = latestBacktest(stale, 1);
+    assert.equal(got.pnlPct, seed.pnlPct);
+  });
+
+  it("serves a stored 2x report when it is newer than the seed", () => {
+    const seed = latestBacktest(null, 2);
     const stored = {
-      ...latestBacktest(null)!,
+      ...seed,
       leverage: 2 as const,
       pnlPct: 0.12,
+      ranAt: (seed.ranAt || 0) + 10_000,
       curve: Array.from({ length: 12 }, (_, i) => ({ t: i, equity: 1000 + i })),
     };
     const got = latestBacktest(stored, 2);
@@ -120,6 +134,16 @@ describe("backtest replay", () => {
     const pub = publicBacktest(got);
     assert.equal(pub.ready, true);
     if (pub.ready) assert.equal(pub.leverage, 2);
+  });
+
+  it("public pack matches the seeded 1x mark so the homepage cannot show an old loss", () => {
+    const pack = publicBacktestPack();
+    const one = pack.windows["1m"][1];
+    assert.equal(one.ready, true);
+    if (one.ready) {
+      assert.ok((one.pnlPct || 0) > 0.05, "1 month 1x seed must stay green after a push");
+      assert.ok((one.curve?.length || 0) > 8);
+    }
   });
 });
 

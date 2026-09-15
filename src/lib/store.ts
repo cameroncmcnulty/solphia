@@ -19,6 +19,7 @@ import {
 } from "./persist";
 import type { AppState, AuditEvent, BacktestReport, PairHoldings, TraderAccount } from "./types";
 import { pruneBookLogs } from "./pair/bookLog";
+import { latestBacktest } from "./pair/backtest";
 import { emptyCircle, ensureCircle, mergeCircle } from "./circle/engine";
 import { emptyShill, ensureShill, mergeShill, slimShill } from "./shill/engine";
 import { emptyMail, ensureMail } from "./email/desk";
@@ -375,9 +376,9 @@ async function persistBacktests(next: AppState) {
 async function overlayBacktests(state: AppState) {
   const rows = await kvMGetJson([KEYS.backtest(1), KEYS.backtest(2), KEYS.backtest(3)]);
   const [b1, b2, b3] = rows;
-  if (b1 && typeof b1 === "object") state.backtest = b1 as AppState["backtest"];
-  if (b2 && typeof b2 === "object") state.backtestLev2 = b2 as AppState["backtestLev2"];
-  if (b3 && typeof b3 === "object") state.backtestLev3 = b3 as AppState["backtestLev3"];
+  state.backtest = latestBacktest(b1 && typeof b1 === "object" ? (b1 as AppState["backtest"]) : null, 1);
+  state.backtestLev2 = latestBacktest(b2 && typeof b2 === "object" ? (b2 as AppState["backtestLev2"]) : null, 2);
+  state.backtestLev3 = latestBacktest(b3 && typeof b3 === "object" ? (b3 as AppState["backtestLev3"]) : null, 3);
 }
 
 async function persistShards(next: AppState, owners: string[]) {
