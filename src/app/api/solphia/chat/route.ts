@@ -55,7 +55,7 @@ function localVoice(message: string, context: string): string {
     return "I will never take your keys. Connect Phantom. You sign. I watch.";
   }
   if (m.includes("fee")) {
-    return "I take 0.1% on each clip, plus 0.1 SOL a month for live spot or 0.15 SOL for optional SOL 2×/3×. The paper book already subtracts those costs so the PnL is not a fairy tale.";
+    return "Live is 0.1 SOL a month for spot or 0.15 SOL for optional SOL 2×/3×. Backtests show the mark with fees in.";
   }
   if (m.includes("score") || m.includes("risk")) {
     return "I skip a coin if they can freeze you, print extra tokens, yank liquidity, or if snipers already own it. Telegram links are a P(grad) feature, not a buy signal. Unique buyers and a clean creator do more work than mention counts.";
@@ -63,5 +63,5 @@ function localVoice(message: string, context: string): string {
   if (m.includes("grad") || m.includes("launch")) {
     return "Launch is not a sniper. I estimate P(grad) from curve fill, SOL per unique buyer, bot-share, creator history, and whether a social link is actually there. Under the bar, she stays off.";
   }
-  return `Demo book: ${context}. Connect Phantom, add SOL, watch me trade S&P 500, Nasdaq, and gold. Practice first. Hit KILL to stop.`;
+  return `Connect Phantom, add SOL, watch me trade S&P 500, Nasdaq, and gold. Backtests first. Live when you are ready. Hit KILL to stop.`;
 }

@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
     const r = await fetch(target.toString(), {
       cache: "force-cache",
       headers: { accept: "image/*,*/*;q=0.8", "user-agent": "Solphia/1.0 (+https://solphia.io)" },
-      signal: AbortSignal.timeout(7000),
+      signal: AbortSignal.timeout(12_000),
       redirect: "follow",
     });
     if (!r.ok) return NextResponse.json({ error: "fetch_failed" }, { status: 502 });

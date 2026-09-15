@@ -238,7 +238,7 @@ export function UsersSection() {
               </button>
             </div>
             <div className="border-t border-line pt-3">
-              <p className="text-sm text-mute">Delete removes the account, paper book, and 24/7 key. Coins they launched stay on the tape.</p>
+              <p className="text-sm text-mute">Delete removes the account, trading book, and 24/7 key. Coins they launched stay on the tape.</p>
               <input
                 value={confirmDel}
                 onChange={(e) => setConfirmDel(e.target.value)}

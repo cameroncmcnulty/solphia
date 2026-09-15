@@ -9,8 +9,8 @@ export function Tokenomics({ compact = false }: { compact?: boolean }) {
     <div className={compact ? "" : "rounded-3xl border border-violet/20 bg-void/40 p-5 sm:p-7"}>
       <div className="font-mono text-[10px] tracking-[0.22em] text-acid">TOKENOMICS · 100,000,000 $SPHA</div>
       <p className="mt-2 max-w-2xl text-sm text-mute sm:text-base">
-        At launch the mint fills four wallets. Mint and freeze are then revoked. The community-market share is the
-        tradeable float.
+        At launch the mint fills four wallets. Mint and freeze are then revoked. The public-market share is the
+        tradeable float released into circulation.
       </p>
       <div className="mt-5 flex h-4 overflow-hidden rounded-full">
         {SPHA_SLICES.map((s) => (

@@ -22,6 +22,37 @@ export function emptyShill(): ShillBook {
   return { messages: [], pins: [], members: {}, typing: {} };
 }
 
+/** Union two books so a empty isolate cannot wipe Redis. Local wins on the same id. */
+export function mergeShill(local: ShillBook, remote: ShillBook): ShillBook {
+  const a = ensureShill(local);
+  const b = ensureShill(remote);
+  const msgs = new Map<string, ShillMessage>();
+  for (const m of b.messages) msgs.set(m.id, m);
+  for (const m of a.messages) msgs.set(m.id, m);
+  const pins = new Map<string, ShillPin>();
+  for (const p of b.pins) pins.set(p.id, p);
+  for (const p of a.pins) pins.set(p.id, p);
+  const members = { ...b.members, ...a.members };
+  const out: ShillBook = {
+    messages: [...msgs.values()].sort((x, y) => x.at - y.at),
+    pins: [...pins.values()].sort((x, y) => x.at - y.at),
+    members,
+    typing: {},
+  };
+  pruneShill(out);
+  return out;
+}
+
+export function slimShill(book?: ShillBook | null): ShillBook {
+  const b = ensureShill(book);
+  return {
+    messages: b.messages.slice(-120),
+    pins: b.pins.slice(-SHILL_PIN_SLOTS),
+    members: b.members,
+    typing: {},
+  };
+}
+
 export function ensureShill(book?: ShillBook | null): ShillBook {
   const b = book || emptyShill();
   if (!b.messages) b.messages = [];

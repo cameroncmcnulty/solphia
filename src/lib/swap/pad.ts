@@ -40,7 +40,7 @@ export async function quotePadSwap(opts: {
   const slip = opts.slippageBps || 100;
   if (opts.side === "buy") {
     const { feeSol, swapSol } = opts.skipFee ? { feeSol: 0, swapSol: opts.amount } : splitPadSpend(opts.amount);
-    if (swapSol < 0.005) return { ok: false, reason: "Amount is too small after the 1% protocol fee." };
+    if (swapSol < 0.005) return { ok: false, reason: "Amount is too small after the protocol fee." };
     const q = await quoteOpenSwap({
       inputMint: SOL_MINT,
       outputMint: opts.mint,

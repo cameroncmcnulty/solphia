@@ -1,4 +1,4 @@
-import { DEFAULT_AUTO, lockedAuto, bankrollUsd, maybeResizeBook } from "./auto";
+import { DEFAULT_AUTO, lockedAuto, bankrollUsd, maybeResizeBook, emptyBook } from "./auto";
 import { liveTradingEnabled } from "./liveFlag";
 import { publicMind } from "./mind/engine";
 import { tickPairBook } from "./pair/paper";
@@ -107,7 +107,7 @@ export function ensurePaperLoop() {
 }
 
 export async function runMarketTick(): Promise<{
-  paper: ReturnType<typeof publicBook>;
+  paper: ReturnType<typeof publicBook> | null;
   health: FeedHealth[];
   solUsd: number;
   spyxUsd: number;
@@ -159,7 +159,7 @@ export async function runMarketTick(): Promise<{
       state.lastTickAt = now;
       await saveOps(state);
       return {
-        paper: publicBook(state.paper),
+        paper: null,
         health,
         solUsd: 0,
         spyxUsd: 0,
@@ -223,22 +223,8 @@ export async function runMarketTick(): Promise<{
       });
     }
 
-    const demoAuto = { ...DEFAULT_AUTO, armed: true, mode: "paper" as const };
-    const demo = tickPairBook({
-      book: state.paper,
-      auto: demoAuto,
-      prices,
-      samples,
-      study: history.study,
-      now,
-      mind: state.mind,
-      impactPct,
-      shortTape,
-      frames,
-    });
-
-    let entries = demo.fills.filter((f) => f.side === "buy").length;
-    let exits = demo.fills.filter((f) => f.side === "sell").length;
+    let entries = 0;
+    let exits = 0;
     let liveFills = 0;
 
     const hot = await loadHotTraders(state);
@@ -248,25 +234,28 @@ export async function runMarketTick(): Promise<{
       /* trading still runs */
     }
     for (const trader of hot) {
-      // Armed paper books keep clipping even if the owner closed the browser.
       const owner = trader.owner;
       const seatOk = !treasuryAddress() || liveSeatOk(state, owner);
-      const liveWanted = trader.auto?.mode === "live" && liveTradingEnabled() && seatOk;
+      const liveOn = liveTradingEnabled() && seatOk;
       trader.auto = lockedAuto({
         ...trader.auto,
-        mode: liveWanted ? "live" : "paper",
-        armed: !trader.book.killed,
+        mode: "live",
+        armed: !trader.book.killed && liveOn,
         tradingPubkey: trader.auto?.tradingPubkey,
         liveDelegate: trader.auto?.liveDelegate,
         armedAt: trader.auto?.armedAt,
         leverage: leverageUnlocked({
-          mode: liveWanted ? "live" : "paper",
+          mode: "live",
           levSeat: levSeatOk(state, owner),
         })
           ? trader.auto?.leverage
           : 1,
       });
-      if (trader.auto.mode === "live" && (!liveTradingEnabled() || !seatOk)) trader.auto.mode = "paper";
+      if (!liveOn) {
+        trader.updatedAt = now;
+        await saveTrader(trader);
+        continue;
+      }
       const target = bankrollUsd(trader.depositedSol, prices.sol.usd);
       trader.book = maybeResizeBook(trader.book, target);
       if (!trader.book.pair) {
@@ -280,7 +269,7 @@ export async function runMarketTick(): Promise<{
       const live = trader.auto.mode === "live" && Boolean(trader.auto.armed);
       const t = tickPairBook({
         book: trader.book,
-        auto: { ...trader.auto, armed: true, mode: live ? "live" : "paper" },
+        auto: { ...trader.auto, armed: true, mode: "live" },
         prices,
         samples,
         study: history.study,
@@ -310,7 +299,20 @@ export async function runMarketTick(): Promise<{
 
     state.feedHealth = health;
     state.lastTickAt = now;
-    lastPairPublic = publicPair(state.paper, prices, demo.decision, history.study);
+    const idle = emptyBook();
+    const probe = tickPairBook({
+      book: idle,
+      auto: { ...DEFAULT_AUTO, armed: false, mode: "live" },
+      prices,
+      samples,
+      study: history.study,
+      now,
+      mind: state.mind,
+      impactPct,
+      shortTape,
+      frames,
+    });
+    lastPairPublic = publicPair(idle, prices, probe.decision, history.study);
     lastPrices = {
       solUsd: prices.sol.usd,
       spyxUsd: prices.spyx.usd,
@@ -334,7 +336,7 @@ export async function runMarketTick(): Promise<{
     await saveOps(state);
 
     return {
-      paper: publicBook(state.paper),
+      paper: null,
       health,
       solUsd: prices.sol.usd,
       spyxUsd: prices.spyx.usd,

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { clientIp, rateLimit } from "@/lib/security";
 import { loadState, readyState } from "@/lib/store";
-import { runMarketTick, publicBook, lastPairDesk, lastPairPrices } from "@/lib/tick";
+import { runMarketTick, lastPairDesk, lastPairPrices } from "@/lib/tick";
 import { publicMind } from "@/lib/mind/engine";
 import { liveTradingEnabled } from "@/lib/liveFlag";
 import { treasuryAddress } from "@/lib/treasury";
@@ -46,7 +46,7 @@ export async function GET(req: NextRequest) {
   const cached = lastPairDesk() || state.lastPair || null;
   const px = lastPairPrices();
   return NextResponse.json({
-    paper: publicBook(state.paper),
+    paper: null,
     health: state.feedHealth,
     mind: publicMind(state.mind),
     lastTickAt: state.lastTickAt,

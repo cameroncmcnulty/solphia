@@ -23,6 +23,37 @@ export function emptyCircle(): CircleBook {
   return { cap: CIRCLE_DEFAULT_CAP, members: {}, messages: [], airdrops: [], typing: {}, promos: [] };
 }
 
+export function mergeCircle(local: CircleBook, remote: CircleBook): CircleBook {
+  const a = ensureCircle(local);
+  const b = ensureCircle(remote);
+  const members = { ...b.members, ...a.members };
+  for (const pk of Object.keys(members)) {
+    const x = a.members[pk];
+    const y = b.members[pk];
+    if (x && y) {
+      members[pk] = {
+        ...y,
+        ...x,
+        invitedPubkey: x.invitedPubkey || y.invitedPubkey,
+        access: x.access === "ready" || y.access === "ready" ? "ready" : x.access || y.access,
+        unclaimed: Math.max(x.unclaimed || 0, y.unclaimed || 0),
+        claimed: Math.max(x.claimed || 0, y.claimed || 0),
+      };
+    }
+  }
+  const promo = new Map((b.promos || []).map((p) => [p.id, p]));
+  for (const p of a.promos || []) promo.set(p.id, p);
+  const out: CircleBook = {
+    cap: Math.max(a.cap || 0, b.cap || 0) || CIRCLE_DEFAULT_CAP,
+    members,
+    messages: a.messages.length >= b.messages.length ? a.messages : b.messages,
+    airdrops: a.airdrops.length >= b.airdrops.length ? a.airdrops : b.airdrops,
+    typing: {},
+    promos: [...promo.values()].sort((x, y) => x.at - y.at).slice(-CIRCLE_PROMO_MAX),
+  };
+  return ensureCircle(out);
+}
+
 export function ensureCircle(book?: CircleBook | null): CircleBook {
   const b = book || emptyCircle();
   if (!b.members) b.members = {};

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { emptyShill, extractCas, pinToken, postShill, pruneShill } from "../lib/shill/engine";
+import { emptyShill, extractCas, mergeShill, pinToken, postShill, pruneShill } from "../lib/shill/engine";
 import { SHILL_CA_COOLDOWN_MS, SHILL_PIN_MS, SHILL_PIN_SOL, SHILL_PIN_SLOTS } from "../lib/shill/types";
 
 const A = "CyaE1VxvBrahnPWkqm5VsdCvyS2QmNht2UFrKJHga54o";
@@ -18,6 +18,19 @@ describe("shill zone", () => {
     if (!b.ok) assert.equal(b.error, "ca_cooldown");
     const c = postShill(book, { owner: A, text: `later ${CA}`, now: 1 + SHILL_CA_COOLDOWN_MS + 1 });
     assert.equal(c.ok, true);
+  });
+
+  it("merges two books so an empty isolate cannot wipe chat", () => {
+    const live = emptyShill();
+    const stale = emptyShill();
+    const now = Date.now();
+    postShill(live, { owner: A, text: "keep me", now });
+    const wiped = mergeShill(emptyShill(), live);
+    assert.equal(wiped.messages.length, 1);
+    assert.equal(wiped.messages[0].text, "keep me");
+    postShill(stale, { owner: B, text: "older", now: now - 1000 });
+    const both = mergeShill(live, stale);
+    assert.equal(both.messages.length, 2);
   });
 
   it("pins five tokens for 3h then reports the next free slot", () => {

@@ -96,7 +96,7 @@ export default function PricingPage() {
     <main className="pb-24">
       <div className="mx-auto max-w-6xl px-4 pt-6 md:px-8 md:pt-10">
         <p className="text-base text-acid">Pricing</p>
-        <h1 className="mt-2 font-display text-4xl leading-tight text-ghost sm:text-6xl">Paper is free. Live is 0.1. SOL 2×/3× is 0.15.</h1>
+        <h1 className="mt-2 font-display text-4xl leading-tight text-ghost sm:text-6xl">Backtests are free. Live is 0.1. SOL 2×/3× is 0.15.</h1>
         <p className="mt-4 max-w-xl text-lg text-mute">
           Spot live 0.1 SOL / 30d. Optional SOL-PERP 2× or 3× is 0.15 SOL / 30d (Jupiter Perps fees, liquidation).
           Plus 0.1% per clip.

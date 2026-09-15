@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireAdmin } from "@/lib/admin/auth";
 import { clientIp, isSolanaAddress } from "@/lib/security";
 import { audit, mutateState, pushBounded, withCircle } from "@/lib/store";
+import { displayMedia } from "@/lib/pinata";
 import {
   activeMembers,
   addPromo,
@@ -57,7 +58,7 @@ export async function GET(req: NextRequest) {
     members,
     messages: book.messages.slice(-80),
     airdrops: book.airdrops.slice(-20).reverse(),
-    promos: book.promos || [],
+    promos: (book.promos || []).map((p) => ({ ...p, url: displayMedia(p.url) })),
   });
 }
 

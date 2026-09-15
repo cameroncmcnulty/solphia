@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
     ok: true,
     entries: tick.entries,
     exits: tick.exits,
-    equity: tick.paper.equityUsd,
+    equity: tick.paper?.equityUsd ?? 0,
     promos,
     lastTickAt: Date.now(),
     liveTrading: tick.liveTrading,

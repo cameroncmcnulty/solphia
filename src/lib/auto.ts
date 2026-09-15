@@ -19,11 +19,11 @@ export const DEFAULT_AUTO: AutoSettings = {
   leverage: SPOT_LEVERAGE,
 };
 
-/** Production settings: live unless explicitly paper. Everything else is the better default. */
+/** Production settings: live only. Backtests are separate. */
 export function lockedAuto(partial?: Partial<AutoSettings>): AutoSettings {
   return {
     ...DEFAULT_AUTO,
-    mode: partial?.mode === "paper" ? "paper" : "live",
+    mode: "live",
     armed: partial?.armed !== false,
     armedAt: partial?.armedAt,
     tradingPubkey: partial?.tradingPubkey,

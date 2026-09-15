@@ -32,7 +32,7 @@ describe("scale store", () => {
     delete s.hotAt[live];
     const still = hotOwners(s, now + 8 * 60 * 60_000);
     assert.ok(still.includes(live), "live 24/7 books tick after the hub goes cold");
-    assert.ok(hot.includes(cold), "closed-tab paper books still get ticks");
+    assert.ok(hot.includes(cold), "closed-tab live books still get ticks");
     assert.ok(!hot.includes(dead), "killed books stay off");
     assert.ok(hot.length <= MAX_TICK_TRADERS);
     assert.equal(KEYS.trader("abc").startsWith("solphia:trader:"), true);

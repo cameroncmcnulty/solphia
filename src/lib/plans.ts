@@ -17,9 +17,9 @@ export const PLANS: Plan[] = [
     id: "live",
     name: "Live",
     sol: 0.1,
-    tagline: "Paper is free. Live is 0.1 SOL / 30 days.",
+    tagline: "Backtests are free. Live is 0.1 SOL / 30 days.",
     story: "Connect, agree, pay 0.1 SOL. Spot SOL, S&P, Nasdaq, gold.",
-    points: ["Paper included", "KILL always on", "Spot only", "Cancel anytime"],
+    points: ["Backtests included", "KILL always on", "Spot only", "Cancel anytime"],
     includes: ["live"],
     icon: "/icons/plan-paper.jpg",
   },
@@ -45,20 +45,20 @@ export function lamportsForPlan(id: PlanId): number {
   return Math.round((p?.sol || 0.1) * 1_000_000_000);
 }
 
-export const COMPARE_ROWS: { label: string; hint?: string; values: [string, string, string] }[] = [
-  { label: "Paper book", values: ["Yes", "Yes", "Yes"] },
-  { label: "Kill switch", values: ["Yes", "Yes", "Yes"] },
-  { label: "SOL vs S&P, Nasdaq, gold", values: ["Paper", "Live", "Live"] },
-  { label: "SOL leverage", values: ["1× paper", "Spot 1×", "Optional 2× / 3×"] },
-  { label: "Keys with us", values: ["Never", "Never", "Never"] },
-  { label: "30 days", values: ["Free", "0.1 SOL", "0.15 SOL"] },
-  { label: "Auto-renew", values: ["—", "Until you unsubscribe", "Until you unsubscribe"] },
+export const COMPARE_ROWS: { label: string; hint?: string; values: [string, string] }[] = [
+  { label: "Backtests", values: ["Yes", "Yes"] },
+  { label: "Kill switch", values: ["Yes", "Yes"] },
+  { label: "SOL vs S&P, Nasdaq, gold", values: ["Live", "Live"] },
+  { label: "SOL leverage", values: ["Spot 1×", "Optional 2× / 3×"] },
+  { label: "Keys with us", values: ["Never", "Never"] },
+  { label: "30 days", values: ["0.1 SOL", "0.15 SOL"] },
+  { label: "Auto-renew", values: ["Until you unsubscribe", "Until you unsubscribe"] },
 ];
 
 export const FAQS: { q: string; a: string }[] = [
   {
     q: "Does she spend my SOL?",
-    a: "Connect once and add SOL to the trading wallet on this device. After that she signs from that wallet. Keys never leave the device. Practice is on until you flip to live.",
+    a: "Connect once and add SOL to the trading wallet on this device. After that she signs from that wallet. Keys never leave the device. Backtests are free until you go live.",
   },
   {
     q: "Where does the SOL I add sit?",
@@ -90,6 +90,6 @@ export const FAQS: { q: string; a: string }[] = [
   },
   {
     q: "How do I pay?",
-    a: "Paper is free. Live is 0.1 SOL / 30 days. SOL 2×/3× is 0.15 SOL / 30 days. First pay from your wallet. Later months renew from the trading wallet while this site is open.",
+    a: "Live is 0.1 SOL / 30 days. SOL 2×/3× is 0.15 SOL / 30 days. First pay from your wallet. Later months renew from the trading wallet while this site is open.",
   },
 ];

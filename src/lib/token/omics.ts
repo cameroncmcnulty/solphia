@@ -40,10 +40,10 @@ export const SPHA_SLICES: SphaSlice[] = [
   },
   {
     id: "lp",
-    label: "Community market",
+    label: "Public market",
     pct: "77.1%",
     bps: 7710,
-    note: "Tradeable float. Lands in the community-market wallet so the public can buy and sell through Solphia’s 1% router.",
+    note: "Tradeable float released into circulation. Lands in the public-market wallet so anyone can buy and sell.",
   },
 ];
 

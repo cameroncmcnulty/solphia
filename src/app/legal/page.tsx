@@ -17,7 +17,7 @@ export default function LegalPage() {
         </p>
         <h2 className="pt-4 font-display text-2xl text-ghost">Live seat</h2>
         <p>
-          Paper is free. Live is 0.1 SOL / 30 days. SOL 2×/3× is 0.15 SOL / 30 days. Leverage can liquidate. By checking
+          Live is 0.1 SOL / 30 days. SOL 2×/3× is 0.15 SOL / 30 days. Leverage can liquidate. By checking
           “I agree” you authorize the transfer.
         </p>
         <p>

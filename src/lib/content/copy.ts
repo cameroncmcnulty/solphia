@@ -110,7 +110,7 @@ const BEATS = [
   "When SOL looks expensive vs a market she sells SOL for that token. When it looks cheap she buys SOL back.",
   "She skips crash knives, weekend fake prints, and any clip fees would eat.",
   "PnL stays in USDC. Kill switch always on.",
-  "Live is 0.1 SOL / 30 days. SOL 2×/3× is 0.15. 1% of each in-house swap goes to the treasury.",
+  "Live is 0.1 SOL / 30 days. SOL 2×/3× is 0.15.",
   "These tokens are not the New York print after 16:00 ET. You can lose SOL.",
   "No memecoins, no copy list, no sniper. Ten pairs among five official sleeves.",
   "Connect and add SOL once. The trading wallet on your device signs. Phantom is not asked again until you withdraw.",

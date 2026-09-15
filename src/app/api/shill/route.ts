@@ -4,6 +4,7 @@ import { z } from "zod";
 import { clientIp, isSolanaAddress, rateLimit, sanitizeText } from "@/lib/security";
 import { withShill } from "@/lib/store";
 import { treasuryAddress } from "@/lib/treasury";
+import { displayMedia } from "@/lib/pinata";
 import { confirmedSolTransfer } from "@/lib/solana/connection";
 import { lookupMarketMint } from "@/lib/launch/market";
 import {
@@ -65,14 +66,18 @@ export async function GET(req: NextRequest) {
   const typing = [...typingMem.entries()]
     .filter(([pk, until]) => pk !== pubkey && until > now)
     .map(([pk]) => pk);
-  const messages = book.messages.filter((m) => m.at > since).slice(-120);
+  const messages = book.messages.filter((m) => m.at > since).slice(-120).map((m) => ({
+    ...m,
+    media: m.media ? displayMedia(m.media) : m.media,
+    token: m.token ? { ...m.token, image: displayMedia(m.token.image) } : m.token,
+  }));
   const people = [...new Set(messages.map((m) => m.owner).concat(typing, pubkey ? [pubkey] : []))];
   const profiles: Record<string, { username: string; hasPfp: boolean }> = {};
   for (const pk of people) {
     const acc = s.launch?.accounts?.[pk];
     profiles[pk] = { username: acc?.username || "", hasPfp: Boolean(acc?.pfp) };
   }
-  const pins = livePins(book, now);
+  const pins = livePins(book, now).map((p) => ({ ...p, image: displayMedia(p.image) }));
   return NextResponse.json({
     members: Object.keys(book.members).length,
     messages,

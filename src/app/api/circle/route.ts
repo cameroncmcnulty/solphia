@@ -5,6 +5,7 @@ import { mutateState, readyState, withCircle } from "@/lib/store";
 import { pinDataUrl } from "@/lib/pinata";
 import { sphaMintOf } from "@/lib/token/solphia";
 import { SITE_URL } from "@/lib/config";
+import { displayMedia } from "@/lib/pinata";
 import { treasuryAddress } from "@/lib/treasury";
 import {
   activeMembers,
@@ -88,7 +89,7 @@ export async function GET(req: NextRequest) {
     mint: sphaMintOf(s.sphaMint),
     official,
     link: pubkey ? inviteUrl(SITE_URL, pubkey) : "",
-    promos: ready ? (book.promos || []) : [],
+    promos: ready ? (book.promos || []).map((p) => ({ ...p, url: displayMedia(p.url) })) : [],
   };
   if (!me || banned) {
     return NextResponse.json({ ...base, member: null, banned: Boolean(banned), ready: false });

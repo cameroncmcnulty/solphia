@@ -7,6 +7,16 @@ const PIN_URL = "https://api.pinata.cloud/pinning/pinFileToIPFS";
 const USAGE_URL = "https://api.pinata.cloud/data/userPinnedDataTotal";
 const GATEWAY = (process.env.PINATA_GATEWAY || "https://gateway.pinata.cloud/ipfs").replace(/\/$/, "");
 
+/** Same-origin proxy so Pinata/IPFS images actually render in the app. */
+export function displayMedia(url?: string | null): string {
+  const raw = (url || "").trim();
+  if (!raw) return "";
+  if (raw.startsWith("data:image/")) return raw;
+  if (raw.startsWith("/api/media")) return raw;
+  if (!/^https?:\/\//i.test(raw)) return raw;
+  return `/api/media?u=${encodeURIComponent(raw)}`;
+}
+
 export function pinataConfigured(): boolean {
   const jwt = (process.env.PINATA_JWT || "").trim();
   const key = (process.env.PINATA_API_KEY || "").trim();
@@ -79,7 +89,8 @@ export async function pinBytes(
     });
     const j = (await r.json().catch(() => ({}))) as { IpfsHash?: string };
     if (!r.ok || !j.IpfsHash) return null;
-    return { cid: j.IpfsHash, url: `${GATEWAY}/${j.IpfsHash}` };
+    const cid = j.IpfsHash;
+    return { cid, url: displayMedia(`${GATEWAY}/${cid}`) };
   } catch {
     return null;
   }

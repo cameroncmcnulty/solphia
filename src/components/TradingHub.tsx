@@ -82,8 +82,7 @@ export function TradingHub() {
   const [restore, setRestore] = useState("");
   const fundErr = useConfirmErrors<"wallet" | "amount" | "restore">();
 
-  const demoPaper = data?.paper;
-  const book = paper || demoPaper;
+  const book = paper;
   const pair = data?.pair;
   const armed = Boolean(auto?.armed);
 
@@ -464,8 +463,7 @@ export function TradingHub() {
           <h3 className="font-display text-2xl text-ghost">0.5% clips. 40% of a sleeve.</h3>
           <p className="text-sm leading-relaxed text-mute">
             She keeps PnL in USDC and scalps tokenized S&P, Nasdaq, and gold. SOL stays in the trading wallet for
-            gas and fees — it is not a sleeve. 1% of each in-house swap goes to the treasury. An 8% drawdown flattens
-            to USDC and pauses.
+            gas and fees — it is not a sleeve. A 12% drawdown flattens to USDC and pauses.
           </p>
           <div className="grid grid-cols-3 gap-2">
             <Mini k="S&P 500" v={spyxUsd ? `$${Number(spyxUsd).toFixed(0)}` : "—"} />

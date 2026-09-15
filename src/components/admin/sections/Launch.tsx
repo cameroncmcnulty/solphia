@@ -44,9 +44,9 @@ export function LaunchSection() {
         <div className="font-mono text-[10px] tracking-[0.3em] text-mute">SOLPHIA BONDING CURVE</div>
         <h2 className="mt-1 font-display text-2xl text-ghost">Same pad as the website</h2>
         <p className="mt-2 max-w-2xl text-sm text-mute">
-          Pump/Moonshot-style virtual AMM: 1B supply, 1% swap, 80% sold on the curve, 20% reserved for the community
+          Pump/Moonshot-style virtual AMM: 1B supply, 80% sold on the curve, 20% reserved for the public
           market at graduation. Image, ticker, blurb, and socials are required the same way on /launch. $SPHA itself
-          launches from Project with that same metadata, then the 77.1% community-market slice is the tradeable float.
+          launches from Project with that same metadata, then the 77.1% public-market slice is the tradeable float.
         </p>
         <div className="mt-4 flex flex-wrap gap-3">
           <a href="/launch" className="btn-acid rounded-full px-5 py-2 text-sm">

@@ -29,7 +29,7 @@ import {
 } from "@/lib/launch/validate";
 import { FieldError, FormAlert, fieldClass, useConfirmErrors } from "@/components/form/confirm";
 import { loadOwner, signAndSendPhantom } from "@/lib/wallet/trading";
-import { SWAP_FEE_BPS } from "@/lib/launch/curve";
+
 import { auditLaunchCoin, rankTape, scoreTape, type LaunchAudit } from "@/lib/launch/audit";
 import { BoostBuy, BoostRail, fmtLeft } from "@/components/BoostBuy";
 import type { BoostRank } from "@/lib/launch/boost";
@@ -1254,8 +1254,7 @@ function CoinDesk({
                     <FormAlert error={tradeErr.banner} />
                   </div>
                   <p className="mt-3 text-center font-mono text-[11px] text-mute">
-                    1% fee · 50% to the dev · protocol share: listings, buybacks, burns
-                    {solUsd ? ` · SOL $${solUsd.toFixed(0)}` : ""}
+                    {solUsd ? `SOL $${solUsd.toFixed(0)}` : "You sign. Tokens land in your wallet."}
                   </p>
                   {creator && (
                     <button
@@ -1392,8 +1391,7 @@ function MarketSwap({
         </button>
       </div>
       <p className="mt-3 text-sm text-mute">
-        You sign. Tokens land in that wallet — not the bot trading wallet. {SWAP_FEE_BPS / 100}% protocol fee on the route
-        funds listings, buybacks, and burns.
+        You sign. Tokens land in that wallet — not the bot trading wallet.
       </p>
       {!owner ? (
         <div className="mt-5">

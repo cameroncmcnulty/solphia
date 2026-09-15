@@ -21,7 +21,7 @@ describe("spha tokenomics", () => {
     assert.equal(byId.foundation, 970);
     assert.equal(byId.treasury, 460);
     assert.equal(byId.lp, 7710);
-    assert.equal(SPHA_SLICES.find((s) => s.id === "lp")?.label, "Community market");
+    assert.equal(SPHA_SLICES.find((s) => s.id === "lp")?.label, "Public market");
   });
 
   it("pays the airdrop wallet for the foundation slice when set", () => {

@@ -234,9 +234,9 @@ export function WalletsSection() {
         <div className="font-mono text-[10px] tracking-[0.28em] text-mute">PROTOCOL WALLETS</div>
         <h2 className="mt-1 font-display text-3xl text-ghost">Where SOL sits</h2>
         <p className="mt-1 max-w-2xl text-sm text-mute">
-          Treasury takes seats, 1% pad/$SPHA swap fees, and is the buyback SOL source. Dev holdings are team $SPHA.
-          Community market holds the 77.1% tradeable float. Foundation / airdrop fund Circle. Trading keys are bot-only
-          — never mix them with protocol SOL.
+          Treasury takes seats and is the buyback SOL source. Dev holdings are team $SPHA.
+          Public market holds the 77.1% tradeable float released into circulation. Foundation / airdrop fund Circle.
+          Trading keys are bot-only — never mix them with protocol SOL.
         </p>
       </div>
 
@@ -244,7 +244,7 @@ export function WalletsSection() {
         <WalletCard
           kicker="TREASURY · IN"
           title="Treasury"
-          blurb={`${data.seatSol} SOL spot seats, ${data.seatSolLev} SOL lev seats, 0.1% desk clips, and 1% pad/$SPHA swap fees land here. Buybacks spend from this wallet.`}
+          blurb={`${data.seatSol} SOL spot seats, ${data.seatSolLev} SOL lev seats, and desk clips land here. Buybacks spend from this wallet.`}
           pk={pack?.treasury.pk || data.treasury}
           sol={treasSol}
           solUsd={solUsd}
@@ -255,7 +255,7 @@ export function WalletsSection() {
         <WalletCard
           kicker="OWNER · OUT"
           title="Owner"
-          blurb="Pad owner cut (25% of the 1% curve fee) and treasury withdrawals pay here."
+          blurb="Pad owner cut and treasury withdrawals pay here."
           pk={pack?.owner.pk || data.ownerWallet}
           sol={pack?.owner.sol ?? 0}
           solUsd={solUsd}
@@ -280,9 +280,9 @@ export function WalletsSection() {
           )}
         </WalletCard>
         <WalletCard
-          kicker="COMMUNITY MARKET · 77.1%"
-          title="Community market"
-          blurb="Tradeable $SPHA float after launch. Not an AMM vault until listed — the tokens sit here so the public can buy through Solphia’s 1% router."
+          kicker="PUBLIC MARKET · 77.1%"
+          title="Public market"
+          blurb="Tradeable float released into circulation after launch. Tokens sit here so the public can buy and sell."
           pk={pack?.lp?.pk || data.lpWallet}
           sol={pack?.lp?.sol ?? 0}
           solUsd={solUsd}

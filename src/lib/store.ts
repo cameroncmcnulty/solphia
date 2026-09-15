@@ -19,8 +19,8 @@ import {
 } from "./persist";
 import type { AppState, AuditEvent, BacktestReport, PairHoldings, TraderAccount } from "./types";
 import { pruneBookLogs } from "./pair/bookLog";
-import { emptyCircle, ensureCircle } from "./circle/engine";
-import { emptyShill, ensureShill } from "./shill/engine";
+import { emptyCircle, ensureCircle, mergeCircle } from "./circle/engine";
+import { emptyShill, ensureShill, mergeShill, slimShill } from "./shill/engine";
 import { emptyMail, ensureMail } from "./email/desk";
 import type { CircleBook } from "./circle/types";
 import type { ShillBook } from "./shill/types";
@@ -195,8 +195,8 @@ function opsView(state: AppState): AppState {
     backtestLev3: null,
     launch: slimLaunch(state.launch || emptyLaunchBook()),
     circle: slimCircle(state.circle),
-    shill: undefined,
-    mail: undefined,
+    shill: slimShill(state.shill),
+    mail: state.mail,
   };
 }
 
@@ -221,7 +221,9 @@ async function overlayCircle(state: AppState) {
   if (!durableConfigured()) return;
   try {
     const raw = await kvGetJson(KEYS.circle);
-    if (raw && typeof raw === "object") state.circle = ensureCircle(raw as CircleBook);
+    if (raw && typeof raw === "object") {
+      state.circle = mergeCircle(ensureCircle(state.circle), raw as CircleBook);
+    }
   } catch {
     /* keep mem */
   }
@@ -229,14 +231,21 @@ async function overlayCircle(state: AppState) {
 
 async function persistCircle(state: AppState) {
   if (!durableConfigured()) return;
-  await kvSetJson(KEYS.circle, ensureCircle(state.circle));
+  const local = ensureCircle(state.circle);
+  const raw = await kvGetJson(KEYS.circle);
+  const remote = raw && typeof raw === "object" ? ensureCircle(raw as CircleBook) : null;
+  const merged = remote ? mergeCircle(local, remote) : local;
+  state.circle = merged;
+  await kvSetJson(KEYS.circle, merged);
 }
 
 async function overlayShill(state: AppState) {
   if (!durableConfigured()) return;
   try {
     const raw = await kvGetJson(KEYS.shill);
-    if (raw && typeof raw === "object") state.shill = ensureShill(raw as ShillBook);
+    if (raw && typeof raw === "object") {
+      state.shill = mergeShill(ensureShill(state.shill), raw as ShillBook);
+    }
   } catch {
     /* keep mem */
   }
@@ -244,7 +253,16 @@ async function overlayShill(state: AppState) {
 
 async function persistShill(state: AppState) {
   if (!durableConfigured()) return;
-  await kvSetJson(KEYS.shill, ensureShill(state.shill));
+  const local = ensureShill(state.shill);
+  const raw = await kvGetJson(KEYS.shill);
+  const remote = raw && typeof raw === "object" ? ensureShill(raw as ShillBook) : null;
+  if (remote && remote.messages.length && !local.messages.length) {
+    state.shill = remote;
+    return;
+  }
+  const merged = remote ? mergeShill(local, remote) : local;
+  state.shill = merged;
+  await kvSetJson(KEYS.shill, merged);
 }
 
 async function overlayMail(state: AppState) {
