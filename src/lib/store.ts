@@ -20,6 +20,11 @@ import {
 import type { AppState, AuditEvent, BacktestReport, PairHoldings, TraderAccount } from "./types";
 import { pruneBookLogs } from "./pair/bookLog";
 import { emptyCircle, ensureCircle } from "./circle/engine";
+import { emptyShill, ensureShill } from "./shill/engine";
+import { emptyMail, ensureMail } from "./email/desk";
+import type { CircleBook } from "./circle/types";
+import type { ShillBook } from "./shill/types";
+import type { MailBook } from "./email/desk";
 
 export const DATA_DIR = process.env.DATA_DIR || (process.env.VERCEL ? "/tmp/solphia" : path.join(process.cwd(), "data"));
 const FILE = path.join(DATA_DIR, "state.json");
@@ -73,6 +78,8 @@ export function emptyState(): AppState {
     sphaNetwork: "devnet",
     sphaLaunch: null,
     circle: emptyCircle(),
+    shill: emptyShill(),
+    mail: emptyMail(),
     sphaSocials: { x: "", telegram: "", discord: "", website: "" },
     publishLiveWallet: false,
     buybacks: [],
@@ -136,6 +143,8 @@ function hydrateFromRaw(raw: AppState): AppState {
     sphaNetwork: raw.sphaNetwork === "mainnet-beta" ? "mainnet-beta" : "devnet",
     sphaLaunch: raw.sphaLaunch || null,
     circle: ensureCircle(raw.circle),
+    shill: ensureShill(raw.shill),
+    mail: ensureMail(raw.mail),
     sphaSocials: {
       x: raw.sphaSocials?.x || "",
       telegram: raw.sphaSocials?.telegram || "",
@@ -172,6 +181,11 @@ function slimBacktest(report?: BacktestReport | null): BacktestReport | null {
   return { ...report, fills, curve };
 }
 
+function slimCircle(book?: CircleBook | null): CircleBook {
+  const c = ensureCircle(book);
+  return { ...c, messages: [], typing: {} };
+}
+
 function opsView(state: AppState): AppState {
   return {
     ...state,
@@ -180,6 +194,9 @@ function opsView(state: AppState): AppState {
     backtestLev2: null,
     backtestLev3: null,
     launch: slimLaunch(state.launch || emptyLaunchBook()),
+    circle: slimCircle(state.circle),
+    shill: undefined,
+    mail: undefined,
   };
 }
 
@@ -198,6 +215,51 @@ async function overlayLaunch(state: AppState) {
 async function persistLaunch(state: AppState) {
   if (!durableConfigured()) return;
   await kvSetJson(KEYS.launch, slimLaunch(state.launch || emptyLaunchBook()));
+}
+
+async function overlayCircle(state: AppState) {
+  if (!durableConfigured()) return;
+  try {
+    const raw = await kvGetJson(KEYS.circle);
+    if (raw && typeof raw === "object") state.circle = ensureCircle(raw as CircleBook);
+  } catch {
+    /* keep mem */
+  }
+}
+
+async function persistCircle(state: AppState) {
+  if (!durableConfigured()) return;
+  await kvSetJson(KEYS.circle, ensureCircle(state.circle));
+}
+
+async function overlayShill(state: AppState) {
+  if (!durableConfigured()) return;
+  try {
+    const raw = await kvGetJson(KEYS.shill);
+    if (raw && typeof raw === "object") state.shill = ensureShill(raw as ShillBook);
+  } catch {
+    /* keep mem */
+  }
+}
+
+async function persistShill(state: AppState) {
+  if (!durableConfigured()) return;
+  await kvSetJson(KEYS.shill, ensureShill(state.shill));
+}
+
+async function overlayMail(state: AppState) {
+  if (!durableConfigured()) return;
+  try {
+    const raw = await kvGetJson(KEYS.mail);
+    if (raw && typeof raw === "object") state.mail = ensureMail(raw as MailBook);
+  } catch {
+    /* keep mem */
+  }
+}
+
+async function persistMail(state: AppState) {
+  if (!durableConfigured()) return;
+  await kvSetJson(KEYS.mail, ensureMail(state.mail));
 }
 
 export function touchHot(state: AppState, owner: string, at = Date.now()) {
@@ -303,6 +365,9 @@ async function overlayBacktests(state: AppState) {
 async function persistShards(next: AppState, owners: string[]) {
   await persistBacktests(next);
   await persistLaunch(next);
+  await persistCircle(next);
+  await persistShill(next);
+  await persistMail(next);
   await kvSetJson(KEYS.ops, opsView(next));
   const uniq = [...new Set(owners.filter(Boolean))];
   await Promise.all(
@@ -343,6 +408,9 @@ export async function saveOps(next: AppState): Promise<void> {
       try {
         await persistBacktests(next);
         await persistLaunch(next);
+        await persistCircle(next);
+        await persistShill(next);
+        await persistMail(next);
         await kvSetJson(KEYS.ops, opsView(next));
       } catch {
         /* ignore */
@@ -473,6 +541,9 @@ async function hydrate(): Promise<AppState> {
         mem.traders = mem.traders || {};
         await overlayBacktests(mem);
         await overlayLaunch(mem);
+        await overlayCircle(mem);
+        await overlayShill(mem);
+        await overlayMail(mem);
         knownTraderOwners = await kvSmembers(KEYS.traders);
         memMtime = Date.now();
         hydrated = true;
@@ -485,6 +556,9 @@ async function hydrate(): Promise<AppState> {
         knownTraderOwners = owners;
         await overlayBacktests(mem);
         await overlayLaunch(mem);
+        await overlayCircle(mem);
+        await overlayShill(mem);
+        await overlayMail(mem);
         await persistShards(mem, owners);
         memMtime = Date.now();
         hydrated = true;
@@ -500,6 +574,9 @@ async function hydrate(): Promise<AppState> {
     try {
       await overlayBacktests(local);
       await overlayLaunch(local);
+      await overlayCircle(local);
+      await overlayShill(local);
+      await overlayMail(local);
     } catch {
       /* disk still usable */
     }
@@ -527,6 +604,33 @@ export async function withLaunch<T>(fn: (state: AppState) => T | Promise<T>, wri
   const state = await readyState();
   await overlayLaunch(state);
   if (!state.launch) state.launch = emptyLaunchBook();
+  const result = await fn(state);
+  if (write) await saveState(state);
+  return result;
+}
+
+export async function withCircle<T>(fn: (state: AppState) => T | Promise<T>, write = false): Promise<T> {
+  const state = await readyState();
+  await overlayCircle(state);
+  state.circle = ensureCircle(state.circle);
+  const result = await fn(state);
+  if (write) await saveState(state);
+  return result;
+}
+
+export async function withShill<T>(fn: (state: AppState) => T | Promise<T>, write = false): Promise<T> {
+  const state = await readyState();
+  await overlayShill(state);
+  state.shill = ensureShill(state.shill);
+  const result = await fn(state);
+  if (write) await saveState(state);
+  return result;
+}
+
+export async function withMail<T>(fn: (state: AppState) => T | Promise<T>, write = false): Promise<T> {
+  const state = await readyState();
+  await overlayMail(state);
+  state.mail = ensureMail(state.mail);
   const result = await fn(state);
   if (write) await saveState(state);
   return result;

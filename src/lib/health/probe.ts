@@ -111,7 +111,9 @@ export async function probeHealth(state: AppState): Promise<{
           return { ok: true, ms: Date.now() - t0 };
         })()
       : Promise.resolve({ ok: false, ms: 0 }),
-    durableKind() === "upstash" ? kvMemoryBytes([KEYS.ops, KEYS.launch, KEYS.traders, KEYS.state]) : Promise.resolve(0),
+    durableKind() === "upstash"
+      ? kvMemoryBytes([KEYS.ops, KEYS.launch, KEYS.traders, KEYS.state, KEYS.circle, KEYS.shill, KEYS.mail])
+      : Promise.resolve(0),
   ]);
   const storeBytes = Math.max(estimateStoreBytes(state), redisBytes || 0);
   const tickAgeMs = state.lastTickAt ? Date.now() - state.lastTickAt : -1;

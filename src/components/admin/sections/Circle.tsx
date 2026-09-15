@@ -18,10 +18,12 @@ type Row = {
   username: string;
 };
 
+type Promo = { id: string; url: string; caption?: string };
 type Pack = {
   active: number;
   members: Row[];
   airdrops: { id: string; at: number; total: number; heads: number }[];
+  promos?: Promo[];
 };
 
 export function CircleSection() {
@@ -31,6 +33,7 @@ export function CircleSection() {
   const [note, setNote] = useState("");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
+  const [caption, setCaption] = useState("");
 
   const load = useCallback(async () => {
     const r = await fetch("/api/admin/circle", { cache: "no-store" });
@@ -71,8 +74,8 @@ export function CircleSection() {
         <div className="font-mono text-[10px] tracking-[0.28em] text-mute">FOUNDERS CIRCLE</div>
         <h2 className="mt-1 font-display text-3xl text-ghost">The exclusive hang</h2>
         <p className="mt-1 max-w-2xl text-sm text-mute">
-          Spots are limited. Wallet + email to enter. Referrals add 5% airdrop weight for life. Mods can keep the chat
-          clean. Admins can ban and drop.
+          Wallet + email, then one invite unlocks both seats. Upload up to 30 promo images for the hang. Chat lives in
+          Shill Zone.
         </p>
       </div>
 
@@ -85,6 +88,61 @@ export function CircleSection() {
           <div className="font-mono text-[10px] text-mute">DROPS</div>
           <div className="font-display text-2xl text-ghost">{pack?.airdrops?.length ?? 0}</div>
         </div>
+      </div>
+
+      <div className="rounded-3xl border border-violet/20 p-5">
+        <div className="font-mono text-[10px] tracking-[0.2em] text-mute">PROMO MEDIA · {pack?.promos?.length || 0}/30</div>
+        <p className="mt-1 text-sm text-mute">Only uploaded spots show in the circle.</p>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <input
+            type="file"
+            accept="image/*"
+            onChange={async (e) => {
+              const f = e.target.files?.[0];
+              e.target.value = "";
+              if (!f) return;
+              setBusy(true);
+              setErr("");
+              try {
+                const fd = new FormData();
+                fd.append("file", f);
+                fd.append("caption", caption);
+                const r = await fetch("/api/admin/circle/promo", { method: "POST", body: fd });
+                const j = await r.json();
+                if (!r.ok) throw new Error(j.message || "upload failed");
+                setCaption("");
+                await load();
+              } catch (er) {
+                setErr(er instanceof Error ? er.message : "upload failed");
+              } finally {
+                setBusy(false);
+              }
+            }}
+          />
+          <input
+            value={caption}
+            onChange={(e) => setCaption(e.target.value)}
+            placeholder="caption (optional)"
+            className="rounded-full border border-violet/30 bg-void px-3 py-1.5 text-sm text-ghost"
+          />
+        </div>
+        {(pack?.promos || []).length > 0 && (
+          <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-5">
+            {(pack?.promos || []).map((p) => (
+              <div key={p.id} className="relative overflow-hidden rounded-xl border border-violet/20">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={p.url} alt="" className="aspect-square w-full object-cover" />
+                <button
+                  type="button"
+                  className="absolute right-1 top-1 rounded-full bg-black/60 px-2 text-[11px] text-ghost"
+                  onClick={() => post({ deletePromoId: p.id })}
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="rounded-3xl border border-acid/25 bg-acid/[0.04] p-5">
@@ -122,6 +180,7 @@ export function CircleSection() {
               <th className="px-3 py-2">Unclaimed</th>
               <th className="px-3 py-2">Role</th>
               <th className="px-3 py-2">Status</th>
+              <th className="px-3 py-2">Access</th>
               <th className="px-3 py-2">Tools</th>
             </tr>
           </thead>
@@ -148,6 +207,7 @@ export function CircleSection() {
                   </select>
                 </td>
                 <td className="px-3 py-2 font-mono text-[11px] text-mute">{m.status}</td>
+                <td className="px-3 py-2 font-mono text-[11px] text-mute">{(m as { access?: string }).access || "ready"}</td>
                 <td className="px-3 py-2">
                   <div className="flex flex-wrap gap-1">
                     <button type="button" className="rounded-full border border-violet/30 px-2 py-0.5 text-[11px]" onClick={() => post({ pubkey: m.pubkey, muteMs: 3_600_000 })}>

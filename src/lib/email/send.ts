@@ -16,7 +16,13 @@ function transport() {
   });
 }
 
-export async function queueEmail(state: AppState, to: string, subject: string, html: string): Promise<EmailRecord> {
+export async function queueEmail(
+  state: AppState,
+  to: string,
+  subject: string,
+  html: string,
+  opts?: { from?: string; cc?: string; bcc?: string },
+): Promise<EmailRecord> {
   const rec: EmailRecord = {
     id: `em_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
     at: Date.now(),
@@ -26,6 +32,7 @@ export async function queueEmail(state: AppState, to: string, subject: string, h
     status: "queued",
   };
   const mailer = transport();
+  const from = opts?.from || process.env.SMTP_FROM || "Solphia <admin@solphia.io>";
   if (!mailer) {
     rec.status = "preview";
     rec.error = "SMTP not configured — stored in outbox.";
@@ -34,8 +41,10 @@ export async function queueEmail(state: AppState, to: string, subject: string, h
   }
   try {
     await mailer.sendMail({
-      from: process.env.SMTP_FROM || "Solphia <alerts@solphia.io>",
+      from,
       to,
+      cc: opts?.cc || undefined,
+      bcc: opts?.bcc || undefined,
       subject,
       html,
     });

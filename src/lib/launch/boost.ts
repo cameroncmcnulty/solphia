@@ -1,23 +1,22 @@
 import { isSolanaAddress } from "../security";
 import type { LaunchBook } from "./engine";
 
-/** One rocket is 24h of rank. More rockets = higher on the rail. */
-export const ROCKET_SOL = 0.05;
+/** One pack is 24h of rank. More rockets = higher on the rail. */
 export const ROCKET_MS = 24 * 60 * 60 * 1000;
-export const ROCKET_MIN = 1;
-export const ROCKET_MAX = 50;
+export const ROCKET_MIN = 10;
+export const ROCKET_MAX = 500;
 export const HOUSE_OWNER = "solphia";
 export const HOUSE_KEEP_MIN = 8;
 export const HOUSE_KEEP_MAX = 10;
 export const HOUSE_REFILL_AT = 7;
 export const HOUSE_TOP = 10;
+export const MEGA_ROCKETS = 500;
 
 export const ROCKET_PACKS = [
-  { rockets: 1, label: "24h" },
-  { rockets: 2, label: "24h" },
-  { rockets: 3, label: "24h" },
-  { rockets: 5, label: "24h" },
-  { rockets: 10, label: "24h" },
+  { rockets: 10, sol: 0.5, label: "10 rockets" },
+  { rockets: 30, sol: 1, label: "30 rockets" },
+  { rockets: 100, sol: 2, label: "100 rockets" },
+  { rockets: 500, sol: 3, label: "500 rockets" },
 ] as const;
 
 export type BoostStatus = "queued" | "live" | "done";
@@ -27,6 +26,8 @@ export type LaunchBoost = {
   coinId: string;
   mint: string;
   symbol: string;
+  name?: string;
+  image?: string;
   owner: string;
   rockets: number;
   paidSol: number;
@@ -42,14 +43,24 @@ export type BoostRank = {
   coinId: string;
   mint: string;
   symbol: string;
+  name?: string;
   rockets: number;
   endsAt: number;
   leftMs: number;
+  lastBoostAt: number;
   image?: string;
+  mega?: boolean;
 };
 
+export type BoostSort = "top" | "latest";
+
 export function rocketSol(n: number): number {
-  return Math.round(n * ROCKET_SOL * 1_000_000) / 1_000_000;
+  const pack = ROCKET_PACKS.find((p) => p.rockets === n);
+  if (pack) return pack.sol;
+  if (n >= MEGA_ROCKETS) return 3;
+  if (n >= 100) return 2;
+  if (n >= 30) return 1;
+  return 0.5;
 }
 
 export function rocketMs(_n = 1): number {
@@ -97,30 +108,42 @@ export function liveBoosts(book: LaunchBook, now = Date.now()): LaunchBoost[] {
     .sort((a, b) => b.rockets - a.rockets || (a.endsAt || 0) - (b.endsAt || 0));
 }
 
-export function rankedBoosts(book: LaunchBook, now = Date.now()): BoostRank[] {
+export function rankedBoosts(book: LaunchBook, now = Date.now(), sort: BoostSort = "top"): BoostRank[] {
   const map = new Map<string, BoostRank>();
   for (const b of liveBoosts(book, now)) {
     const key = b.mint || b.coinId;
-    const prev = map.get(key);
+    const coin = book.coins.find((c) => c.id === b.coinId || c.mint === b.mint);
     const leftMs = Math.max(0, (b.endsAt || 0) - now);
+    const prev = map.get(key);
     if (!prev) {
+      const rockets = b.rockets;
       map.set(key, {
         coinId: b.coinId,
         mint: b.mint,
-        symbol: b.symbol,
-        rockets: b.rockets,
+        symbol: b.symbol || coin?.symbol || "",
+        name: b.name || coin?.name,
+        rockets,
         endsAt: b.endsAt || 0,
         leftMs,
+        lastBoostAt: b.boughtAt || b.liveAt || now,
+        image: b.image || coin?.image,
+        mega: rockets >= MEGA_ROCKETS,
       });
     } else {
       prev.rockets += b.rockets;
+      prev.mega = prev.rockets >= MEGA_ROCKETS;
+      prev.lastBoostAt = Math.max(prev.lastBoostAt, b.boughtAt || b.liveAt || 0);
       if ((b.endsAt || 0) > prev.endsAt) {
         prev.endsAt = b.endsAt || 0;
         prev.leftMs = leftMs;
       }
+      if (!prev.image && (b.image || coin?.image)) prev.image = b.image || coin?.image;
+      if (!prev.name && (b.name || coin?.name)) prev.name = b.name || coin?.name;
     }
   }
-  return [...map.values()].sort((a, b) => b.rockets - a.rockets || a.leftMs - b.leftMs);
+  const rows = [...map.values()];
+  if (sort === "latest") return rows.sort((a, b) => b.lastBoostAt - a.lastBoostAt || b.rockets - a.rockets);
+  return rows.sort((a, b) => b.rockets - a.rockets || a.leftMs - b.leftMs);
 }
 
 export function queuedBoosts(_book: LaunchBook, _now = Date.now()): LaunchBoost[] {
@@ -155,6 +178,8 @@ export function buyBoost(
     coinId: string;
     mint?: string;
     symbol?: string;
+    name?: string;
+    image?: string;
     rockets: number;
     sig: string;
     paidSol: number;
@@ -180,6 +205,8 @@ export function buyBoost(
     coinId,
     mint: coin?.mint || opts.mint || coinId,
     symbol: coin?.symbol || opts.symbol || "",
+    name: coin?.name || opts.name,
+    image: coin?.image || opts.image,
     owner: opts.house ? HOUSE_OWNER : opts.owner,
     rockets,
     paidSol: opts.paidSol,
@@ -194,7 +221,7 @@ export function buyBoost(
   return { ok: true, boost };
 }
 
-export type HouseCoin = { id?: string; mint?: string; symbol?: string };
+export type HouseCoin = { id?: string; mint?: string; symbol?: string; name?: string; image?: string };
 
 export function fillHouseBoosts(book: LaunchBook, candidates: HouseCoin[], now = Date.now()): boolean {
   tickBoosts(book, now);
@@ -213,12 +240,14 @@ export function fillHouseBoosts(book: LaunchBook, candidates: HouseCoin[], now =
   let dirty = false;
   for (const c of pool.slice(0, add)) {
     const id = c.mint || c.id || "";
-    const rockets = 1 + Math.floor(Math.random() * 4);
+    const rockets = Math.random() < 0.25 ? 30 : 10;
     const r = buyBoost(book, {
       owner: HOUSE_OWNER,
       coinId: id,
       mint: c.mint,
       symbol: c.symbol,
+      name: c.name,
+      image: c.image,
       rockets,
       sig: `house_${id}_${now}_${rockets}_${Math.random().toString(36).slice(2, 8)}`.padEnd(32, "x"),
       paidSol: 0,
@@ -236,7 +265,10 @@ export function publicLiveBoost(b: LaunchBoost, now = Date.now()) {
     coinId: b.coinId,
     mint: b.mint,
     symbol: b.symbol,
+    name: b.name,
+    image: b.image,
     rockets: b.rockets,
+    mega: b.rockets >= MEGA_ROCKETS,
     endsAt: b.endsAt || 0,
     leftMs: Math.max(0, (b.endsAt || 0) - now),
     house: Boolean(b.house),

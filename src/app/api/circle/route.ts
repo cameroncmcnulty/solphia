@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { clientIp, isSolanaAddress, rateLimit, sanitizeText, isEmail } from "@/lib/security";
-import { mutateState, readyState } from "@/lib/store";
+import { mutateState, readyState, withCircle } from "@/lib/store";
 import { pinDataUrl } from "@/lib/pinata";
 import { sphaMintOf } from "@/lib/token/solphia";
 import { SITE_URL } from "@/lib/config";
@@ -15,6 +15,8 @@ import {
   claimAmount,
   deleteMessage,
   ensureCircle,
+  hasAccess,
+  inviteUrl,
   isMuted,
   joinCircle,
   markClaimed,
@@ -52,20 +54,21 @@ function publicMember(m: ReturnType<typeof activeMembers>[number], book: ReturnT
     joinedAt: m.joinedAt,
     boostPct: boostPct(book, m.pubkey),
     refs: referralCount(book, m.pubkey),
+    access: hasAccess(m) ? "ready" : "pending",
+    invitedPubkey: m.invitedPubkey || "",
   };
 }
 
 export async function GET(req: NextRequest) {
   const pubkey = req.nextUrl.searchParams.get("pubkey") || "";
-  const s = await readyState();
+  const s = await withCircle((st) => st, false);
   const raw = s.circle;
   const book = ensureCircle(raw);
   if (circleStale(raw, book)) {
-    await mutateState((st) => {
+    await withCircle((st) => {
       st.circle = ensureCircle(st.circle);
-    });
+    }, true);
   }
-  const since = Number(req.nextUrl.searchParams.get("since") || 0);
   const me = isSolanaAddress(pubkey) ? book.members[pubkey] : undefined;
   const banned = me?.status === "banned";
   const official = [
@@ -79,45 +82,30 @@ export async function GET(req: NextRequest) {
     s.launch?.ownerWallet,
     ...(s.adminWallets || []),
   ].filter(Boolean) as string[];
+  const ready = hasAccess(me);
   const base = {
     members: activeMembers(book).length,
-    stickers: CIRCLE_STICKERS,
-    reacts: CIRCLE_REACTS,
     mint: sphaMintOf(s.sphaMint),
     official,
-    link: `${SITE_URL}/circle?ref=${pubkey || ""}`,
+    link: pubkey ? inviteUrl(SITE_URL, pubkey) : "",
+    promos: ready ? (book.promos || []) : [],
   };
   if (!me || banned) {
-    return NextResponse.json({ ...base, member: null, banned: Boolean(banned) });
+    return NextResponse.json({ ...base, member: null, banned: Boolean(banned), ready: false });
   }
-  const now = Date.now();
-  const typing = [...typingMem.entries()]
-    .filter(([pk, until]) => pk !== pubkey && until > now && book.members[pk]?.status !== "banned")
-    .map(([pk]) => pk);
-  const messages = book.messages.filter((m) => m.at > since).slice(-80);
-  const people = [...new Set(messages.map((m) => m.owner).concat(typing, [pubkey]))];
-  const profiles: Record<string, { username: string; hasPfp: boolean; color: string }> = {};
-  for (const pk of people) {
-    const acc = s.launch?.accounts?.[pk];
-    const mem = book.members[pk];
-    profiles[pk] = {
-      username: acc?.username || "",
-      hasPfp: Boolean(acc?.pfp),
-      color: mem?.color || "#14f195",
-    };
-  }
+  const acc = s.launch?.accounts?.[pubkey];
   return NextResponse.json({
     ...base,
+    ready,
     member: {
       ...publicMember(me, book),
       email: me.email,
       unclaimed: me.unclaimed || 0,
       claimed: me.claimed || 0,
       muted: isMuted(me),
+      username: acc?.username || "",
+      hasPfp: Boolean(acc?.pfp),
     },
-    messages,
-    typing,
-    profiles,
   });
 }
 
@@ -139,7 +127,7 @@ export async function POST(req: NextRequest) {
   }
   if (b.action === "join") {
     if (!b.email || !isEmail(b.email)) return NextResponse.json({ error: "bad_email", message: "Enter a real email for updates." }, { status: 400 });
-    const out = await mutateState((s) => {
+    const out = await withCircle((s) => {
       s.circle = ensureCircle(s.circle);
       const r = joinCircle(s.circle, { pubkey: b.pubkey, email: b.email || "", referrer: b.referrer });
       if (r.ok) {
@@ -157,7 +145,7 @@ export async function POST(req: NextRequest) {
         u.lastSeen = Date.now();
       }
       return r;
-    });
+    }, true);
     if (!out.ok) {
       const message =
         out.error === "banned"
@@ -165,7 +153,12 @@ export async function POST(req: NextRequest) {
             : "Could not join.";
       return NextResponse.json({ error: out.error, message }, { status: 400 });
     }
-    return NextResponse.json({ ok: true, created: out.created });
+    return NextResponse.json({
+      ok: true,
+      created: out.created,
+      access: hasAccess(out.member) ? "ready" : "pending",
+      link: inviteUrl(SITE_URL, b.pubkey),
+    });
   }
 
   if (b.action === "media") {

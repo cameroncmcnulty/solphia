@@ -6,9 +6,11 @@ import {
   CIRCLE_DEFAULT_CAP,
   CIRCLE_KEEP_MS,
   CIRCLE_MSG_MAX,
+  CIRCLE_PROMO_MAX,
   type CircleBook,
   type CircleMember,
   type CircleMessage,
+  type CirclePromo,
   type CircleRole,
 } from "./types";
 
@@ -18,7 +20,7 @@ function pushMax<T>(arr: T[], item: T, max: number) {
 }
 
 export function emptyCircle(): CircleBook {
-  return { cap: CIRCLE_DEFAULT_CAP, members: {}, messages: [], airdrops: [], typing: {} };
+  return { cap: CIRCLE_DEFAULT_CAP, members: {}, messages: [], airdrops: [], typing: {}, promos: [] };
 }
 
 export function ensureCircle(book?: CircleBook | null): CircleBook {
@@ -27,10 +29,22 @@ export function ensureCircle(book?: CircleBook | null): CircleBook {
   if (!b.messages) b.messages = [];
   if (!b.airdrops) b.airdrops = [];
   if (!b.typing) b.typing = {};
+  if (!b.promos) b.promos = [];
   b.typing = {};
   if (!(b.cap > 0)) b.cap = CIRCLE_DEFAULT_CAP;
   pruneCircle(b);
   return b;
+}
+
+/** Old seats without access are already in. Pending until one invite lands. */
+export function hasAccess(m: CircleMember | undefined): boolean {
+  if (!m || m.status === "banned") return false;
+  if (m.role === "admin") return true;
+  return m.access !== "pending";
+}
+
+export function inviteUrl(origin: string, pubkey: string): string {
+  return `${origin.replace(/\/$/, "")}/circle?ref=${encodeURIComponent(pubkey)}`;
 }
 
 export function pruneCircle(book: CircleBook, now = Date.now()) {
@@ -114,6 +128,8 @@ export function joinCircle(
   if (referrer === pubkey || !isSolanaAddress(referrer) || !book.members[referrer] || book.members[referrer].status === "banned") {
     referrer = "";
   }
+  const host = referrer ? book.members[referrer] : undefined;
+  const hostOpen = Boolean(host && host.status !== "banned" && !host.invitedPubkey);
   const member: CircleMember = {
     pubkey,
     email,
@@ -121,13 +137,43 @@ export function joinCircle(
     referrer: referrer || undefined,
     role: "member",
     status: "ok",
+    access: hostOpen ? "ready" : "pending",
     color: circleColor(pubkey),
     lastReadAt: now,
     unclaimed: 0,
     claimed: 0,
   };
   book.members[pubkey] = member;
+  if (hostOpen && host) {
+    host.invitedPubkey = pubkey;
+    host.access = "ready";
+  }
   return { ok: true, member, created: true };
+}
+
+export function addPromo(
+  book: CircleBook,
+  opts: { url: string; caption?: string; now?: number },
+): { ok: true; promo: CirclePromo } | { ok: false; error: string } {
+  const url = (opts.url || "").trim();
+  if (!/^https?:\/\//i.test(url) && !url.startsWith("data:image/")) return { ok: false, error: "bad_url" };
+  if ((book.promos || []).length >= CIRCLE_PROMO_MAX) return { ok: false, error: "full" };
+  const promo: CirclePromo = {
+    id: `p${(opts.now || Date.now()).toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+    url,
+    at: opts.now || Date.now(),
+    caption: (opts.caption || "").trim().slice(0, 80) || undefined,
+  };
+  if (!book.promos) book.promos = [];
+  book.promos.push(promo);
+  return { ok: true, promo };
+}
+
+export function removePromo(book: CircleBook, id: string): boolean {
+  const i = (book.promos || []).findIndex((p) => p.id === id);
+  if (i < 0) return false;
+  book.promos.splice(i, 1);
+  return true;
 }
 
 export function postMessage(

@@ -29,7 +29,8 @@ export type AdminIcon =
   | "wallets"
   | "users"
   | "health"
-  | "circle";
+  | "circle"
+  | "mail";
 
 export const ADMIN_NAV = [
   {
@@ -105,6 +106,13 @@ export const ADMIN_NAV = [
     hint: "Members, mods, bans, airdrops",
     icon: "circle" as const,
     badge: (d: AdminDesk) => d.circle?.members || null,
+  },
+  {
+    id: "mail",
+    group: "access",
+    label: "Mail",
+    hint: "admin@solphia.io and @solphia.io identities",
+    icon: "mail" as const,
   },
 ] as const;
 

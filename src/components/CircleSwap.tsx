@@ -51,7 +51,7 @@ export function CircleSwap({ owner }: { owner: string }) {
 
   return (
     <div className="rounded-2xl border border-violet/20 bg-void/50 p-3">
-      <div className="font-mono text-[10px] tracking-[0.18em] text-mute">SWAP · 1% TO SOLPHIA</div>
+      <div className="font-mono text-[10px] tracking-[0.18em] text-mute">QUICK SWAP</div>
       <input
         value={mint}
         onChange={(e) => setMint(e.target.value.trim())}

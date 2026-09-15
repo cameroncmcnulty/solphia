@@ -3,7 +3,7 @@ export const PUZZLE_H = 280;
 export const PIECE = 72;
 export const KNOB = 11;
 export const PIECE_BOX = PIECE + KNOB;
-export const PUZZLE_TOL = 6;
+export const PUZZLE_TOL = 20;
 export const HUMAN_KEY = "solphia_human";
 
 export type PuzzleChallenge = {

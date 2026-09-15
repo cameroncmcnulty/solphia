@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { createCoin, emptyLaunchBook } from "../lib/launch/engine";
 import {
+  MEGA_ROCKETS,
   ROCKET_MS,
   buyBoost,
   fillHouseBoosts,
@@ -29,17 +30,20 @@ function bookWithCoins() {
 }
 
 describe("rocket boosts", () => {
-  it("prices rockets and goes live for 24h with no slot cap", () => {
-    assert.equal(rocketSol(3), 0.15);
+  it("prices packs and goes live for 24h with no slot cap", () => {
+    assert.equal(rocketSol(10), 0.5);
+    assert.equal(rocketSol(30), 1);
+    assert.equal(rocketSol(100), 2);
+    assert.equal(rocketSol(500), 3);
     const book = bookWithCoins();
     const t0 = 1_000_000;
     for (let i = 0; i < 12; i++) {
       const r = buyBoost(book, {
         owner: A,
         coinId: book.coins[i].id,
-        rockets: 1,
+        rockets: 10,
         sig: `siglive${i}xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx`,
-        paidSol: 0.05,
+        paidSol: 0.5,
         now: t0,
       });
       assert.equal(r.ok, true);
@@ -55,30 +59,48 @@ describe("rocket boosts", () => {
     buyBoost(book, {
       owner: A,
       coinId: book.coins[0].id,
-      rockets: 2,
+      rockets: 10,
       sig: "s1yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
-      paidSol: 0.1,
+      paidSol: 0.5,
       now: t0,
     });
     buyBoost(book, {
       owner: B,
       coinId: book.coins[0].id,
-      rockets: 3,
+      rockets: 30,
       sig: "s2yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
-      paidSol: 0.15,
-      now: t0,
+      paidSol: 1,
+      now: t0 + 10,
     });
-    const ranked = rankedBoosts(book, t0);
-    assert.equal(ranked[0].rockets, 5);
-    tickBoosts(book, t0 + ROCKET_MS + 1);
-    assert.equal(rankedBoosts(book, t0 + ROCKET_MS + 1).length, 0);
+    const ranked = rankedBoosts(book, t0 + 10);
+    assert.equal(ranked[0].rockets, 40);
+    const latest = rankedBoosts(book, t0 + 10, "latest");
+    assert.equal(latest[0].coinId, book.coins[0].id);
+    tickBoosts(book, t0 + 10 + ROCKET_MS + 1);
+    assert.equal(rankedBoosts(book, t0 + 10 + ROCKET_MS + 1).length, 0);
+  });
+
+  it("marks a 500-rocket pack as mega", () => {
+    const book = bookWithCoins();
+    const r = buyBoost(book, {
+      owner: A,
+      coinId: book.coins[0].id,
+      rockets: MEGA_ROCKETS,
+      sig: "megaxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      paidSol: 3,
+      now: 8,
+    });
+    assert.equal(r.ok, true);
+    const ranked = rankedBoosts(book, 8);
+    assert.equal(ranked[0].mega, true);
+    assert.equal(ranked[0].rockets, 500);
   });
 
   it("rejects a reused signature", () => {
     const book = bookWithCoins();
     const sig = "dupsigxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx";
-    const a = buyBoost(book, { owner: A, coinId: book.coins[0].id, rockets: 1, sig, paidSol: 0.05, now: 9 });
-    const b = buyBoost(book, { owner: A, coinId: book.coins[1].id, rockets: 1, sig, paidSol: 0.05, now: 10 });
+    const a = buyBoost(book, { owner: A, coinId: book.coins[0].id, rockets: 10, sig, paidSol: 0.5, now: 9 });
+    const b = buyBoost(book, { owner: A, coinId: book.coins[1].id, rockets: 10, sig, paidSol: 0.5, now: 10 });
     assert.equal(a.ok, true);
     assert.equal(b.ok, false);
   });
@@ -86,7 +108,7 @@ describe("rocket boosts", () => {
   it("house-fills from the top 10 until 8-10 live, and refills at 6-7", () => {
     const book = bookWithCoins();
     const t0 = 9_000_000;
-    const top = book.coins.slice(0, 10).map((c) => ({ id: c.id, mint: c.mint, symbol: c.symbol }));
+    const top = book.coins.slice(0, 10).map((c) => ({ id: c.id, mint: c.mint, symbol: c.symbol, name: c.name, image: c.image }));
     assert.equal(fillHouseBoosts(book, top, t0), true);
     const n = rankedBoosts(book, t0).length;
     assert.ok(n >= 8 && n <= 10);

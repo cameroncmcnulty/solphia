@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { paySeatFromPhantom } from "@/lib/wallet/trading";
-import { ROCKET_PACKS, rocketSol, type BoostRank } from "@/lib/launch/boost";
+import { MEGA_ROCKETS, ROCKET_PACKS, rocketSol, type BoostRank, type BoostSort } from "@/lib/launch/boost";
 
 export function BoostBuy({
   owner,
@@ -15,7 +15,7 @@ export function BoostBuy({
   symbol: string;
   onDone?: () => void;
 }) {
-  const [rockets, setRockets] = useState(1);
+  const [rockets, setRockets] = useState(10);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [note, setNote] = useState("");
@@ -54,20 +54,26 @@ export function BoostBuy({
     <div className="rounded-2xl border border-acid/25 bg-acid/[0.04] p-3">
       <div className="font-mono text-[10px] tracking-[0.18em] text-acid">BOOST · ${symbol.replace(/^\$/, "")}</div>
       <p className="mt-1 text-[12px] text-mute">Each buy is 24 hours. More rockets, higher on the rail.</p>
-      <div className="mt-2 flex flex-wrap gap-1">
+      <div className="mt-2 grid grid-cols-2 gap-1.5">
         {ROCKET_PACKS.map((p) => (
           <button
             key={p.rockets}
             type="button"
             onClick={() => setRockets(p.rockets)}
-            className={`rounded-full px-3 py-1 font-mono text-[11px] ${rockets === p.rockets ? "bg-acid/20 text-acid" : "border border-violet/30 text-mute"}`}
+            className={`rounded-2xl px-3 py-2 text-left ${
+              rockets === p.rockets ? "bg-acid/20 text-acid ring-1 ring-acid/50" : "border border-violet/30 text-mute"
+            } ${p.rockets === MEGA_ROCKETS ? "col-span-2" : ""}`}
           >
-            {p.rockets} ⚡
+            <div className="font-display text-sm text-ghost">
+              {p.rockets === MEGA_ROCKETS ? "⚡ " : ""}
+              {p.rockets} 🚀
+            </div>
+            <div className="font-mono text-[10px]">{p.sol} SOL · 24h</div>
           </button>
         ))}
       </div>
       <button type="button" disabled={busy} onClick={buy} className="btn-acid mt-3 w-full rounded-full py-2 text-sm disabled:opacity-40">
-        {busy ? "Paying…" : `Boost · ${rocketSol(pack.rockets)} SOL · 24h`}
+        {busy ? "Paying…" : `Boost · ${rocketSol(pack.rockets)} SOL · ${pack.rockets} 🚀`}
       </button>
       {note && <p className="mt-2 text-[12px] text-acid">{note}</p>}
       {err && <p className="mt-2 text-[12px] text-blood">{err}</p>}
@@ -82,20 +88,68 @@ export function BoostRail({
   rows: BoostRank[];
   onOpen: (mint: string, coinId: string) => void;
 }) {
+  const [sort, setSort] = useState<BoostSort>("top");
   if (!rows.length) return null;
+  const ordered =
+    sort === "latest"
+      ? [...rows].sort((a, b) => (b.lastBoostAt || 0) - (a.lastBoostAt || 0) || b.rockets - a.rockets)
+      : [...rows].sort((a, b) => b.rockets - a.rockets || a.leftMs - b.leftMs);
   return (
-    <div className="boost-rail">
-      {rows.map((b, i) => (
-        <button
-          key={`${b.mint || b.coinId}-${i}`}
-          type="button"
-          onClick={() => onOpen(b.mint, b.coinId)}
-          className="boost-chip"
-        >
-          <span className="font-mono text-[10px] text-acid">⚡ {b.rockets}</span>
-          <span className="truncate font-display text-sm text-ghost">${(b.symbol || "").replace(/^\$/, "")}</span>
-        </button>
-      ))}
+    <div>
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div className="font-mono text-[10px] tracking-[0.2em] text-acid">BOOSTED</div>
+        <div className="flex gap-1 rounded-full border border-violet/30 p-0.5 font-mono text-[10px]">
+          <button
+            type="button"
+            onClick={() => setSort("latest")}
+            className={`rounded-full px-3 py-1 ${sort === "latest" ? "bg-acid/20 text-acid" : "text-mute"}`}
+          >
+            Latest
+          </button>
+          <button
+            type="button"
+            onClick={() => setSort("top")}
+            className={`rounded-full px-3 py-1 ${sort === "top" ? "bg-acid/20 text-acid" : "text-mute"}`}
+          >
+            Top
+          </button>
+        </div>
+      </div>
+      <div className="boost-rail">
+        {ordered.map((b, i) => {
+          const ticker = (b.symbol || "").replace(/^\$/, "");
+          const mega = Boolean(b.mega) || b.rockets >= MEGA_ROCKETS;
+          return (
+            <button
+              key={`${b.mint || b.coinId}-${i}`}
+              type="button"
+              onClick={() => onOpen(b.mint, b.coinId)}
+              className={`boost-chip ${mega ? "mega" : ""}`}
+            >
+              {b.image ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={b.image} alt="" className="boost-chip-art" />
+              ) : (
+                <div className="boost-chip-art flex items-center justify-center font-display text-sm text-acid">
+                  {(ticker || "?").slice(0, 2)}
+                </div>
+              )}
+              <span className="min-w-0 flex-1">
+                <span className="block truncate font-display text-sm leading-tight text-ghost">
+                  ${ticker || "TOKEN"}
+                </span>
+                {b.name && b.name.replace(/^\$/, "") !== ticker && (
+                  <span className="block truncate text-[10px] text-mute">{b.name}</span>
+                )}
+                <span className="mt-0.5 block font-mono text-[10px] text-acid">
+                  🚀 {b.rockets}
+                  {mega ? " · mega" : ""}
+                </span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }

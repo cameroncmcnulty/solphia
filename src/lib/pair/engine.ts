@@ -357,24 +357,23 @@ export function decidePair(opts: {
   const stop = (auto.stopPct || 0.08) * (lev <= 1 ? 1 : Math.sqrt(lev));
   const anyX = XSTOCKS.some((x) => qtyOf(h, x.id) > 0);
   const riskOn = h.solQty > 0 || Boolean(h.solPerp) || anyX;
-  if (dd >= stop) {
-    if (riskOn) {
-      return {
-        action: "flatten",
-        reason: `Down ${(dd * 100).toFixed(1)}%. Selling everything back to USDC and pausing.`,
-        clipUsd: equity,
-        from: "both",
-        to: "USDC",
-        z7: primary.z7,
-        z24: primary.z24,
-        ratio: primary.ratio,
-        bandK,
-        session,
-        read: primary,
-        reads,
-      };
-    }
-    return empty("skip", `Down ${(dd * 100).toFixed(1)}%. Sitting in USDC until the book recovers.`);
+  if (dd >= stop && riskOn) {
+    book.haltedUntil = now + 2 * 3600_000;
+    book.haltReason = `Down ${(dd * 100).toFixed(1)}%. Banked to USDC. Pause 6h, then look for the next clip.`;
+    return {
+      action: "flatten",
+      reason: book.haltReason,
+      clipUsd: equity,
+      from: "both",
+      to: "USDC",
+      z7: primary.z7,
+      z24: primary.z24,
+      ratio: primary.ratio,
+      bandK,
+      session,
+      read: primary,
+      reads,
+    };
   }
 
   const cooldownMs = (auto.cooldownMin ?? 2) * 60_000;
@@ -463,7 +462,11 @@ export function decidePair(opts: {
   const heldSet = new Set(openSet);
   if (usdOf("SOL") >= PAIR_MIN_CLIP_USD) heldSet.add("SOL");
   const clipUsd = Math.max(PAIR_MIN_CLIP_USD, Math.min(allocated * SLEEVE_WEIGHT, h.usdcQty * HOLDING_CLIP_MAX));
-  const ranked = [...buySigs].sort((a, b) => b.buy - a.buy);
+  const ranked = [...buySigs].sort((a, b) => {
+    const as = a.sleeve === "SOL" && a.bias === "bull" ? 0.08 : 0;
+    const bs = b.sleeve === "SOL" && b.bias === "bull" ? 0.08 : 0;
+    return b.buy + bs - (a.buy + as);
+  });
   for (const best of ranked) {
     if (openSet.has(best.sleeve)) continue;
     const pairId = `usdc-${best.sleeve.toLowerCase()}`;

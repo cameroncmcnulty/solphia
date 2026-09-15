@@ -56,6 +56,8 @@ export function WalletConnect({ compact: _compact = false }: { compact?: boolean
 
   useEffect(() => {
     mounted.current = true;
+    const saved = typeof window !== "undefined" ? localStorage.getItem("solphia_owner") : null;
+    if (saved) setAddr(saved);
     const found = phantom();
     if (found?.publicKey) {
       const pubkey = found.publicKey.toString();
@@ -74,15 +76,14 @@ export function WalletConnect({ compact: _compact = false }: { compact?: boolean
     }
     const onAccount = (pk?: { toString(): string } | null) => {
       const next = pk ? pk.toString() : null;
+      if (!next) return;
       setAddr(next);
       setOwner(next);
     };
     found?.on?.("accountChanged", onAccount);
-    found?.on?.("disconnect", onAccount);
     return () => {
       mounted.current = false;
       found?.off?.("accountChanged", onAccount);
-      found?.off?.("disconnect", onAccount);
     };
   }, []);
 

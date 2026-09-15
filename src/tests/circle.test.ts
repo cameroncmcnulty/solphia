@@ -4,6 +4,7 @@ import {
   airdropWeight,
   boostPct,
   emptyCircle,
+  hasAccess,
   joinCircle,
   postMessage,
   pruneCircle,
@@ -53,6 +54,24 @@ describe("founders circle", () => {
     pruneCircle(book);
     assert.equal(book.messages.length, 1);
     assert.equal(book.messages[0].text, "fresh");
+  });
+
+  it("unlocks both seats when the invitee registers", () => {
+    const book = emptyCircle();
+    const a = joinCircle(book, { pubkey: A, email: "a@solphia.io" });
+    assert.equal(a.ok, true);
+    if (!a.ok) return;
+    assert.equal(hasAccess(a.member), false);
+    const b = joinCircle(book, { pubkey: B, email: "b@solphia.io", referrer: A });
+    assert.equal(b.ok, true);
+    if (!b.ok) return;
+    assert.equal(hasAccess(book.members[A]), true);
+    assert.equal(hasAccess(book.members[B]), true);
+    assert.equal(book.members[A].invitedPubkey, B);
+    const c = joinCircle(book, { pubkey: C, email: "c@solphia.io", referrer: A });
+    assert.equal(c.ok, true);
+    if (!c.ok) return;
+    assert.equal(hasAccess(c.member), false);
   });
 
   it("toggles reactions as grouped emoji chips", () => {

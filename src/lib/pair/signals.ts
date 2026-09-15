@@ -10,7 +10,7 @@ import type { ScalpFrames } from "./frames";
 import { scoreScalp } from "./scalp";
 import type { Bias, Setup } from "./scalp";
 
-export const RISK_SLEEVES: Exclude<Sleeve, "USDC">[] = ["SPYx", "QQQx", "GLDx"];
+export const RISK_SLEEVES: Exclude<Sleeve, "USDC">[] = ["SOL", "SPYx", "QQQx", "GLDx"];
 
 export const ROUND_TRIP = (PAIR_FEE_BPS + PROTOCOL_FEE_BPS + PAIR_SLIP_BPS) * 2 * 0.0001;
 
@@ -53,10 +53,10 @@ export const DEFAULT_LEARN: SleeveLearn = { trades: 0, wins: 0, pnlUsd: 0, buyNe
 
 /** A 15m reclaim / momentum clip — not RSI alone. */
 export function needOf(learn?: SleeveLearn, sleeve?: Exclude<Sleeve, "USDC">): number {
-  const fallback = sleeve === "SOL" ? 0.36 : 0.22;
+  const fallback = sleeve === "SOL" ? 0.26 : 0.22;
   const n = learn?.buyNeed ?? fallback;
-  const floor = sleeve === "SOL" ? 0.34 : 0.18;
-  const cap = sleeve === "SOL" ? 0.5 : 0.34;
+  const floor = sleeve === "SOL" ? 0.22 : 0.18;
+  const cap = sleeve === "SOL" ? 0.42 : 0.34;
   return Math.min(cap, Math.max(floor, n));
 }
 
@@ -235,9 +235,9 @@ export function readAsset(
 /** Room under the peak. Bull trends get 3%+ so a SOL run is not scalped to death. */
 export function trailGiveback(peakProfit: number, atrPct: number, trailK: number, swing = false): number {
   if (swing) {
-    if (peakProfit >= 0.12) return 0.025;
-    if (peakProfit >= 0.06) return 0.03;
-    return 0.034;
+    if (peakProfit >= 0.25) return 0.08;
+    if (peakProfit >= 0.12) return 0.1;
+    return 0.12;
   }
   const atr = Math.max(atrPct, 0.006);
   const wide = Math.max(0.01, Math.min(0.018, atr * (0.9 + (trailK || 0.55))));
@@ -263,10 +263,10 @@ export function nextTrail(opts: {
   const profit = opts.entryPx > 0 ? opts.px / opts.entryPx - 1 : 0;
   const peakProfit = opts.entryPx > 0 ? peakPx / opts.entryPx - 1 : 0;
   const swing = Boolean(opts.swing);
-  /** Arm after a real scalp. Swing used to lock 0.4% and scratch out to fees. */
-  if (!armed && profit >= CLIP_AIM) {
+  /** Arm after a real scalp. Swing waits for a bigger cushion so SOL dips don't scratch winners. */
+  if (!armed && profit >= (swing ? 0.04 : CLIP_AIM)) {
     armed = true;
-    stopPx = Math.max(stopPx, opts.entryPx * (1 + CLIP_MIN));
+    stopPx = Math.max(stopPx, opts.entryPx * (1 + (swing ? CLIP_AIM : CLIP_MIN)));
   }
   if (armed) {
     const k = trailGiveback(peakProfit, opts.atrPct, opts.trailK, swing);

@@ -13,6 +13,7 @@ import { WalletsSection } from "./Wallets";
 import { UsersSection } from "./Users";
 import { HealthSection } from "./Health";
 import { CircleSection } from "./Circle";
+import { MailSection } from "./Mail";
 
 /** Map a nav id to its screen. Add a tool here when you append it in src/lib/admin/nav.ts. */
 export const ADMIN_SECTIONS: Record<AdminSectionId, ComponentType> = {
@@ -26,6 +27,7 @@ export const ADMIN_SECTIONS: Record<AdminSectionId, ComponentType> = {
   users: UsersSection,
   health: HealthSection,
   circle: CircleSection,
+  mail: MailSection,
 };
 
 export function AdminSection() {

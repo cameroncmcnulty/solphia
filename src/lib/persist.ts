@@ -10,6 +10,9 @@ export const KEYS = {
   trader: (owner: string) => `solphia:trader:${owner}`,
   backtest: (lev: 1 | 2 | 3) => `solphia:backtest:${lev}`,
   launch: "solphia:launch",
+  circle: "solphia:circle",
+  shill: "solphia:shill",
+  mail: "solphia:mail",
   signer: (owner: string) => `solphia:signer:${owner}`,
 };
 

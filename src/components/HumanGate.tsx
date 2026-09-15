@@ -25,7 +25,13 @@ export function HumanGate() {
   const [puzzle, setPuzzle] = useState<PuzzleChallenge | null>(null);
   const viewRef = useRef<HTMLCanvasElement>(null);
   const sceneRef = useRef<HTMLCanvasElement | null>(null);
-  const drag = useRef<{ on: boolean; startX: number; orig: number }>({ on: false, startX: 0, orig: 10 });
+  const trackRef = useRef<HTMLDivElement>(null);
+  const drag = useRef<{ on: boolean; startX: number; orig: number; moved: boolean }>({
+    on: false,
+    startX: 0,
+    orig: 10,
+    moved: false,
+  });
 
   function slideTo(n: number) {
     xRef.current = n;
@@ -66,6 +72,23 @@ export function HumanGate() {
     composite(x, puzzle);
   }, [x, open, thanks, puzzle, composite]);
 
+  useEffect(() => {
+    if (!open) return;
+    const prev = document.body.style.overflow;
+    const prevOver = document.documentElement.style.overscrollBehavior;
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overscrollBehavior = "none";
+    const block = (e: TouchEvent) => {
+      if (drag.current.on) e.preventDefault();
+    };
+    document.addEventListener("touchmove", block, { passive: false });
+    return () => {
+      document.body.style.overflow = prev;
+      document.documentElement.style.overscrollBehavior = prevOver;
+      document.removeEventListener("touchmove", block);
+    };
+  }, [open]);
+
   function finish(ok: boolean) {
     if (!puzzle) return;
     if (!ok) {
@@ -86,18 +109,27 @@ export function HumanGate() {
   }
 
   function onPointerDown(e: PointerEvent<HTMLDivElement>) {
+    e.preventDefault();
+    e.stopPropagation();
     e.currentTarget.setPointerCapture(e.pointerId);
-    drag.current = { on: true, startX: e.clientX, orig: xRef.current };
+    drag.current = { on: true, startX: e.clientX, orig: xRef.current, moved: false };
   }
   function onPointerMove(e: PointerEvent<HTMLDivElement>) {
     if (!drag.current.on) return;
-    const track = e.currentTarget.getBoundingClientRect();
-    const dx = ((e.clientX - drag.current.startX) / Math.max(1, track.width - 48)) * (PUZZLE_W - PIECE_BOX);
+    e.preventDefault();
+    e.stopPropagation();
+    const track = (trackRef.current || e.currentTarget).getBoundingClientRect();
+    const dx = ((e.clientX - drag.current.startX) / Math.max(1, track.width - 56)) * (PUZZLE_W - PIECE_BOX);
+    if (Math.abs(e.clientX - drag.current.startX) > 8) drag.current.moved = true;
     slideTo(clampSlide(drag.current.orig + dx));
   }
-  function onPointerUp() {
+  function onPointerUp(e: PointerEvent<HTMLDivElement>) {
     if (!drag.current.on) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const moved = drag.current.moved;
     drag.current.on = false;
+    if (!moved) return;
     if (puzzle) finish(puzzleHit(xRef.current, puzzle.targetX));
   }
 
@@ -120,24 +152,28 @@ export function HumanGate() {
             <h2 id="human-title" className="font-display text-2xl text-ghost sm:text-3xl">
               Verify you&apos;re human
             </h2>
+            <p className="mt-1 text-sm text-mute">Slide the piece into the hole.</p>
             <div className="relative mt-5 overflow-hidden rounded-2xl border border-violet/30 bg-void">
               <canvas ref={viewRef} width={PUZZLE_W} height={PUZZLE_H} className="human-canvas" />
             </div>
             <div
+              ref={trackRef}
               className="human-track"
               onPointerDown={onPointerDown}
               onPointerMove={onPointerMove}
               onPointerUp={onPointerUp}
               onPointerCancel={onPointerUp}
             >
+              <div className="human-track-glow" />
               <div className="human-track-fill" style={{ width: `${pct}%` }} />
+              <div className="human-track-hint">{pct < 8 ? "Slide →" : ""}</div>
               <button
                 type="button"
                 className="human-knob"
-                style={{ left: `clamp(4px, calc(${pct}% - 22px), calc(100% - 48px))` }}
+                style={{ left: `clamp(3px, calc(${pct}% - 26px), calc(100% - 54px))` }}
                 aria-label="Slide to verify"
               >
-                {">>"}
+                <span className="human-knob-chevs">››</span>
               </button>
             </div>
           </>

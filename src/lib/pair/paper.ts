@@ -450,7 +450,7 @@ export function applyPairDecision(
   let fills: PaperFill[] = [];
   if (decision.action === "flatten") {
     fills = flattenToUsdc(book, prices, now, decision.reason, mind);
-    book.haltedUntil = now + 12 * 60 * 60 * 1000;
+    book.haltedUntil = now + 2 * 60 * 60 * 1000;
     book.haltReason = decision.reason;
   } else if (decision.action === "deploy") {
     fills = deployMix(

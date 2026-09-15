@@ -11,7 +11,7 @@ export const DEFAULT_AUTO: AutoSettings = {
   band: "normal",
   clipPct: 0.5,
   cooldownMin: 60,
-  stopPct: 0.08,
+  stopPct: 0.12,
   takeProfitPct: 0.012,
   targetSolPct: 0.2,
   slippageBps: 50,

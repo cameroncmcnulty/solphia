@@ -18,6 +18,7 @@ import {
   Users,
   Wallet,
   Gift,
+  Mail,
   X,
 } from "lucide-react";
 import { SphaMark } from "@/components/SphaMark";
@@ -44,6 +45,7 @@ const ICONS: Record<AdminIcon, typeof LayoutDashboard> = {
   users: Users,
   health: HeartPulse,
   circle: Gift,
+  mail: Mail,
 };
 
 export function AdminShell({ children }: { children: ReactNode }) {

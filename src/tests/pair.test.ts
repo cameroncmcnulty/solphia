@@ -361,7 +361,7 @@ describe("USDC-home engine", () => {
     assert.equal(d.to, "USDC");
   });
 
-  it("does not re-enter while the book is still under the stack stop", () => {
+  it("looks for the next clip from USDC after a stack stop instead of locking out", () => {
     const book = emptyBook(1000);
     book.equityUsd = 880;
     book.pair = { solQty: 0, spyxQty: 0, qqqxQty: 0, gldxQty: 0, usdcQty: 880 };
@@ -373,8 +373,8 @@ describe("USDC-home engine", () => {
       study: DEFAULT_STUDY,
       now: CASH,
     });
-    assert.equal(d.action, "skip");
-    assert.match(d.reason, /Sitting in USDC/i);
+    assert.notEqual(d.action, "flatten");
+    assert.doesNotMatch(d.reason, /Sitting in USDC until the book recovers/i);
   });
 
   it("respects cooldown while in USDC", () => {

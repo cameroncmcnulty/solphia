@@ -212,6 +212,14 @@ export function scoreScalp(
     if (macdUp) buy += 0.06;
     if (room) buy += 0.08;
     if (hl) buy += 0.06;
+  } else if (bias === "bull" && aligned && st.dir !== -1 && rsiN >= 38 && rsiN <= 78 && ret1h > -0.025) {
+    setup = "trend_pullback";
+    buy += 0.24;
+    why.push("HTF bull ride");
+    if (live > vw) buy += 0.08;
+    if (macdUp) buy += 0.06;
+    if (room) buy += 0.06;
+    if (hl) buy += 0.05;
   } else if (dmi.adx < 22 && (disc <= 0.42 || rsiN <= 42) && bounce5 && st.dir !== -1) {
     setup = "range_fade";
     buy += 0.2;

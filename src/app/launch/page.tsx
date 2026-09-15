@@ -490,6 +490,13 @@ export default function LaunchPage() {
       <div className="relative z-10 mx-auto max-w-6xl px-4 pt-6 md:px-8 md:pt-10">
         <p className="font-mono text-[11px] tracking-[0.28em] text-acid">LAUNCH</p>
         <h1 className="mt-2 font-display text-4xl text-ghost sm:text-5xl">Launch a token. Swap it.</h1>
+        <a
+          href="/shill"
+          className="btn-acid mt-5 inline-flex min-h-[52px] items-center justify-center gap-2 rounded-full px-7 text-base"
+        >
+          <span aria-hidden>🪩</span>
+          SHILL ZONE
+        </a>
 
         <div className="mt-8 grid gap-5 lg:grid-cols-[minmax(280px,0.72fr)_minmax(0,1.28fr)]">
           <section className="panel-bubble overflow-hidden rounded-3xl p-5">
@@ -699,7 +706,15 @@ export default function LaunchPage() {
             <div className="mt-3 space-y-2">
               {tab === "tape" && (
                 <BoostRail
-                  rows={boostRank}
+                  rows={boostRank.map((b) => {
+                    const hit = coins.find((c) => c.mint === b.mint || c.id === b.coinId || c.id === b.mint);
+                    return {
+                      ...b,
+                      image: b.image || hit?.image,
+                      name: b.name || hit?.name,
+                      symbol: b.symbol || hit?.symbol || "",
+                    };
+                  })}
                   onOpen={(mint, coinId) => {
                     const hit = coins.find((c) => c.mint === mint || c.id === coinId || c.id === mint);
                     if (hit) {

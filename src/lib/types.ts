@@ -546,6 +546,8 @@ export interface AppState {
     feeSol: number;
   }[];
   circle?: import("./circle/types").CircleBook;
+  shill?: import("./shill/types").ShillBook;
+  mail?: import("./email/desk").MailBook;
   healthLog?: {
     t: number;
     tickAgeMs: number;

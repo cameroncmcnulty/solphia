@@ -16,7 +16,7 @@ export async function GET() {
       tickBoosts(st.launch);
       fillHouseBoosts(
         st.launch,
-        coins.slice(0, 10).map((c) => ({ id: c.id || c.mint, mint: c.mint, symbol: c.symbol })),
+        coins.slice(0, 10).map((c) => ({ id: c.id || c.mint, mint: c.mint, symbol: c.symbol, name: c.name, image: c.image })),
       );
     }, true);
     const ranked = await withLaunch((st) => rankedBoosts(st.launch || emptyLaunchBook()), false);

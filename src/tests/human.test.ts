@@ -16,7 +16,8 @@ describe("human puzzle", () => {
     const p = makePuzzle("fit-check");
     assert.equal(puzzleHit(p.targetX, p.targetX), true);
     assert.equal(puzzleHit(p.targetX + 4, p.targetX), true);
-    assert.equal(puzzleHit(p.targetX + 20, p.targetX), false);
+    assert.equal(puzzleHit(p.targetX + 16, p.targetX), true);
+    assert.equal(puzzleHit(p.targetX + 28, p.targetX), false);
     assert.equal(puzzleHit(0, p.targetX), false);
   });
 
