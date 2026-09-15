@@ -22,7 +22,7 @@ export function Stat({ k, v, sub, good }: { k: string; v: string; sub: string; g
   return (
     <div className="panel rounded-2xl p-4">
       <div className="font-mono text-[10px] tracking-[0.3em] text-mute">{k}</div>
-      <div className={`mt-1 font-display text-2xl md:text-3xl ${good === false ? "text-blood" : "text-ghost"}`}>{v}</div>
+      <div className={`stat-num mt-1 text-2xl md:text-3xl ${good === false ? "text-blood" : "text-ghost"}`}>{v}</div>
       <div className="font-mono text-[10px] text-mute">{sub}</div>
     </div>
   );
@@ -32,7 +32,7 @@ export function Mini({ k, v }: { k: string; v: string }) {
   return (
     <div className="rounded-2xl border border-line bg-void/40 px-4 py-3">
       <div className="font-mono text-[10px] tracking-[0.2em] text-mute">{k}</div>
-      <div className="mt-1 font-display text-xl text-ghost">{v}</div>
+      <div className="stat-num mt-1 text-xl text-ghost">{v}</div>
     </div>
   );
 }

@@ -55,7 +55,8 @@ export function ProfileOverlay({
   onClose: () => void;
   onModerated?: () => void;
 }) {
-  const [pack, setPack] = useState<ProfilePack | null>(cache.get(pubkey) || null);
+  const cacheKey = `${pubkey}:${viewer || ""}`;
+  const [pack, setPack] = useState<ProfilePack | null>(cache.get(cacheKey) || null);
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState("");
@@ -68,14 +69,14 @@ export function ProfileOverlay({
       .then((r) => r.json())
       .then((j) => {
         if (stop || !j?.pubkey) return;
-        cache.set(pubkey, j);
+        cache.set(cacheKey, j);
         setPack(j);
       })
       .catch(() => {});
     return () => {
       stop = true;
     };
-  }, [pubkey]);
+  }, [pubkey, viewer, cacheKey]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

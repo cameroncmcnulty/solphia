@@ -184,7 +184,7 @@ export function SwapWidget({
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
           inputMode="decimal"
-          className="w-full bg-transparent font-display text-3xl text-ghost outline-none"
+          className="stat-num w-full bg-transparent text-3xl text-ghost outline-none"
         />
       </SwapBox>
       {side === "buy" && (
@@ -214,7 +214,7 @@ export function SwapWidget({
         </button>
       </div>
       <SwapBox label="YOU GET" unit={quoteUnit}>
-        <div className="font-display text-3xl text-ghost">{quote || "—"}</div>
+        <div className="stat-num text-3xl text-ghost">{quote || "—"}</div>
       </SwapBox>
       {owner ? (
         <button type="button" disabled={busy} onClick={go} className="btn-acid mt-4 w-full rounded-full py-3.5 text-base disabled:opacity-40">

@@ -357,7 +357,7 @@ export function loadState(): AppState {
 function writeFs(next: AppState) {
   ensureDir();
   const tmp = FILE + ".tmp";
-  fs.writeFileSync(tmp, JSON.stringify(next, null, 2));
+  fs.writeFileSync(tmp, JSON.stringify(next));
   fs.renameSync(tmp, FILE);
   try {
     memMtime = fs.statSync(FILE).mtimeMs;

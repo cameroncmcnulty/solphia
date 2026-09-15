@@ -134,7 +134,7 @@ export function BacktestBrochure() {
                 </button>
               ))}
             </div>
-            <div className={`font-display text-5xl sm:text-7xl ${ready ? (up ? "text-acid" : "text-blood") : "text-mute"}`}>
+            <div className={`stat-num text-5xl sm:text-7xl ${ready ? (up ? "text-acid" : "text-blood") : "text-mute"}`}>
               {pct}
             </div>
             <div className="mt-1 font-mono text-xs text-mute">
@@ -193,7 +193,7 @@ function Stat({ k, v, sub }: { k: string; v: string; sub: string }) {
   return (
     <div className="rounded-2xl border border-line/80 bg-void/50 p-4">
       <div className="font-mono text-[10px] tracking-[0.2em] text-mute">{k}</div>
-      <div className="mt-1 font-display text-2xl text-ghost sm:text-3xl">{v}</div>
+      <div className="stat-num mt-1 text-2xl text-ghost sm:text-3xl">{v}</div>
       <div className="font-mono text-[11px] text-mute">{sub}</div>
     </div>
   );

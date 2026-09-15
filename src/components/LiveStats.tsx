@@ -49,7 +49,7 @@ export function LiveStats({ compact = false }: { compact?: boolean }) {
         {items.map((s) => (
           <div key={s.k} className="min-w-0">
             <div className="font-mono text-[10px] tracking-[0.16em] text-mute sm:text-[11px]">{s.k}</div>
-            <div className={`truncate font-display text-lg sm:text-2xl ${s.k === "1m backtest" && pnlPct < 0 ? "text-blood" : "text-acid"}`}>
+            <div className={`stat-num truncate text-lg sm:text-2xl ${s.k === "1m backtest" && pnlPct < 0 ? "text-blood" : "text-acid"}`}>
               {s.v}
             </div>
             <div className="truncate font-mono text-[10px] text-mute sm:text-[11px]">{s.sub}</div>

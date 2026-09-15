@@ -55,22 +55,36 @@ export function BoostBuy({
       <div className="font-mono text-[10px] tracking-[0.18em] text-acid">BOOST · ${symbol.replace(/^\$/, "")}</div>
       <p className="mt-1 text-[12px] text-mute">Each buy is 24 hours. More rockets, higher on the rail.</p>
       <div className="mt-2 grid grid-cols-2 gap-1.5">
-        {ROCKET_PACKS.map((p) => (
-          <button
-            key={p.rockets}
-            type="button"
-            onClick={() => setRockets(p.rockets)}
-            className={`rounded-2xl px-3 py-2 text-left ${
-              rockets === p.rockets ? "bg-acid/20 text-acid ring-1 ring-acid/50" : "border border-violet/30 text-mute"
-            } ${p.rockets === MEGA_ROCKETS ? "col-span-2" : ""}`}
-          >
-            <div className="font-display text-sm text-ghost">
-              {p.rockets === MEGA_ROCKETS ? "⚡ " : ""}
-              {p.rockets} 🚀
-            </div>
-            <div className="font-mono text-[10px]">{p.sol} SOL · 24h</div>
-          </button>
-        ))}
+        {ROCKET_PACKS.map((p) => {
+          const mega = p.rockets === MEGA_ROCKETS;
+          const on = rockets === p.rockets;
+          return (
+            <button
+              key={p.rockets}
+              type="button"
+              onClick={() => setRockets(p.rockets)}
+              className={`relative overflow-hidden rounded-2xl px-3 py-2 text-left ${
+                mega ? `col-span-2 boost-mega-pack ${on ? "on" : ""}` : on ? "bg-acid/20 text-acid ring-1 ring-acid/50" : "border border-violet/30 text-mute"
+              }`}
+            >
+              {mega && (
+                <span className="boost-confetti" aria-hidden>
+                  <i />
+                  <i />
+                  <i />
+                  <i />
+                  <i />
+                  <i />
+                </span>
+              )}
+              <div className="relative z-[1] font-stat text-sm text-ghost">
+                {mega ? "MEGA · " : ""}
+                {p.rockets} rockets
+              </div>
+              <div className="relative z-[1] font-mono text-[11px] text-acid">{p.sol} SOL · 24h</div>
+            </button>
+          );
+        })}
       </div>
       <button type="button" disabled={busy} onClick={buy} className="btn-acid mt-3 w-full rounded-full py-2 text-sm disabled:opacity-40">
         {busy ? "Paying…" : `Boost · ${rocketSol(pack.rockets)} SOL · ${pack.rockets} 🚀`}
@@ -97,10 +111,7 @@ export function BoostRail({
   return (
     <div className="overflow-hidden rounded-[1.5rem] border border-acid/35 bg-gradient-to-br from-acid/20 via-cyan/10 to-violet/25 p-3 shadow-[0_0_40px_rgba(20,241,149,0.12)]">
       <div className="mb-3 flex items-center justify-between gap-2">
-        <div>
-          <div className="font-display text-lg leading-none text-ghost">Boosted</div>
-          <p className="mt-0.5 text-[11px] text-mute">Paid rockets pin a token to the front of the tape for 24h.</p>
-        </div>
+        <div className="font-display text-lg leading-none text-ghost">Boosted</div>
         <div className="flex gap-1 rounded-full border border-violet/30 bg-void/50 p-0.5 font-mono text-[10px]">
           <button
             type="button"
@@ -129,6 +140,16 @@ export function BoostRail({
               onClick={() => onOpen(b.mint, b.coinId)}
               className={`boost-chip ${mega ? "mega" : ""}`}
             >
+              {mega && (
+                <span className="boost-confetti" aria-hidden>
+                  <i />
+                  <i />
+                  <i />
+                  <i />
+                  <i />
+                  <i />
+                </span>
+              )}
               {b.image ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={b.image} alt="" className="boost-chip-art" />
@@ -144,12 +165,12 @@ export function BoostRail({
                 {b.name && b.name.replace(/^\$/, "") !== ticker && (
                   <span className="block truncate text-[11px] text-mute">{b.name}</span>
                 )}
-                <span className="mt-1 flex items-center gap-2 font-mono text-[11px] text-acid">
+                <span className="mt-1 flex items-center gap-2 font-stat text-[12px] text-acid">
                   <span className="rounded-full bg-acid/20 px-2 py-0.5">
-                    {mega ? "⚡ " : "🚀 "}
+                    {mega ? "MEGA " : ""}
                     {b.rockets}
                   </span>
-                  <span className="text-mute">{fmtLeft(b.leftMs)} left</span>
+                  <span className="text-mute">{fmtLeft(b.leftMs)}</span>
                 </span>
               </span>
             </button>

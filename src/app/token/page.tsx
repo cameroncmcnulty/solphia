@@ -114,7 +114,7 @@ function Bubble({ k, v, hint }: { k: string; v: string; hint?: string }) {
   return (
     <div className="panel-bubble rounded-3xl px-4 py-4">
       <div className="font-mono text-[10px] tracking-[0.16em] text-mute">{k}</div>
-      <div className="mt-1 font-display text-2xl text-ghost sm:text-3xl">{v}</div>
+      <div className="stat-num mt-1 text-2xl text-ghost sm:text-3xl">{v}</div>
       {hint && <div className="mt-1 font-mono text-[10px] text-mute">{hint}</div>}
     </div>
   );

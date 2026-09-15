@@ -218,21 +218,23 @@ export function slimLaunch(book: LaunchBook): LaunchBook {
   for (const [k, a] of Object.entries(book.accounts || {})) {
     const pfp = a.pfp || "";
     const banner = a.banner || "";
+    const events = Array.isArray(a.rankEvents) ? a.rankEvents.slice(-12) : undefined;
     accounts[k] = {
       ...a,
       pfp: pfp.startsWith("data:") && pfp.length > 90_000 ? "" : pfp,
       banner: banner.startsWith("data:") && banner.length > 90_000 ? "" : banner,
+      rankEvents: events && events.length ? events : undefined,
     };
   }
   tickBoosts(book);
   return {
     ...book,
     accounts,
-    boosts: ensureBoosts(book).slice(-80),
-    coins: (book.coins || []).slice(0, 120).map((c) => ({
+    boosts: ensureBoosts(book).slice(-40),
+    coins: (book.coins || []).slice(0, 80).map((c) => ({
       ...c,
       image: (c.image || "").length > 90_000 ? "" : c.image,
-      fills: (c.fills || []).slice(-200),
+      fills: (c.fills || []).slice(-80),
     })),
   };
 }

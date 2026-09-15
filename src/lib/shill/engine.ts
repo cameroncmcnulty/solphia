@@ -46,7 +46,7 @@ export function mergeShill(local: ShillBook, remote: ShillBook): ShillBook {
 export function slimShill(book?: ShillBook | null): ShillBook {
   const b = ensureShill(book);
   return {
-    messages: b.messages.slice(-120),
+    messages: b.messages.slice(-80),
     pins: b.pins.slice(-SHILL_PIN_SLOTS),
     members: b.members,
     typing: {},
@@ -71,6 +71,11 @@ export function pruneShill(book: ShillBook, now = Date.now()) {
   book.pins = (book.pins || []).filter((p) => p.endsAt > now);
   for (const m of book.messages) {
     if (!m.reactions) m.reactions = {};
+  }
+  for (const [pk, m] of Object.entries(book.members || {})) {
+    if (m.banned || (m.mutedUntil && m.mutedUntil > now)) continue;
+    const last = Math.max(m.lastReadAt || 0, m.lastCaAt || 0);
+    if (last < cut) delete book.members[pk];
   }
 }
 

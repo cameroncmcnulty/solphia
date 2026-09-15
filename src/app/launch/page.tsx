@@ -977,7 +977,7 @@ function StatCell({ k, v, tone }: { k: string; v: ReactNode; tone?: string }) {
   return (
     <div className="min-w-0">
       <div className="font-mono text-[9px] tracking-[0.14em] text-mute">{k}</div>
-      <div className={`truncate font-mono text-[12px] ${tone || "text-ghost"}`}>{v}</div>
+      <div className={`stat-num truncate text-[13px] ${tone || "text-ghost"}`}>{v}</div>
     </div>
   );
 }
@@ -1044,28 +1044,28 @@ function CoinCard({
                 </span>
               ) : null}
             </div>
-            <div className="mt-0.5 flex items-center gap-2 text-[12px]">
-              <span className="font-mono text-ghost">{px}</span>
+            <div className="mt-0.5 flex items-center gap-2 text-[13px]">
+              <span className="stat-num text-ghost">{px}</span>
               {c.name && c.name.replace(/^\$+/, "").toUpperCase() !== (c.symbol || "").replace(/^\$+/, "").toUpperCase() ? (
                 <span className="truncate text-mute">{c.name}</span>
               ) : null}
             </div>
           </div>
         </div>
-        <div className="hidden xl:block font-mono text-[12px] text-mute">{fmtAge(Date.now() - c.createdAt)}</div>
-        <div className="hidden xl:block font-mono text-[12px] text-ghost">{mc}</div>
-        <div className="hidden xl:block font-mono text-[12px] text-ghost">{liq}</div>
-        <div className="hidden xl:block font-mono text-[12px] text-ghost">{volShown}</div>
-        <div className="hidden xl:block font-mono text-[12px]">
+        <div className="stat-num hidden text-[13px] text-mute xl:block">{fmtAge(Date.now() - c.createdAt)}</div>
+        <div className="stat-num hidden text-[13px] text-ghost xl:block">{mc}</div>
+        <div className="stat-num hidden text-[13px] text-ghost xl:block">{liq}</div>
+        <div className="stat-num hidden text-[13px] text-ghost xl:block">{volShown}</div>
+        <div className="stat-num hidden text-[13px] xl:block">
           <Chg n={c.change5m} />
         </div>
-        <div className="hidden xl:block font-mono text-[12px]">
+        <div className="stat-num hidden text-[13px] xl:block">
           <Chg n={c.change1h} />
         </div>
-        <div className="hidden xl:block font-mono text-[12px]">
+        <div className="stat-num hidden text-[13px] xl:block">
           <Chg n={c.change6h} />
         </div>
-        <div className="hidden xl:block font-mono text-[12px]">
+        <div className="stat-num hidden text-[13px] xl:block">
           <Chg n={c.change24h} />
         </div>
       </div>
@@ -1520,7 +1520,7 @@ function Stat({ k, v }: { k: string; v: string }) {
   return (
     <div className="rounded-2xl border border-violet/15 px-3 py-2">
       <div className="font-mono text-[10px] text-mute">{k}</div>
-      <div className="font-display text-lg text-ghost">{v}</div>
+      <div className="stat-num text-lg text-ghost">{v}</div>
     </div>
   );
 }

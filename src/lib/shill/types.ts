@@ -52,7 +52,7 @@ export type ShillBook = {
   typing: Record<string, number>;
 };
 
-export const SHILL_MSG_MAX = 500;
+export const SHILL_MSG_MAX = 240;
 export const SHILL_KEEP_MS = 14 * 24 * 3600_000;
 export const SHILL_CA_COOLDOWN_MS = 30_000;
 export const SHILL_PIN_SLOTS = 5;

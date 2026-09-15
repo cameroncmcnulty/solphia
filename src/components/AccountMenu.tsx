@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { CircleUser, Gift, Image, Rocket, Users, Wallet } from "lucide-react";
 import { useOwner } from "@/lib/hooks";
 import { CartoonPfp } from "./CartoonPfp";
 import { PhantomMark } from "./PhantomMark";
@@ -10,12 +11,12 @@ import { WalletConnect, switchPhantom } from "./WalletConnect";
 type Desk = { pfp?: string; username?: string };
 
 const LINKS = [
-  { href: "/account", label: "Account" },
-  { href: "/account#wallets", label: "Trading wallets" },
-  { href: "/account#profile", label: "Profile" },
-  { href: "/account#launches", label: "Launched coins" },
-  { href: "/account#referrals", label: "Referrals" },
-  { href: "/circle?welcome=1", label: "🎁 Founders Circle" },
+  { href: "/account", label: "Account", Icon: CircleUser },
+  { href: "/account#wallets", label: "Trading wallets", Icon: Wallet },
+  { href: "/account#profile", label: "Profile", Icon: Image },
+  { href: "/account#launches", label: "Launched coins", Icon: Rocket },
+  { href: "/account#referrals", label: "Referrals", Icon: Users },
+  { href: "/circle?welcome=1", label: "Founders Circle", Icon: Gift },
 ];
 
 export function AccountMenu() {
@@ -95,8 +96,9 @@ export function AccountMenu() {
                   setOpen(false);
                   if (l.href.includes("#")) queueMicrotask(() => window.dispatchEvent(new Event("hashchange")));
                 }}
-                className="block px-4 py-2.5 text-sm text-mute hover:bg-white/5 hover:text-ghost"
+                className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-mute hover:bg-white/5 hover:text-ghost"
               >
+                <l.Icon className="h-4 w-4 shrink-0 text-acid" />
                 {l.label}
               </Link>
             ))}
@@ -113,9 +115,9 @@ export function AccountMenu() {
                   setOpen(false);
                 }
               }}
-              className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-mute hover:bg-white/5 hover:text-ghost disabled:opacity-40"
+              className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left text-sm text-mute hover:bg-white/5 hover:text-ghost disabled:opacity-40"
             >
-              <PhantomMark className="h-4 w-4 text-white" />
+              <PhantomMark className="h-4 w-4 shrink-0 text-white" />
               {busy ? "Opening Phantom…" : "Switch wallet"}
             </button>
           </nav>

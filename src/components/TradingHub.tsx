@@ -530,7 +530,7 @@ function Huge({ k, v, sub, good }: { k: string; v: string; sub: string; good?: b
   return (
     <div className="rounded-2xl border border-violet/20 bg-void/40 p-4">
       <div className="font-mono text-[10px] tracking-[0.18em] text-mute">{k}</div>
-      <div className={`mt-1 font-display text-2xl md:text-3xl ${good === false ? "text-blood" : "text-ghost"}`}>{v}</div>
+      <div className={`stat-num mt-1 text-2xl md:text-3xl ${good === false ? "text-blood" : "text-ghost"}`}>{v}</div>
       <div className="mt-1 font-mono text-[11px] text-mute">{sub}</div>
     </div>
   );
@@ -540,7 +540,7 @@ function Mini({ k, v }: { k: string; v: string }) {
   return (
     <div className="rounded-xl border border-violet/15 px-3 py-2">
       <div className="font-mono text-[10px] tracking-[0.16em] text-mute">{k}</div>
-      <div className="font-display text-lg text-ghost">{v}</div>
+      <div className="stat-num text-lg text-ghost">{v}</div>
     </div>
   );
 }

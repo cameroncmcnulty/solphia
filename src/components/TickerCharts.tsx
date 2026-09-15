@@ -61,7 +61,7 @@ export function TickerCharts() {
                   <div className="truncate font-display text-xl text-ghost">{t.name}</div>
                 </div>
                 <div className="shrink-0 text-right">
-                  <div className={`font-display text-xl ${up ? "text-acid" : "text-blood"}`}>
+                  <div className={`stat-num text-xl ${up ? "text-acid" : "text-blood"}`}>
                     {t.last ? money(t.last) : "—"}
                   </div>
                   <div className={`font-mono text-[11px] ${up ? "text-acid" : "text-blood"}`}>

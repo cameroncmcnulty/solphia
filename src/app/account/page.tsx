@@ -659,7 +659,7 @@ function Mini({ k, v }: { k: string; v: string }) {
   return (
     <div className="rounded-2xl border border-line bg-void/40 px-4 py-3">
       <div className="font-mono text-[10px] tracking-[0.2em] text-mute">{k}</div>
-      <div className="mt-1 font-display text-xl text-ghost">{v}</div>
+      <div className="stat-num mt-1 text-xl text-ghost">{v}</div>
     </div>
   );
 }
@@ -669,7 +669,7 @@ function WalletRow({ k, pk, bal }: { k: string; pk: string; bal: number }) {
     <div className="rounded-2xl border border-violet/20 px-4 py-3">
       <div className="font-mono text-[10px] tracking-[0.2em] text-mute">{k}</div>
       <div className="mt-1 break-all font-mono text-xs text-ghost">{pk || "—"}</div>
-      <div className="mt-1 font-display text-xl text-acid">{bal.toFixed(4)} SOL</div>
+      <div className="stat-num mt-1 text-xl text-acid">{bal.toFixed(4)} SOL</div>
     </div>
   );
 }

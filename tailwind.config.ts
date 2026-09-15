@@ -21,6 +21,7 @@ const config: Config = {
         display: ["var(--font-syne)", "sans-serif"],
         serif: ["var(--font-cormorant)", "serif"],
         mono: ["var(--font-plex)", "ui-monospace", "monospace"],
+        stat: ["var(--font-plex)", "ui-monospace", "monospace"],
       },
       boxShadow: {
         glow: "0 0 40px rgba(92, 255, 216, 0.18)",

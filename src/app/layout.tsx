@@ -4,7 +4,7 @@ import "./globals.css";
 import { Shell } from "@/components/Shell";
 
 const syne = Syne({ subsets: ["latin"], variable: "--font-syne" });
-const plex = IBM_Plex_Mono({ subsets: ["latin"], weight: ["400", "500", "600"], variable: "--font-plex" });
+const plex = IBM_Plex_Mono({ subsets: ["latin"], weight: ["400", "500", "600", "700"], variable: "--font-plex" });
 const cormorant = Cormorant_Garamond({ subsets: ["latin"], weight: ["400", "500", "600"], variable: "--font-cormorant" });
 
 export const viewport: Viewport = {

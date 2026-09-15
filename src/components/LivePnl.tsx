@@ -15,7 +15,7 @@ export function LivePnl({
   return (
     <div className="panel rounded-2xl px-5 py-4">
       <div className="font-mono text-[10px] tracking-[0.35em] text-cyan">LIVE BOOK · $1,000 START</div>
-      <div className={`mt-1 font-display text-4xl ${up ? "text-acid" : "text-blood"}`}>
+      <div className={`stat-num mt-1 text-4xl ${up ? "text-acid" : "text-blood"}`}>
         ${equity.toFixed(2)}
       </div>
       <div className="mt-1 flex gap-4 font-mono text-xs text-mute">
