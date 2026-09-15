@@ -44,6 +44,7 @@ export type AdminUser = {
   plan: string;
   paid: boolean;
   admin: boolean;
+  mod: boolean;
   comped: boolean;
   createdAt: number;
   lastSeen: number;

@@ -490,6 +490,8 @@ export interface AppState {
   creators: Record<string, CreatorStat>;
   watchWallets: string[];
   adminWallets: string[];
+  /** Chat mods. Admins are adminWallets / founders, not this list. */
+  modWallets?: string[];
   traders: Record<string, TraderAccount>;
   /** Owners with REAL mode on. Tick these even if the hub is idle. */
   liveOwners?: string[];

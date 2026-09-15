@@ -41,6 +41,8 @@ export type ShillMember = {
   pubkey: string;
   lastCaAt?: number;
   lastReadAt?: number;
+  banned?: boolean;
+  mutedUntil?: number;
 };
 
 export type ShillBook = {

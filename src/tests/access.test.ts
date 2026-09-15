@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { circleVip, grantFounder, isFounder, levSeatOk, liveSeatOk, revokeFounder } from "../lib/access";
+import { circleVip, grantFounder, grantMod, isFounder, levSeatOk, liveSeatOk, revokeFounder, revokeMod, staffRole } from "../lib/access";
 import { LIVE_TRADING } from "../lib/config";
 import { emptyState } from "../lib/store";
 
@@ -53,5 +53,20 @@ describe("founder access", () => {
 
   it("defaults the live desk on", () => {
     assert.equal(LIVE_TRADING, true);
+  });
+
+  it("grants a distinct mod role that can moderate chat without becoming a founder", () => {
+    const s = emptyState();
+    const pk = "CyaE1VxvBrahnPWkqm5VsdCvyS2QmNht2UFrKJHga54o";
+    grantMod(s, pk);
+    assert.equal(staffRole(s, pk), "mod");
+    assert.equal(isFounder(s, pk), false);
+    grantFounder(s, pk);
+    assert.equal(staffRole(s, pk), "admin");
+    assert.equal((s.modWallets || []).includes(pk), false);
+    revokeFounder(s, pk);
+    grantMod(s, pk);
+    revokeMod(s, pk);
+    assert.equal(staffRole(s, pk), null);
   });
 });

@@ -216,10 +216,12 @@ function pxAt(fills: LaunchFill[], before: number, fallback: number): number {
 export function slimLaunch(book: LaunchBook): LaunchBook {
   const accounts: Record<string, LaunchAccount> = {};
   for (const [k, a] of Object.entries(book.accounts || {})) {
+    const pfp = a.pfp || "";
+    const banner = a.banner || "";
     accounts[k] = {
       ...a,
-      pfp: (a.pfp || "").length > 90_000 ? "" : a.pfp,
-      banner: (a.banner || "").length > 90_000 ? "" : a.banner,
+      pfp: pfp.startsWith("data:") && pfp.length > 90_000 ? "" : pfp,
+      banner: banner.startsWith("data:") && banner.length > 90_000 ? "" : banner,
     };
   }
   tickBoosts(book);
@@ -258,16 +260,7 @@ export function mergeLaunch(local: LaunchBook, remote: LaunchBook): LaunchBook {
       accounts[k] = a;
       continue;
     }
-    accounts[k] = {
-      pubkey: a.pubkey || r.pubkey || k,
-      referrer: a.referrer || r.referrer,
-      referredAt: a.referredAt || r.referredAt,
-      pfp: a.pfp || r.pfp,
-      username: a.username || r.username,
-      usernameAt: a.usernameAt || r.usernameAt,
-      notes: a.notes || r.notes,
-      referralRewardsSol: Math.max(a.referralRewardsSol || 0, r.referralRewardsSol || 0),
-    };
+    accounts[k] = mergeAccount(r, a, k);
   }
   const boostMap = new Map<string, NonNullable<LaunchBook["boosts"]>[number]>();
   for (const b of remote.boosts || []) boostMap.set(b.id, b);
@@ -279,6 +272,42 @@ export function mergeLaunch(local: LaunchBook, remote: LaunchBook): LaunchBook {
     treasuryFeesSol: Math.max(local.treasuryFeesSol || 0, remote.treasuryFeesSol || 0),
     accounts,
     boosts: [...boostMap.values()],
+  };
+}
+
+export function mergeAccount(remote: LaunchAccount, local: LaunchAccount, key: string): LaunchAccount {
+  const dayA = local.rankDay;
+  const dayB = remote.rankDay;
+  const rankDay =
+    !dayA ? dayB : !dayB ? dayA : dayA.ymd > dayB.ymd ? dayA : dayB.ymd > dayA.ymd ? dayB : {
+      ymd: dayA.ymd,
+      chat: Math.max(dayA.chat || 0, dayB.chat || 0),
+      swapXp: Math.max(dayA.swapXp || 0, dayB.swapXp || 0),
+      launches: Math.max(dayA.launches || 0, dayB.launches || 0),
+    };
+  const eventsA = local.rankEvents || [];
+  const eventsB = remote.rankEvents || [];
+  return {
+    ...remote,
+    ...local,
+    pubkey: local.pubkey || remote.pubkey || key,
+    referrer: local.referrer || remote.referrer,
+    referredAt: local.referredAt || remote.referredAt,
+    pfp: local.pfp || remote.pfp,
+    username: local.username || remote.username,
+    usernameAt: local.usernameAt || remote.usernameAt,
+    notes: local.notes || remote.notes,
+    referralRewardsSol: Math.max(local.referralRewardsSol || 0, remote.referralRewardsSol || 0),
+    intro: local.intro != null ? local.intro : remote.intro,
+    banner: local.banner != null ? local.banner : remote.banner,
+    favMint: local.favMint != null ? local.favMint : remote.favMint,
+    favSymbol: local.favSymbol || remote.favSymbol,
+    favName: local.favName || remote.favName,
+    favImage: local.favImage || remote.favImage,
+    xp: Math.max(local.xp || 0, remote.xp || 0),
+    rankDay,
+    rankEvents: eventsA.length >= eventsB.length ? eventsA : eventsB,
+    circleCredited: Boolean(local.circleCredited || remote.circleCredited),
   };
 }
 

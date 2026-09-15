@@ -2,6 +2,43 @@
 
 import { rankTier } from "@/lib/rank/engine";
 
+export function StaffBadge({
+  role,
+  size = 72,
+  className = "",
+}: {
+  role: "admin" | "mod";
+  size?: number;
+  className?: string;
+}) {
+  const admin = role === "admin";
+  const metal = admin ? "#ff4d6d" : "#80eaff";
+  const glow = admin ? "#ff8fab" : "#14f195";
+  const label = admin ? "ADMIN" : "MOD";
+  const id = `stf${role}${size}`;
+  return (
+    <svg viewBox="0 0 80 80" width={size} height={size} className={className} aria-label={label}>
+      <defs>
+        <linearGradient id={`${id}m`} x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="#fff" />
+          <stop offset="45%" stopColor={metal} />
+          <stop offset="100%" stopColor={glow} />
+        </linearGradient>
+        <radialGradient id={`${id}g`} cx="50%" cy="40%" r="60%">
+          <stop offset="0%" stopColor={glow} stopOpacity="0.95" />
+          <stop offset="100%" stopColor="#0b0614" stopOpacity="0.15" />
+        </radialGradient>
+      </defs>
+      <circle cx="40" cy="40" r="36" fill={`url(#${id}g)`} />
+      <polygon points={hex(40, 40, 32)} fill="#12081c" stroke={`url(#${id}m)`} strokeWidth="3" />
+      <polygon points={hex(40, 40, 26)} fill="none" stroke={glow} strokeWidth="1.2" opacity="0.8" />
+      <text x="40" y="44" textAnchor="middle" fontFamily="ui-sans-serif, system-ui, sans-serif" fontWeight="800" fontSize={admin ? 11 : 13} fill="#f4f0ff">
+        {label}
+      </text>
+    </svg>
+  );
+}
+
 export function RankBadge({
   rank,
   size = 72,

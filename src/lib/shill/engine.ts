@@ -129,6 +129,8 @@ export function postShill(
   if (!isSolanaAddress(opts.owner)) return { ok: false, error: "bad_wallet" };
   const now = opts.now || Date.now();
   const me = touchMember(book, opts.owner, now);
+  if (me.banned) return { ok: false, error: "banned" };
+  if (me.mutedUntil && me.mutedUntil > now) return { ok: false, error: "muted", waitMs: me.mutedUntil - now };
   const kind = opts.kind || (opts.sticker ? "sticker" : opts.media ? "media" : "text");
   const text = (opts.text || "").trim().slice(0, 2000);
   if (kind === "text" && !text) return { ok: false, error: "empty" };
@@ -168,6 +170,22 @@ export function reactShill(book: ShillBook, opts: { owner: string; id: string; e
   else cur.add(opts.owner);
   if (cur.size) msg.reactions[emoji] = [...cur];
   else delete msg.reactions[emoji];
+  return true;
+}
+
+export function muteShill(book: ShillBook, pubkey: string, ms: number, now = Date.now()): boolean {
+  if (!isSolanaAddress(pubkey)) return false;
+  const m = touchMember(book, pubkey, now);
+  if (m.banned) return false;
+  m.mutedUntil = now + Math.max(0, ms);
+  return true;
+}
+
+export function banShill(book: ShillBook, pubkey: string, on = true, now = Date.now()): boolean {
+  if (!isSolanaAddress(pubkey)) return false;
+  const m = touchMember(book, pubkey, now);
+  m.banned = on;
+  if (on) m.mutedUntil = undefined;
   return true;
 }
 

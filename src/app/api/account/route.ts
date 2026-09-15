@@ -57,7 +57,13 @@ function pack(book: ReturnType<typeof emptyLaunchBook>, pubkey: string, solUsd: 
     launched: launched.map((c) => publicCoin(c, solUsd, pubkey, book)),
     link: `/r/${pubkey}`,
     intro: acc.intro || "",
-    banner: acc.banner || "",
+    banner: acc.banner
+      ? acc.banner.startsWith("data:")
+        ? `/api/circle/avatar?pk=${encodeURIComponent(pubkey)}&kind=banner`
+        : acc.banner.startsWith("http")
+          ? `/api/media?u=${encodeURIComponent(acc.banner)}`
+          : acc.banner
+      : "",
     favMint: acc.favMint || "",
     favSymbol: acc.favSymbol || "",
     favName: acc.favName || "",

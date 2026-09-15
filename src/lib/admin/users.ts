@@ -28,6 +28,7 @@ export function buildAdminUsers(state: AppState): AdminUser[] {
       plan: user?.plan || "paper",
       paid: Boolean(user?.subscribedUntil && user.subscribedUntil > now),
       admin: isFounder(state, pubkey),
+      mod: !isFounder(state, pubkey) && (state.modWallets || []).includes(pubkey),
       comped: Boolean(user?.comped),
       createdAt: user?.createdAt || acc.referredAt || trader?.updatedAt || 0,
       lastSeen: Math.max(user?.lastSeen || 0, trader?.updatedAt || 0),

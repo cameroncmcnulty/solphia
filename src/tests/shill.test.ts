@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { emptyShill, extractCas, mergeShill, pinToken, postShill, pruneShill } from "../lib/shill/engine";
+import { banShill, emptyShill, extractCas, mergeShill, muteShill, pinToken, postShill, pruneShill } from "../lib/shill/engine";
 import { SHILL_CA_COOLDOWN_MS, SHILL_PIN_MS, SHILL_PIN_SOL, SHILL_PIN_SLOTS } from "../lib/shill/types";
 
 const A = "CyaE1VxvBrahnPWkqm5VsdCvyS2QmNht2UFrKJHga54o";
@@ -8,6 +8,21 @@ const B = "D4uCNcBKAbG9NAkmhQg7pBiztuejNzbWrZDcZmFGut81";
 const CA = "So11111111111111111111111111111111111111112";
 
 describe("shill zone", () => {
+  it("blocks muted and banned wallets from posting", () => {
+    const book = emptyShill();
+    const now = 50_000;
+    assert.equal(muteShill(book, A, 24 * 3600_000, now), true);
+    const muted = postShill(book, { owner: A, text: "hi", now: now + 1000 });
+    assert.equal(muted.ok, false);
+    if (!muted.ok) assert.equal(muted.error, "muted");
+    const later = postShill(book, { owner: A, text: "later", now: now + 24 * 3600_000 + 1 });
+    assert.equal(later.ok, true);
+    assert.equal(banShill(book, B, true, now), true);
+    const banned = postShill(book, { owner: B, text: "nope", now: now + 10 });
+    assert.equal(banned.ok, false);
+    if (!banned.ok) assert.equal(banned.error, "banned");
+  });
+
   it("pulls a CA out of chat and cools down the next one", () => {
     assert.deepEqual(extractCas(`ape ${CA} now`), [CA]);
     const book = emptyShill();

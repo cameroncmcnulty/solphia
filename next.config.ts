@@ -12,11 +12,12 @@ const securityHeaders = [
     key: "Content-Security-Policy",
     value: [
       "default-src 'self'",
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.youtube.com https://www.youtube-nocookie.com",
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "font-src 'self' https://fonts.gstatic.com data:",
       "img-src 'self' data: blob: https:",
       "media-src 'self' blob: https:",
+      "frame-src https://www.youtube.com https://www.youtube-nocookie.com",
       "connect-src 'self' https: wss:",
       "frame-ancestors 'none'",
       "base-uri 'self'",

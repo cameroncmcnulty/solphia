@@ -34,9 +34,32 @@ export function circleVip(state: AppState, pubkey?: string | null): boolean {
   return isFounder(state, pubkey);
 }
 
+export function grantMod(state: AppState, pubkey: string) {
+  if (!pubkey) return;
+  if (isFounder(state, pubkey)) return;
+  if (!state.modWallets) state.modWallets = [];
+  if (!state.modWallets.includes(pubkey)) state.modWallets.push(pubkey);
+}
+
+export function revokeMod(state: AppState, pubkey: string) {
+  state.modWallets = (state.modWallets || []).filter((w) => w !== pubkey);
+}
+
+export function staffRole(state: AppState, pubkey?: string | null): "admin" | "mod" | null {
+  if (!pubkey) return null;
+  if (isFounder(state, pubkey)) return "admin";
+  if ((state.modWallets || []).includes(pubkey)) return "mod";
+  return null;
+}
+
+export function canModerateChat(state: AppState, pubkey?: string | null): boolean {
+  return staffRole(state, pubkey) != null;
+}
+
 export function grantFounder(state: AppState, pubkey: string) {
   if (!state.adminWallets) state.adminWallets = [];
   if (!state.adminWallets.includes(pubkey)) state.adminWallets.push(pubkey);
+  revokeMod(state, pubkey);
   let user = state.users.find((u) => u.pubkey === pubkey);
   if (!user) {
     user = {

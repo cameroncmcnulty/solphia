@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { CartoonPfp } from "./CartoonPfp";
-import { RankBadge } from "./RankBadge";
+import { RankBadge, StaffBadge } from "./RankBadge";
 
 function media(url?: string) {
   const raw = (url || "").trim();
@@ -26,6 +26,10 @@ export type ProfilePack = {
   launched?: number;
   referred?: number;
   fav?: { mint: string; symbol: string; name: string; image?: string } | null;
+  role?: "admin" | "mod" | null;
+  canModerate?: boolean;
+  banned?: boolean;
+  mutedUntil?: number;
 };
 
 const cache = new Map<string, ProfilePack>();
@@ -40,13 +44,27 @@ export function useProfilePeek() {
   };
 }
 
-export function ProfileOverlay({ pubkey, onClose }: { pubkey: string; onClose: () => void }) {
+export function ProfileOverlay({
+  pubkey,
+  viewer,
+  onClose,
+  onModerated,
+}: {
+  pubkey: string;
+  viewer?: string | null;
+  onClose: () => void;
+  onModerated?: () => void;
+}) {
   const [pack, setPack] = useState<ProfilePack | null>(cache.get(pubkey) || null);
   const [copied, setCopied] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState("");
 
   useEffect(() => {
     let stop = false;
-    fetch(`/api/profile?pubkey=${encodeURIComponent(pubkey)}`, { cache: "no-store" })
+    const q = new URLSearchParams({ pubkey });
+    if (viewer) q.set("viewer", viewer);
+    fetch(`/api/profile?${q.toString()}`, { cache: "no-store" })
       .then((r) => r.json())
       .then((j) => {
         if (stop || !j?.pubkey) return;
@@ -96,11 +114,15 @@ export function ProfileOverlay({ pubkey, onClose }: { pubkey: string; onClose: (
               {pubkey.slice(0, 6)}…{pubkey.slice(-4)}
             </div>
           </div>
-          <RankBadge rank={pack?.rank || 1} size={72} />
+          <div className="flex items-end gap-1">
+            {pack?.role ? <StaffBadge role={pack.role} size={56} /> : null}
+            <RankBadge rank={pack?.rank || 1} size={72} />
+          </div>
         </div>
         <div className="px-4 pb-5 pt-3">
           <div className="flex items-center justify-between text-[12px]">
             <span className="font-display text-acid">
+              {pack?.role ? `${pack.role === "admin" ? "ADMIN" : "MOD"} · ` : ""}
               Rank {pack?.rank || 1} · {pack?.title || "Spark"}
             </span>
             <span className="font-mono text-[10px] text-mute">{pack?.need === 0 ? "MAX" : `${pack?.need || 0} XP to next`}</span>
@@ -147,6 +169,63 @@ export function ProfileOverlay({ pubkey, onClose }: { pubkey: string; onClose: (
               <div className="font-display text-lg text-ghost">{pack?.referred ?? "—"}</div>
             </div>
           </div>
+          {pack?.canModerate && viewer && viewer !== pubkey && pack.role !== "admin" && (
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                disabled={busy}
+                className="rounded-full border border-warn/50 py-2 text-sm text-warn disabled:opacity-40"
+                onClick={async () => {
+                  setBusy(true);
+                  setNote("");
+                  try {
+                    const r = await fetch("/api/shill", {
+                      method: "POST",
+                      headers: { "content-type": "application/json" },
+                      body: JSON.stringify({ action: "mute", pubkey: viewer, target: pubkey }),
+                    });
+                    const j = await r.json();
+                    if (!r.ok) throw new Error(j.message || "Could not mute.");
+                    setNote("Muted for 24 hours.");
+                    onModerated?.();
+                  } catch (e) {
+                    setNote(e instanceof Error ? e.message : "mute failed");
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              >
+                Mute 24h
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                className="rounded-full border border-blood/50 py-2 text-sm text-blood disabled:opacity-40"
+                onClick={async () => {
+                  setBusy(true);
+                  setNote("");
+                  try {
+                    const r = await fetch("/api/shill", {
+                      method: "POST",
+                      headers: { "content-type": "application/json" },
+                      body: JSON.stringify({ action: "ban", pubkey: viewer, target: pubkey, banned: true }),
+                    });
+                    const j = await r.json();
+                    if (!r.ok) throw new Error(j.message || "Could not ban.");
+                    setNote("Banned from Shill Zone.");
+                    onModerated?.();
+                  } catch (e) {
+                    setNote(e instanceof Error ? e.message : "ban failed");
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              >
+                Ban
+              </button>
+            </div>
+          )}
+          {note && <p className="mt-2 text-center font-mono text-[11px] text-acid">{note}</p>}
         </div>
       </div>
     </div>

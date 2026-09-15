@@ -46,6 +46,8 @@ type RankCard = {
   xp: number;
   need: number;
   pct: number;
+  role?: "admin" | "mod" | null;
+  staff?: boolean;
 };
 
 type Pack = {
@@ -291,7 +293,14 @@ export default function ShillPage() {
 
   return (
     <main className="relative min-h-[calc(100vh-4rem)] overflow-hidden pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:pb-4">
-      {peek && <ProfileOverlay pubkey={peek} onClose={() => setPeek(null)} />}
+      {peek && (
+        <ProfileOverlay
+          pubkey={peek}
+          viewer={owner}
+          onClose={() => setPeek(null)}
+          onModerated={() => load().catch(() => {})}
+        />
+      )}
       {toast && (
         <div className="pointer-events-none fixed inset-x-0 top-20 z-[60] flex justify-center">
           <div className="rounded-full border border-acid/50 bg-acid px-5 py-2 font-display text-lg text-void shadow-[0_0_30px_rgba(20,241,149,0.45)]">
@@ -350,9 +359,15 @@ export default function ShillPage() {
                       <button type="button" className="hover:text-acid" onClick={() => setPeek(m.owner)}>
                         {nameOf(m.owner, pack?.profiles)}
                       </button>
-                      <span className="rounded-full bg-acid/15 px-1.5 py-[1px] text-[9px] text-acid">
-                        {rankOf(m.owner, pack?.profiles)}
-                      </span>
+                      {pack?.profiles?.[m.owner]?.role ? (
+                        <span className={`rounded-full px-1.5 py-[1px] text-[9px] ${pack.profiles[m.owner].role === "admin" ? "bg-blood/25 text-blood" : "bg-cyan/20 text-cyan"}`}>
+                          {pack.profiles[m.owner].role === "admin" ? "ADMIN" : "MOD"}
+                        </span>
+                      ) : (
+                        <span className="rounded-full bg-acid/15 px-1.5 py-[1px] text-[9px] text-acid">
+                          {rankOf(m.owner, pack?.profiles)}
+                        </span>
+                      )}
                     </div>
                     <div
                       className={`relative rounded-2xl px-3 py-2 text-sm leading-snug ${
@@ -422,7 +437,7 @@ export default function ShillPage() {
                       <button type="button" className="text-mute hover:text-acid" onClick={() => setReply(m)} title="Reply">
                         <Reply className="h-3 w-3" />
                       </button>
-                      {mine && (
+                      {pack?.you?.staff && (
                         <button
                           type="button"
                           className="text-[10px] text-mute hover:text-blood"

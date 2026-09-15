@@ -178,7 +178,7 @@ export function setIntro(book: LaunchBook, pubkey: string, intro: string) {
   if (!isSolanaAddress(pubkey)) return { ok: false as const, error: "bad_wallet" };
   const acc = ensureAccount(book, pubkey);
   const text = sanitizeText(intro || "", INTRO_MAX);
-  acc.intro = text || undefined;
+  acc.intro = text;
   return { ok: true as const, account: acc };
 }
 
@@ -187,11 +187,11 @@ export function setBanner(book: LaunchBook, pubkey: string, banner: string) {
   const acc = ensureAccount(book, pubkey);
   const raw = (banner || "").trim();
   if (!raw) {
-    acc.banner = undefined;
+    acc.banner = "";
     return { ok: true as const, account: acc };
   }
   if (raw.startsWith("data:image/") && raw.length > 400_000) return { ok: false as const, error: "bad_image" };
-  if (!raw.startsWith("data:image/") && !/^https?:\/\//i.test(raw) && !raw.startsWith("/api/media")) {
+  if (!raw.startsWith("data:image/") && !/^https?:\/\//i.test(raw) && !raw.startsWith("/api/media") && !raw.startsWith("/api/circle/avatar")) {
     return { ok: false as const, error: "bad_image" };
   }
   acc.banner = raw;
@@ -206,17 +206,17 @@ export function setFavourite(
   if (!isSolanaAddress(pubkey)) return { ok: false as const, error: "bad_wallet" };
   const acc = ensureAccount(book, pubkey);
   if (!fav || !fav.mint) {
-    acc.favMint = undefined;
-    acc.favSymbol = undefined;
-    acc.favName = undefined;
-    acc.favImage = undefined;
+    acc.favMint = "";
+    acc.favSymbol = "";
+    acc.favName = "";
+    acc.favImage = "";
     return { ok: true as const, account: acc };
   }
   if (!isSolanaAddress(fav.mint)) return { ok: false as const, error: "bad_mint" };
   acc.favMint = fav.mint;
-  acc.favSymbol = sanitizeText(fav.symbol || "", 16) || undefined;
-  acc.favName = sanitizeText(fav.name || "", 48) || undefined;
-  acc.favImage = (fav.image || "").slice(0, 400) || undefined;
+  acc.favSymbol = sanitizeText(fav.symbol || "", 16);
+  acc.favName = sanitizeText(fav.name || "", 48);
+  acc.favImage = (fav.image || "").startsWith("http") || (fav.image || "").startsWith("/") ? (fav.image || "").slice(0, 500) : "";
   return { ok: true as const, account: acc };
 }
 

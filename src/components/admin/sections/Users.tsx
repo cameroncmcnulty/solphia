@@ -141,7 +141,7 @@ export function UsersSection() {
                 </div>
                 <div className="truncate font-mono text-[10px] text-mute">
                   {u.username ? shortPk(u.pubkey, 4) : ""} {u.plan}
-                  {u.admin ? " · admin" : ""}
+                  {u.admin ? " · admin" : u.mod ? " · mod" : ""}
                   {u.mode === "live" ? " · LIVE" : ""}
                   {u.launched ? ` · ${u.launched} launches` : ""}
                   {u.rank > 1 ? ` · r${u.rank}` : ""}
@@ -214,6 +214,14 @@ export function UsersSection() {
                 className="btn-ghost rounded-full px-4 py-2 text-sm"
               >
                 {picked.admin ? "Revoke admin" : "Make admin"}
+              </button>
+              <button
+                type="button"
+                disabled={busy || picked.admin}
+                onClick={() => patch({ user: { pubkey: picked.pubkey, grantMod: !picked.mod } })}
+                className="btn-ghost rounded-full px-4 py-2 text-sm disabled:opacity-40"
+              >
+                {picked.mod ? "Revoke mod" : "Make mod"}
               </button>
               <button
                 type="button"

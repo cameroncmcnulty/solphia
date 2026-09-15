@@ -4,50 +4,182 @@ import { useEffect, useRef, useState } from "react";
 import { Volume2, VolumeX } from "lucide-react";
 
 const STORE = "solphia_shill_vol";
+/** Ultra Records official video. We stream it — we do not host a copy. */
+const VIDEO = "0HtyF0jux2Q";
+const HOOK_START = 32;
+const HOOK_END = 96;
 
-/** Original four-on-the-floor pump loop. Not a copyrighted recording. */
+type YTPlayer = {
+  playVideo: () => void;
+  pauseVideo: () => void;
+  seekTo: (s: number, allowSeekAhead: boolean) => void;
+  setVolume: (n: number) => void;
+  mute: () => void;
+  unMute: () => void;
+  getPlayerState: () => number;
+  getCurrentTime: () => number;
+  destroy: () => void;
+};
+
+declare global {
+  interface Window {
+    YT?: {
+      Player: new (
+        el: HTMLElement,
+        opts: {
+          videoId: string;
+          width?: string | number;
+          height?: string | number;
+          playerVars?: Record<string, string | number>;
+          events?: { onReady?: (e: { target: YTPlayer }) => void; onStateChange?: (e: { data: number; target: YTPlayer }) => void };
+        },
+      ) => YTPlayer;
+      PlayerState?: { ENDED: number; PLAYING: number };
+    };
+    onYouTubeIframeAPIReady?: () => void;
+  }
+}
+
+function loadApi(): Promise<void> {
+  if (typeof window === "undefined") return Promise.resolve();
+  if (window.YT?.Player) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const prev = window.onYouTubeIframeAPIReady;
+    window.onYouTubeIframeAPIReady = () => {
+      prev?.();
+      resolve();
+    };
+    if (document.querySelector("script[data-yt-api]")) return;
+    const tag = document.createElement("script");
+    tag.src = "https://www.youtube.com/iframe_api";
+    tag.dataset.ytApi = "1";
+    tag.onerror = () => reject(new Error("youtube"));
+    document.head.appendChild(tag);
+    window.setTimeout(() => {
+      if (window.YT?.Player) resolve();
+    }, 2500);
+  });
+}
+
 export function PumpLoop() {
+  const box = useRef<HTMLDivElement>(null);
+  const player = useRef<YTPlayer | null>(null);
   const [vol, setVol] = useState(0.5);
   const [muted, setMuted] = useState(false);
-  const [armed, setArmed] = useState(false);
   const [blocked, setBlocked] = useState(false);
-  const api = useRef<Loop | null>(null);
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
     const saved = Number(typeof window !== "undefined" ? localStorage.getItem(STORE) : 0.5);
     const start = Number.isFinite(saved) ? Math.min(1, Math.max(0, saved)) : 0.5;
     setVol(start);
-    const loop = createLoop();
-    api.current = loop;
-    loop.setGain(start);
-    loop
-      .start()
-      .then((ok) => {
-        setArmed(true);
-        setBlocked(!ok);
+    let dead = false;
+    loadApi()
+      .then(() => {
+        if (dead || !box.current || !window.YT?.Player) {
+          setBlocked(true);
+          return;
+        }
+        player.current = new window.YT.Player(box.current, {
+          videoId: VIDEO,
+          width: 1,
+          height: 1,
+          playerVars: {
+            autoplay: 1,
+            controls: 0,
+            disablekb: 1,
+            fs: 0,
+            modestbranding: 1,
+            playsinline: 1,
+            rel: 0,
+            start: HOOK_START,
+          },
+          events: {
+            onReady: (e) => {
+              if (dead) return;
+              e.target.setVolume(Math.round(start * 100));
+              if (start === 0) e.target.mute();
+              e.target.seekTo(HOOK_START, true);
+              e.target.playVideo();
+              setReady(true);
+              window.setTimeout(() => {
+                if (dead) return;
+                const st = e.target.getPlayerState?.();
+                if (st !== 1) setBlocked(true);
+              }, 800);
+            },
+            onStateChange: (e) => {
+              if (dead) return;
+              if (e.data === 1) setBlocked(false);
+              if (e.data === 0 || (e.data === 1 && false)) {
+                /* ended */
+              }
+              if (e.data === window.YT?.PlayerState?.ENDED || e.data === 0) {
+                e.target.seekTo(HOOK_START, true);
+                e.target.playVideo();
+              }
+            },
+          },
+        });
       })
       .catch(() => setBlocked(true));
+
+    const tick = window.setInterval(() => {
+      const p = player.current;
+      if (!p?.getPlayerState) return;
+      try {
+        const iframe = box.current?.querySelector("iframe") as HTMLIFrameElement | undefined;
+        const current = p.getCurrentTime?.() || 0;
+        if (current >= HOOK_END) {
+          p.seekTo(HOOK_START, true);
+          p.playVideo();
+        }
+        void iframe;
+      } catch {
+        /* player not ready */
+      }
+    }, 800);
+
     return () => {
-      loop.stop();
-      api.current = null;
+      dead = true;
+      window.clearInterval(tick);
+      try {
+        player.current?.destroy();
+      } catch {
+        /* already gone */
+      }
+      player.current = null;
     };
   }, []);
 
   function apply(next: number, mute = muted) {
-    const v = mute ? 0 : next;
-    api.current?.setGain(v);
+    const p = player.current;
+    if (!p) return;
+    p.setVolume(Math.round(next * 100));
+    if (mute || next === 0) p.mute();
+    else p.unMute();
     localStorage.setItem(STORE, String(next));
   }
 
   async function unlock() {
-    const ok = await api.current?.start();
-    setBlocked(!ok);
-    setArmed(true);
-    apply(vol, muted);
+    const p = player.current;
+    if (!p) {
+      setBlocked(true);
+      return;
+    }
+    p.unMute();
+    p.setVolume(Math.round(vol * 100));
+    p.seekTo(HOOK_START, true);
+    p.playVideo();
+    setMuted(false);
+    setBlocked(false);
   }
 
   return (
     <>
+      <div className="pointer-events-none absolute h-px w-px overflow-hidden opacity-0" aria-hidden>
+        <div ref={box} />
+      </div>
       {blocked && (
         <button
           type="button"
@@ -55,8 +187,8 @@ export function PumpLoop() {
           className="fixed inset-0 z-[70] flex flex-col items-center justify-center bg-[#0b0614]/92 text-center"
         >
           <div className="font-mono text-[11px] tracking-[0.28em] text-acid">SHILL ZONE</div>
-          <div className="mt-3 font-display text-5xl text-ghost">Pump it.</div>
-          <p className="mt-3 max-w-xs text-sm text-mute">Tap to drop in. The loop runs until you mute it.</p>
+          <div className="mt-3 font-display text-5xl text-ghost">Pump it up</div>
+          <p className="mt-3 max-w-xs text-sm text-mute">Danzel. Tap to drop the hook. Loop until you mute it.</p>
           <span className="btn-acid mt-6 rounded-full px-8 py-3 text-lg">Enter</span>
         </button>
       )}
@@ -93,116 +225,10 @@ export function PumpLoop() {
           className="w-20 accent-[#14f195] sm:w-28"
           aria-label="Volume"
         />
-        {armed && !blocked && !muted && vol > 0 && <span className="hidden font-mono text-[9px] tracking-[0.16em] text-acid sm:inline">LIVE</span>}
+        {ready && !blocked && !muted && vol > 0 && (
+          <span className="hidden font-mono text-[9px] tracking-[0.16em] text-acid sm:inline">DANZEL</span>
+        )}
       </div>
     </>
   );
-}
-
-type Loop = { start: () => Promise<boolean>; stop: () => void; setGain: (v: number) => void };
-
-function createLoop(): Loop {
-  let ctx: AudioContext | null = null;
-  let master: GainNode | null = null;
-  let timer: number | null = null;
-  let step = 0;
-  const bpm = 128;
-  const stepMs = ((60_000 / bpm) * 4) / 16;
-
-  function boot() {
-    if (ctx) return ctx;
-    const AC = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-    ctx = new AC();
-    master = ctx.createGain();
-    master.gain.value = 0.5;
-    const comp = ctx.createDynamicsCompressor();
-    comp.threshold.value = -18;
-    comp.ratio.value = 4;
-    master.connect(comp);
-    comp.connect(ctx.destination);
-    return ctx;
-  }
-
-  function beep(type: OscillatorType, freq: number, dur: number, gain: number, at: number, slide?: number) {
-    if (!ctx || !master) return;
-    const o = ctx.createOscillator();
-    const g = ctx.createGain();
-    o.type = type;
-    o.frequency.setValueAtTime(freq, at);
-    if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(40, slide), at + dur);
-    g.gain.setValueAtTime(0.0001, at);
-    g.gain.exponentialRampToValueAtTime(gain, at + 0.01);
-    g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
-    o.connect(g);
-    g.connect(master);
-    o.start(at);
-    o.stop(at + dur + 0.02);
-  }
-
-  function noise(dur: number, gain: number, at: number, hp = 800) {
-    if (!ctx || !master) return;
-    const n = Math.floor(ctx.sampleRate * dur);
-    const buf = ctx.createBuffer(1, n, ctx.sampleRate);
-    const data = buf.getChannelData(0);
-    for (let i = 0; i < n; i++) data[i] = Math.random() * 2 - 1;
-    const src = ctx.createBufferSource();
-    src.buffer = buf;
-    const f = ctx.createBiquadFilter();
-    f.type = "highpass";
-    f.frequency.value = hp;
-    const g = ctx.createGain();
-    g.gain.setValueAtTime(gain, at);
-    g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
-    src.connect(f);
-    f.connect(g);
-    g.connect(master);
-    src.start(at);
-    src.stop(at + dur + 0.02);
-  }
-
-  function tick() {
-    if (!ctx || !master) return;
-    const t = ctx.currentTime + 0.02;
-    const s = step % 16;
-    const bar = Math.floor(step / 16) % 8;
-    beep("sine", 90, 0.12, 0.9, t, 42);
-    if (s % 4 === 0) beep("triangle", 55, 0.18, 0.55, t, 38);
-    if (s === 4 || s === 12) noise(0.12, 0.28, t, 1200);
-    if (s % 2 === 1) noise(0.03, 0.12, t, 6000);
-    if (s === 0 || s === 6 || s === 10) beep("sawtooth", bar % 2 ? 196 : 220, 0.09, 0.12, t);
-    if (s === 14) beep("square", 330, 0.16, 0.1, t, 196);
-    if (bar === 7 && s === 12) beep("sawtooth", 392, 0.28, 0.14, t, 196);
-    step += 1;
-  }
-
-  return {
-    async start() {
-      const c = boot();
-      try {
-        await c.resume();
-      } catch {
-        return false;
-      }
-      if (c.state !== "running") return false;
-      if (timer == null) {
-        tick();
-        timer = window.setInterval(tick, stepMs) as unknown as number;
-      }
-      return true;
-    },
-    stop() {
-      if (timer != null) window.clearInterval(timer);
-      timer = null;
-      try {
-        ctx?.close();
-      } catch {
-        /* already closed */
-      }
-      ctx = null;
-      master = null;
-    },
-    setGain(v: number) {
-      if (master && ctx) master.gain.setTargetAtTime(Math.max(0, Math.min(1, v)) * 0.7, ctx.currentTime, 0.05);
-    },
-  };
 }

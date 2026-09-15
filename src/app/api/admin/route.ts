@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/admin/auth";
 import { buildAdminDesk } from "@/lib/admin/desk";
-import { grantFounder, revokeFounder } from "@/lib/access";
+import { grantFounder, grantMod, revokeFounder, revokeMod } from "@/lib/access";
 import { isSolanaAddress, isEmail, clientIp } from "@/lib/security";
 import { lockedAuto } from "@/lib/auto";
 import { runBacktest } from "@/lib/pair/backtest";
@@ -61,6 +61,7 @@ const Patch = z.object({
       email: z.string().max(120).nullable().optional(),
       notes: z.string().max(500).nullable().optional(),
       grantAdmin: z.boolean().optional(),
+      grantMod: z.boolean().optional(),
       comped: z.boolean().optional(),
       alertsEnabled: z.boolean().optional(),
       clearUsername: z.boolean().optional(),
@@ -277,6 +278,10 @@ export async function POST(req: NextRequest) {
       if (typeof u.grantAdmin === "boolean") {
         if (u.grantAdmin) grantFounder(s, u.pubkey);
         else revokeFounder(s, u.pubkey);
+      }
+      if (typeof u.grantMod === "boolean") {
+        if (u.grantMod) grantMod(s, u.pubkey);
+        else revokeMod(s, u.pubkey);
       }
       pushBounded(s.audit, audit("admin", "user_edit", u.pubkey, ip), 400);
       return { ok: true as const };

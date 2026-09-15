@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAdmin } from "../AdminProvider";
 import { Mini, shortPk } from "../ui";
-import { RankBadge } from "@/components/RankBadge";
+import { RankBadge, StaffBadge } from "@/components/RankBadge";
+import { RANK_TIERS } from "@/lib/rank/engine";
 
 type Row = {
   pubkey: string;
@@ -61,6 +62,29 @@ export function RanksSection() {
         <Mini k="Ranked wallets" v={String(data.ranks?.cards || board.length)} />
         <Mini k="Top rank" v={board[0] ? String(board[0].rank) : "—"} />
       </div>
+      <section className="panel rounded-2xl p-5">
+        <h2 className="font-display text-2xl text-ghost">Badges</h2>
+        <p className="mt-1 text-sm text-mute">Rank crests 1–100, plus staff marks you grant on a wallet.</p>
+        <div className="mt-4 flex flex-wrap gap-4">
+          <div className="flex flex-col items-center gap-1">
+            <StaffBadge role="admin" size={72} />
+            <div className="font-mono text-[10px] text-blood">ADMIN</div>
+          </div>
+          <div className="flex flex-col items-center gap-1">
+            <StaffBadge role="mod" size={72} />
+            <div className="font-mono text-[10px] text-cyan">MOD</div>
+          </div>
+          {RANK_TIERS.map((t) => (
+            <div key={t.id} className="flex flex-col items-center gap-1">
+              <RankBadge rank={t.from} size={72} />
+              <div className="font-mono text-[10px] text-mute">
+                {t.from}
+                {t.from < 100 ? "+" : ""} {t.title}
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
       <section className="panel rounded-2xl p-5">
         <h2 className="font-display text-2xl text-ghost">Grant / set</h2>
         <p className="mt-1 text-sm text-mute">Wallet, then grant XP, snap a rank, or reset.</p>

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { emptyLaunchBook } from "../lib/launch/engine";
+import { emptyLaunchBook, mergeLaunch } from "../lib/launch/engine";
 import {
   RANK_MAX,
   creditRank,
@@ -93,5 +93,28 @@ describe("rank engine", () => {
     const p = xpProgress(0);
     assert.equal(p.rank, 1);
     assert.ok(p.need > 0);
+  });
+
+  it("keeps intro, banner, favourite, and XP across launch merges", () => {
+    const local = emptyLaunchBook();
+    local.accounts[A] = {
+      pubkey: A,
+      referralRewardsSol: 0,
+      intro: "bags only",
+      banner: "/api/media?u=https://example.com/b.jpg",
+      favMint: B,
+      favSymbol: "BAG",
+      xp: 5000,
+    };
+    const remote = emptyLaunchBook();
+    remote.accounts[A] = { pubkey: A, referralRewardsSol: 1, username: "old" };
+    const merged = mergeLaunch(local, remote);
+    const acc = merged.accounts[A];
+    assert.equal(acc.intro, "bags only");
+    assert.equal(acc.banner, "/api/media?u=https://example.com/b.jpg");
+    assert.equal(acc.favMint, B);
+    assert.equal(acc.favSymbol, "BAG");
+    assert.equal(acc.xp, 5000);
+    assert.equal(acc.referralRewardsSol, 1);
   });
 });

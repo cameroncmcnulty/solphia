@@ -204,7 +204,7 @@ export default function AccountPage() {
           <RankBadge rank={desk?.rank || 1} size={64} />
         </button>
       </div>
-      {peek && owner && <ProfileOverlay pubkey={owner} onClose={() => setPeek(false)} />}
+      {peek && owner && <ProfileOverlay pubkey={owner} viewer={owner} onClose={() => setPeek(false)} />}
 
       <div className="mt-5 flex flex-wrap gap-1 rounded-2xl border border-violet/25 p-1">
         {TABS.map(([id, label]) => (
@@ -274,7 +274,7 @@ export default function AccountPage() {
               <div className="h-full bg-acid" style={{ width: `${Math.round((desk?.pct || 0) * 100)}%` }} />
             </div>
             <p className="mt-2 text-[12px] text-mute">
-              Rank climbs from launches, Shill Zone chat, Founders Circle, referrals, and swaps through Solphia.
+              Rank climbs from launches, Shill Zone chat, Founders Circle, referrals, and swaps on Solphia platform.
               Rank 100 is a long grind on purpose.
             </p>
           </div>
@@ -457,6 +457,7 @@ export default function AccountPage() {
                   const j = await r.json();
                   if (!r.ok) throw new Error(j.message || "Could not save banner.");
                   setNote("Banner saved.");
+                  if (j.banner) setDesk((d) => (d ? { ...d, banner: j.banner } : d));
                   load().catch(() => {});
                 } catch (err) {
                   fieldErr.fail({ banner: err instanceof Error ? err.message : "Could not use that image." });
@@ -476,11 +477,13 @@ export default function AccountPage() {
                   headers: { "content-type": "application/json" },
                   body: JSON.stringify({ action: "intro", pubkey: owner, intro }),
                 });
+                const j = await r.json().catch(() => ({}));
                 if (!r.ok) {
-                  fieldErr.fail({ intro: "Could not save intro." });
+                  fieldErr.fail({ intro: j.message || "Could not save intro." });
                   return;
                 }
                 setNote("Intro saved.");
+                setDesk((d) => (d ? { ...d, intro: j.intro ?? intro } : d));
                 load().catch(() => {});
               }}
             >
@@ -524,6 +527,16 @@ export default function AccountPage() {
                   return;
                 }
                 setNote(favMint ? "Favourite project saved." : "Favourite cleared.");
+                setDesk((d) =>
+                  d
+                    ? {
+                        ...d,
+                        favMint: j.fav?.mint || "",
+                        favSymbol: j.fav?.symbol || "",
+                        favName: j.fav?.name || "",
+                      }
+                    : d,
+                );
                 load().catch(() => {});
               }}
             >
@@ -710,9 +723,9 @@ async function wideBanner(file: File): Promise<string> {
     const dw = img.naturalWidth * scale;
     const dh = img.naturalHeight * scale;
     ctx.drawImage(img, (w - dw) / 2, (h - dh) / 2, dw, dh);
-    for (const q of [0.78, 0.62, 0.48, 0.34]) {
+    for (const q of [0.72, 0.55, 0.42, 0.3, 0.22]) {
       const data = canvas.toDataURL("image/jpeg", q);
-      if (data.length <= 280_000) return data;
+      if (data.length <= 80_000) return data;
     }
     throw new Error("Image is too heavy. Try a simpler JPEG.");
   } finally {

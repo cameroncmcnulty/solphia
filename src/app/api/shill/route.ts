@@ -8,10 +8,12 @@ import { displayMedia } from "@/lib/pinata";
 import { confirmedSolTransfer } from "@/lib/solana/connection";
 import { lookupMarketMint } from "@/lib/launch/market";
 import {
+  banShill,
   deleteShill,
   ensureShill,
   extractCas,
   livePins,
+  muteShill,
   nextPinFreeAt,
   pinSlotsLeft,
   pinToken,
@@ -22,6 +24,7 @@ import {
 import { SHILL_PIN_SOL, SHILL_REACTS, SHILL_STICKERS, type ShillToken } from "@/lib/shill/types";
 import { emptyLaunchBook } from "@/lib/launch/engine";
 import { creditRank, leaderboard, publicCard } from "@/lib/rank/engine";
+import { canModerateChat, staffRole } from "@/lib/access";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -29,7 +32,7 @@ export const maxDuration = 30;
 const typingMem = new Map<string, number>();
 
 const Body = z.object({
-  action: z.enum(["chat", "react", "typing", "read", "delete", "pin"]),
+  action: z.enum(["chat", "react", "typing", "read", "delete", "pin", "mute", "ban"]),
   pubkey: z.string(),
   text: z.string().max(2000).optional(),
   sticker: z.string().max(16).optional(),
@@ -39,6 +42,8 @@ const Body = z.object({
   emoji: z.string().max(8).optional(),
   mint: z.string().optional(),
   signature: z.string().min(32).max(128).optional(),
+  target: z.string().optional(),
+  banned: z.boolean().optional(),
 });
 
 async function tokenOf(mint: string): Promise<ShillToken | null> {
@@ -74,10 +79,10 @@ export async function GET(req: NextRequest) {
     token: m.token ? { ...m.token, image: displayMedia(m.token.image) } : m.token,
   }));
   const people = [...new Set(messages.map((m) => m.owner).concat(typing, pubkey ? [pubkey] : []))];
-  const profiles: Record<string, ReturnType<typeof publicCard>> = {};
+  const profiles: Record<string, ReturnType<typeof publicCard> & { role: "admin" | "mod" | null }> = {};
   const launch = s.launch || emptyLaunchBook();
   for (const pk of people) {
-    profiles[pk] = publicCard(launch.accounts?.[pk], pk);
+    profiles[pk] = { ...publicCard(launch.accounts?.[pk], pk), role: staffRole(s, pk) };
   }
   const pins = livePins(book, now).map((p) => ({ ...p, image: displayMedia(p.image) }));
   return NextResponse.json({
@@ -92,7 +97,16 @@ export async function GET(req: NextRequest) {
     typing,
     profiles,
     board: leaderboard(launch, 10),
-    you: pubkey && isSolanaAddress(pubkey) ? publicCard(launch.accounts?.[pubkey], pubkey) : null,
+    you:
+      pubkey && isSolanaAddress(pubkey)
+        ? {
+            ...publicCard(launch.accounts?.[pubkey], pubkey),
+            role: staffRole(s, pubkey),
+            staff: canModerateChat(s, pubkey),
+            banned: Boolean(book.members[pubkey]?.banned),
+            mutedUntil: book.members[pubkey]?.mutedUntil || 0,
+          }
+        : null,
     treasury: treasuryAddress(),
   });
 }
@@ -182,7 +196,11 @@ export async function POST(req: NextRequest) {
           ? `Wait ${Math.ceil((posted.waitMs || 0) / 1000)}s before dropping another CA.`
           : posted.error === "empty"
             ? "Write something first."
-            : "Could not send.";
+            : posted.error === "banned"
+              ? "This wallet is banned from Shill Zone."
+              : posted.error === "muted"
+                ? `Muted for ${Math.max(1, Math.ceil((posted.waitMs || 0) / 60_000))} min.`
+                : "Could not send.";
       return NextResponse.json({ error: posted.error, message, waitMs: posted.waitMs }, { status: 400 });
     }
     let leveled = false;
@@ -208,7 +226,20 @@ export async function POST(req: NextRequest) {
     touchMember(book, b.pubkey);
     if (b.action === "read") return { ok: true as const };
     if (b.action === "delete") {
-      return deleteShill(book, b.id || "", b.pubkey) ? { ok: true as const } : { ok: false as const, error: "missing" };
+      if (!canModerateChat(st, b.pubkey)) return { ok: false as const, error: "forbidden" };
+      return deleteShill(book, b.id || "") ? { ok: true as const } : { ok: false as const, error: "missing" };
+    }
+    if (b.action === "mute") {
+      if (!canModerateChat(st, b.pubkey)) return { ok: false as const, error: "forbidden" };
+      const target = b.target || "";
+      if (!isSolanaAddress(target) || staffRole(st, target) === "admin") return { ok: false as const, error: "bad_target" };
+      return muteShill(book, target, 24 * 60 * 60 * 1000) ? { ok: true as const } : { ok: false as const, error: "missing" };
+    }
+    if (b.action === "ban") {
+      if (!canModerateChat(st, b.pubkey)) return { ok: false as const, error: "forbidden" };
+      const target = b.target || "";
+      if (!isSolanaAddress(target) || staffRole(st, target) === "admin") return { ok: false as const, error: "bad_target" };
+      return banShill(book, target, b.banned !== false) ? { ok: true as const } : { ok: false as const, error: "missing" };
     }
     if (b.action === "react") {
       return reactShill(book, { owner: b.pubkey, id: b.id || "", emoji: b.emoji || "" })
