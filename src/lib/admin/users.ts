@@ -1,5 +1,6 @@
 import { isFounder } from "../access";
 import { emptyAccount, referredBy, type LaunchBook } from "../launch/engine";
+import { rankFromXp } from "../rank/engine";
 import type { AppState } from "../types";
 import type { AdminUser } from "./types";
 
@@ -37,6 +38,10 @@ export function buildAdminUsers(state: AppState): AdminUser[] {
       referrer: acc.referrer || null,
       referralRewardsSol: acc.referralRewardsSol || 0,
       launched,
+      rank: rankFromXp(acc.xp || 0),
+      xp: acc.xp || 0,
+      intro: acc.intro || null,
+      favMint: acc.favMint || null,
       depositedSol: trader?.depositedSol || 0,
       mode: trader?.auto?.mode === "live" ? "live" : "paper",
       killed: Boolean(trader?.book?.killed),

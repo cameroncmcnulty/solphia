@@ -16,6 +16,7 @@ import { launchError } from "@/lib/launch/errors";
 import { IMAGE_DATA_MAX } from "@/lib/launch/validate";
 import { lastPairPrices } from "@/lib/tick";
 import { enrollPaperBot } from "@/lib/store";
+import { creditRank, publicRank } from "@/lib/rank/engine";
 
 export const dynamic = "force-dynamic";
 
@@ -55,6 +56,12 @@ function pack(book: ReturnType<typeof emptyLaunchBook>, pubkey: string, solUsd: 
     })),
     launched: launched.map((c) => publicCoin(c, solUsd, pubkey, book)),
     link: `/r/${pubkey}`,
+    intro: acc.intro || "",
+    banner: acc.banner || "",
+    favMint: acc.favMint || "",
+    favSymbol: acc.favSymbol || "",
+    favName: acc.favName || "",
+    ...publicRank(acc),
   };
 }
 
@@ -79,6 +86,7 @@ export async function POST(req: NextRequest) {
     const book = bookOf(s);
     if (b.action === "hello") {
       const r = bindReferrer(book, b.pubkey, sanitizeText(b.referrer || "", 48));
+      if (r.ok && r.bound && r.account.referrer) creditRank(book, r.account.referrer, "referral");
       return r;
     }
     if (b.action === "pfp") {

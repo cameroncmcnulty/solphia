@@ -17,6 +17,9 @@ import { seatSol } from "../seat";
 import { promoDataUrl, promoViewToken } from "./promoFile";
 import { bookHoldingUsd, sumWindows, tradingNow, uniqueWallets } from "./stats";
 import { buildAdminUsers } from "./users";
+import { ensureShill, livePins } from "../shill/engine";
+import { leaderboard } from "../rank/engine";
+import { emptyLaunchBook } from "../launch/engine";
 import type { AdminDesk, AdminPromo, AdminSeat, AdminSleeve, AdminTrader } from "./types";
 
 export type { AdminDesk, AdminSeat, AdminSleeve, AdminTrader } from "./types";
@@ -190,6 +193,17 @@ export function buildAdminDesk(opts?: { light?: boolean }): AdminDesk {
     backtest: latestBacktest(s.backtest, 1),
     backtestLev2: latestBacktest(s.backtestLev2, 2),
     backtestLev3: latestBacktest(s.backtestLev3, 3),
+    shill: (() => {
+      const b = ensureShill(s.shill);
+      return { messages: b.messages.length, pins: livePins(b).length, members: Object.keys(b.members).length };
+    })(),
+    ranks: (() => {
+      const top = leaderboard(s.launch || emptyLaunchBook(), 8);
+      return {
+        cards: Object.values(s.launch?.accounts || {}).filter((a) => (a.xp || 0) > 0).length,
+        top: top.map((t) => ({ pubkey: t.pubkey, username: t.username, rank: t.rank, xp: t.xp })),
+      };
+    })(),
   };
 }
 

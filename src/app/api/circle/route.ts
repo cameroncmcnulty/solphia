@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { clientIp, isSolanaAddress, rateLimit, sanitizeText, isEmail } from "@/lib/security";
-import { mutateState, readyState, withCircle } from "@/lib/store";
+import { mutateState, readyState, withCircle, withLaunch } from "@/lib/store";
 import { pinDataUrl } from "@/lib/pinata";
 import { sphaMintOf } from "@/lib/token/solphia";
 import { SITE_URL } from "@/lib/config";
 import { displayMedia } from "@/lib/pinata";
 import { treasuryAddress } from "@/lib/treasury";
 import { circleVip } from "@/lib/access";
+import { emptyLaunchBook } from "@/lib/launch/engine";
+import { creditRank } from "@/lib/rank/engine";
 import {
   activeMembers,
   airdropWeight,
@@ -72,6 +74,16 @@ export async function GET(req: NextRequest) {
       joinCircle(st.circle, { pubkey, email, vip: true });
       return st;
     }, true);
+    const fresh = await withLaunch((st) => {
+      if (!st.launch) st.launch = emptyLaunchBook();
+      return !st.launch.accounts?.[pubkey]?.circleCredited;
+    }, false);
+    if (fresh) {
+      await withLaunch((st) => {
+        if (!st.launch) st.launch = emptyLaunchBook();
+        creditRank(st.launch, pubkey, "circle");
+      }, true);
+    }
   }
   const raw = s.circle;
   const book = ensureCircle(raw);
@@ -168,6 +180,13 @@ export async function POST(req: NextRequest) {
             ? "This wallet is banned from Founders Circle."
             : "Could not join.";
       return NextResponse.json({ error: out.error, message }, { status: 400 });
+    }
+    if (out.ok) {
+      await withLaunch((st) => {
+        if (!st.launch) st.launch = emptyLaunchBook();
+        creditRank(st.launch, b.pubkey, "circle");
+        if (out.created && out.member.referrer) creditRank(st.launch, out.member.referrer, "referral");
+      }, true);
     }
     return NextResponse.json({
       ok: true,

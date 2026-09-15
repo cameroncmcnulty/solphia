@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { LAMPORTS_PER_SOL } from "@solana/web3.js";
 import { z } from "zod";
 import { clientIp, isSolanaAddress, rateLimit, sanitizeText } from "@/lib/security";
-import { withShill } from "@/lib/store";
+import { withLaunch, withShill } from "@/lib/store";
 import { treasuryAddress } from "@/lib/treasury";
 import { displayMedia } from "@/lib/pinata";
 import { confirmedSolTransfer } from "@/lib/solana/connection";
@@ -20,6 +20,8 @@ import {
   touchMember,
 } from "@/lib/shill/engine";
 import { SHILL_PIN_SOL, SHILL_REACTS, SHILL_STICKERS, type ShillToken } from "@/lib/shill/types";
+import { emptyLaunchBook } from "@/lib/launch/engine";
+import { creditRank, leaderboard, publicCard } from "@/lib/rank/engine";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -72,10 +74,10 @@ export async function GET(req: NextRequest) {
     token: m.token ? { ...m.token, image: displayMedia(m.token.image) } : m.token,
   }));
   const people = [...new Set(messages.map((m) => m.owner).concat(typing, pubkey ? [pubkey] : []))];
-  const profiles: Record<string, { username: string; hasPfp: boolean }> = {};
+  const profiles: Record<string, ReturnType<typeof publicCard>> = {};
+  const launch = s.launch || emptyLaunchBook();
   for (const pk of people) {
-    const acc = s.launch?.accounts?.[pk];
-    profiles[pk] = { username: acc?.username || "", hasPfp: Boolean(acc?.pfp) };
+    profiles[pk] = publicCard(launch.accounts?.[pk], pk);
   }
   const pins = livePins(book, now).map((p) => ({ ...p, image: displayMedia(p.image) }));
   return NextResponse.json({
@@ -89,6 +91,8 @@ export async function GET(req: NextRequest) {
     reacts: SHILL_REACTS,
     typing,
     profiles,
+    board: leaderboard(launch, 10),
+    you: pubkey && isSolanaAddress(pubkey) ? publicCard(launch.accounts?.[pubkey], pubkey) : null,
     treasury: treasuryAddress(),
   });
 }
@@ -181,7 +185,21 @@ export async function POST(req: NextRequest) {
             : "Could not send.";
       return NextResponse.json({ error: posted.error, message, waitMs: posted.waitMs }, { status: 400 });
     }
-    return NextResponse.json({ ok: true, message: posted.message });
+    let leveled = false;
+    let rank = 1;
+    try {
+      const cred = await withLaunch((st) => {
+        if (!st.launch) st.launch = emptyLaunchBook();
+        return creditRank(st.launch, b.pubkey, "chat");
+      }, true);
+      if (cred.ok) {
+        leveled = cred.leveled;
+        rank = cred.rank;
+      }
+    } catch {
+      /* chat still sent */
+    }
+    return NextResponse.json({ ok: true, message: posted.message, leveled, rank });
   }
 
   const posted = await withShill((st) => {

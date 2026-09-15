@@ -20,11 +20,13 @@ type Coin = {
 export function LaunchSection() {
   const { data, go } = useAdmin();
   const [coins, setCoins] = useState<Coin[]>([]);
+  const [boosts, setBoosts] = useState<{ id: string; symbol: string; rockets: number; mega?: boolean; house?: boolean; endsAt: number }[]>([]);
 
   const load = useCallback(async () => {
     const r = await fetch("/api/launch", { cache: "no-store" });
     const j = await r.json();
     if (Array.isArray(j.coins)) setCoins(j.coins);
+    if (Array.isArray(j.boosts)) setBoosts(j.boosts);
   }, []);
 
   useEffect(() => {
@@ -57,6 +59,38 @@ export function LaunchSection() {
           </button>
         </div>
       </section>
+      {boosts.length > 0 && (
+        <section className="panel rounded-2xl p-5">
+          <h2 className="font-display text-2xl text-ghost">Live boosts</h2>
+          <div className="mt-3 space-y-2">
+            {boosts.map((b) => (
+              <div key={b.id} className="flex items-center justify-between gap-3 rounded-xl border border-acid/20 px-3 py-2">
+                <div>
+                  <div className="font-display text-ghost">${b.symbol}</div>
+                  <div className="font-mono text-[10px] text-mute">
+                    {b.rockets} rockets{b.mega ? " · mega" : ""}
+                    {b.house ? " · house" : ""}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="text-sm text-blood"
+                  onClick={async () => {
+                    await fetch("/api/admin/launch", {
+                      method: "POST",
+                      headers: { "content-type": "application/json" },
+                      body: JSON.stringify({ expireBoost: b.id }),
+                    });
+                    load().catch(() => {});
+                  }}
+                >
+                  End
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
       <div className="space-y-2">
         {coins.length === 0 && <p className="text-sm text-mute">No Solphia-born coins yet. Launch from the public pad or mint $SPHA from Project.</p>}
         {coins.map((c) => (

@@ -30,7 +30,9 @@ export type AdminIcon =
   | "users"
   | "health"
   | "circle"
-  | "mail";
+  | "mail"
+  | "shill"
+  | "ranks";
 
 export const ADMIN_NAV = [
   {
@@ -113,6 +115,21 @@ export const ADMIN_NAV = [
     label: "Mail",
     hint: "admin@solphia.io and @solphia.io identities",
     icon: "mail" as const,
+  },
+  {
+    id: "shill",
+    group: "protocol",
+    label: "Shill Zone",
+    hint: "Chat, pins, and the pump loop room",
+    icon: "shill" as const,
+    badge: (d: AdminDesk) => d.shill?.messages || null,
+  },
+  {
+    id: "ranks",
+    group: "access",
+    label: "Ranks",
+    hint: "XP, badges, intros, favourite CAs",
+    icon: "ranks" as const,
   },
 ] as const;
 

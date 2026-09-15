@@ -87,6 +87,16 @@ export type LaunchAccount = {
   usernameAt?: number;
   notes?: string;
   referralRewardsSol: number;
+  intro?: string;
+  banner?: string;
+  favMint?: string;
+  favSymbol?: string;
+  favName?: string;
+  favImage?: string;
+  xp?: number;
+  rankDay?: { ymd: string; chat: number; swapXp: number; launches: number };
+  rankEvents?: { id: string; kind: string; xp: number; at: number }[];
+  circleCredited?: boolean;
 };
 
 export type LaunchBook = {
@@ -209,6 +219,7 @@ export function slimLaunch(book: LaunchBook): LaunchBook {
     accounts[k] = {
       ...a,
       pfp: (a.pfp || "").length > 90_000 ? "" : a.pfp,
+      banner: (a.banner || "").length > 90_000 ? "" : a.banner,
     };
   }
   tickBoosts(book);

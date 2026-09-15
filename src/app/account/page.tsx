@@ -11,6 +11,10 @@ import { IMAGE_DATA_MAX } from "@/lib/launch/validate";
 import { launchError } from "@/lib/launch/errors";
 import { usernameIssue } from "@/lib/launch/username";
 import { FieldError, fieldClass, useConfirmErrors } from "@/components/form/confirm";
+import { RankBadge } from "@/components/RankBadge";
+import { ProfileOverlay } from "@/components/ProfileOverlay";
+import { INTRO_MAX } from "@/lib/rank/engine";
+import { isSolanaAddress } from "@/lib/wallet/addr";
 
 type Invited = { pubkey: string; launched: number };
 type Coin = {
@@ -35,12 +39,22 @@ type Desk = {
   launched: Coin[];
   link: string;
   withdrawn?: number;
+  intro?: string;
+  banner?: string;
+  favMint?: string;
+  favSymbol?: string;
+  favName?: string;
+  rank?: number;
+  title?: string;
+  xp?: number;
+  need?: number;
+  pct?: number;
 };
 
 const TABS = [
   ["overview", "Account"],
   ["wallets", "Wallets"],
-  ["pfp", "PFP"],
+  ["profile", "Profile"],
   ["launches", "Launched"],
   ["referrals", "Referrals"],
 ] as const;
@@ -61,7 +75,11 @@ export default function AccountPage() {
   const [note, setNote] = useState("");
   const [noteErr, setNoteErr] = useState(false);
   const [username, setUsername] = useState("");
-  const fieldErr = useConfirmErrors<"username" | "restore" | "pfp">();
+  const fieldErr = useConfirmErrors<"username" | "restore" | "pfp" | "banner" | "intro" | "fav">();
+  const [intro, setIntro] = useState("");
+  const [favMint, setFavMint] = useState("");
+  const [peek, setPeek] = useState(false);
+  const bannerRef = useRef<HTMLInputElement>(null);
   const [boosts, setBoosts] = useState<{
     live: { symbol: string; leftMs: number; rockets: number }[];
     queued: { symbol: string; position: number; etaMs: number; rockets: number }[];
@@ -76,6 +94,8 @@ export default function AccountPage() {
     const j = await fetch(`/api/account?pubkey=${encodeURIComponent(owner)}`).then((r) => r.json());
     setDesk(j);
     if (typeof j.username === "string") setUsername(j.username);
+    if (typeof j.intro === "string") setIntro(j.intro);
+    if (typeof j.favMint === "string") setFavMint(j.favMint);
     const b = await fetch(`/api/launch/boost?pubkey=${encodeURIComponent(owner)}`).then((r) => r.json());
     if (b.mine) setBoosts({ live: b.mine.live || [], queued: b.mine.queued || [] });
   }, [owner]);
@@ -169,15 +189,22 @@ export default function AccountPage() {
   return (
     <main className="mx-auto max-w-3xl px-4 pb-24 pt-6 md:px-8">
       <div className="flex items-center gap-3">
-        <CartoonPfp seed={owner} src={desk?.pfp} className="h-14 w-14" />
-        <div>
+        <button type="button" onClick={() => setPeek(true)} className="relative">
+          <CartoonPfp seed={owner} src={desk?.pfp} className="h-14 w-14" />
+        </button>
+        <div className="min-w-0 flex-1">
           <p className="font-mono text-[11px] tracking-[0.22em] text-violet">ACCOUNT</p>
           <h1 className="font-display text-3xl text-ghost">{desk?.username ? `@${desk.username}` : "You"}</h1>
           <p className="font-mono text-[11px] text-mute">
             {owner.slice(0, 6)}…{owner.slice(-6)}
+            {desk?.title ? ` · Rank ${desk.rank || 1} ${desk.title}` : ""}
           </p>
         </div>
+        <button type="button" onClick={() => setPeek(true)} title="Preview card">
+          <RankBadge rank={desk?.rank || 1} size={64} />
+        </button>
       </div>
+      {peek && owner && <ProfileOverlay pubkey={owner} onClose={() => setPeek(false)} />}
 
       <div className="mt-5 flex flex-wrap gap-1 rounded-2xl border border-violet/25 p-1">
         {TABS.map(([id, label]) => (
@@ -234,9 +261,22 @@ export default function AccountPage() {
             </form>
           </section>
           <div className="grid gap-3 sm:grid-cols-3">
+            <Mini k="Rank" v={`${desk?.rank || 1} · ${desk?.title || "Spark"}`} />
             <Mini k="Launched" v={String(desk?.launched.length || 0)} />
             <Mini k="Invited" v={String(desk?.referredCount || 0)} />
-            <Mini k="Referral rewards" v={`${(desk?.referralRewardsSol || 0).toFixed(4)} SOL`} />
+          </div>
+          <div className="rounded-2xl border border-violet/20 px-4 py-3">
+            <div className="flex justify-between font-mono text-[10px] text-mute">
+              <span>{desk?.xp || 0} XP</span>
+              <span>{desk?.need === 0 ? "MAX" : `${desk?.need || 0} to next rank`}</span>
+            </div>
+            <div className="mt-2 h-2 overflow-hidden rounded-full bg-void">
+              <div className="h-full bg-acid" style={{ width: `${Math.round((desk?.pct || 0) * 100)}%` }} />
+            </div>
+            <p className="mt-2 text-[12px] text-mute">
+              Rank climbs from launches, Shill Zone chat, Founders Circle, referrals, and swaps through Solphia.
+              Rank 100 is a long grind on purpose.
+            </p>
           </div>
         </div>
       )}
@@ -319,48 +359,193 @@ export default function AccountPage() {
         </section>
       )}
 
-      {tab === "pfp" && (
-        <section className="panel-bubble mt-6 overflow-hidden rounded-3xl p-5">
-          <h2 className="font-display text-2xl text-ghost">Profile picture</h2>
-          <p className="mt-2 text-sm text-mute">
-            Until you pick one, we draw a cartoon from your wallet. Same wallet, same face.
-          </p>
-          <div data-field="pfp" className={`mt-4 flex items-center gap-4 ${fieldErr.errors.pfp ? "rounded-2xl p-1 ring-1 ring-blood/60" : ""}`}>
-            <CartoonPfp seed={owner} src={desk?.pfp} className="h-24 w-24" />
-            <div className="flex flex-wrap gap-2">
-              <button type="button" className="btn-acid rounded-full px-5 py-2 text-sm" onClick={() => fileRef.current?.click()}>
-                Upload
+      {tab === "profile" && (
+        <div className="mt-6 space-y-4">
+          <section className="panel-bubble overflow-hidden rounded-3xl p-5">
+            <h2 className="font-display text-2xl text-ghost">Profile picture</h2>
+            <p className="mt-2 text-sm text-mute">Until you pick one, we draw a cartoon from your wallet.</p>
+            <div data-field="pfp" className={`mt-4 flex items-center gap-4 ${fieldErr.errors.pfp ? "rounded-2xl p-1 ring-1 ring-blood/60" : ""}`}>
+              <CartoonPfp seed={owner} src={desk?.pfp} className="h-24 w-24" />
+              <div className="flex flex-wrap gap-2">
+                <button type="button" className="btn-acid rounded-full px-5 py-2 text-sm" onClick={() => fileRef.current?.click()}>
+                  Upload
+                </button>
+                <button
+                  type="button"
+                  disabled={busy || !desk?.pfp}
+                  className="btn-ghost rounded-full px-5 py-2 text-sm disabled:opacity-40"
+                  onClick={() => post({ action: "pfp", pfp: "" })}
+                >
+                  Use cartoon
+                </button>
+              </div>
+            </div>
+            <FieldError error={fieldErr.errors.pfp} />
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              className="hidden"
+              onChange={async (e) => {
+                const f = e.target.files?.[0];
+                e.target.value = "";
+                if (!f) return;
+                fieldErr.clear("pfp");
+                try {
+                  const data = await squarePfp(f);
+                  await post({ action: "pfp", pfp: data });
+                } catch (err) {
+                  fieldErr.fail({ pfp: err instanceof Error ? err.message : "Could not use that image." });
+                }
+              }}
+            />
+          </section>
+          <section className="panel-bubble overflow-hidden rounded-3xl p-5">
+            <h2 className="font-display text-2xl text-ghost">Banner</h2>
+            <p className="mt-1 text-sm text-mute">Wide image for your card. Shows when someone taps your PFP in Shill Zone.</p>
+            <div className="mt-3 overflow-hidden rounded-2xl border border-violet/25 bg-void">
+              <div className="relative h-28 bg-gradient-to-r from-violet/30 via-acid/15 to-cyan/25">
+                {desk?.banner ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={desk.banner.startsWith("data:") || desk.banner.startsWith("/") ? desk.banner : `/api/media?u=${encodeURIComponent(desk.banner)}`}
+                    alt=""
+                    className="h-full w-full object-cover"
+                  />
+                ) : null}
+              </div>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button type="button" className="btn-acid rounded-full px-5 py-2 text-sm" onClick={() => bannerRef.current?.click()}>
+                Upload banner
               </button>
               <button
                 type="button"
-                disabled={busy || !desk?.pfp}
+                disabled={busy || !desk?.banner}
                 className="btn-ghost rounded-full px-5 py-2 text-sm disabled:opacity-40"
-                onClick={() => post({ action: "pfp", pfp: "" })}
+                onClick={async () => {
+                  await fetch("/api/profile", {
+                    method: "POST",
+                    headers: { "content-type": "application/json" },
+                    body: JSON.stringify({ action: "banner", pubkey: owner, banner: "" }),
+                  });
+                  setNote("Banner cleared.");
+                  load().catch(() => {});
+                }}
               >
-                Use cartoon
+                Clear
               </button>
             </div>
-          </div>
-          <FieldError error={fieldErr.errors.pfp} />
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/png,image/jpeg,image/webp"
-            className="hidden"
-            onChange={async (e) => {
-              const f = e.target.files?.[0];
-              e.target.value = "";
-              if (!f) return;
-              fieldErr.clear("pfp");
-              try {
-                const data = await squarePfp(f);
-                await post({ action: "pfp", pfp: data });
-              } catch (err) {
-                fieldErr.fail({ pfp: err instanceof Error ? err.message : "Could not use that image." });
-              }
-            }}
-          />
-        </section>
+            <FieldError error={fieldErr.errors.banner} />
+            <input
+              ref={bannerRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              className="hidden"
+              onChange={async (e) => {
+                const f = e.target.files?.[0];
+                e.target.value = "";
+                if (!f) return;
+                fieldErr.clear("banner");
+                try {
+                  const data = await wideBanner(f);
+                  const r = await fetch("/api/profile", {
+                    method: "POST",
+                    headers: { "content-type": "application/json" },
+                    body: JSON.stringify({ action: "banner", pubkey: owner, banner: data }),
+                  });
+                  const j = await r.json();
+                  if (!r.ok) throw new Error(j.message || "Could not save banner.");
+                  setNote("Banner saved.");
+                  load().catch(() => {});
+                } catch (err) {
+                  fieldErr.fail({ banner: err instanceof Error ? err.message : "Could not use that image." });
+                }
+              }}
+            />
+          </section>
+          <section className="panel-bubble overflow-hidden rounded-3xl p-5">
+            <h2 className="font-display text-2xl text-ghost">Intro</h2>
+            <p className="mt-1 text-sm text-mute">One short line. People see it on your card.</p>
+            <form
+              className="mt-3"
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const r = await fetch("/api/profile", {
+                  method: "POST",
+                  headers: { "content-type": "application/json" },
+                  body: JSON.stringify({ action: "intro", pubkey: owner, intro }),
+                });
+                if (!r.ok) {
+                  fieldErr.fail({ intro: "Could not save intro." });
+                  return;
+                }
+                setNote("Intro saved.");
+                load().catch(() => {});
+              }}
+            >
+              <textarea
+                value={intro}
+                maxLength={INTRO_MAX}
+                onChange={(e) => setIntro(e.target.value)}
+                placeholder="Who you are. What you shill. Why they should care."
+                className={`min-h-[88px] w-full rounded-2xl border bg-void px-4 py-3 text-sm text-ghost ${fieldClass(fieldErr.errors.intro)}`}
+              />
+              <div className="mt-1 flex items-center justify-between">
+                <FieldError error={fieldErr.errors.intro} />
+                <span className="font-mono text-[10px] text-mute">
+                  {intro.length}/{INTRO_MAX}
+                </span>
+              </div>
+              <button type="submit" className="btn-acid mt-2 rounded-full px-5 py-2 text-sm">
+                Save intro
+              </button>
+            </form>
+          </section>
+          <section className="panel-bubble overflow-hidden rounded-3xl p-5">
+            <h2 className="font-display text-2xl text-ghost">Favourite project</h2>
+            <p className="mt-1 text-sm text-mute">A CA on your card. One tap copy so people can buy it.</p>
+            <form
+              className="mt-3"
+              onSubmit={async (e) => {
+                e.preventDefault();
+                if (favMint && !isSolanaAddress(favMint)) {
+                  fieldErr.fail({ fav: "Paste a real token CA." });
+                  return;
+                }
+                const r = await fetch("/api/profile", {
+                  method: "POST",
+                  headers: { "content-type": "application/json" },
+                  body: JSON.stringify({ action: "favourite", pubkey: owner, mint: favMint }),
+                });
+                const j = await r.json();
+                if (!r.ok) {
+                  fieldErr.fail({ fav: j.message || "Could not save that CA." });
+                  return;
+                }
+                setNote(favMint ? "Favourite project saved." : "Favourite cleared.");
+                load().catch(() => {});
+              }}
+            >
+              <div className="flex gap-2">
+                <input
+                  value={favMint}
+                  onChange={(e) => {
+                    setFavMint(e.target.value.trim());
+                    fieldErr.clear("fav");
+                  }}
+                  placeholder="Token CA"
+                  className={`min-h-[44px] min-w-0 flex-1 rounded-full border bg-void px-4 font-mono text-[12px] text-ghost ${fieldClass(fieldErr.errors.fav)}`}
+                />
+                <button type="submit" className="btn-acid rounded-full px-5 text-sm">
+                  Save
+                </button>
+              </div>
+              <FieldError error={fieldErr.errors.fav} />
+              {desk?.favSymbol ? <p className="mt-2 text-sm text-acid">${desk.favSymbol} is on your card.</p> : null}
+            </form>
+          </section>
+        </div>
       )}
 
       {tab === "launches" && (
@@ -499,6 +684,37 @@ async function squarePfp(file: File): Promise<string> {
       if (data.length <= IMAGE_DATA_MAX) return data;
     }
     throw new Error("Image is too heavy.");
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+async function wideBanner(file: File): Promise<string> {
+  if (file.size > 4_000_000) throw new Error("Image must be under 4 MB.");
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const el = new Image();
+      el.onload = () => resolve(el);
+      el.onerror = () => reject(new Error("Could not read that image."));
+      el.src = url;
+    });
+    const w = 1200;
+    const h = 400;
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Could not crop image.");
+    const scale = Math.max(w / img.naturalWidth, h / img.naturalHeight);
+    const dw = img.naturalWidth * scale;
+    const dh = img.naturalHeight * scale;
+    ctx.drawImage(img, (w - dw) / 2, (h - dh) / 2, dw, dh);
+    for (const q of [0.78, 0.62, 0.48, 0.34]) {
+      const data = canvas.toDataURL("image/jpeg", q);
+      if (data.length <= 280_000) return data;
+    }
+    throw new Error("Image is too heavy. Try a simpler JPEG.");
   } finally {
     URL.revokeObjectURL(url);
   }

@@ -54,6 +54,10 @@ export type AdminUser = {
   referrer: string | null;
   referralRewardsSol: number;
   launched: number;
+  rank: number;
+  xp: number;
+  intro: string | null;
+  favMint: string | null;
   depositedSol: number;
   mode: "paper" | "live";
   killed: boolean;
@@ -195,4 +199,6 @@ export type AdminDesk = {
   backtest?: import("../types").BacktestReport | null;
   backtestLev2?: import("../types").BacktestReport | null;
   backtestLev3?: import("../types").BacktestReport | null;
+  shill?: { messages: number; pins: number; members: number };
+  ranks?: { cards: number; top: { pubkey: string; username: string; rank: number; xp: number }[] };
 };

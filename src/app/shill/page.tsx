@@ -1,10 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Check, CheckCheck, Paperclip, Pin, Reply, Send, Smile } from "lucide-react";
+import { Check, CheckCheck, Paperclip, Pin, Reply, Send, Smile, Trophy } from "lucide-react";
 import { CartoonPfp } from "@/components/CartoonPfp";
 import { CircleSwap } from "@/components/CircleSwap";
 import { WalletConnect } from "@/components/WalletConnect";
+import { RankBadge } from "@/components/RankBadge";
+import { ProfileOverlay } from "@/components/ProfileOverlay";
+import { PumpLoop } from "@/components/PumpLoop";
+import { ShillMark } from "@/components/ShillMark";
 import { useOwner } from "@/lib/hooks";
 import { paySeatFromPhantom } from "@/lib/wallet/trading";
 import { SHILL_REACTS, SHILL_STICKERS, type ShillToken } from "@/lib/shill/types";
@@ -33,6 +37,17 @@ type PinRow = {
   endsAt: number;
 };
 
+type RankCard = {
+  pubkey: string;
+  username: string;
+  hasPfp?: boolean;
+  rank: number;
+  title: string;
+  xp: number;
+  need: number;
+  pct: number;
+};
+
 type Pack = {
   messages?: Msg[];
   pins?: PinRow[];
@@ -40,7 +55,9 @@ type Pack = {
   nextFreeAt?: number;
   pinSol?: number;
   typing?: string[];
-  profiles?: Record<string, { username: string; hasPfp?: boolean }>;
+  profiles?: Record<string, RankCard>;
+  board?: RankCard[];
+  you?: RankCard | null;
   treasury?: string;
 };
 
@@ -57,6 +74,10 @@ function pfpSrc(pk: string, profiles?: Pack["profiles"]) {
   const p = profiles?.[pk];
   if (p?.hasPfp) return `/api/circle/avatar?pk=${encodeURIComponent(pk)}`;
   return undefined;
+}
+
+function rankOf(pk: string, profiles?: Pack["profiles"]) {
+  return profiles?.[pk]?.rank || 1;
 }
 
 function fmtMc(n?: number) {
@@ -154,6 +175,8 @@ export default function ShillPage() {
   const scroller = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const hold = useRef<number>(0);
+  const [peek, setPeek] = useState<string | null>(null);
+  const [toast, setToast] = useState("");
 
   const load = useCallback(async () => {
     const q = owner ? `?pubkey=${encodeURIComponent(owner)}` : "";
@@ -189,10 +212,14 @@ export default function ShillPage() {
     setBusy(true);
     setErr("");
     try {
-      await act({ action: "chat", text, replyTo: reply?.id, ...extra });
+      const sent = await act({ action: "chat", text, replyTo: reply?.id, ...extra });
       setText("");
       setReply(null);
       setStickers(false);
+      if (sent?.leveled) {
+        setToast(`Rank up. You are ${sent.rank}.`);
+        window.setTimeout(() => setToast(""), 3200);
+      }
       await load();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "send failed");
@@ -259,16 +286,41 @@ export default function ShillPage() {
   const nextFree = pack?.nextFreeAt || 0;
   const waitMin = Math.max(1, Math.ceil((nextFree - Date.now()) / 60_000));
 
+  const you = pack?.you;
+  const board = pack?.board || [];
+
   return (
     <main className="relative min-h-[calc(100vh-4rem)] overflow-hidden pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:pb-4">
+      {peek && <ProfileOverlay pubkey={peek} onClose={() => setPeek(null)} />}
+      {toast && (
+        <div className="pointer-events-none fixed inset-x-0 top-20 z-[60] flex justify-center">
+          <div className="rounded-full border border-acid/50 bg-acid px-5 py-2 font-display text-lg text-void shadow-[0_0_30px_rgba(20,241,149,0.45)]">
+            {toast}
+          </div>
+        </div>
+      )}
       <div className="mx-auto flex max-w-6xl flex-col gap-3 px-3 pt-3 md:h-[calc(100vh-5rem)] md:flex-row md:px-6">
         <section className="flex min-h-[70vh] min-w-0 flex-1 flex-col overflow-hidden rounded-3xl border border-violet/25 bg-[#0b0614]/90 shadow-[0_24px_80px_rgba(0,0,0,0.35)]">
-          <header className="flex items-center justify-between border-b border-violet/20 px-4 py-3">
-            <div>
-              <div className="font-mono text-[10px] tracking-[0.22em] text-acid">🪩 SHILL ZONE</div>
-              <h1 className="font-display text-xl text-ghost">Talk. Shill. Swap.</h1>
+          <header className="flex items-center justify-between gap-3 border-b border-violet/20 px-4 py-3">
+            <div className="flex min-w-0 items-center gap-3">
+              <ShillMark className="h-10 w-10 shrink-0" />
+              <div className="min-w-0">
+                <div className="font-mono text-[10px] tracking-[0.22em] text-acid">SHILL ZONE</div>
+                <h1 className="font-display text-xl leading-none text-ghost">Talk. Shill. Climb.</h1>
+              </div>
             </div>
-            {!owner && <WalletConnect />}
+            <div className="flex items-center gap-2">
+              <PumpLoop />
+              {you && (
+                <button type="button" onClick={() => owner && setPeek(owner)} className="hidden items-center gap-2 sm:flex" title="Your card">
+                  <RankBadge rank={you.rank} size={40} />
+                  <span className="font-mono text-[10px] text-acid">
+                    {you.rank} {you.title}
+                  </span>
+                </button>
+              )}
+              {!owner && <WalletConnect />}
+            </div>
           </header>
           {pins.length > 0 && (
             <div className="flex gap-2 overflow-x-auto border-b border-violet/15 px-3 py-2">
@@ -287,9 +339,21 @@ export default function ShillPage() {
               const seen = mine && Date.now() - m.at > 1600;
               return (
                 <div key={m.id} className={`flex items-end gap-2 ${mine ? "flex-row-reverse" : ""}`}>
-                  <CartoonPfp seed={m.owner} src={pfpSrc(m.owner, pack?.profiles)} className="h-8 w-8 shrink-0" />
+                  <CartoonPfp
+                    seed={m.owner}
+                    src={pfpSrc(m.owner, pack?.profiles)}
+                    className="h-8 w-8 shrink-0"
+                    onClick={() => setPeek(m.owner)}
+                  />
                   <div className={`relative max-w-[78%] ${mine ? "items-end" : "items-start"} flex flex-col`}>
-                    <div className="mb-0.5 font-mono text-[10px] text-mute">{nameOf(m.owner, pack?.profiles)}</div>
+                    <div className="mb-0.5 flex items-center gap-1.5 font-mono text-[10px] text-mute">
+                      <button type="button" className="hover:text-acid" onClick={() => setPeek(m.owner)}>
+                        {nameOf(m.owner, pack?.profiles)}
+                      </button>
+                      <span className="rounded-full bg-acid/15 px-1.5 py-[1px] text-[9px] text-acid">
+                        {rankOf(m.owner, pack?.profiles)}
+                      </span>
+                    </div>
                     <div
                       className={`relative rounded-2xl px-3 py-2 text-sm leading-snug ${
                         mine ? "rounded-br-md bg-acid/20 text-ghost" : "rounded-bl-md bg-white/[0.07] text-ghost"
@@ -444,6 +508,50 @@ export default function ShillPage() {
         </section>
 
         <aside className="flex shrink-0 flex-col gap-3 md:w-[300px]">
+          {you && (
+            <button
+              type="button"
+              onClick={() => owner && setPeek(owner)}
+              className="rounded-3xl border border-acid/30 bg-gradient-to-br from-acid/15 to-violet/20 p-4 text-left"
+            >
+              <div className="flex items-center gap-3">
+                <RankBadge rank={you.rank} size={56} />
+                <div className="min-w-0">
+                  <div className="font-mono text-[10px] tracking-[0.18em] text-acid">YOUR RANK</div>
+                  <div className="font-display text-2xl text-ghost">
+                    {you.rank} · {you.title}
+                  </div>
+                  <div className="font-mono text-[10px] text-mute">{you.need === 0 ? "Maxed" : `${you.need} XP to next`}</div>
+                </div>
+              </div>
+              <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-void">
+                <div className="h-full bg-acid" style={{ width: `${Math.round((you.pct || 0) * 100)}%` }} />
+              </div>
+              <p className="mt-2 text-[12px] text-mute">Launch. Chat. Invite. Swap. The badge on your PFP is the receipt.</p>
+            </button>
+          )}
+          <div className="rounded-3xl border border-violet/25 bg-void/50 p-4">
+            <div className="flex items-center gap-2 font-mono text-[10px] tracking-[0.18em] text-acid">
+              <Trophy className="h-3.5 w-3.5" />
+              TOP SHILLERS
+            </div>
+            <div className="mt-2 space-y-1.5">
+              {board.length === 0 && <p className="text-[12px] text-mute">Be first on the board. Drop a CA.</p>}
+              {board.map((row, i) => (
+                <button
+                  key={row.pubkey}
+                  type="button"
+                  onClick={() => setPeek(row.pubkey)}
+                  className="flex w-full items-center gap-2 rounded-xl px-1 py-1 text-left hover:bg-white/5"
+                >
+                  <span className="w-4 font-mono text-[11px] text-mute">{i + 1}</span>
+                  <RankBadge rank={row.rank} size={28} />
+                  <span className="min-w-0 flex-1 truncate text-sm text-ghost">{row.username ? `@${row.username}` : `${row.pubkey.slice(0, 4)}…`}</span>
+                  <span className="font-mono text-[10px] text-acid">{row.rank}</span>
+                </button>
+              ))}
+            </div>
+          </div>
           <div className="rounded-3xl border border-acid/25 bg-acid/[0.06] p-4">
             <div className="font-mono text-[10px] tracking-[0.22em] text-acid">PIN POST · 0.2 SOL · 3H</div>
             <p className="mt-1 text-sm text-mute">Five spots. Token bubble sits at the top of chat.</p>

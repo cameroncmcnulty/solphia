@@ -19,6 +19,7 @@ import { lastPairPrices } from "@/lib/tick";
 import { liveBoosts, publicLiveBoost, tickBoosts } from "@/lib/launch/boost";
 import { IMAGE_DATA_MAX } from "@/lib/launch/validate";
 import { pinDataUrl } from "@/lib/pinata";
+import { creditRank } from "@/lib/rank/engine";
 
 export const dynamic = "force-dynamic";
 
@@ -100,7 +101,7 @@ export async function POST(req: NextRequest) {
     const book = bookOf(s);
     bookSnap = book;
     if (b.action === "create") {
-      return createCoin(book, {
+      const made = createCoin(book, {
         creator: b.pubkey,
         name: sanitizeText(b.name || "", 24),
         symbol: sanitizeText(b.symbol || "", 10),
@@ -112,9 +113,19 @@ export async function POST(req: NextRequest) {
         discord: sanitizeText(b.discord || "", 120),
         launchBuySol: Number(b.launchBuySol) || 0,
       });
+      if (made.ok) creditRank(book, b.pubkey, "launch");
+      return made;
     }
-    if (b.action === "buy") return buyCoin(book, { id: b.id || "", owner: b.pubkey, sol: Number(b.sol) || 0 });
-    if (b.action === "sell") return sellCoin(book, { id: b.id || "", owner: b.pubkey, tokens: Number(b.tokens) || 0 });
+    if (b.action === "buy") {
+      const bought = buyCoin(book, { id: b.id || "", owner: b.pubkey, sol: Number(b.sol) || 0 });
+      if (bought.ok) creditRank(book, b.pubkey, "swap", { sol: Number(b.sol) || 0 });
+      return bought;
+    }
+    if (b.action === "sell") {
+      const sold = sellCoin(book, { id: b.id || "", owner: b.pubkey, tokens: Number(b.tokens) || 0 });
+      if (sold.ok) creditRank(book, b.pubkey, "swap");
+      return sold;
+    }
     if (b.action === "withdraw_dev") return withdrawDev(book, { id: b.id || "", owner: b.pubkey });
     if (b.action === "withdraw_owner") return withdrawOwner(book, { owner: b.pubkey });
     if (b.action === "withdraw_referral") return withdrawReferral(book, { owner: b.pubkey });

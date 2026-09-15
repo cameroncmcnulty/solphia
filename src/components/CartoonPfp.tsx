@@ -1,22 +1,38 @@
 "use client";
 
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useState, type KeyboardEvent } from "react";
 
 /** Deterministic cartoon PFP from a wallet seed until they upload their own. */
 export function CartoonPfp({
   seed,
   src,
   className = "h-9 w-9",
+  onClick,
 }: {
   seed: string;
   src?: string | null;
   className?: string;
+  onClick?: () => void;
 }) {
   const uid = useId().replace(/:/g, "");
   const [dead, setDead] = useState(false);
   useEffect(() => {
     setDead(false);
   }, [src]);
+  const click = onClick
+    ? {
+        role: "button" as const,
+        tabIndex: 0,
+        onClick,
+        onKeyDown: (e: KeyboardEvent) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onClick();
+          }
+        },
+        className: `shrink-0 cursor-pointer rounded-full object-cover ${className}`,
+      }
+    : { className: `shrink-0 rounded-full object-cover ${className}` };
   if (src && !dead) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
@@ -25,13 +41,13 @@ export function CartoonPfp({
         alt=""
         draggable={false}
         onError={() => setDead(true)}
-        className={`shrink-0 rounded-full object-cover ${className}`}
+        {...click}
       />
     );
   }
   const a = avatar(seed || "solphia", uid);
   return (
-    <svg viewBox="0 0 64 64" className={`shrink-0 rounded-full ${className}`} aria-hidden>
+    <svg viewBox="0 0 64 64" {...click} className={`shrink-0 rounded-full ${className}`} aria-hidden={onClick ? undefined : true}>
       <defs>
         <radialGradient id={a.gid} cx="32%" cy="28%" r="80%">
           <stop offset="0%" stopColor={a.bg2} />

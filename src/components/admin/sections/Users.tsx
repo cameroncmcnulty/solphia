@@ -9,7 +9,7 @@ import { useAdmin } from "../AdminProvider";
 import { shortPk } from "../ui";
 
 type Filter = "all" | "paid" | "admin" | "live" | "paper" | "launched" | "referred";
-type Sort = "seen" | "created" | "rewards" | "launches";
+type Sort = "seen" | "created" | "rewards" | "launches" | "rank";
 
 function matches(u: AdminUser, q: string, filter: Filter) {
   if (filter === "paid" && !u.paid && !u.admin) return false;
@@ -41,6 +41,7 @@ export function UsersSection() {
       if (sort === "created") return b.createdAt - a.createdAt;
       if (sort === "rewards") return b.referralRewardsSol - a.referralRewardsSol;
       if (sort === "launches") return b.launched - a.launched;
+      if (sort === "rank") return b.rank - a.rank || b.xp - a.xp;
       return b.lastSeen - a.lastSeen;
     });
     return list;
@@ -102,6 +103,7 @@ export function UsersSection() {
             <option value="created">Created</option>
             <option value="rewards">Referral SOL</option>
             <option value="launches">Launches</option>
+            <option value="rank">Rank</option>
           </select>
         </div>
         <input
@@ -142,6 +144,7 @@ export function UsersSection() {
                   {u.admin ? " · admin" : ""}
                   {u.mode === "live" ? " · LIVE" : ""}
                   {u.launched ? ` · ${u.launched} launches` : ""}
+                  {u.rank > 1 ? ` · r${u.rank}` : ""}
                 </div>
               </div>
               <div className="shrink-0 text-right font-mono text-[10px] text-mute">
@@ -161,7 +164,7 @@ export function UsersSection() {
             <div className="font-mono text-[11px] text-ghost">{shortPk(picked.pubkey, 8)}</div>
             <p className="font-mono text-[10px] text-mute">
               Last seen {picked.lastSeen ? new Date(picked.lastSeen).toLocaleString() : "never"} · invited {picked.referredCount} ·
-              deposited {picked.depositedSol.toFixed(3)} SOL
+              deposited {picked.depositedSol.toFixed(3)} SOL · rank {picked.rank} ({picked.xp} XP)
             </p>
             <label className="block" data-field="username">
               <span className="font-mono text-[10px] text-mute">Username</span>

@@ -11,7 +11,8 @@ export async function GET(req: NextRequest) {
   const pk = req.nextUrl.searchParams.get("pk") || "";
   if (!isSolanaAddress(pk)) return new NextResponse(null, { status: 404 });
   const s = await readyState();
-  const pfp = s.launch?.accounts?.[pk]?.pfp || "";
+  const kind = req.nextUrl.searchParams.get("kind") || "pfp";
+  const pfp = (kind === "banner" ? s.launch?.accounts?.[pk]?.banner : s.launch?.accounts?.[pk]?.pfp) || "";
   if (!pfp) return new NextResponse(null, { status: 404 });
   if (/^https?:\/\//i.test(pfp)) {
     return NextResponse.redirect(pfp, 302);
