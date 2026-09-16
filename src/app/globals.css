@@ -108,8 +108,8 @@ body {
 }
 
 @keyframes hover-mark {
-  0%, 100% { transform: translate3d(0, 0, 0) rotate(-3deg); }
-  50% { transform: translate3d(8px, -14px, 0) rotate(4deg); }
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  50% { transform: translate3d(4px, -8px, 0); }
 }
 
 .reveal {
@@ -145,31 +145,55 @@ body {
   will-change: transform;
 }
 
-@keyframes hair-drift {
+@keyframes locks-drift {
   0%,
   100% {
-    transform: translate3d(-1.1%, 0.2%, 0) rotate(-0.55deg) scale(1.012);
+    transform: translate3d(-1.4%, 0.3%, 0) rotate(-0.35deg);
   }
   50% {
-    transform: translate3d(1.5%, -1.2%, 0) rotate(0.7deg) scale(1.028);
+    transform: translate3d(1.8%, -0.9%, 0) rotate(0.4deg);
   }
 }
 
-.solphia-hair {
-  animation: hair-drift 7.2s ease-in-out infinite;
-  transform-origin: 50% 16%;
+.solphia-locks {
+  animation: locks-drift 14s ease-in-out infinite;
+  transform-origin: 50% 18%;
+  will-change: transform;
+  -webkit-mask-image: radial-gradient(ellipse 36% 40% at 50% 40%, transparent 52%, rgba(0, 0, 0, 0.2) 68%, #000 86%);
+  mask-image: radial-gradient(ellipse 36% 40% at 50% 40%, transparent 52%, rgba(0, 0, 0, 0.2) 68%, #000 86%);
+}
+
+@keyframes solphia-breathe {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(-0.5%, -0.35%, 0);
+  }
+}
+
+.solphia-breathe {
+  animation: solphia-breathe 16s ease-in-out infinite;
   will-change: transform;
 }
 
-.orbit-chip {
-  transform: translate(-50%, -50%);
-  transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+@keyframes constellation-locks {
+  0%,
+  100% {
+    transform: translate3d(-0.7%, 0.2%, 0);
+  }
+  50% {
+    transform: translate3d(0.9%, -0.55%, 0);
+  }
 }
-.orbit-chip:hover,
-.orbit-chip:focus-visible {
-  border-color: rgba(20, 241, 149, 0.85);
-  box-shadow: 0 0 22px rgba(20, 241, 149, 0.45);
-  background: rgba(4, 0, 10, 0.92);
+
+.solphia-constellation-locks {
+  animation: constellation-locks 18s ease-in-out infinite;
+  transform-origin: 82% 28%;
+  will-change: transform;
+  -webkit-mask-image: radial-gradient(ellipse 16% 22% at 78% 28%, #000 0%, #000 42%, transparent 74%);
+  mask-image: radial-gradient(ellipse 16% 22% at 78% 28%, #000 0%, #000 42%, transparent 74%);
 }
 
 .card-lift {
@@ -188,7 +212,9 @@ body {
   .reveal-right,
   .mark-float,
   .hover-mark,
-  .solphia-hair,
+  .solphia-locks,
+  .solphia-breathe,
+  .solphia-constellation-locks,
   .card-lift,
   .card-lift:hover {
     animation: none;

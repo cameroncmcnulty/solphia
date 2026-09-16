@@ -12,7 +12,7 @@ export default function Home() {
     <main className="relative">
       <section className="relative">
         <div className="mx-auto grid max-w-6xl items-center gap-8 px-4 pt-4 md:px-12 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] lg:min-h-[78vh] lg:py-10">
-          <div className="relative order-1 mx-auto w-full max-w-[22rem] overflow-visible sm:max-w-[420px] lg:order-2 lg:max-w-[560px]">
+          <div className="relative order-1 mx-auto w-full max-w-[20rem] overflow-visible sm:max-w-[380px] lg:order-2 lg:max-w-[520px]">
             <OrbitTickers />
             <SolphiaFace mode="hero" />
           </div>

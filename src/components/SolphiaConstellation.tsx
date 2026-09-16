@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 
 type Star = { x: number; y: number; lum: number; phase: number; speed: number; cyan: boolean };
-type Packet = { a: number; b: number; t: number; speed: number };
+type Photon = { path: number[]; t: number; speed: number };
 
 function containRight(iw: number, ih: number, cw: number, ch: number) {
   const ir = iw / ih;
@@ -41,8 +41,8 @@ function sampleStars(img: HTMLImageElement): Star[] {
       const g = data[i + 1];
       const b = data[i + 2];
       const lum = r * 0.2 + g * 0.55 + b * 0.25;
-      if (lum < 140) continue;
-      if (!(g > 150 || b > 160)) continue;
+      if (lum < 150) continue;
+      if (!(g > 155 || b > 165)) continue;
       cand.push({
         x: x / w,
         y: y / h,
@@ -53,29 +53,43 @@ function sampleStars(img: HTMLImageElement): Star[] {
   }
   cand.sort((a, b) => b.lum - a.lum);
   const kept: Star[] = [];
-  const minD2 = 0.0016;
+  const minD2 = 0.0024;
   for (const c of cand) {
-    let ok = true;
-    for (const s of kept) {
-      const dx = s.x - c.x;
-      const dy = s.y - c.y;
-      if (dx * dx + dy * dy < minD2) {
-        ok = false;
-        break;
-      }
-    }
-    if (!ok) continue;
+    if (kept.some((s) => (s.x - c.x) ** 2 + (s.y - c.y) ** 2 < minD2)) continue;
     kept.push({
       x: c.x,
       y: c.y,
       lum: c.lum,
       cyan: c.cyan,
       phase: Math.random() * Math.PI * 2,
-      speed: 0.018 + Math.random() * 0.042,
+      speed: 0.01 + Math.random() * 0.018,
     });
-    if (kept.length >= 70) break;
+    if (kept.length >= 48) break;
   }
   return kept;
+}
+
+function walk(stars: Star[], from: number, len = 5): number[] {
+  const path = [from];
+  let cur = from;
+  const used = new Set([from]);
+  for (let n = 0; n < len; n++) {
+    let best = -1;
+    let bd = 0.018;
+    for (let j = 0; j < stars.length; j++) {
+      if (used.has(j)) continue;
+      const d = (stars[cur].x - stars[j].x) ** 2 + (stars[cur].y - stars[j].y) ** 2;
+      if (d < bd) {
+        bd = d;
+        best = j;
+      }
+    }
+    if (best < 0) break;
+    path.push(best);
+    used.add(best);
+    cur = best;
+  }
+  return path;
 }
 
 export function SolphiaConstellation() {
@@ -98,8 +112,8 @@ export function SolphiaConstellation() {
     let lastPh = 0;
     let t = 0;
     let ready = pic.complete && pic.naturalWidth > 0;
-    const packets: Packet[] = [];
-    const links: [number, number][] = [];
+    let photon: Photon | null = null;
+    let wait = 80;
     const reduce =
       typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -107,19 +121,6 @@ export function SolphiaConstellation() {
       if (!pic.naturalWidth) return;
       ready = true;
       stars = sampleStars(pic);
-      links.length = 0;
-      for (let i = 0; i < stars.length; i++) {
-        let best = -1;
-        let bd = 0.012;
-        for (let j = i + 1; j < stars.length; j++) {
-          const d = (stars[i].x - stars[j].x) ** 2 + (stars[i].y - stars[j].y) ** 2;
-          if (d < bd) {
-            bd = d;
-            best = j;
-          }
-        }
-        if (best >= 0) links.push([i, best]);
-      }
     };
     pic.addEventListener("load", boot);
     if (ready) boot();
@@ -147,52 +148,52 @@ export function SolphiaConstellation() {
       box = containRight(pic.naturalWidth, pic.naturalHeight, w, h);
       t += reduce ? 0 : 1;
       ctx.globalCompositeOperation = "screen";
-      if (!reduce && packets.length < 18 && links.length) {
-        const [a, b] = links[(Math.random() * links.length) | 0];
-        packets.push({ a, b, t: 0, speed: 0.012 + Math.random() * 0.02 });
-      }
-      ctx.beginPath();
-      ctx.strokeStyle = "rgba(20,241,149,0.16)";
-      ctx.lineWidth = 0.7;
-      for (const [a, b] of links) {
-        ctx.moveTo(box.dx + stars[a].x * box.dw, box.dy + stars[a].y * box.dh);
-        ctx.lineTo(box.dx + stars[b].x * box.dw, box.dy + stars[b].y * box.dh);
-      }
-      ctx.stroke();
-      for (let i = packets.length - 1; i >= 0; i--) {
-        const p = packets[i];
-        p.t += p.speed;
-        if (p.t >= 1) {
-          packets.splice(i, 1);
-          continue;
+
+      if (!reduce) {
+        if (!photon) {
+          wait -= 1;
+          if (wait <= 0 && stars.length > 4) {
+            const start = (Math.random() * stars.length) | 0;
+            const path = walk(stars, start, 4 + ((Math.random() * 3) | 0));
+            if (path.length > 1) photon = { path, t: 0, speed: 0.006 + Math.random() * 0.004 };
+            wait = 140 + Math.random() * 220;
+          }
+        } else {
+          photon.t += photon.speed;
+          if (photon.t >= photon.path.length - 1) photon = null;
         }
-        const a = stars[p.a];
-        const b = stars[p.b];
-        if (!a || !b) continue;
-        const sx = box.dx + (a.x + (b.x - a.x) * p.t) * box.dw;
-        const sy = box.dy + (a.y + (b.y - a.y) * p.t) * box.dh;
-        ctx.fillStyle = `rgba(20,241,149,${0.45 + (1 - Math.abs(p.t - 0.5) * 2) * 0.5})`;
-        ctx.beginPath();
-        ctx.arc(sx, sy, 2.1, 0, Math.PI * 2);
-        ctx.fill();
       }
+
       for (const s of stars) {
-        const twinkle = reduce ? 0.28 : 0.12 + 0.32 * (0.5 + 0.5 * Math.sin(t * s.speed + s.phase));
+        const twinkle = reduce ? 0.16 : 0.08 + 0.18 * (0.5 + 0.5 * Math.sin(t * s.speed + s.phase));
         const a = s.lum * twinkle;
         const sx = box.dx + s.x * box.dw;
         const sy = box.dy + s.y * box.dh;
-        const rad = s.lum > 0.8 ? 1.15 : 0.7;
-        ctx.fillStyle = s.cyan ? `rgba(20,241,149,${a * 0.35})` : `rgba(201,168,255,${a * 0.32})`;
+        ctx.fillStyle = s.cyan ? `rgba(20,241,149,${a * 0.28})` : `rgba(201,168,255,${a * 0.24})`;
         ctx.beginPath();
-        ctx.arc(sx, sy, rad * 2.1, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = s.cyan
-          ? `rgba(180,255,230,${Math.min(0.45, 0.08 + a * 0.4)})`
-          : `rgba(230,210,255,${Math.min(0.4, 0.06 + a * 0.36)})`;
-        ctx.beginPath();
-        ctx.arc(sx, sy, rad, 0, Math.PI * 2);
+        ctx.arc(sx, sy, 1.6, 0, Math.PI * 2);
         ctx.fill();
       }
+
+      if (photon && photon.path.length > 1) {
+        const seg = Math.min(photon.path.length - 2, Math.floor(photon.t));
+        const f = photon.t - seg;
+        const a = stars[photon.path[seg]];
+        const b = stars[photon.path[seg + 1]];
+        if (a && b) {
+          const sx = box.dx + (a.x + (b.x - a.x) * f) * box.dw;
+          const sy = box.dy + (a.y + (b.y - a.y) * f) * box.dh;
+          const g = ctx.createRadialGradient(sx, sy, 0, sx, sy, 16);
+          g.addColorStop(0, "rgba(210,255,240,0.55)");
+          g.addColorStop(0.4, "rgba(20,241,149,0.22)");
+          g.addColorStop(1, "rgba(20,241,149,0)");
+          ctx.fillStyle = g;
+          ctx.beginPath();
+          ctx.arc(sx, sy, 16, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
       ctx.globalCompositeOperation = "source-over";
       raf = requestAnimationFrame(loop);
     };
@@ -208,21 +209,21 @@ export function SolphiaConstellation() {
       <div
         className="absolute inset-0 mix-blend-screen"
         style={{
-          WebkitMaskImage: "linear-gradient(to right, transparent 0%, rgba(0,0,0,0.2) 22%, black 48%)",
-          maskImage: "linear-gradient(to right, transparent 0%, rgba(0,0,0,0.2) 22%, black 48%)",
+          WebkitMaskImage: "linear-gradient(to right, transparent 0%, rgba(0,0,0,0.18) 24%, black 52%)",
+          maskImage: "linear-gradient(to right, transparent 0%, rgba(0,0,0,0.18) 24%, black 52%)",
         }}
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           ref={photo}
-          src="/solphia-constellation.jpg?v=6"
+          src="/solphia-constellation.jpg?v=7"
           alt=""
           draggable={false}
-          className="absolute inset-0 h-full w-full object-contain object-right opacity-[0.52]"
+          className="solphia-breathe absolute inset-0 h-full w-full object-contain object-right opacity-[0.62]"
         />
         <canvas ref={canvas} className="pointer-events-none absolute inset-0 h-full w-full" />
       </div>
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_78%_42%,rgba(20,241,149,0.05),transparent_36%),radial-gradient(ellipse_at_22%_16%,rgba(153,69,255,0.08),transparent_44%),linear-gradient(to_right,rgba(4,0,10,0.55)_0%,rgba(4,0,10,0.12)_52%,transparent_78%),linear-gradient(to_bottom,transparent_62%,rgba(4,0,10,0.72)_100%)]" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_78%_42%,rgba(20,241,149,0.04),transparent_36%),radial-gradient(ellipse_at_22%_16%,rgba(153,69,255,0.07),transparent_44%),linear-gradient(to_right,rgba(4,0,10,0.55)_0%,rgba(4,0,10,0.12)_52%,transparent_78%),linear-gradient(to_bottom,transparent_62%,rgba(4,0,10,0.72)_100%)]" />
     </div>
   );
 }
