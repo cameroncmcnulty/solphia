@@ -9,6 +9,16 @@ function isVoid(r, g, b) {
   return mx < 14;
 }
 
+function padTransparent(png, fracX, fracY) {
+  const pl = Math.round(png.width * fracX);
+  const pr = pl;
+  const pt = Math.round(png.height * fracY);
+  const pb = Math.round(png.height * fracY * 0.35);
+  const out = new PNG({ width: png.width + pl + pr, height: png.height + pt + pb, colorType: 6 });
+  PNG.bitblt(png, out, 0, 0, png.width, png.height, pl, pt);
+  return out;
+}
+
 function knockout(file) {
   const abs = path.resolve(file);
   const png = PNG.sync.read(fs.readFileSync(abs));
@@ -52,21 +62,11 @@ function knockout(file) {
       data[p + 3] = 0;
     }
   }
-  let sx = 0;
-  let sy = 0;
-  let cnt = 0;
-  for (let i = 0; i < n; i++) {
-    if (bg[i]) continue;
-    const p = i * 4;
-    if (Math.max(data[p], data[p + 1], data[p + 2]) < 40) continue;
-    sx += i % w;
-    sy += (i / w) | 0;
-    cnt++;
-  }
-  const cx = cnt ? sx / cnt : w / 2;
-  const cy = cnt ? sy / cnt : h / 2;
-  const rx = 0.36 * w;
-  const ry = 0.56 * h;
+  const body = path.basename(abs).includes("body");
+  const cx = 0.5 * w;
+  const cy = body ? 0.46 * h : 0.5 * h;
+  const rx = (body ? 0.34 : 0.22) * w;
+  const ry = (body ? 0.52 : 0.4) * h;
   for (let i = 0; i < n; i++) {
     const p = i * 4;
     if (bg[i]) continue;
@@ -74,21 +74,21 @@ function knockout(file) {
     const y = (i / w) | 0;
     const dx = (x - cx) / rx;
     const dy = (y - cy) / ry;
-    if (dx * dx + dy * dy <= 1) {
-      data[p + 3] = 255;
-      continue;
-    }
     const mx = Math.max(data[p], data[p + 1], data[p + 2]);
-    if (mx >= 48) {
+    const face = dx * dx + dy * dy <= 1 && y > h * 0.22;
+    if (face || mx >= 52) {
       data[p + 3] = 255;
       continue;
     }
-    data[p + 3] = Math.max(0, Math.min(150, Math.round(mx * 4.2)));
+    data[p + 3] = Math.max(0, Math.min(140, Math.round(mx * 3.6)));
   }
-  fs.writeFileSync(abs, PNG.sync.write(png));
+  const base = path.basename(abs);
+  const padded =
+    base === "solphia-face.png" ? png : padTransparent(png, 0.14, 0.05);
+  fs.writeFileSync(abs, PNG.sync.write(padded));
   let clear = 0;
-  for (let i = 3; i < data.length; i += 4) if (data[i] === 0) clear++;
-  console.log(path.basename(abs), w + "x" + h, "void", ((clear / n) * 100).toFixed(1) + "%");
+  for (let i = 3; i < padded.data.length; i += 4) if (padded.data[i] === 0) clear++;
+  console.log(base, padded.width + "x" + padded.height, "void", ((clear / (padded.width * padded.height)) * 100).toFixed(1) + "%");
 }
 
 const files = process.argv.slice(2);

@@ -210,7 +210,7 @@ export function SolphiaConstellation() {
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           ref={photo}
-          src="/solphia-body.png?v=8"
+          src="/solphia-body.png?v=9"
           alt=""
           draggable={false}
           className="solphia-breathe absolute inset-0 h-full w-full object-contain object-right"

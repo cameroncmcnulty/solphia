@@ -93,7 +93,7 @@ export function SolphiaFace({ mode = "panel" }: { mode?: "hero" | "panel" | "lau
   const photo = useRef<HTMLImageElement>(null);
   const hero = mode === "hero";
   const launch = mode === "launch";
-  const src = launch ? "/solphia-launch.png?v=8" : hero ? "/solphia-hero.png?v=8" : "/solphia-face.png?v=8";
+  const src = launch ? "/solphia-launch.png?v=9" : hero ? "/solphia-hero.png?v=9" : "/solphia-face.png?v=9";
 
   useEffect(() => {
     const c = canvas.current;
@@ -299,20 +299,24 @@ export function SolphiaFace({ mode = "panel" }: { mode?: "hero" | "panel" | "lau
         launch
           ? "h-full w-full overflow-hidden"
           : hero
-            ? "solphia-hero-veil mx-auto aspect-[3/4] w-full overflow-visible"
+            ? "solphia-hero-veil mx-auto w-full overflow-visible"
             : "h-[240px] w-full overflow-hidden md:h-[300px]"
       }`}
       style={{ isolation: "isolate", WebkitTapHighlightColor: "transparent" }}
     >
-      <div className={hero ? "solphia-hero-extend absolute inset-0" : "absolute inset-0"}>
+      <div className={hero ? "relative w-full overflow-visible" : "absolute inset-0"}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           ref={photo}
           src={src}
           alt=""
           draggable={false}
-          className={`pointer-events-none absolute inset-0 h-full w-full outline-none ${
-            hero ? "object-contain object-top" : launch ? "object-cover object-[82%_42%]" : "object-cover"
+          className={`pointer-events-none outline-none ${
+            hero
+              ? "relative z-0 h-auto w-full"
+              : launch
+                ? "absolute inset-0 h-full w-full object-cover object-[82%_42%]"
+                : "absolute inset-0 h-full w-full object-cover"
           }`}
         />
         {hero ? (
@@ -321,10 +325,10 @@ export function SolphiaFace({ mode = "panel" }: { mode?: "hero" | "panel" | "lau
             src={src}
             alt=""
             draggable={false}
-            className="solphia-locks pointer-events-none absolute inset-0 h-full w-full object-contain object-top"
+            className="solphia-locks pointer-events-none absolute inset-0 z-[1] h-full w-full"
           />
         ) : null}
-        <canvas ref={canvas} className="pointer-events-none absolute inset-0 h-full w-full" />
+        <canvas ref={canvas} className="pointer-events-none absolute inset-0 z-[2] h-full w-full" />
       </div>
       {launch ? (
         <div
