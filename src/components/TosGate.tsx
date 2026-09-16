@@ -82,9 +82,9 @@ export function TosGate() {
     <div className="fixed inset-0 z-[80] flex items-end justify-center bg-void/80 p-4 backdrop-blur-sm sm:items-center">
       <div className="w-full max-w-md rounded-3xl border border-violet/30 bg-ink p-5 shadow-[0_24px_80px_rgba(0,0,0,0.55)]">
         <p className="font-mono text-[10px] tracking-[0.22em] text-acid">FIRST CONNECT</p>
-        <h2 className="mt-2 font-display text-2xl text-ghost">Before you trade or chat</h2>
+        <h2 className="mt-2 font-display text-2xl text-ghost">Before you enter</h2>
         <p className="mt-2 text-sm leading-relaxed text-mute">
-          Solphia is non-custodial. Your wallet is login. You can lose SOL. Agree to the terms and privacy policy to continue.
+          Solphia is non-custodial. Your wallet is login. Trading activities carry heavy risk. Agree to the terms and privacy policy to continue.
         </p>
         <label className="mt-4 flex items-start gap-2 text-sm text-ghost">
           <input type="checkbox" checked={tos} onChange={(e) => setTos(e.target.checked)} className="mt-1" />

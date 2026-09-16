@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Check, CheckCheck, Pin, Reply, Send, Smile, Trophy } from "lucide-react";
 import { BurstSticker } from "@/components/BurstSticker";
+import { fmtLeft } from "@/components/BoostBuy";
 import { CartoonPfp } from "@/components/CartoonPfp";
 import { CircleSwap } from "@/components/CircleSwap";
 import { WalletConnect } from "@/components/WalletConnect";
@@ -275,12 +276,34 @@ export default function ShillPage() {
             </div>
           )}
           {pins.length > 0 && (
-            <div className="flex gap-2 overflow-x-auto bg-[#17212b] px-3 py-2">
-              {pins.map((p) => (
-                <div key={p.id} className="min-w-[11rem] shrink-0">
-                  <TokenBubble token={p} compact />
-                </div>
-              ))}
+            <div className="bg-[#17212b] px-2 py-2">
+              <div className="boost-rail">
+                {pins.map((p) => {
+                  const ticker = (p.symbol || "").replace(/^\$/, "");
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      title="Copy CA"
+                      onClick={() => navigator.clipboard.writeText(p.mint)}
+                      className="boost-tile"
+                    >
+                      {p.image ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={p.image} alt="" className="boost-tile-art" />
+                      ) : (
+                        <div className="boost-tile-art flex items-center justify-center font-display text-xs text-acid">
+                          {(ticker || "?").slice(0, 2)}
+                        </div>
+                      )}
+                      <span className="mt-1 block w-full truncate text-center text-[12px] font-semibold text-ghost">
+                        ${ticker || "TOKEN"}
+                      </span>
+                      <span className="stat-num block text-center text-[11px] text-acid">{fmtLeft(Math.max(0, p.endsAt - Date.now()))}</span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           )}
           <div ref={scroller} className="shill-wallpaper min-h-0 flex-1 space-y-1 overflow-y-auto px-2 py-3" onClick={() => setPicker(null)}>

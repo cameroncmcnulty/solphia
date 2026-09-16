@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Activity, ArrowDownUp, Rocket } from "lucide-react";
+import { Activity, ArrowDownUp, Rocket, X } from "lucide-react";
 
 const ITEMS = [
   {
@@ -37,16 +37,26 @@ export function ToolsSheet({ open, onClose }: { open: boolean; onClose: () => vo
   }, [open, onClose]);
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/70 p-3 sm:items-center" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-[70] flex items-end justify-center bg-black/70 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:items-center"
+      onClick={onClose}
+    >
       <div
-        className="w-full max-w-sm overflow-hidden rounded-t-3xl border border-violet/30 bg-[#17212b] shadow-2xl sm:rounded-3xl"
+        className="flex max-h-[min(82dvh,34rem)] w-full max-w-[22rem] flex-col overflow-hidden rounded-3xl border border-violet/30 bg-[#17212b] shadow-2xl sm:max-w-sm"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="px-5 pb-2 pt-4">
-          <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/20 sm:hidden" />
+        <div className="flex shrink-0 items-center justify-between gap-3 px-4 pb-1 pt-3">
           <div className="font-display text-xl text-ghost">Tools</div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex h-10 w-10 items-center justify-center rounded-full text-mute hover:bg-white/10 hover:text-ghost"
+            aria-label="Close"
+          >
+            <X className="h-5 w-5" />
+          </button>
         </div>
-        <div className="pb-4">
+        <div className="min-h-0 flex-1 overflow-y-auto pb-3">
           {ITEMS.map((it) => (
             <button
               key={it.href}
@@ -55,9 +65,9 @@ export function ToolsSheet({ open, onClose }: { open: boolean; onClose: () => vo
                 onClose();
                 router.push(it.href);
               }}
-              className="flex w-full items-center gap-3 px-5 py-3.5 text-left hover:bg-white/5"
+              className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-white/5"
             >
-              <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-acid/15 text-acid">
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-acid/15 text-acid">
                 <it.Icon className="h-5 w-5" />
               </span>
               <span className="min-w-0">

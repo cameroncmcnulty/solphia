@@ -216,9 +216,11 @@ body {
 }
 
 .shill-wallpaper {
-  background-color: #0e1621;
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='280' height='280' viewBox='0 0 280 280'><g fill='none' stroke='%2314f195' stroke-width='1.2' opacity='0.11'><path d='M36 48l8 22 22-6-14 18 16 16-24-4-10 22-6-22-24 2 18-16z'/><path d='M168 38l14 22 26 2-20 16 6 24-22-12-22 14 4-26-18-18 26 2z'/><path d='M92 168c10-18 34-18 44 0 8 14-4 30-22 36-18-6-30-22-22-36z'/><circle cx='214' cy='186' r='16'/><path d='M48 220h28m-14-14v28'/><path d='M230 88l18 10-18 10-18-10z'/></g><g fill='%239945ff' opacity='0.09'><circle cx='120' cy='72' r='3'/><circle cx='252' cy='140' r='2.5'/><circle cx='20' cy='160' r='2'/><circle cx='188' cy='248' r='3'/></g></svg>");
-  background-size: 280px 280px;
+  background-color: #071018;
+  background-image: url("/shill-wallpaper.png");
+  background-repeat: repeat;
+  background-position: 0 0;
+  background-size: 280px 417px;
 }
 
 @keyframes sticker-rocket {

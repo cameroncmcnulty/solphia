@@ -26,8 +26,8 @@ import { SHILL_PIN_SOL, SHILL_REACTS, SHILL_STICKERS, type ShillToken } from "@/
 import { emptyLaunchBook } from "@/lib/launch/engine";
 import { creditRank, leaderboard, publicCard } from "@/lib/rank/engine";
 import { canModerateChat, staffRole } from "@/lib/access";
-import { GLDX_MINT_OFFICIAL, QQQX_MINT_OFFICIAL, SOL_MINT, SPYX_MINT_OFFICIAL } from "@/lib/pair/mints";
-import { sphaMintOf } from "@/lib/token/solphia";
+import { GLDX_MINT_OFFICIAL, QQQX_MINT_OFFICIAL, SOL_MINT, SPYX_MINT_OFFICIAL, USDC_MINT, USDT_MINT } from "@/lib/pair/mints";
+import { loadMarketTape } from "@/lib/launch/market";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -67,36 +67,44 @@ async function tokenOf(mint: string): Promise<ShillToken | null> {
   }
 }
 
-function housePinCoins(st: { launch?: ReturnType<typeof emptyLaunchBook>; sphaMint?: string | null }) {
-  const fromPad = (st.launch?.coins || [])
-    .filter((c) => c.mint)
-    .slice(0, 16)
-    .map((c) => ({ mint: c.mint, symbol: c.symbol, name: c.name, image: c.image }));
-  const spha = sphaMintOf(st.sphaMint);
-  const rails = [
-    { mint: SOL_MINT, symbol: "SOL", name: "Solana" },
-    { mint: SPYX_MINT_OFFICIAL, symbol: "SPYx", name: "S&P 500 xStock" },
-    { mint: QQQX_MINT_OFFICIAL, symbol: "QQQx", name: "Nasdaq xStock" },
-    { mint: GLDX_MINT_OFFICIAL, symbol: "GLDx", name: "Gold xStock" },
-    ...(spha ? [{ mint: spha, symbol: "SPHA", name: "Solphia" }] : []),
-  ];
-  const seen = new Set<string>();
-  const out: { mint: string; symbol?: string; name?: string; image?: string; priceUsd?: number; mcUsd?: number }[] = [];
-  for (const c of [...fromPad, ...rails]) {
-    if (!c.mint || seen.has(c.mint)) continue;
-    seen.add(c.mint);
-    out.push(c);
+const PIN_BLOCK = new Set([SOL_MINT, SPYX_MINT_OFFICIAL, QQQX_MINT_OFFICIAL, GLDX_MINT_OFFICIAL, USDC_MINT, USDT_MINT]);
+
+async function tapePinCoins() {
+  try {
+    const pack = await loadMarketTape();
+    const seen = new Set<string>();
+    const out: { mint: string; symbol?: string; name?: string; image?: string; priceUsd?: number; mcUsd?: number }[] = [];
+    for (const row of pack.rows) {
+      const c = row.coin;
+      if (!c?.mint || PIN_BLOCK.has(c.mint) || seen.has(c.mint)) continue;
+      seen.add(c.mint);
+      out.push({
+        mint: c.mint,
+        symbol: c.symbol,
+        name: c.name,
+        image: c.image,
+        priceUsd: c.priceSol && pack.solUsd ? c.priceSol * pack.solUsd : undefined,
+        mcUsd: c.marketCapUsd,
+      });
+      if (out.length >= 16) break;
+    }
+    return out;
+  } catch {
+    return [];
   }
-  return out;
 }
 
 export async function GET(req: NextRequest) {
   const pubkey = req.nextUrl.searchParams.get("pubkey") || "";
   const since = Number(req.nextUrl.searchParams.get("since") || 0);
+  const tapeCoins = await tapePinCoins();
   const preview = await withShill((st) => {
     st.shill = ensureShill(st.shill);
-    const dirty = fillHousePins(st.shill, housePinCoins(st));
-    return { dirty };
+    const before = st.shill.pins.length;
+    st.shill.pins = st.shill.pins.filter((p) => !p.house || !PIN_BLOCK.has(p.mint));
+    const stripped = st.shill.pins.length !== before;
+    const filled = fillHousePins(st.shill, tapeCoins);
+    return { dirty: stripped || filled };
   }, false);
   if (preview.dirty) await withShill((st) => st, true);
   const s = await withShill((st) => st, false);
