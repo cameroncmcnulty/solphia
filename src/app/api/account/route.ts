@@ -21,7 +21,7 @@ import { creditRank, publicRank } from "@/lib/rank/engine";
 export const dynamic = "force-dynamic";
 
 const Body = z.object({
-  action: z.enum(["hello", "pfp", "withdraw_referral", "username"]),
+  action: z.enum(["hello", "pfp", "withdraw_referral", "username", "tos"]),
   pubkey: z.string(),
   referrer: z.string().optional(),
   pfp: z.string().max(IMAGE_DATA_MAX).optional(),
@@ -55,6 +55,7 @@ function pack(book: ReturnType<typeof emptyLaunchBook>, pubkey: string, solUsd: 
       launched: book.coins.filter((c) => c.creator === pk).length,
     })),
     launched: launched.map((c) => publicCoin(c, solUsd, pubkey, book)),
+    tosAcceptedAt: 0,
     link: `/r/${pubkey}`,
     intro: acc.intro || "",
     banner: acc.banner
@@ -77,7 +78,8 @@ export async function GET(req: NextRequest) {
   const solUsd = lastPairPrices().solUsd || 0;
   const s = await withLaunch((st) => st, false);
   const book = bookOf(s);
-  return NextResponse.json(pack(book, pubkey, solUsd));
+  const user = s.users.find((u) => u.pubkey === pubkey);
+  return NextResponse.json({ ...pack(book, pubkey, solUsd), tosAcceptedAt: user?.tosAcceptedAt || 0 });
 }
 
 export async function POST(req: NextRequest) {
@@ -119,6 +121,23 @@ export async function POST(req: NextRequest) {
     if (b.action === "withdraw_referral") {
       return withdrawReferral(book, { owner: b.pubkey });
     }
+    if (b.action === "tos") {
+      const now = Date.now();
+      let user = s.users.find((u) => u.pubkey === b.pubkey);
+      if (!user) {
+        user = {
+          pubkey: b.pubkey,
+          createdAt: now,
+          lastSeen: now,
+          alertsEnabled: false,
+        };
+        s.users.push(user);
+      }
+      user.tosAcceptedAt = now;
+      user.privacyAcceptedAt = now;
+      user.lastSeen = now;
+      return { ok: true as const };
+    }
     return { ok: false as const, error: "bad_action" };
   }, true);
 
@@ -135,7 +154,8 @@ export async function POST(req: NextRequest) {
   }
 
   const s = await withLaunch((st) => st, false);
-  const desk = pack(bookOf(s), b.pubkey, solUsd);
+  const user = s.users.find((u) => u.pubkey === b.pubkey);
+  const desk = { ...pack(bookOf(s), b.pubkey, solUsd), tosAcceptedAt: user?.tosAcceptedAt || 0 };
   if ("sol" in out) return NextResponse.json({ ...desk, withdrawn: out.sol });
   return NextResponse.json({ ...desk, bound: "bound" in out ? out.bound : undefined });
 }

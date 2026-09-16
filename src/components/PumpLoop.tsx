@@ -65,8 +65,8 @@ export function PumpLoop() {
   const box = useRef<HTMLDivElement>(null);
   const player = useRef<YTPlayer | null>(null);
   const [vol, setVol] = useState(0.5);
-  const [muted, setMuted] = useState(false);
-  const [inRoom, setInRoom] = useState(false);
+  const [muted, setMuted] = useState(true);
+  const inRoom = true;
 
   useEffect(() => {
     const saved = Number(typeof window !== "undefined" ? localStorage.getItem(STORE) : 0.5);
@@ -98,7 +98,7 @@ export function PumpLoop() {
             onReady: (e) => {
               if (dead) return;
               e.target.setVolume(Math.round((Number.isFinite(start) ? start : 0.5) * 100));
-              e.target.unMute();
+              e.target.mute();
               e.target.seekTo(HOOK_START, true);
               e.target.playVideo();
             },
@@ -150,15 +150,6 @@ export function PumpLoop() {
       <div className="pointer-events-none absolute h-px w-px overflow-hidden opacity-0" aria-hidden>
         <div ref={box} />
       </div>
-      {!inRoom && (
-        <button
-          type="button"
-          onClick={() => setInRoom(true)}
-          className="fixed inset-0 z-[70] flex items-center justify-center bg-[#0e1621]"
-        >
-          <span className="btn-acid rounded-full px-12 py-4 text-xl">Enter</span>
-        </button>
-      )}
       {inRoom && (
         <div className="flex items-center gap-2">
           <button

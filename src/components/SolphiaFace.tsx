@@ -105,8 +105,6 @@ export function SolphiaFace({ mode = "panel" }: { mode?: "hero" | "panel" | "lau
 
     let raf = 0;
     let nodes: Node[] = [];
-    let mx = 0.5;
-    let my = 0.4;
     let box = { dx: 0, dy: 0, dw: 1, dh: 1 };
     let lastPw = 0;
     let lastPh = 0;
@@ -235,16 +233,6 @@ export function SolphiaFace({ mode = "panel" }: { mode?: "hero" | "panel" | "lau
         ctx.fill();
       }
 
-      const hx = box.dx + mx * box.dw;
-      const hy = box.dy + my * box.dh;
-      const washR = Math.min(box.dw, box.dh) * 0.22;
-      const wash = ctx.createRadialGradient(hx, hy, 4, hx, hy, washR);
-      wash.addColorStop(0, "rgba(20,241,149,0.06)");
-      wash.addColorStop(1, "rgba(0,0,0,0)");
-      ctx.fillStyle = wash;
-      ctx.beginPath();
-      ctx.arc(hx, hy, washR, 0, Math.PI * 2);
-      ctx.fill();
       ctx.globalCompositeOperation = "source-over";
 
       for (let i = packets.length - 1; i >= 0; i--) {
@@ -271,23 +259,16 @@ export function SolphiaFace({ mode = "panel" }: { mode?: "hero" | "panel" | "lau
     };
     raf = requestAnimationFrame(loop);
 
-    const onMove = (e: PointerEvent) => {
-      const r = host.getBoundingClientRect();
-      mx = (e.clientX - r.left) / Math.max(1, r.width);
-      my = (e.clientY - r.top) / Math.max(1, r.height);
-    };
     const onDown = (e: PointerEvent) => {
       const r = host.getBoundingClientRect();
       const nx = (e.clientX - r.left - box.dx) / Math.max(1, box.dw);
       const ny = (e.clientY - r.top - box.dy) / Math.max(1, box.dh);
       spawn({ x: nx, y: ny });
     };
-    host.addEventListener("pointermove", onMove, { passive: true });
     host.addEventListener("pointerdown", onDown);
     return () => {
       cancelAnimationFrame(raf);
       pic.removeEventListener("load", boot);
-      host.removeEventListener("pointermove", onMove);
       host.removeEventListener("pointerdown", onDown);
     };
   }, [hero, launch, src]);

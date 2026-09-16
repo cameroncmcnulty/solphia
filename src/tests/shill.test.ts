@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { banShill, emptyShill, extractCas, mergeShill, muteShill, pinToken, postShill, pruneShill } from "../lib/shill/engine";
-import { SHILL_CA_COOLDOWN_MS, SHILL_PIN_MS, SHILL_PIN_SOL, SHILL_PIN_SLOTS } from "../lib/shill/types";
+import { banShill, emptyShill, extractCas, fillHousePins, mergeShill, muteShill, pinToken, postShill, pruneShill } from "../lib/shill/engine";
+import { SHILL_CA_COOLDOWN_MS, SHILL_HOUSE_PIN_MAX, SHILL_HOUSE_PIN_MIN, SHILL_PIN_MS, SHILL_PIN_SOL, SHILL_PIN_SLOTS } from "../lib/shill/types";
 
 const A = "CyaE1VxvBrahnPWkqm5VsdCvyS2QmNht2UFrKJHga54o";
 const B = "D4uCNcBKAbG9NAkmhQg7pBiztuejNzbWrZDcZmFGut81";
@@ -75,5 +75,30 @@ describe("shill zone", () => {
     }
     pruneShill(book, t0 + SHILL_PIN_SLOTS + SHILL_PIN_MS + 1);
     assert.equal(book.pins.length, 0);
+  });
+
+  it("keeps 2–3 house pins on the board without eating paid slots", () => {
+    const book = emptyShill();
+    const coins = [
+      { mint: CA, symbol: "SOL", name: "Solana" },
+      { mint: A, symbol: "AAA", name: "Alpha" },
+      { mint: B, symbol: "BBB", name: "Beta" },
+    ];
+    assert.equal(fillHousePins(book, coins, 1_000), true);
+    assert.ok(book.pins.length >= SHILL_HOUSE_PIN_MIN);
+    assert.ok(book.pins.length <= SHILL_HOUSE_PIN_MAX);
+    assert.ok(book.pins.every((p) => p.house));
+    const paid = pinToken(book, {
+      owner: A,
+      token: { mint: CA, symbol: "SOL", name: "Solana" },
+      sig: "userpinxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      paidSol: SHILL_PIN_SOL,
+      now: 2_000,
+    });
+    assert.equal(paid.ok, true);
+    book.pins = book.pins.filter((p) => !p.house).slice(0, 1);
+    assert.equal(book.pins.length, 1);
+    assert.equal(fillHousePins(book, coins, 3_000), true);
+    assert.equal(book.pins.length, 2);
   });
 });

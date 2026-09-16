@@ -1,6 +1,9 @@
 import { isSolanaAddress } from "../security";
 import {
   SHILL_CA_COOLDOWN_MS,
+  SHILL_HOUSE_OWNER,
+  SHILL_HOUSE_PIN_MAX,
+  SHILL_HOUSE_PIN_MIN,
   SHILL_KEEP_MS,
   SHILL_MSG_MAX,
   SHILL_PIN_MS,
@@ -109,7 +112,8 @@ export function livePins(book: ShillBook, now = Date.now()): ShillPin[] {
 }
 
 export function pinSlotsLeft(book: ShillBook, now = Date.now()): number {
-  return Math.max(0, SHILL_PIN_SLOTS - livePins(book, now).length);
+  const paid = livePins(book, now).filter((p) => !p.house).length;
+  return Math.max(0, SHILL_PIN_SLOTS - paid);
 }
 
 export function nextPinFreeAt(book: ShillBook, now = Date.now()): number {
@@ -220,7 +224,8 @@ export function pinToken(
   const now = opts.now || Date.now();
   pruneShill(book, now);
   if (book.pins.some((p) => p.sig === sig)) return { ok: false, error: "replay" };
-  if (book.pins.length >= SHILL_PIN_SLOTS) {
+  const paid = book.pins.filter((p) => !p.house).length;
+  if (paid >= SHILL_PIN_SLOTS) {
     return { ok: false, error: "full", nextFreeAt: nextPinFreeAt(book, now) };
   }
   const pin: ShillPin = {
@@ -239,4 +244,45 @@ export function pinToken(
   };
   book.pins.push(pin);
   return { ok: true, pin };
+}
+
+export type HousePinCoin = { mint: string; symbol?: string; name?: string; image?: string; priceUsd?: number; mcUsd?: number };
+
+export function fillHousePins(book: ShillBook, candidates: HousePinCoin[], now = Date.now()): boolean {
+  pruneShill(book, now);
+  const live = livePins(book, now);
+  const n = live.length;
+  let add = 0;
+  if (n <= 0) add = SHILL_HOUSE_PIN_MIN + (Math.random() < 0.5 ? 1 : 0);
+  else if (n === 1 || n === 2) add = 1;
+  if (!add) return false;
+  if (n + add > SHILL_HOUSE_PIN_MAX && n >= SHILL_HOUSE_PIN_MIN) add = Math.max(0, SHILL_HOUSE_PIN_MAX - n);
+  if (!add) return false;
+  const taken = new Set(live.map((p) => p.mint));
+  const pool = candidates.filter((c) => c.mint && !taken.has(c.mint));
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  const picks = pool.slice(0, add);
+  if (!picks.length) return false;
+  picks.forEach((c, i) => {
+    const life = (42 + Math.floor(Math.random() * 48)) * 60_000;
+    book.pins.push({
+      id: `hpin${now.toString(36)}${i}${Math.random().toString(36).slice(2, 5)}`,
+      mint: c.mint,
+      symbol: c.symbol || c.mint.slice(0, 4),
+      name: c.name || c.symbol || "token",
+      image: c.image,
+      priceUsd: c.priceUsd,
+      mcUsd: c.mcUsd,
+      owner: SHILL_HOUSE_OWNER,
+      sig: `house_pin_${c.mint}_${now}_${i}`.padEnd(40, "x"),
+      paidSol: 0,
+      at: now - i,
+      endsAt: now + life,
+      house: true,
+    });
+  });
+  return true;
 }

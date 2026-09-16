@@ -319,6 +319,7 @@ export interface AppUser {
   lastSeen: number;
   alertsEnabled: boolean;
   tosAcceptedAt?: number;
+  privacyAcceptedAt?: number;
   autoRenew?: boolean;
   lastPaidAt?: number;
   lastPaySig?: string;

@@ -10,6 +10,8 @@ import { SeatRunner } from "./SeatRunner";
 import { ReferralCapture } from "./ReferralCapture";
 import { HumanGate } from "./HumanGate";
 import { WalletKeepalive } from "./WalletConnect";
+import { TosGate } from "./TosGate";
+import { SiteFooter } from "./SiteFooter";
 
 export function Shell({ children }: { children: React.ReactNode }) {
   const path = usePathname();
@@ -28,6 +30,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
         {!isAdmin && <div className={isShill ? "hidden md:block" : ""}><Nav /></div>}
         {children}
       </div>
+      <SiteFooter />
+      <TosGate />
       <WalletKeepalive />
       <LiveRunner />
       <SeatRunner />

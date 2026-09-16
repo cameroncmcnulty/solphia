@@ -12,6 +12,7 @@ import {
   deleteShill,
   ensureShill,
   extractCas,
+  fillHousePins,
   livePins,
   muteShill,
   nextPinFreeAt,
@@ -25,6 +26,8 @@ import { SHILL_PIN_SOL, SHILL_REACTS, SHILL_STICKERS, type ShillToken } from "@/
 import { emptyLaunchBook } from "@/lib/launch/engine";
 import { creditRank, leaderboard, publicCard } from "@/lib/rank/engine";
 import { canModerateChat, staffRole } from "@/lib/access";
+import { GLDX_MINT_OFFICIAL, QQQX_MINT_OFFICIAL, SOL_MINT, SPYX_MINT_OFFICIAL } from "@/lib/pair/mints";
+import { sphaMintOf } from "@/lib/token/solphia";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -64,9 +67,38 @@ async function tokenOf(mint: string): Promise<ShillToken | null> {
   }
 }
 
+function housePinCoins(st: { launch?: ReturnType<typeof emptyLaunchBook>; sphaMint?: string | null }) {
+  const fromPad = (st.launch?.coins || [])
+    .filter((c) => c.mint)
+    .slice(0, 16)
+    .map((c) => ({ mint: c.mint, symbol: c.symbol, name: c.name, image: c.image }));
+  const spha = sphaMintOf(st.sphaMint);
+  const rails = [
+    { mint: SOL_MINT, symbol: "SOL", name: "Solana" },
+    { mint: SPYX_MINT_OFFICIAL, symbol: "SPYx", name: "S&P 500 xStock" },
+    { mint: QQQX_MINT_OFFICIAL, symbol: "QQQx", name: "Nasdaq xStock" },
+    { mint: GLDX_MINT_OFFICIAL, symbol: "GLDx", name: "Gold xStock" },
+    ...(spha ? [{ mint: spha, symbol: "SPHA", name: "Solphia" }] : []),
+  ];
+  const seen = new Set<string>();
+  const out: { mint: string; symbol?: string; name?: string; image?: string; priceUsd?: number; mcUsd?: number }[] = [];
+  for (const c of [...fromPad, ...rails]) {
+    if (!c.mint || seen.has(c.mint)) continue;
+    seen.add(c.mint);
+    out.push(c);
+  }
+  return out;
+}
+
 export async function GET(req: NextRequest) {
   const pubkey = req.nextUrl.searchParams.get("pubkey") || "";
   const since = Number(req.nextUrl.searchParams.get("since") || 0);
+  const preview = await withShill((st) => {
+    st.shill = ensureShill(st.shill);
+    const dirty = fillHousePins(st.shill, housePinCoins(st));
+    return { dirty };
+  }, false);
+  if (preview.dirty) await withShill((st) => st, true);
   const s = await withShill((st) => st, false);
   const book = ensureShill(s.shill);
   const now = Date.now();

@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Check, CheckCheck, Paperclip, Pin, Reply, Send, Smile, Trophy } from "lucide-react";
+import { Check, CheckCheck, Pin, Reply, Send, Smile, Trophy } from "lucide-react";
+import { BurstSticker } from "@/components/BurstSticker";
 import { CartoonPfp } from "@/components/CartoonPfp";
 import { CircleSwap } from "@/components/CircleSwap";
 import { WalletConnect } from "@/components/WalletConnect";
@@ -89,51 +90,6 @@ function fmtMc(n?: number) {
   return `$${n.toFixed(0)}`;
 }
 
-async function loadImage(file: File): Promise<CanvasImageSource> {
-  try {
-    return await createImageBitmap(file);
-  } catch {
-    return await new Promise((resolve, reject) => {
-      const url = URL.createObjectURL(file);
-      const img = new Image();
-      img.onload = () => {
-        URL.revokeObjectURL(url);
-        resolve(img);
-      };
-      img.onerror = () => {
-        URL.revokeObjectURL(url);
-        reject(new Error("Use a JPEG or PNG photo."));
-      };
-      img.src = url;
-    });
-  }
-}
-
-async function compressImage(file: File): Promise<Blob> {
-  const src = await loadImage(file);
-  const iw = "width" in src ? Number(src.width) : 1280;
-  const ih = "height" in src ? Number(src.height) : 1280;
-  const scale = Math.min(1, 1280 / Math.max(iw, ih, 1));
-  const w = Math.max(1, Math.round(iw * scale));
-  const h = Math.max(1, Math.round(ih * scale));
-  const c = document.createElement("canvas");
-  c.width = w;
-  c.height = h;
-  const ctx = c.getContext("2d");
-  if (!ctx) throw new Error("Could not compress.");
-  ctx.drawImage(src, 0, 0, w, h);
-  let q = 0.82;
-  let blob: Blob | null = null;
-  while (q >= 0.48) {
-    blob = await new Promise((resolve) => c.toBlob(resolve, "image/jpeg", q));
-    if (blob && blob.size <= 850_000) break;
-    q -= 0.12;
-  }
-  if (blob && blob.size <= 900_000) return blob;
-  if (file.size <= 900_000 && file.type.startsWith("image/")) return file;
-  throw new Error("Image is too large. Try a smaller photo.");
-}
-
 function TokenBubble({ token, compact }: { token: ShillToken; compact?: boolean }) {
   return (
     <div className={`flex items-center gap-2 rounded-2xl border border-acid/30 bg-acid/[0.08] ${compact ? "p-1.5" : "p-2"}`}>
@@ -175,7 +131,6 @@ export default function ShillPage() {
   const [pinMint, setPinMint] = useState("");
   const [pinBusy, setPinBusy] = useState(false);
   const scroller = useRef<HTMLDivElement>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
   const hold = useRef<number>(0);
   const [peek, setPeek] = useState<string | null>(null);
   const [toast, setToast] = useState("");
@@ -225,28 +180,6 @@ export default function ShillPage() {
       await load();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "send failed");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function onFile(file: File) {
-    if (!owner) return;
-    setErr("");
-    setBusy(true);
-    try {
-      const blob = await compressImage(file);
-      const fd = new FormData();
-      fd.append("pubkey", owner);
-      fd.append("file", blob, "shill.jpg");
-      if (reply?.id) fd.append("replyTo", reply.id);
-      const r = await fetch("/api/shill/media", { method: "POST", body: fd });
-      const j = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(j.message || j.error || "upload failed");
-      setReply(null);
-      await load();
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "media failed");
     } finally {
       setBusy(false);
     }
@@ -325,6 +258,22 @@ export default function ShillPage() {
             <PumpLoop />
             {!owner && <WalletConnect />}
           </header>
+          {board.length > 0 && (
+            <div className="flex gap-2 overflow-x-auto bg-[#17212b] px-3 py-2 md:hidden">
+              {board.slice(0, 8).map((row, i) => (
+                <button
+                  key={row.pubkey}
+                  type="button"
+                  onClick={() => setPeek(row.pubkey)}
+                  className="flex shrink-0 items-center gap-1.5 rounded-full border border-violet/25 bg-[#0e1621] px-2 py-1"
+                >
+                  <span className="font-mono text-[10px] text-mute">{i + 1}</span>
+                  <RankBadge rank={row.rank} size={22} />
+                  <span className="max-w-[7rem] truncate text-[11px] text-ghost">{row.username ? `@${row.username}` : `${row.pubkey.slice(0, 4)}…`}</span>
+                </button>
+              ))}
+            </div>
+          )}
           {pins.length > 0 && (
             <div className="flex gap-2 overflow-x-auto bg-[#17212b] px-3 py-2">
               {pins.map((p) => (
@@ -334,7 +283,7 @@ export default function ShillPage() {
               ))}
             </div>
           )}
-          <div ref={scroller} className="min-h-0 flex-1 space-y-1 overflow-y-auto px-2 py-3" onClick={() => setPicker(null)}>
+          <div ref={scroller} className="shill-wallpaper min-h-0 flex-1 space-y-1 overflow-y-auto px-2 py-3" onClick={() => setPicker(null)}>
             {msgs.map((m) => {
               const mine = m.owner === owner;
               const quoted = m.replyTo ? byId[m.replyTo] : null;
@@ -384,10 +333,8 @@ export default function ShillPage() {
                           {quoted.sticker || quoted.text || "photo"}
                         </div>
                       )}
-                      {m.kind === "sticker" && <div className="text-4xl">{m.sticker}</div>}
-                      {m.kind === "media" && m.media && (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={m.media} alt="" className="max-h-56 rounded-xl" />
+                      {m.kind === "sticker" && m.sticker && (
+                        <BurstSticker emoji={m.sticker} className="text-5xl leading-none" />
                       )}
                       {m.text && <div className="whitespace-pre-wrap break-words">{m.text}</div>}
                       {m.token && (
@@ -475,20 +422,6 @@ export default function ShillPage() {
                 <button type="button" className="text-mute hover:text-acid" onClick={() => setStickers((v) => !v)}>
                   <Smile className="h-5 w-5" />
                 </button>
-                <button type="button" className="text-mute hover:text-acid" onClick={() => fileRef.current?.click()}>
-                  <Paperclip className="h-5 w-5" />
-                </button>
-                <input
-                  ref={fileRef}
-                  type="file"
-                  accept="image/*"
-                  hidden
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (f) onFile(f);
-                    e.target.value = "";
-                  }}
-                />
                 <input
                   value={text}
                   onChange={(e) => {
@@ -503,10 +436,10 @@ export default function ShillPage() {
                 </button>
               </form>
               {stickers && (
-                <div className="flex flex-wrap gap-2 border-t border-violet/20 px-3 py-2 text-2xl">
+                <div className="flex flex-wrap gap-2 border-t border-violet/20 bg-[#17212b] px-3 py-2 text-2xl">
                   {SHILL_STICKERS.map((s) => (
                     <button key={s} type="button" onClick={() => send({ sticker: s, kind: "sticker" })}>
-                      {s}
+                      <BurstSticker emoji={s} className="text-3xl" />
                     </button>
                   ))}
                 </div>
@@ -562,8 +495,8 @@ export default function ShillPage() {
             </div>
           </div>
           <div className="rounded-3xl border border-acid/25 bg-acid/[0.06] p-4">
-            <div className="font-mono text-[10px] tracking-[0.22em] text-acid">PIN POST · 0.2 SOL · 3H</div>
-            <p className="mt-1 text-sm text-mute">Five spots. Token bubble sits at the top of chat.</p>
+            <div className="font-mono text-[10px] tracking-[0.22em] text-acid">👀 PIN · 0.2 SOL · 3H</div>
+            <p className="mt-1 text-sm text-mute">Pin your project to the top of the chat.</p>
             <div className="mt-2 font-mono text-[11px] text-ghost">
               {slots > 0 ? `${slots} spots open` : `No spots · next in ${waitMin}m`}
             </div>

@@ -35,6 +35,7 @@ export type ShillPin = {
   paidSol: number;
   at: number;
   endsAt: number;
+  house?: boolean;
 };
 
 export type ShillMember = {
@@ -58,5 +59,8 @@ export const SHILL_CA_COOLDOWN_MS = 30_000;
 export const SHILL_PIN_SLOTS = 5;
 export const SHILL_PIN_MS = 3 * 3600_000;
 export const SHILL_PIN_SOL = 0.2;
-export const SHILL_STICKERS = ["🚀", "🔥", "💎", "🐸", "👑", "🪩", "🎉", "💸", "🧠", "🫡"];
-export const SHILL_REACTS = ["❤️", "😂", "🔥", "🚀", "👍", "💎"];
+export const SHILL_HOUSE_PIN_MIN = 2;
+export const SHILL_HOUSE_PIN_MAX = 3;
+export const SHILL_HOUSE_OWNER = "solphia";
+export const SHILL_STICKERS = ["🚀", "🔥", "💎", "🐸", "👑", "🪩", "🎉", "💸", "🧠", "🫡", "👀"];
+export const SHILL_REACTS = ["❤️", "😂", "🔥", "🚀", "👍", "💎", "👀"];
