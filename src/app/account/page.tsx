@@ -54,7 +54,6 @@ type Desk = {
 const TABS = [
   ["overview", "Account"],
   ["wallets", "Wallets"],
-  ["profile", "Profile"],
   ["launches", "Launched"],
   ["referrals", "Referrals"],
 ] as const;
@@ -78,6 +77,7 @@ export default function AccountPage() {
   const fieldErr = useConfirmErrors<"username" | "restore" | "pfp" | "banner" | "intro" | "fav">();
   const [intro, setIntro] = useState("");
   const [favMint, setFavMint] = useState("");
+  const [saved, setSaved] = useState<Record<string, string>>({});
   const [peek, setPeek] = useState(false);
   const bannerRef = useRef<HTMLInputElement>(null);
   const [boosts, setBoosts] = useState<{
@@ -164,8 +164,8 @@ export default function AccountPage() {
       setDesk(j);
       if (typeof j.username === "string") setUsername(j.username);
       if (j.withdrawn) setNote(`Withdrew ${Number(j.withdrawn).toFixed(4)} SOL in referral rewards.`);
-      if (body.action === "pfp") setNote(body.pfp ? "PFP saved." : "PFP cleared. Cartoon is back.");
-      if (body.action === "username") setNote(j.username ? `Username set to @${j.username}` : "Username cleared.");
+      if (body.action === "pfp") setSaved((s) => ({ ...s, pfp: body.pfp ? "PFP saved." : "Cartoon is back." }));
+      if (body.action === "username") setSaved((s) => ({ ...s, username: j.username ? `Saved @${j.username}` : "Username cleared." }));
     } finally {
       setBusy(false);
     }
@@ -222,8 +222,8 @@ export default function AccountPage() {
         ))}
       </div>
 
-      {note && (
-        <p className={`mt-4 font-mono text-sm ${noteErr ? "text-blood" : "text-acid"}`} role={noteErr ? "alert" : undefined}>
+      {note && noteErr && (
+        <p className="mt-4 font-mono text-sm text-blood" role="alert">
           {note}
         </p>
       )}
@@ -258,6 +258,7 @@ export default function AccountPage() {
                 </button>
               </div>
               <FieldError error={fieldErr.errors.username} />
+              {saved.username && <p className="mt-2 text-[12px] text-acid">{saved.username}</p>}
             </form>
           </section>
           <div className="grid gap-3 sm:grid-cols-3">
@@ -359,7 +360,7 @@ export default function AccountPage() {
         </section>
       )}
 
-      {tab === "profile" && (
+      {tab === "overview" && (
         <div className="mt-6 space-y-4">
           <section className="panel-bubble overflow-hidden rounded-3xl p-5">
             <h2 className="font-display text-2xl text-ghost">Profile picture</h2>
@@ -381,6 +382,7 @@ export default function AccountPage() {
               </div>
             </div>
             <FieldError error={fieldErr.errors.pfp} />
+            {saved.pfp && <p className="mt-2 text-[12px] text-acid">{saved.pfp}</p>}
             <input
               ref={fileRef}
               type="file"
@@ -429,7 +431,7 @@ export default function AccountPage() {
                     headers: { "content-type": "application/json" },
                     body: JSON.stringify({ action: "banner", pubkey: owner, banner: "" }),
                   });
-                  setNote("Banner cleared.");
+                  setSaved((s) => ({ ...s, banner: "Banner cleared." }));
                   load().catch(() => {});
                 }}
               >
@@ -437,6 +439,7 @@ export default function AccountPage() {
               </button>
             </div>
             <FieldError error={fieldErr.errors.banner} />
+            {saved.banner && <p className="mt-2 text-[12px] text-acid">{saved.banner}</p>}
             <input
               ref={bannerRef}
               type="file"
@@ -456,7 +459,7 @@ export default function AccountPage() {
                   });
                   const j = await r.json();
                   if (!r.ok) throw new Error(j.message || "Could not save banner.");
-                  setNote("Banner saved.");
+                  setSaved((s) => ({ ...s, banner: "Banner saved." }));
                   if (j.banner) setDesk((d) => (d ? { ...d, banner: j.banner } : d));
                   load().catch(() => {});
                 } catch (err) {
@@ -482,7 +485,7 @@ export default function AccountPage() {
                   fieldErr.fail({ intro: j.message || "Could not save intro." });
                   return;
                 }
-                setNote("Intro saved.");
+                setSaved((s) => ({ ...s, intro: "Intro saved." }));
                 setDesk((d) => (d ? { ...d, intro: j.intro ?? intro } : d));
                 load().catch(() => {});
               }}
@@ -503,6 +506,7 @@ export default function AccountPage() {
               <button type="submit" className="btn-acid mt-2 rounded-full px-5 py-2 text-sm">
                 Save intro
               </button>
+              {saved.intro && <p className="mt-2 text-[12px] text-acid">{saved.intro}</p>}
             </form>
           </section>
           <section className="panel-bubble overflow-hidden rounded-3xl p-5">
@@ -526,7 +530,7 @@ export default function AccountPage() {
                   fieldErr.fail({ fav: j.message || "Could not save that CA." });
                   return;
                 }
-                setNote(favMint ? "Favourite project saved." : "Favourite cleared.");
+                setSaved((s) => ({ ...s, fav: favMint ? "Favourite saved." : "Favourite cleared." }));
                 setDesk((d) =>
                   d
                     ? {
@@ -555,6 +559,7 @@ export default function AccountPage() {
                 </button>
               </div>
               <FieldError error={fieldErr.errors.fav} />
+              {saved.fav && <p className="mt-2 text-[12px] text-acid">{saved.fav}</p>}
               {desk?.favSymbol ? <p className="mt-2 text-sm text-acid">${desk.favSymbol} is on your card.</p> : null}
             </form>
           </section>

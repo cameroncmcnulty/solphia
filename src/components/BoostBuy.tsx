@@ -40,7 +40,7 @@ export function BoostBuy({
         body: JSON.stringify({ pubkey: owner, coinId, rockets, signature: sig }),
       }).then((r) => r.json());
       if (!done.ok) throw new Error(done.message || "Boost did not confirm.");
-      setNote("Live for 24 hours. Add more any time.");
+      setNote("Live for 24 hours.");
       onDone?.();
     } catch (e) {
       const msg = e instanceof Error ? e.message : "boost failed";
@@ -53,41 +53,31 @@ export function BoostBuy({
   return (
     <div className="rounded-2xl border border-acid/25 bg-acid/[0.04] p-3">
       <div className="font-mono text-[10px] tracking-[0.18em] text-acid">BOOST · ${symbol.replace(/^\$/, "")}</div>
-      <p className="mt-1 text-[12px] text-mute">Each buy is 24 hours. More rockets, higher on the rail.</p>
       <div className="mt-2 grid grid-cols-2 gap-1.5">
         {ROCKET_PACKS.map((p) => {
-          const mega = p.rockets === MEGA_ROCKETS;
+          const gold = p.rockets === MEGA_ROCKETS;
           const on = rockets === p.rockets;
           return (
             <button
               key={p.rockets}
               type="button"
               onClick={() => setRockets(p.rockets)}
-              className={`relative overflow-hidden rounded-2xl px-3 py-2 text-left ${
-                mega ? `col-span-2 boost-mega-pack ${on ? "on" : ""}` : on ? "bg-acid/20 text-acid ring-1 ring-acid/50" : "border border-violet/30 text-mute"
+              className={`rounded-2xl px-3 py-2 text-left ${
+                gold
+                  ? `col-span-2 ${on ? "ring-1 ring-[#ffd24a]" : ""} boost-gold`
+                  : on
+                    ? "bg-acid/20 text-acid ring-1 ring-acid/50"
+                    : "border border-violet/30 text-mute"
               }`}
             >
-              {mega && (
-                <span className="boost-confetti" aria-hidden>
-                  <i />
-                  <i />
-                  <i />
-                  <i />
-                  <i />
-                  <i />
-                </span>
-              )}
-              <div className="relative z-[1] font-stat text-sm text-ghost">
-                {mega ? "MEGA · " : ""}
-                {p.rockets} rockets
-              </div>
-              <div className="relative z-[1] font-mono text-[11px] text-acid">{p.sol} SOL · 24h</div>
+              <div className={`stat-num text-sm ${gold ? "text-[#ffd24a]" : "text-ghost"}`}>{p.rockets} rockets</div>
+              <div className={`font-mono text-[11px] ${gold ? "text-[#ffd24a]" : "text-acid"}`}>{p.sol} SOL</div>
             </button>
           );
         })}
       </div>
       <button type="button" disabled={busy} onClick={buy} className="btn-acid mt-3 w-full rounded-full py-2 text-sm disabled:opacity-40">
-        {busy ? "Paying…" : `Boost · ${rocketSol(pack.rockets)} SOL · ${pack.rockets} 🚀`}
+        {busy ? "Paying…" : `Boost · ${rocketSol(pack.rockets)} SOL · ${pack.rockets} rockets`}
       </button>
       {note && <p className="mt-2 text-[12px] text-acid">{note}</p>}
       {err && <p className="mt-2 text-[12px] text-blood">{err}</p>}
@@ -109,9 +99,8 @@ export function BoostRail({
       ? [...rows].sort((a, b) => (b.lastBoostAt || 0) - (a.lastBoostAt || 0) || b.rockets - a.rockets)
       : [...rows].sort((a, b) => b.rockets - a.rockets || a.leftMs - b.leftMs);
   return (
-    <div className="overflow-hidden rounded-[1.5rem] border border-acid/35 bg-gradient-to-br from-acid/20 via-cyan/10 to-violet/25 p-3 shadow-[0_0_40px_rgba(20,241,149,0.12)]">
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <div className="font-display text-lg leading-none text-ghost">Boosted</div>
+    <div className="py-1">
+      <div className="mb-2 flex justify-center">
         <div className="flex gap-1 rounded-full border border-violet/30 bg-void/50 p-0.5 font-mono text-[10px]">
           <button
             type="button"
@@ -132,47 +121,26 @@ export function BoostRail({
       <div className="boost-rail">
         {ordered.map((b, i) => {
           const ticker = (b.symbol || "").replace(/^\$/, "");
-          const mega = Boolean(b.mega) || b.rockets >= MEGA_ROCKETS;
+          const gold = Boolean(b.mega) || b.rockets >= MEGA_ROCKETS;
           return (
             <button
               key={`${b.mint || b.coinId}-${i}`}
               type="button"
               onClick={() => onOpen(b.mint, b.coinId)}
-              className={`boost-chip ${mega ? "mega" : ""}`}
+              className={`boost-tile ${gold ? "gold" : ""}`}
             >
-              {mega && (
-                <span className="boost-confetti" aria-hidden>
-                  <i />
-                  <i />
-                  <i />
-                  <i />
-                  <i />
-                  <i />
-                </span>
-              )}
               {b.image ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={b.image} alt="" className="boost-chip-art" />
+                <img src={b.image} alt="" className="boost-tile-art" />
               ) : (
-                <div className="boost-chip-art flex items-center justify-center font-display text-lg text-acid">
+                <div className="boost-tile-art flex items-center justify-center font-display text-xs text-acid">
                   {(ticker || "?").slice(0, 2)}
                 </div>
               )}
-              <span className="min-w-0 flex-1 text-left">
-                <span className="block truncate font-display text-base leading-tight text-ghost">
-                  ${ticker || "TOKEN"}
-                </span>
-                {b.name && b.name.replace(/^\$/, "") !== ticker && (
-                  <span className="block truncate text-[11px] text-mute">{b.name}</span>
-                )}
-                <span className="mt-1 flex items-center gap-2 font-stat text-[12px] text-acid">
-                  <span className="rounded-full bg-acid/20 px-2 py-0.5">
-                    {mega ? "MEGA " : ""}
-                    {b.rockets}
-                  </span>
-                  <span className="text-mute">{fmtLeft(b.leftMs)}</span>
-                </span>
+              <span className="mt-1 block w-full truncate text-center text-[12px] font-semibold text-ghost">
+                ${ticker || "TOKEN"}
               </span>
+              <span className={`stat-num block text-center text-[12px] ${gold ? "text-[#ffd24a]" : "text-acid"}`}>{b.rockets}</span>
             </button>
           );
         })}

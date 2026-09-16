@@ -61,7 +61,7 @@ export default function Home() {
             t="Auto-trade"
             d="She trades tokenized S&P 500, Nasdaq, and gold. Turn her on and close the tab."
             href="/trading"
-            c="Automate"
+            c="Tools"
           /></Reveal>
           <Reveal delay={120}><Eco
             n="02"

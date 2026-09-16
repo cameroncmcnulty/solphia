@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { usePathname } from "next/navigation";
 import { CopyCa } from "@/components/CopyCa";
 import { SolphiaConstellation } from "@/components/SolphiaConstellation";
 import { MiniSpark } from "@/components/SparkCandles";
@@ -32,7 +33,7 @@ import { loadOwner, signAndSendPhantom } from "@/lib/wallet/trading";
 
 import { auditLaunchCoin, rankTape, scoreTape, type LaunchAudit } from "@/lib/launch/audit";
 import { BoostBuy, BoostRail, fmtLeft } from "@/components/BoostBuy";
-import { ShillMark } from "@/components/ShillMark";
+
 import { SwapBox, SwapShell, SwapTabs, SwapWidget } from "@/components/SwapWidget";
 import type { BoostRank } from "@/lib/launch/boost";
 import { filterTape, sortTape, volumeIn, type AgeFilter, type VolWindow } from "@/lib/launch/tape";
@@ -217,6 +218,8 @@ function venueLabel(c: Coin) {
 }
 
 export default function LaunchPage() {
+  const path = usePathname();
+  const isSwap = path.startsWith("/swap");
   const connected = useOwner();
   const owner = connected || (typeof window !== "undefined" ? loadOwner() : null);
   const [coins, setCoins] = useState<Coin[]>([]);
@@ -236,7 +239,7 @@ export default function LaunchPage() {
   const createErr = useConfirmErrors<LaunchField>();
   const [busy, setBusy] = useState(false);
   const [solUsd, setSolUsd] = useState(0);
-  const [tab, setTab] = useState<"tape" | "mine">("tape");
+  const [tab, setTab] = useState<"tape" | "mine">(isSwap ? "tape" : "mine");
   const [age, setAge] = useState<AgeFilter>("newest");
   const [vol, setVol] = useState<VolWindow | null>(null);
   const [ranked, setRanked] = useState(false);
@@ -295,6 +298,10 @@ export default function LaunchPage() {
       setTapeLoading(false);
     }
   }
+
+  useEffect(() => {
+    setTab(isSwap ? "tape" : "mine");
+  }, [isSwap]);
 
   useEffect(() => {
     refreshPad().catch(() => {});
@@ -490,21 +497,11 @@ export default function LaunchPage() {
     <main className="relative min-h-[calc(100vh-4rem)] overflow-x-hidden pb-24">
       <SolphiaConstellation />
       <div className="relative z-10 mx-auto max-w-6xl px-4 pt-6 md:px-8 md:pt-10">
-        <p className="font-mono text-[11px] tracking-[0.28em] text-acid">LAUNCH</p>
-        <h1 className="mt-2 font-display text-4xl text-ghost sm:text-5xl">Launch a token. Swap it.</h1>
-        <a
-          href="/shill"
-          className="group mt-6 flex items-center gap-4 overflow-hidden rounded-[1.7rem] border border-cyan/35 bg-gradient-to-r from-cyan/20 via-acid/10 to-[#ff4fd8]/20 p-4 shadow-[0_16px_40px_rgba(128,234,255,0.12)] transition hover:border-acid/50"
-        >
-          <ShillMark className="h-14 w-14 shrink-0 sm:h-16 sm:w-16" />
-          <span className="min-w-0 flex-1 text-left">
-            <span className="block font-display text-2xl leading-none text-ghost sm:text-3xl">Shill Zone</span>
-            <span className="mt-1 block text-sm text-mute">Come talk your bag. Share clips. Hype with the room.</span>
-          </span>
-          <span className="btn-acid hidden shrink-0 rounded-full px-5 py-2.5 text-sm sm:inline-flex">Jump in</span>
-        </a>
+        <p className="font-mono text-[11px] tracking-[0.28em] text-acid">{isSwap ? "SWAP" : "LAUNCHPAD"}</p>
+        <h1 className="mt-2 font-display text-4xl text-ghost sm:text-5xl">{isSwap ? "Discover. Swap." : "Launch a token."}</h1>
 
-        <div className="mt-8 grid gap-5 lg:grid-cols-[minmax(280px,0.72fr)_minmax(0,1.28fr)]">
+        <div className={`mt-8 grid gap-5 ${isSwap ? "" : "lg:grid-cols-[minmax(280px,0.72fr)_minmax(0,1.28fr)]"}`}>
+          {!isSwap && (
           <div className="space-y-5">
           <section className="panel-bubble overflow-hidden rounded-3xl p-5">
             <h2 className="font-display text-2xl text-ghost">Create</h2>
@@ -695,25 +692,18 @@ export default function LaunchPage() {
               </>
             )}
           </section>
-          <SwapWidget owner={owner} title="Swap a token" />
           </div>
+          )}
 
-          <section className="panel-bubble overflow-hidden rounded-3xl p-5">
-            <div className="flex items-center justify-between">
-              <h2 className="font-display text-2xl text-ghost">{tab === "mine" ? "Yours" : "Tape"}</h2>
-              {owner && (
-                <div className="flex gap-1 rounded-full border border-violet/30 p-0.5 font-mono text-[10px]">
-                  <button type="button" onClick={() => setTab("tape")} className={`rounded-full px-3 py-1 ${tab === "tape" ? "bg-acid/20 text-acid" : "text-mute"}`}>
-                    All
-                  </button>
-                  <button type="button" onClick={() => setTab("mine")} className={`rounded-full px-3 py-1 ${tab === "mine" ? "bg-acid/20 text-acid" : "text-mute"}`}>
-                    Mine
-                  </button>
-                </div>
-              )}
-            </div>
+          <section className="panel-bubble overflow-hidden rounded-3xl p-4 sm:p-5">
+            {isSwap && (
+              <div className="mb-4">
+                <SwapWidget owner={owner} title="Swap" />
+              </div>
+            )}
+            <h2 className="font-display text-2xl text-ghost">{isSwap ? "Market" : "Yours"}</h2>
             <div className="mt-3 space-y-2">
-              {tab === "tape" && (
+              {isSwap && (
                 <BoostRail
                   rows={boostRank.map((b) => {
                     const hit = coins.find((c) => c.mint === b.mint || c.id === b.coinId || c.id === b.mint);
@@ -733,6 +723,8 @@ export default function LaunchPage() {
                   }}
                 />
               )}
+              {isSwap && (
+              <>
               <form
                 className="flex gap-2"
                 onSubmit={(e) => {
@@ -841,10 +833,12 @@ export default function LaunchPage() {
                 <div className="space-y-1 text-[12px] text-mute">
                   {boostMine.live.map((b) => (
                     <div key={`l-${b.symbol}`} className="text-acid">
-                      ${b.symbol} · {fmtLeft(b.leftMs)} left · {b.rockets} ⚡
+                      ${b.symbol} · {b.rockets} rockets
                     </div>
                   ))}
                 </div>
+              )}
+              </>
               )}
             </div>
             <div className="mt-3 max-h-[44rem] space-y-1.5 overflow-y-auto overflow-x-hidden">
@@ -866,35 +860,35 @@ export default function LaunchPage() {
                 </p>
               )}
               {board.map((row) => (
-                <CoinCard
-                  key={row.coin.id}
-                  c={row.coin}
-                  solUsd={solUsd}
-                  active={open?.id === row.coin.id}
-                  onOpen={() => setOpen(row.coin)}
-                  rank={ranked ? row.rank : 0}
-                  audit={row.audit}
-                  vol={ranked ? null : vol}
-                  rockets={row.boost?.rockets}
-                  boostLeft={row.boost?.leftMs}
-                />
+                <div key={row.coin.id} className="space-y-2">
+                  <CoinCard
+                    c={row.coin}
+                    solUsd={solUsd}
+                    active={open?.id === row.coin.id}
+                    onOpen={() => setOpen((cur) => (cur?.id === row.coin.id ? null : row.coin))}
+                    rank={ranked ? row.rank : 0}
+                    audit={row.audit}
+                    vol={ranked ? null : vol}
+                    rockets={row.boost?.rockets}
+                    boostLeft={row.boost?.leftMs}
+                  />
+                  {open?.id === row.coin.id && (
+                    <CoinDesk
+                      open={open}
+                      owner={owner}
+                      sol={sol}
+                      setSol={setSol}
+                      solUsd={solUsd}
+                      busy={busy}
+                      onClose={() => setOpen(null)}
+                      onAct={act}
+                    />
+                  )}
+                </div>
               ))}
             </div>
           </section>
         </div>
-
-        {open && (
-          <CoinDesk
-            open={open}
-            owner={owner}
-            sol={sol}
-            setSol={setSol}
-            solUsd={solUsd}
-            busy={busy}
-            onClose={() => setOpen(null)}
-            onAct={act}
-          />
-        )}
 
         {err && (
           <p className="relative z-10 mt-4 rounded-2xl border border-blood/50 bg-blood/10 px-4 py-3 font-mono text-sm text-blood">
@@ -1148,7 +1142,7 @@ function CoinDesk({
             : "";
 
   return (
-    <section className="panel-bubble mt-6 flex min-w-0 flex-col gap-5 overflow-x-hidden rounded-3xl p-4 sm:p-5">
+    <section className="panel-bubble flex min-w-0 flex-col gap-5 overflow-x-hidden rounded-3xl p-3 sm:p-5">
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
           <TokenArt src={open.image} mint={open.mint} label={open.symbol} eager className="h-14 w-14 rounded-2xl" />

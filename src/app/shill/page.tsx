@@ -292,7 +292,7 @@ export default function ShillPage() {
   const board = pack?.board || [];
 
   return (
-    <main className="relative min-h-[calc(100vh-4rem)] overflow-hidden pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:pb-4">
+    <main className="relative flex h-[100dvh] flex-col overflow-hidden bg-[#0e1621] pb-[calc(3.6rem+env(safe-area-inset-bottom))] md:h-[calc(100dvh-5.5rem)] md:pb-0">
       {peek && (
         <ProfileOverlay
           pubkey={peek}
@@ -308,31 +308,25 @@ export default function ShillPage() {
           </div>
         </div>
       )}
-      <div className="mx-auto flex max-w-6xl flex-col gap-3 px-3 pt-3 md:h-[calc(100vh-5rem)] md:flex-row md:px-6">
-        <section className="flex min-h-[70vh] min-w-0 flex-1 flex-col overflow-hidden rounded-3xl border border-violet/25 bg-[#0b0614]/90 shadow-[0_24px_80px_rgba(0,0,0,0.35)]">
-          <header className="flex items-center justify-between gap-3 border-b border-violet/20 px-4 py-3">
-            <div className="flex min-w-0 items-center gap-3">
+      <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col md:max-w-none md:flex-row">
+        <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-[#0e1621]">
+          <header className="flex items-center gap-3 bg-[#17212b] px-3 py-2 pt-[max(0.5rem,env(safe-area-inset-top))]">
+            {you ? (
+              <button type="button" onClick={() => owner && setPeek(owner)} className="shrink-0">
+                <CartoonPfp seed={owner || "solphia"} src={pfpSrc(owner || "", pack?.profiles)} className="h-10 w-10" />
+              </button>
+            ) : (
               <ShillMark className="h-10 w-10 shrink-0" />
-              <div className="min-w-0">
-                <div className="font-mono text-[10px] tracking-[0.22em] text-acid">SHILL ZONE</div>
-                <h1 className="font-display text-xl leading-none text-ghost">Talk. Shill. Climb.</h1>
-              </div>
+            )}
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-[16px] font-semibold text-ghost">Shill Zone</div>
+              <div className="truncate text-[12px] text-mute">{you ? `${you.rank} ${you.title}` : "Online"}</div>
             </div>
-            <div className="flex items-center gap-2">
-              <PumpLoop />
-              {you && (
-                <button type="button" onClick={() => owner && setPeek(owner)} className="hidden items-center gap-2 sm:flex" title="Your card">
-                  <RankBadge rank={you.rank} size={40} />
-                  <span className="font-mono text-[10px] text-acid">
-                    {you.rank} {you.title}
-                  </span>
-                </button>
-              )}
-              {!owner && <WalletConnect />}
-            </div>
+            <PumpLoop />
+            {!owner && <WalletConnect />}
           </header>
           {pins.length > 0 && (
-            <div className="flex gap-2 overflow-x-auto border-b border-violet/15 px-3 py-2">
+            <div className="flex gap-2 overflow-x-auto bg-[#17212b] px-3 py-2">
               {pins.map((p) => (
                 <div key={p.id} className="min-w-[11rem] shrink-0">
                   <TokenBubble token={p} compact />
@@ -340,7 +334,7 @@ export default function ShillPage() {
               ))}
             </div>
           )}
-          <div ref={scroller} className="flex-1 space-y-2 overflow-y-auto px-3 py-4" onClick={() => setPicker(null)}>
+          <div ref={scroller} className="min-h-0 flex-1 space-y-1 overflow-y-auto px-2 py-3" onClick={() => setPicker(null)}>
             {msgs.map((m) => {
               const mine = m.owner === owner;
               const quoted = m.replyTo ? byId[m.replyTo] : null;
@@ -370,8 +364,8 @@ export default function ShillPage() {
                       )}
                     </div>
                     <div
-                      className={`relative rounded-2xl px-3 py-2 text-sm leading-snug ${
-                        mine ? "rounded-br-md bg-acid/20 text-ghost" : "rounded-bl-md bg-white/[0.07] text-ghost"
+                      className={`relative max-w-[78vw] rounded-xl px-2.5 py-1.5 text-[15px] leading-[1.35] ${
+                        mine ? "rounded-br-sm bg-[#2b5278] text-white" : "rounded-bl-sm bg-[#182533] text-white"
                       }`}
                       onContextMenu={(e) => {
                         e.preventDefault();
@@ -458,11 +452,11 @@ export default function ShillPage() {
             )}
           </div>
           {!owner ? (
-            <div className="border-t border-violet/20 p-4 text-center text-sm text-mute">Connect to chat.</div>
+            <div className="bg-[#17212b] p-4 text-center text-sm text-mute">Connect to chat.</div>
           ) : (
             <>
               {reply && (
-                <div className="flex items-center justify-between border-t border-violet/20 px-3 py-1.5 text-[12px] text-mute">
+                <div className="flex items-center justify-between bg-[#17212b] px-3 py-1.5 text-[12px] text-mute">
                   <span>
                     Replying to {nameOf(reply.owner, pack?.profiles)}: {reply.text || reply.sticker || "photo"}
                   </span>
@@ -472,7 +466,7 @@ export default function ShillPage() {
                 </div>
               )}
               <form
-                className="flex items-end gap-2 border-t border-violet/20 p-3"
+                className="flex items-end gap-2 bg-[#17212b] px-2 py-2"
                 onSubmit={(e) => {
                   e.preventDefault();
                   send();
@@ -501,10 +495,10 @@ export default function ShillPage() {
                     setText(e.target.value);
                     act({ action: "typing" }).catch(() => {});
                   }}
-                  placeholder="Shill a project. Drop a CA."
-                  className="min-h-[44px] flex-1 rounded-2xl border border-violet/25 bg-void px-3 py-2 text-sm text-ghost outline-none"
+                  placeholder="Message"
+                  className="min-h-[40px] flex-1 rounded-2xl bg-[#242f3d] px-3 py-2 text-[15px] text-white outline-none"
                 />
-                <button type="submit" disabled={busy} className="btn-acid rounded-full p-2.5 disabled:opacity-40">
+                <button type="submit" disabled={busy} className="rounded-full bg-[#2b5278] p-2.5 text-white disabled:opacity-40">
                   <Send className="h-4 w-4" />
                 </button>
               </form>
@@ -522,7 +516,7 @@ export default function ShillPage() {
           )}
         </section>
 
-        <aside className="flex shrink-0 flex-col gap-3 md:w-[300px]">
+        <aside className="hidden w-[300px] shrink-0 flex-col gap-3 overflow-y-auto bg-[#0e1621] p-3 md:flex">
           {you && (
             <button
               type="button"

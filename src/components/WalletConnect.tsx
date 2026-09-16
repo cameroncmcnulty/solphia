@@ -85,6 +85,47 @@ export async function switchPhantom(): Promise<string | null> {
   }
 }
 
+/** Keep Phantom session across phone tab sleeps. Mount once in the shell. */
+export function WalletKeepalive() {
+  useEffect(() => {
+    const wake = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      const saved = localStorage.getItem("solphia_owner");
+      const p = phantom();
+      if (p?.publicKey) {
+        setOwner(p.publicKey.toString());
+        return;
+      }
+      if (saved) {
+        window.dispatchEvent(new CustomEvent("solphia-owner", { detail: saved }));
+      }
+      p?.connect({ onlyIfTrusted: true }).then(
+        (res) => {
+          if (res?.publicKey) setOwner(res.publicKey.toString());
+        },
+        () => undefined,
+      );
+    };
+    const onAccount = (pk?: { toString(): string } | null) => {
+      if (!pk) return;
+      setOwner(pk.toString());
+    };
+    const found = phantom();
+    found?.on?.("accountChanged", onAccount);
+    document.addEventListener("visibilitychange", wake);
+    window.addEventListener("focus", wake);
+    window.addEventListener("pageshow", wake);
+    wake();
+    return () => {
+      found?.off?.("accountChanged", onAccount);
+      document.removeEventListener("visibilitychange", wake);
+      window.removeEventListener("focus", wake);
+      window.removeEventListener("pageshow", wake);
+    };
+  }, []);
+  return null;
+}
+
 export function WalletConnect({ compact: _compact = false }: { compact?: boolean }) {
   const [addr, setAddr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -113,15 +154,36 @@ export function WalletConnect({ compact: _compact = false }: { compact?: boolean
     const onAccount = (pk?: { toString(): string } | null) => {
       const next = pk ? pk.toString() : null;
       if (!next) {
-        if (switching) return;
-        setAddr(null);
-        setOwner(null);
+        /* Phone browsers fire a null account when the tab backgrounds. Keep the saved wallet. */
         return;
       }
       setAddr(next);
       setOwner(next);
     };
     found?.on?.("accountChanged", onAccount);
+    const wake = () => {
+      if (document.visibilityState !== "visible") return;
+      const p = phantom();
+      if (p?.publicKey) {
+        const pubkey = p.publicKey.toString();
+        setAddr(pubkey);
+        setOwner(pubkey);
+        return;
+      }
+      const saved = localStorage.getItem("solphia_owner");
+      if (saved) setAddr(saved);
+      p?.connect({ onlyIfTrusted: true }).then(
+        (res) => {
+          if (!res?.publicKey) return;
+          const pubkey = res.publicKey.toString();
+          setAddr(pubkey);
+          setOwner(pubkey);
+        },
+        () => undefined,
+      );
+    };
+    document.addEventListener("visibilitychange", wake);
+    window.addEventListener("focus", wake);
     const onOwner = (e: Event) => {
       const pk = (e as CustomEvent<string | null>).detail || null;
       setAddr(pk);
@@ -131,6 +193,8 @@ export function WalletConnect({ compact: _compact = false }: { compact?: boolean
       mounted.current = false;
       found?.off?.("accountChanged", onAccount);
       window.removeEventListener("solphia-owner", onOwner as EventListener);
+      document.removeEventListener("visibilitychange", wake);
+      window.removeEventListener("focus", wake);
     };
   }, []);
 
