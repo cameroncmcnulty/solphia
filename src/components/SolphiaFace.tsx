@@ -111,7 +111,8 @@ export function SolphiaFace({ mode = "panel" }: { mode?: "hero" | "panel" | "lau
     let lastPw = 0;
     let lastPh = 0;
     let ready = pic.complete && pic.naturalWidth > 0;
-    let nextSpawn = 40 + Math.random() * 80;
+    let nextSpawn = 24 + Math.random() * 50;
+    let tw = 0;
     const packets: Packet[] = [];
     const reduce =
       typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -130,7 +131,7 @@ export function SolphiaFace({ mode = "panel" }: { mode?: "hero" | "panel" | "lau
     });
 
     const spawn = (prefer?: { x: number; y: number }) => {
-      if (!nodes.length || packets.length >= 3) return;
+      if (!nodes.length || packets.length >= 4) return;
       let i = (Math.random() * nodes.length) | 0;
       if (prefer) {
         let bd = 1e9;
@@ -168,6 +169,7 @@ export function SolphiaFace({ mode = "panel" }: { mode?: "hero" | "panel" | "lau
       }
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, w, h);
+      tw += 1;
       if (!ready || !pic.naturalWidth) {
         raf = requestAnimationFrame(loop);
         return;
@@ -178,7 +180,7 @@ export function SolphiaFace({ mode = "panel" }: { mode?: "hero" | "panel" | "lau
         nextSpawn -= 1;
         if (nextSpawn <= 0) {
           spawn();
-          nextSpawn = 90 + Math.random() * 160;
+          nextSpawn = 55 + Math.random() * 110;
         }
       }
 
@@ -187,8 +189,8 @@ export function SolphiaFace({ mode = "panel" }: { mode?: "hero" | "panel" | "lau
       ctx.lineJoin = "round";
 
       ctx.beginPath();
-      ctx.strokeStyle = "rgba(20,241,149,0.07)";
-      ctx.lineWidth = 0.7;
+      ctx.strokeStyle = "rgba(20,241,149,0.11)";
+      ctx.lineWidth = 0.75;
       for (const n of nodes) {
         const p = toScreen(n.x, n.y);
         for (const j of n.links) {
@@ -199,6 +201,15 @@ export function SolphiaFace({ mode = "panel" }: { mode?: "hero" | "panel" | "lau
       }
       ctx.stroke();
 
+      for (const n of nodes) {
+        const p = toScreen(n.x, n.y);
+        const g = 0.1 + 0.22 * (0.5 + 0.5 * Math.sin(tw * 0.03 + n.lum * 18));
+        ctx.fillStyle = `rgba(20,241,149,${n.lum * g})`;
+        ctx.beginPath();
+        ctx.arc(p.sx, p.sy, n.lum > 0.72 ? 1.35 : 0.7, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
       for (const p of packets) {
         const a = nodes[p.a];
         const b = nodes[p.b];
@@ -207,20 +218,20 @@ export function SolphiaFace({ mode = "panel" }: { mode?: "hero" | "panel" | "lau
         const s1 = toScreen(b.x, b.y);
         const glow = 0.25 + 0.55 * (1 - Math.abs(p.t - 0.5) * 2);
         ctx.beginPath();
-        ctx.strokeStyle = `rgba(20,241,149,${0.18 + glow * 0.35})`;
-        ctx.lineWidth = hero ? 1.35 : 1;
+        ctx.strokeStyle = `rgba(20,241,149,${0.28 + glow * 0.4})`;
+        ctx.lineWidth = hero ? 1.5 : 1.1;
         ctx.moveTo(s0.sx, s0.sy);
         ctx.lineTo(s1.sx, s1.sy);
         ctx.stroke();
         const sx = s0.sx + (s1.sx - s0.sx) * p.t;
         const sy = s0.sy + (s1.sy - s0.sy) * p.t;
-        const rad = ctx.createRadialGradient(sx, sy, 0, sx, sy, hero ? 14 : 10);
-        rad.addColorStop(0, `rgba(210,255,240,${0.55 + glow * 0.25})`);
-        rad.addColorStop(0.35, `rgba(20,241,149,${0.28 + glow * 0.2})`);
+        const rad = ctx.createRadialGradient(sx, sy, 0, sx, sy, hero ? 18 : 12);
+        rad.addColorStop(0, `rgba(230,255,245,${0.7 + glow * 0.22})`);
+        rad.addColorStop(0.3, `rgba(20,241,149,${0.36 + glow * 0.22})`);
         rad.addColorStop(1, "rgba(20,241,149,0)");
         ctx.fillStyle = rad;
         ctx.beginPath();
-        ctx.arc(sx, sy, hero ? 14 : 10, 0, Math.PI * 2);
+        ctx.arc(sx, sy, hero ? 18 : 12, 0, Math.PI * 2);
         ctx.fill();
       }
 
@@ -242,7 +253,7 @@ export function SolphiaFace({ mode = "panel" }: { mode?: "hero" | "panel" | "lau
           const fin = packets[i];
           const n = nodes[fin.b];
           packets.splice(i, 1);
-          if (n?.links.length && packets.length < 3 && Math.random() < 0.45) {
+          if (n?.links.length && packets.length < 4 && Math.random() < 0.5) {
             const next = n.links.filter((j) => j !== fin.a);
             if (next.length) {
               packets.push({
@@ -288,31 +299,33 @@ export function SolphiaFace({ mode = "panel" }: { mode?: "hero" | "panel" | "lau
         launch
           ? "h-full w-full overflow-hidden"
           : hero
-            ? "mx-auto aspect-[3/4] w-full overflow-visible"
+            ? "solphia-hero-veil mx-auto aspect-[3/4] w-full overflow-visible"
             : "h-[240px] w-full overflow-hidden md:h-[300px]"
       }`}
       style={{ isolation: "isolate", WebkitTapHighlightColor: "transparent" }}
     >
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        ref={photo}
-        src={src}
-        alt=""
-        draggable={false}
-        className={`pointer-events-none absolute inset-0 h-full w-full outline-none ${
-          hero ? "object-contain object-top" : launch ? "object-cover object-[82%_42%]" : "object-cover"
-        }`}
-      />
-      {hero ? (
-        // eslint-disable-next-line @next/next/no-img-element
+      <div className={hero ? "solphia-hero-extend absolute inset-0" : "absolute inset-0"}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
+          ref={photo}
           src={src}
           alt=""
           draggable={false}
-          className="solphia-locks pointer-events-none absolute inset-0 h-full w-full object-contain object-top"
+          className={`pointer-events-none absolute inset-0 h-full w-full outline-none ${
+            hero ? "object-contain object-top" : launch ? "object-cover object-[82%_42%]" : "object-cover"
+          }`}
         />
-      ) : null}
-      <canvas ref={canvas} className="pointer-events-none absolute inset-0 h-full w-full" />
+        {hero ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={src}
+            alt=""
+            draggable={false}
+            className="solphia-locks pointer-events-none absolute inset-0 h-full w-full object-contain object-top"
+          />
+        ) : null}
+        <canvas ref={canvas} className="pointer-events-none absolute inset-0 h-full w-full" />
+      </div>
       {launch ? (
         <div
           className="pointer-events-none absolute inset-0"

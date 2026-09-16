@@ -155,6 +155,16 @@ body {
   }
 }
 
+.solphia-hero-veil {
+  -webkit-mask-image: radial-gradient(ellipse 92% 90% at 50% 30%, #000 40%, rgba(0, 0, 0, 0.78) 64%, rgba(0, 0, 0, 0.22) 84%, transparent 100%);
+  mask-image: radial-gradient(ellipse 92% 90% at 50% 30%, #000 40%, rgba(0, 0, 0, 0.78) 64%, rgba(0, 0, 0, 0.22) 84%, transparent 100%);
+}
+
+.solphia-hero-extend {
+  transform: scale(1.22);
+  transform-origin: 50% 4%;
+}
+
 .solphia-locks {
   animation: locks-drift 14s ease-in-out infinite;
   transform-origin: 50% 18%;
@@ -166,15 +176,16 @@ body {
 @keyframes solphia-breathe {
   0%,
   100% {
-    transform: translate3d(0, 0, 0);
+    transform: scale(1.14) translate3d(0, 0, 0);
   }
   50% {
-    transform: translate3d(-0.5%, -0.35%, 0);
+    transform: scale(1.14) translate3d(-0.5%, -0.35%, 0);
   }
 }
 
 .solphia-breathe {
   animation: solphia-breathe 16s ease-in-out infinite;
+  transform-origin: 100% 40%;
   will-change: transform;
 }
 
@@ -194,6 +205,11 @@ body {
   will-change: transform;
   -webkit-mask-image: radial-gradient(ellipse 16% 22% at 78% 28%, #000 0%, #000 42%, transparent 74%);
   mask-image: radial-gradient(ellipse 16% 22% at 78% 28%, #000 0%, #000 42%, transparent 74%);
+}
+
+.solphia-constellation-veil {
+  -webkit-mask-image: radial-gradient(ellipse 64% 98% at 88% 42%, #000 30%, rgba(0, 0, 0, 0.78) 56%, rgba(0, 0, 0, 0.22) 78%, transparent 100%);
+  mask-image: radial-gradient(ellipse 64% 98% at 88% 42%, #000 30%, rgba(0, 0, 0, 0.78) 56%, rgba(0, 0, 0, 0.22) 78%, transparent 100%);
 }
 
 .card-lift {

@@ -64,7 +64,7 @@ function sampleStars(img: HTMLImageElement): Star[] {
       phase: Math.random() * Math.PI * 2,
       speed: 0.01 + Math.random() * 0.018,
     });
-    if (kept.length >= 48) break;
+    if (kept.length >= 64) break;
   }
   return kept;
 }
@@ -165,13 +165,13 @@ export function SolphiaConstellation() {
       }
 
       for (const s of stars) {
-        const twinkle = reduce ? 0.16 : 0.08 + 0.18 * (0.5 + 0.5 * Math.sin(t * s.speed + s.phase));
+        const twinkle = reduce ? 0.2 : 0.12 + 0.28 * (0.5 + 0.5 * Math.sin(t * s.speed + s.phase));
         const a = s.lum * twinkle;
         const sx = box.dx + s.x * box.dw;
         const sy = box.dy + s.y * box.dh;
-        ctx.fillStyle = s.cyan ? `rgba(20,241,149,${a * 0.28})` : `rgba(201,168,255,${a * 0.24})`;
+        ctx.fillStyle = s.cyan ? `rgba(20,241,149,${a * 0.42})` : `rgba(201,168,255,${a * 0.34})`;
         ctx.beginPath();
-        ctx.arc(sx, sy, 1.6, 0, Math.PI * 2);
+        ctx.arc(sx, sy, s.lum > 0.8 ? 2.1 : 1.5, 0, Math.PI * 2);
         ctx.fill();
       }
 
@@ -183,13 +183,13 @@ export function SolphiaConstellation() {
         if (a && b) {
           const sx = box.dx + (a.x + (b.x - a.x) * f) * box.dw;
           const sy = box.dy + (a.y + (b.y - a.y) * f) * box.dh;
-          const g = ctx.createRadialGradient(sx, sy, 0, sx, sy, 16);
-          g.addColorStop(0, "rgba(210,255,240,0.55)");
-          g.addColorStop(0.4, "rgba(20,241,149,0.22)");
+          const g = ctx.createRadialGradient(sx, sy, 0, sx, sy, 20);
+          g.addColorStop(0, "rgba(230,255,245,0.68)");
+          g.addColorStop(0.35, "rgba(20,241,149,0.28)");
           g.addColorStop(1, "rgba(20,241,149,0)");
           ctx.fillStyle = g;
           ctx.beginPath();
-          ctx.arc(sx, sy, 16, 0, Math.PI * 2);
+          ctx.arc(sx, sy, 20, 0, Math.PI * 2);
           ctx.fill();
         }
       }
@@ -207,11 +207,7 @@ export function SolphiaConstellation() {
   return (
     <div ref={wrap} className="pointer-events-none fixed inset-0 z-0 isolate overflow-hidden bg-void" aria-hidden="true">
       <div
-        className="absolute inset-0 mix-blend-screen"
-        style={{
-          WebkitMaskImage: "linear-gradient(to right, transparent 0%, rgba(0,0,0,0.18) 24%, black 52%)",
-          maskImage: "linear-gradient(to right, transparent 0%, rgba(0,0,0,0.18) 24%, black 52%)",
-        }}
+        className="solphia-constellation-veil absolute inset-0 mix-blend-screen"
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
@@ -219,11 +215,11 @@ export function SolphiaConstellation() {
           src="/solphia-constellation.jpg?v=7"
           alt=""
           draggable={false}
-          className="solphia-breathe absolute inset-0 h-full w-full object-contain object-right opacity-[0.62]"
+          className="solphia-breathe absolute inset-0 h-full w-full object-contain object-right opacity-[0.72]"
         />
         <canvas ref={canvas} className="pointer-events-none absolute inset-0 h-full w-full" />
       </div>
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_78%_42%,rgba(20,241,149,0.04),transparent_36%),radial-gradient(ellipse_at_22%_16%,rgba(153,69,255,0.07),transparent_44%),linear-gradient(to_right,rgba(4,0,10,0.55)_0%,rgba(4,0,10,0.12)_52%,transparent_78%),linear-gradient(to_bottom,transparent_62%,rgba(4,0,10,0.72)_100%)]" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_78%_42%,rgba(20,241,149,0.05),transparent_40%),radial-gradient(ellipse_at_22%_16%,rgba(153,69,255,0.07),transparent_46%),linear-gradient(to_right,rgba(4,0,10,0.5)_0%,rgba(4,0,10,0.08)_48%,transparent_76%)]" />
     </div>
   );
 }
