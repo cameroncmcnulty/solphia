@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 
 type Star = { x: number; y: number; lum: number; phase: number; speed: number; cyan: boolean };
+type Packet = { a: number; b: number; t: number; speed: number };
 
 function containRight(iw: number, ih: number, cw: number, ch: number) {
   const ir = iw / ih;
@@ -97,6 +98,8 @@ export function SolphiaConstellation() {
     let lastPh = 0;
     let t = 0;
     let ready = pic.complete && pic.naturalWidth > 0;
+    const packets: Packet[] = [];
+    const links: [number, number][] = [];
     const reduce =
       typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -104,6 +107,19 @@ export function SolphiaConstellation() {
       if (!pic.naturalWidth) return;
       ready = true;
       stars = sampleStars(pic);
+      links.length = 0;
+      for (let i = 0; i < stars.length; i++) {
+        let best = -1;
+        let bd = 0.012;
+        for (let j = i + 1; j < stars.length; j++) {
+          const d = (stars[i].x - stars[j].x) ** 2 + (stars[i].y - stars[j].y) ** 2;
+          if (d < bd) {
+            bd = d;
+            best = j;
+          }
+        }
+        if (best >= 0) links.push([i, best]);
+      }
     };
     pic.addEventListener("load", boot);
     if (ready) boot();
@@ -131,6 +147,35 @@ export function SolphiaConstellation() {
       box = containRight(pic.naturalWidth, pic.naturalHeight, w, h);
       t += reduce ? 0 : 1;
       ctx.globalCompositeOperation = "screen";
+      if (!reduce && packets.length < 18 && links.length) {
+        const [a, b] = links[(Math.random() * links.length) | 0];
+        packets.push({ a, b, t: 0, speed: 0.012 + Math.random() * 0.02 });
+      }
+      ctx.beginPath();
+      ctx.strokeStyle = "rgba(20,241,149,0.16)";
+      ctx.lineWidth = 0.7;
+      for (const [a, b] of links) {
+        ctx.moveTo(box.dx + stars[a].x * box.dw, box.dy + stars[a].y * box.dh);
+        ctx.lineTo(box.dx + stars[b].x * box.dw, box.dy + stars[b].y * box.dh);
+      }
+      ctx.stroke();
+      for (let i = packets.length - 1; i >= 0; i--) {
+        const p = packets[i];
+        p.t += p.speed;
+        if (p.t >= 1) {
+          packets.splice(i, 1);
+          continue;
+        }
+        const a = stars[p.a];
+        const b = stars[p.b];
+        if (!a || !b) continue;
+        const sx = box.dx + (a.x + (b.x - a.x) * p.t) * box.dw;
+        const sy = box.dy + (a.y + (b.y - a.y) * p.t) * box.dh;
+        ctx.fillStyle = `rgba(20,241,149,${0.45 + (1 - Math.abs(p.t - 0.5) * 2) * 0.5})`;
+        ctx.beginPath();
+        ctx.arc(sx, sy, 2.1, 0, Math.PI * 2);
+        ctx.fill();
+      }
       for (const s of stars) {
         const twinkle = reduce ? 0.28 : 0.12 + 0.32 * (0.5 + 0.5 * Math.sin(t * s.speed + s.phase));
         const a = s.lum * twinkle;

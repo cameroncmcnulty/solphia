@@ -12,8 +12,10 @@ type Node = {
 };
 
 type Eye = { x: number; y: number; r: number };
-type Packet = { a: number; b: number; t: number; speed: number; wait: number };
-type Hair = { x: number; y: number; len: number; phase: number; curl: number; thick: number };
+type Packet = { a: number; b: number; t: number; speed: number; wait: number; hue: number };
+type Hair = { x: number; y: number; len: number; phase: number; curl: number; thick: number; dir: number };
+type Wave = { x: number; y: number; r: number; life: number };
+type Spark = { x: number; y: number; vx: number; vy: number; life: number; hue: number };
 
 function fit(iw: number, ih: number, cw: number, ch: number, mode: "contain" | "cover") {
   const ir = iw / ih;
@@ -34,10 +36,14 @@ function luma(r: number, g: number, b: number) {
   return r * 0.2126 + g * 0.7152 + b * 0.0722;
 }
 
+function inFace(nx: number, ny: number) {
+  return ((nx - 0.5) / 0.22) ** 2 + ((ny - 0.4) / 0.26) ** 2 < 1;
+}
+
 function analyze(img: HTMLImageElement, dense: boolean) {
   const iw = img.naturalWidth || 1;
   const ih = img.naturalHeight || 1;
-  const scale = Math.min(1, 440 / iw);
+  const scale = Math.min(1, 480 / iw);
   const w = Math.max(1, Math.round(iw * scale));
   const h = Math.max(1, Math.round(ih * scale));
   const off = document.createElement("canvas");
@@ -56,7 +62,7 @@ function analyze(img: HTMLImageElement, dense: boolean) {
       const g = data[i + 1];
       const b = data[i + 2];
       const L = luma(r, g, b);
-      if (L < 78) continue;
+      if (L < 42) continue;
       let peak = true;
       for (let oy = -1; oy <= 1 && peak; oy++) {
         for (let ox = -1; ox <= 1; ox++) {
@@ -73,14 +79,14 @@ function analyze(img: HTMLImageElement, dense: boolean) {
         x: x / w,
         y: y / h,
         lum: L / 255,
-        green: g > r + 18 && g > b,
+        green: g > r + 10 && g > b - 8,
         purple: b > 145 && r > 55 && b > g + 25,
       });
     }
   }
   cand.sort((a, b) => b.lum - a.lum);
 
-  const minD = dense ? 0.016 : 0.022;
+  const minD = dense ? 0.013 : 0.02;
   const minD2 = minD * minD;
   const kept: Node[] = [];
   for (const c of cand) {
@@ -102,10 +108,10 @@ function analyze(img: HTMLImageElement, dense: boolean) {
       eye: c.purple && c.y > 0.3 && c.y < 0.5,
       links: [],
     });
-    if (kept.length >= (dense ? 480 : 240)) break;
+    if (kept.length >= (dense ? 560 : 280)) break;
   }
 
-  const cell = 0.045;
+  const cell = 0.04;
   const buckets = new Map<string, number[]>();
   kept.forEach((n, idx) => {
     const k = `${(n.x / cell) | 0}_${(n.y / cell) | 0}`;
@@ -113,7 +119,7 @@ function analyze(img: HTMLImageElement, dense: boolean) {
     if (arr) arr.push(idx);
     else buckets.set(k, [idx]);
   });
-  const maxLink = dense ? 0.0028 : 0.0036;
+  const maxLink = dense ? 0.0034 : 0.0044;
   for (let i = 0; i < kept.length; i++) {
     const n = kept[i];
     const gx = (n.x / cell) | 0;
@@ -132,7 +138,7 @@ function analyze(img: HTMLImageElement, dense: boolean) {
       }
     }
     near.sort((a, b) => a.d - b.d);
-    n.links = near.slice(0, dense ? 3 : 2).map((x) => x.j);
+    n.links = near.slice(0, dense ? 4 : 3).map((x) => x.j);
   }
 
   const iris: { x: number; y: number }[] = [];
@@ -148,40 +154,43 @@ function analyze(img: HTMLImageElement, dense: boolean) {
       if (purple || teal) iris.push({ x: x / w, y: y / h });
     }
   }
-  const eyes = clusterEyes(iris);
-  for (const n of kept) {
-    n.eye = eyes.some((e) => Math.hypot(n.x - e.x, n.y - e.y) < e.r * 1.35);
+  let eyes = clusterEyes(iris);
+  if (eyes.length < 2) {
+    eyes = [
+      { x: 0.38, y: 0.4, r: 0.034 },
+      { x: 0.62, y: 0.4, r: 0.034 },
+    ];
   }
 
   const hairCand: { x: number; y: number; lum: number }[] = [];
-  for (let y = 2; y < h * 0.72; y += 2) {
-    for (let x = 2; x < w - 2; x += 2) {
-      const i = (y * w + x) * 4;
+  for (let y = 1; y < h * 0.78; y += 2) {
+    for (let x = 1; x < w - 1; x += 2) {
+      const i = ((y | 0) * w + (x | 0)) * 4;
       const r = data[i];
       const g = data[i + 1];
       const b = data[i + 2];
-      if (g < 120 || g < r + 12) continue;
+      if (g < 100 || g < r + 6) continue;
       const nx = x / w;
       const ny = y / h;
-      const face = ((nx - 0.5) / 0.2) ** 2 + ((ny - 0.4) / 0.24) ** 2 < 1;
-      if (face) continue;
+      if (inFace(nx, ny) && ny > 0.22) continue;
       hairCand.push({ x: nx, y: ny, lum: luma(r, g, b) / 255 });
     }
   }
   hairCand.sort((a, b) => b.lum - a.lum);
   const hair: Hair[] = [];
-  const hairD2 = 0.0022;
+  const hairD2 = 0.0016;
   for (const c of hairCand) {
     if (hair.some((h0) => (h0.x - c.x) ** 2 + (h0.y - c.y) ** 2 < hairD2)) continue;
     hair.push({
       x: c.x,
       y: c.y,
-      len: 0.01 + c.lum * 0.012,
+      len: 0.018 + c.lum * 0.022,
       phase: Math.random() * Math.PI * 2,
-      curl: 0.35 + Math.random() * 0.7,
-      thick: 0.6 + c.lum * 1.1,
+      curl: 0.45 + Math.random() * 0.85,
+      thick: 0.8 + c.lum * 1.4,
+      dir: Math.atan2(c.y - 0.34, c.x - 0.5),
     });
-    if (hair.length >= (dense ? 90 : 55)) break;
+    if (hair.length >= (dense ? 160 : 90)) break;
   }
   return { nodes: kept, eyes, hair };
 }
@@ -216,6 +225,61 @@ const PANEL_FADE = [
   `radial-gradient(ellipse 80% 85% at 50% 42%, transparent 50%, ${VOID} 100%)`,
 ].join(", ");
 
+function drawWarpedHair(
+  ctx: CanvasRenderingContext2D,
+  pic: HTMLImageElement,
+  box: { dx: number; dy: number; dw: number; dh: number },
+  t: number,
+  windX: number,
+  windY: number,
+) {
+  const iw = pic.naturalWidth;
+  const ih = pic.naturalHeight;
+  ctx.drawImage(pic, box.dx, box.dy, box.dw, box.dh);
+  const bands = 26;
+  for (let i = 0; i < bands; i++) {
+    const y0 = (i / bands) * 0.22;
+    const y1 = ((i + 1) / bands) * 0.22;
+    const amp = 14 + (1 - i / bands) * 18;
+    const wave =
+      Math.sin(t * 0.042 + i * 0.38) * amp * 0.45 * windX +
+      Math.sin(t * 0.023 + i * 0.19 + 1.1) * amp * 0.7 +
+      windY * 4;
+    const sy = y0 * ih;
+    const sh = Math.max(1, (y1 - y0) * ih);
+    ctx.drawImage(pic, 0, sy, iw, sh, box.dx + wave, box.dy + y0 * box.dh, box.dw, (y1 - y0) * box.dh);
+  }
+  const sideBands = 16;
+  for (const side of [-1, 1] as const) {
+    const x0 = side < 0 ? 0 : 0.7;
+    const x1 = side < 0 ? 0.3 : 1;
+    for (let i = 0; i < sideBands; i++) {
+      const y0 = 0.12 + (i / sideBands) * 0.58;
+      const y1 = 0.12 + ((i + 1) / sideBands) * 0.58;
+      const amp = 11 + Math.abs(0.4 - (y0 + y1) / 2) * 16;
+      const wave =
+        Math.sin(t * 0.038 + i * 0.42 + side) * amp * 0.55 * windX +
+        Math.sin(t * 0.019 + i * 0.27) * amp * 0.5 +
+        side * windX * 6;
+      const sx = x0 * iw;
+      const sw = Math.max(1, (x1 - x0) * iw);
+      const sy = y0 * ih;
+      const sh = Math.max(1, (y1 - y0) * ih);
+      ctx.drawImage(
+        pic,
+        sx,
+        sy,
+        sw,
+        sh,
+        box.dx + x0 * box.dw + wave,
+        box.dy + y0 * box.dh,
+        (x1 - x0) * box.dw,
+        (y1 - y0) * box.dh,
+      );
+    }
+  }
+}
+
 export function SolphiaFace({ mode = "panel" }: { mode?: "hero" | "panel" | "launch" }) {
   const wrap = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -243,12 +307,18 @@ export function SolphiaFace({ mode = "panel" }: { mode?: "hero" | "panel" | "lau
     let hover = false;
     let blink = 1;
     let blinkT = 0;
-    let nextBlink = 220 + Math.random() * 180;
+    let nextBlink = 180 + Math.random() * 140;
     let box = { dx: 0, dy: 0, dw: 1, dh: 1 };
     let lastPw = 0;
     let lastPh = 0;
     let ready = pic.complete && pic.naturalWidth > 0;
+    let solUsd = 0;
+    let live = false;
+    let lastFeedAt = 0;
+    let feedFlash = 0;
     const packets: Packet[] = [];
+    const waves: Wave[] = [];
+    const sparks: Spark[] = [];
     const reduce =
       typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -263,12 +333,46 @@ export function SolphiaFace({ mode = "panel" }: { mode?: "hero" | "panel" | "lau
     pic.addEventListener("load", boot);
     if (ready) boot();
 
+    const pullFeed = () => {
+      fetch("/api/feed", { cache: "no-store" })
+        .then((r) => r.json())
+        .then((j) => {
+          solUsd = Number(j?.solUsd) || solUsd;
+          live = Boolean(j?.liveTrading);
+          const at = Number(j?.lastTickAt) || 0;
+          if (at && at !== lastFeedAt) {
+            lastFeedAt = at;
+            feedFlash = 1;
+            sparkAt(0.5, 0.38);
+          }
+        })
+        .catch(() => undefined);
+    };
+    pullFeed();
+    const feedId = window.setInterval(pullFeed, 8000);
+
     const toScreen = (x: number, y: number) => ({
       sx: box.dx + x * box.dw,
       sy: box.dy + y * box.dh,
     });
 
+    const burst = (nx: number, ny: number, n = 18) => {
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2 + Math.random() * 0.3;
+        sparks.push({
+          x: nx,
+          y: ny,
+          vx: Math.cos(a) * (0.004 + Math.random() * 0.01),
+          vy: Math.sin(a) * (0.004 + Math.random() * 0.01) - 0.002,
+          life: 1,
+          hue: Math.random() > 0.45 ? 0 : 1,
+        });
+      }
+    };
+
     const sparkAt = (nx: number, ny: number) => {
+      waves.push({ x: nx, y: ny, r: 0.02, life: 1 });
+      burst(nx, ny, hero ? 26 : 14);
       if (!nodes.length) return;
       let best = 0;
       let bd = 1e9;
@@ -283,14 +387,15 @@ export function SolphiaFace({ mode = "panel" }: { mode?: "hero" | "panel" | "lau
       const q: { i: number; depth: number }[] = [{ i: best, depth: 0 }];
       while (q.length) {
         const cur = q.shift()!;
-        if (cur.depth > 6) continue;
+        if (cur.depth > 8) continue;
         for (const j of nodes[cur.i].links) {
           packets.push({
             a: cur.i,
             b: j,
             t: 0,
-            speed: 0.045 + Math.random() * 0.03,
-            wait: cur.depth * 3,
+            speed: 0.05 + Math.random() * 0.04,
+            wait: cur.depth * 2,
+            hue: cur.depth % 2,
           });
           if (!seen.has(j)) {
             seen.add(j);
@@ -298,6 +403,24 @@ export function SolphiaFace({ mode = "panel" }: { mode?: "hero" | "panel" | "lau
           }
         }
       }
+    };
+
+    const idleTraffic = () => {
+      if (!nodes.length) return;
+      const cap = hero ? 72 : 32;
+      if (packets.length >= cap) return;
+      const i = (Math.random() * nodes.length) | 0;
+      const n = nodes[i];
+      if (!n.links.length) return;
+      const j = n.links[(Math.random() * n.links.length) | 0];
+      packets.push({
+        a: i,
+        b: j,
+        t: 0,
+        speed: 0.028 + Math.random() * 0.04,
+        wait: 0,
+        hue: Math.random() > 0.55 ? 0 : 1,
+      });
     };
 
     const loop = () => {
@@ -319,20 +442,21 @@ export function SolphiaFace({ mode = "panel" }: { mode?: "hero" | "panel" | "lau
       ctx.clearRect(0, 0, w, h);
 
       t += 1;
+      if (feedFlash > 0) feedFlash *= 0.94;
       if (!hover) {
-        tx = 0.5 + Math.sin(t * 0.0042) * 0.045;
-        ty = 0.4 + Math.sin(t * 0.0031 + 0.7) * 0.028;
+        tx = 0.5 + Math.sin(t * 0.006) * 0.06;
+        ty = 0.38 + Math.sin(t * 0.0044 + 0.7) * 0.035;
       }
-      mx += (tx - mx) * 0.07;
-      my += (ty - my) * 0.07;
+      mx += (tx - mx) * 0.09;
+      my += (ty - my) * 0.09;
 
       nextBlink -= reduce ? 0 : 1;
       if (nextBlink <= 0) {
         blinkT = 1;
-        nextBlink = 260 + Math.random() * 240;
+        nextBlink = 220 + Math.random() * 200;
       }
       if (blinkT > 0) {
-        blinkT -= 0.085;
+        blinkT -= 0.09;
         const k = Math.abs(blinkT - 0.5) * 2;
         blink = blinkT > 0 ? 0.12 + 0.88 * k : 1;
         if (blinkT <= 0) blink = 1;
@@ -344,32 +468,45 @@ export function SolphiaFace({ mode = "panel" }: { mode?: "hero" | "panel" | "lau
       }
 
       box = fit(pic.naturalWidth, pic.naturalHeight, w, h, hero ? "contain" : "cover");
-      const pulseY = 0.92 - ((t * 0.0026) % 1.15);
+      const pulseY = 0.95 - ((t * 0.0042) % 1.2);
       const px = box.dx + mx * box.dw;
       const py = box.dy + my * box.dh;
-      const heatR = hero ? 92 : 64;
+      const heatR = hero ? 120 : 72;
+      const windX = 0.65 + (mx - 0.5) * 1.6;
+      const windY = (my - 0.4) * 1.2;
 
       ctx.imageSmoothingEnabled = true;
       ctx.lineJoin = "round";
       ctx.lineCap = "round";
+
+      if (hero && !reduce) {
+        drawWarpedHair(ctx, pic, box, t, windX, windY);
+      } else if (hero) {
+        ctx.drawImage(pic, box.dx, box.dy, box.dw, box.dh);
+      }
+
+      if (!reduce) idleTraffic();
+      if (!reduce && t % 2 === 0) idleTraffic();
+
       ctx.globalCompositeOperation = "screen";
 
       const heatOf = (n: Node, p: { sx: number; sy: number }) => {
-        let heat = n.lum * 0.2 + 0.04 * (0.5 + 0.5 * Math.sin(t * 0.018 + n.lum * 12));
+        let heat = n.lum * 0.28 + 0.08 * (0.5 + 0.5 * Math.sin(t * 0.028 + n.lum * 14));
         const md = Math.hypot(p.sx - px, p.sy - py);
-        if (md < heatR) heat += (1 - md / heatR) * 0.75;
-        const gy = (n.y - pulseY) / 0.055;
-        heat += Math.exp(-(gy * gy)) * 0.42;
+        if (md < heatR) heat += (1 - md / heatR) * 0.95;
+        const gy = (n.y - pulseY) / 0.05;
+        heat += Math.exp(-(gy * gy)) * 0.7;
+        heat += feedFlash * 0.55;
         if (n.eye) heat *= 0.35 + 0.65 * blink;
         return heat;
       };
 
       ctx.beginPath();
-      ctx.strokeStyle = "rgba(140,200,255,0.18)";
-      ctx.lineWidth = 0.6;
+      ctx.strokeStyle = `rgba(140,200,255,${0.28 + feedFlash * 0.25})`;
+      ctx.lineWidth = hero ? 0.85 : 0.6;
       for (const n of nodes) {
         const p = toScreen(n.x, n.y);
-        if (heatOf(n, p) > 0.85) continue;
+        if (heatOf(n, p) > 0.72) continue;
         for (const j of n.links) {
           const q = toScreen(nodes[j].x, nodes[j].y);
           ctx.moveTo(p.sx, p.sy);
@@ -379,11 +516,11 @@ export function SolphiaFace({ mode = "panel" }: { mode?: "hero" | "panel" | "lau
       ctx.stroke();
 
       ctx.beginPath();
-      ctx.strokeStyle = "rgba(20,241,149,0.42)";
-      ctx.lineWidth = hero ? 1.1 : 0.85;
+      ctx.strokeStyle = `rgba(20,241,149,${0.62 + feedFlash * 0.3})`;
+      ctx.lineWidth = hero ? 1.45 : 1;
       for (const n of nodes) {
         const p = toScreen(n.x, n.y);
-        if (heatOf(n, p) <= 0.85) continue;
+        if (heatOf(n, p) <= 0.72) continue;
         for (const j of n.links) {
           const q = toScreen(nodes[j].x, nodes[j].y);
           ctx.moveTo(p.sx, p.sy);
@@ -395,16 +532,16 @@ export function SolphiaFace({ mode = "panel" }: { mode?: "hero" | "panel" | "lau
       for (const n of nodes) {
         const p = toScreen(n.x, n.y);
         const heat = heatOf(n, p);
-        const rad = (hero ? 1.05 : 0.8) * (0.35 + heat * 1.05);
-        if (heat > 0.95) {
-          ctx.fillStyle = `rgba(20,241,149,${Math.min(0.8, 0.16 + heat * 0.32)})`;
+        const rad = (hero ? 1.25 : 0.9) * (0.4 + heat * 1.2);
+        if (heat > 0.85) {
+          ctx.fillStyle = `rgba(20,241,149,${Math.min(0.9, 0.22 + heat * 0.4)})`;
           ctx.beginPath();
-          ctx.arc(p.sx, p.sy, rad * 3.4, 0, Math.PI * 2);
+          ctx.arc(p.sx, p.sy, rad * 3.8, 0, Math.PI * 2);
           ctx.fill();
         }
         ctx.fillStyle = n.green
-          ? `rgba(20,241,149,${Math.min(0.9, 0.12 + heat * 0.55)})`
-          : `rgba(180,220,255,${Math.min(0.88, 0.1 + heat * 0.5)})`;
+          ? `rgba(20,241,149,${Math.min(1, 0.22 + heat * 0.7)})`
+          : `rgba(190,230,255,${Math.min(0.95, 0.18 + heat * 0.6)})`;
         ctx.beginPath();
         ctx.arc(p.sx, p.sy, rad, 0, Math.PI * 2);
         ctx.fill();
@@ -426,9 +563,16 @@ export function SolphiaFace({ mode = "panel" }: { mode?: "hero" | "panel" | "lau
         if (!a || !b) continue;
         const s = toScreen(a.x + (b.x - a.x) * p.t, a.y + (b.y - a.y) * p.t);
         const glow = 1 - Math.abs(p.t - 0.5) * 2;
-        ctx.fillStyle = `rgba(20,241,149,${0.4 + glow * 0.55})`;
+        ctx.fillStyle =
+          p.hue === 0
+            ? `rgba(20,241,149,${0.55 + glow * 0.45})`
+            : `rgba(180,140,255,${0.5 + glow * 0.45})`;
         ctx.beginPath();
-        ctx.arc(s.sx, s.sy, hero ? 2.2 : 1.6, 0, Math.PI * 2);
+        ctx.arc(s.sx, s.sy, hero ? 2.8 : 1.8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = `rgba(255,255,255,${0.35 + glow * 0.4})`;
+        ctx.beginPath();
+        ctx.arc(s.sx, s.sy, hero ? 1.1 : 0.8, 0, Math.PI * 2);
         ctx.fill();
       }
 
@@ -438,57 +582,129 @@ export function SolphiaFace({ mode = "panel" }: { mode?: "hero" | "panel" | "lau
         const p = toScreen(e.x, e.y);
         const rx = e.r * box.dw;
         const ry = e.r * box.dh * (0.55 + 0.45 * blink);
-        const gx = p.sx + lookNX * rx * 0.28;
-        const gy = p.sy + lookNY * ry * 0.22;
-        const glow = ctx.createRadialGradient(gx, gy, 1, p.sx, p.sy, rx * 1.7);
-        glow.addColorStop(0, `rgba(220,180,255,${0.28 * blink})`);
-        glow.addColorStop(0.4, `rgba(153,69,255,${0.18 * blink})`);
+        const gx = p.sx + lookNX * rx * 0.32;
+        const gy = p.sy + lookNY * ry * 0.24;
+        const glow = ctx.createRadialGradient(gx, gy, 1, p.sx, p.sy, rx * 1.9);
+        glow.addColorStop(0, `rgba(20,241,149,${0.42 * blink})`);
+        glow.addColorStop(0.35, `rgba(153,69,255,${0.22 * blink})`);
         glow.addColorStop(1, "rgba(0,0,0,0)");
         ctx.fillStyle = glow;
         ctx.beginPath();
-        ctx.ellipse(p.sx, p.sy, rx * 1.2, ry * 1.2, 0, 0, Math.PI * 2);
+        ctx.ellipse(p.sx, p.sy, rx * 1.35, ry * 1.35, 0, 0, Math.PI * 2);
         ctx.fill();
         if (blink > 0.2) {
-          ctx.fillStyle = `rgba(255,255,255,${0.62 * blink})`;
+          ctx.fillStyle = `rgba(255,255,255,${0.7 * blink})`;
           ctx.beginPath();
-          ctx.arc(gx + rx * 0.18, gy - ry * 0.12, Math.max(1.3, rx * 0.13), 0, Math.PI * 2);
+          ctx.arc(gx + rx * 0.16, gy - ry * 0.12, Math.max(1.4, rx * 0.14), 0, Math.PI * 2);
           ctx.fill();
         }
       }
 
       if (!reduce && hair.length) {
-        ctx.lineCap = "round";
         for (const s of hair) {
-          const wind = Math.sin(t * 0.012 + s.phase) * 0.55 + Math.sin(t * 0.007 + s.phase * 1.7) * 0.35;
-          const lift = Math.cos(t * 0.009 + s.phase) * 0.25;
+          const wind = Math.sin(t * 0.028 + s.phase) * 0.9 + Math.sin(t * 0.015 + s.phase * 1.6) * 0.55;
+          const lift = Math.cos(t * 0.02 + s.phase) * 0.45 + 0.25;
           ctx.beginPath();
           let hx = s.x;
           let hy = s.y;
           const p0 = toScreen(hx, hy);
           ctx.moveTo(p0.sx, p0.sy);
-          for (let step = 1; step <= 7; step++) {
-            const ang = -1.25 + s.curl * 0.4 + wind * 0.55 + step * 0.12 * s.curl;
+          const steps = hero ? 12 : 8;
+          for (let step = 1; step <= steps; step++) {
+            const ang = s.dir + wind * 0.7 * windX + step * 0.1 * s.curl - 0.15 * lift;
             hx += Math.cos(ang) * s.len;
-            hy += Math.sin(ang) * s.len - 0.0024 * lift;
+            hy += Math.sin(ang) * s.len - 0.004 * lift - 0.0015 * windY;
             const p = toScreen(hx, hy);
             ctx.lineTo(p.sx, p.sy);
           }
-          ctx.strokeStyle = `rgba(20,241,149,${0.07 + s.thick * 0.08})`;
-          ctx.lineWidth = (hero ? 1.35 : 0.95) * s.thick;
+          ctx.strokeStyle = `rgba(20,241,149,${0.16 + s.thick * 0.14})`;
+          ctx.lineWidth = (hero ? 1.7 : 1.1) * s.thick;
           ctx.stroke();
+          const tip = toScreen(hx, hy);
+          ctx.fillStyle = `rgba(180,255,230,${0.18 + 0.2 * (0.5 + 0.5 * Math.sin(t * 0.05 + s.phase))})`;
+          ctx.beginPath();
+          ctx.arc(tip.sx, tip.sy, hero ? 1.6 : 1.1, 0, Math.PI * 2);
+          ctx.fill();
         }
       }
 
-      const washR = Math.min(box.dw, box.dh) * 0.42;
-      const wash = ctx.createRadialGradient(px, py, 8, px, py, washR);
-      wash.addColorStop(0, "rgba(20,241,149,0.08)");
-      wash.addColorStop(0.45, "rgba(153,69,255,0.04)");
+      for (let i = sparks.length - 1; i >= 0; i--) {
+        const s = sparks[i];
+        s.x += s.vx;
+        s.y += s.vy;
+        s.vy -= 0.00012;
+        s.life -= 0.018;
+        if (s.life <= 0) {
+          sparks.splice(i, 1);
+          continue;
+        }
+        const p = toScreen(s.x, s.y);
+        ctx.fillStyle =
+          s.hue === 0 ? `rgba(20,241,149,${s.life})` : `rgba(190,150,255,${s.life})`;
+        ctx.beginPath();
+        ctx.arc(p.sx, p.sy, 1.4 + s.life * 1.6, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      for (let i = waves.length - 1; i >= 0; i--) {
+        const wv = waves[i];
+        wv.r += 0.012;
+        wv.life -= 0.02;
+        if (wv.life <= 0) {
+          waves.splice(i, 1);
+          continue;
+        }
+        const p = toScreen(wv.x, wv.y);
+        ctx.strokeStyle = `rgba(20,241,149,${wv.life * 0.55})`;
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        ctx.ellipse(p.sx, p.sy, wv.r * box.dw, wv.r * box.dh * 1.05, 0, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      if (hero) {
+        const hx = box.dx + 0.5 * box.dw;
+        const hy = box.dy + 0.36 * box.dh;
+        const rx = box.dw * 0.46;
+        const ry = box.dh * 0.38;
+        ctx.save();
+        ctx.globalCompositeOperation = "screen";
+        ctx.strokeStyle = `rgba(20,241,149,${0.22 + 0.18 * Math.sin(t * 0.04)})`;
+        ctx.lineWidth = 1.1;
+        ctx.setLineDash([7, 11]);
+        ctx.lineDashOffset = -t * 0.35;
+        ctx.beginPath();
+        ctx.ellipse(hx, hy, rx, ry, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([3, 16]);
+        ctx.strokeStyle = `rgba(153,69,255,${0.16 + 0.12 * Math.sin(t * 0.03 + 1)})`;
+        ctx.beginPath();
+        ctx.ellipse(hx, hy, rx * 1.12, ry * 1.12, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.restore();
+      }
+
+      const washR = Math.min(box.dw, box.dh) * 0.46;
+      const wash = ctx.createRadialGradient(px, py, 6, px, py, washR);
+      wash.addColorStop(0, `rgba(20,241,149,${0.14 + feedFlash * 0.2})`);
+      wash.addColorStop(0.45, "rgba(153,69,255,0.07)");
       wash.addColorStop(1, "rgba(0,0,0,0)");
       ctx.fillStyle = wash;
       ctx.beginPath();
       ctx.ellipse(px, py, washR, washR * 1.15, 0, 0, Math.PI * 2);
       ctx.fill();
       ctx.globalCompositeOperation = "source-over";
+
+      if (hero) {
+        ctx.font = "600 10px ui-monospace, SFMono-Regular, Menlo, monospace";
+        ctx.fillStyle = "rgba(20,241,149,0.78)";
+        ctx.textAlign = "center";
+        const hud = solUsd
+          ? `${live ? "LIVE" : "MESH"}  ·  SOL ${solUsd >= 10 ? solUsd.toFixed(2) : solUsd.toFixed(3)}  ·  TAP`
+          : "LIVE MESH  ·  TAP";
+        ctx.fillText(hud, box.dx + box.dw / 2, box.dy + box.dh * 0.97);
+      }
 
       raf = requestAnimationFrame(loop);
     };
@@ -509,22 +725,26 @@ export function SolphiaFace({ mode = "panel" }: { mode?: "hero" | "panel" | "lau
     const onLeave = () => {
       hover = false;
     };
+    const onPulse = () => sparkAt(0.5, 0.34);
     host.addEventListener("pointermove", onMove, { passive: true });
     host.addEventListener("pointerdown", onDown);
     host.addEventListener("pointerleave", onLeave);
+    window.addEventListener("solphia-pulse", onPulse);
     return () => {
       cancelAnimationFrame(raf);
+      window.clearInterval(feedId);
       pic.removeEventListener("load", boot);
       host.removeEventListener("pointermove", onMove);
       host.removeEventListener("pointerdown", onDown);
       host.removeEventListener("pointerleave", onLeave);
+      window.removeEventListener("solphia-pulse", onPulse);
     };
   }, [hero, launch]);
 
   return (
     <div
       ref={wrap}
-      className={`relative touch-none select-none outline-none ${
+      className={`relative cursor-crosshair touch-none select-none outline-none ${
         launch
           ? "h-full w-full overflow-hidden"
           : hero
@@ -538,13 +758,13 @@ export function SolphiaFace({ mode = "panel" }: { mode?: "hero" | "panel" | "lau
         userSelect: "none",
         outline: "none",
       }}
-      aria-hidden="true"
+      title="Tap Solphia — mesh pulses with the tape"
     >
       <div
         className="pointer-events-none absolute inset-0"
         style={{
           background:
-            "radial-gradient(ellipse 55% 60% at 50% 42%, rgba(20,241,149,0.10), rgba(153,69,255,0.06) 42%, transparent 70%)",
+            "radial-gradient(ellipse 55% 60% at 50% 42%, rgba(20,241,149,0.14), rgba(153,69,255,0.08) 42%, transparent 70%)",
         }}
       />
       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -554,13 +774,13 @@ export function SolphiaFace({ mode = "panel" }: { mode?: "hero" | "panel" | "lau
         alt=""
         draggable={false}
         className={`pointer-events-none absolute inset-0 h-full w-full outline-none ${
-          hero ? "solphia-hair object-contain object-top" : launch ? "object-cover object-[82%_42%]" : "solphia-hair object-cover"
+          hero ? "object-contain object-top opacity-0" : launch ? "object-cover object-[82%_42%]" : "object-cover"
         }`}
         style={{
           filter: launch
             ? "brightness(1.06) saturate(1.22) contrast(1.12)"
             : "brightness(1.18) saturate(1.12) contrast(1.08)",
-          opacity: launch ? 0.94 : 1,
+          opacity: hero ? 0 : launch ? 0.94 : 1,
           outline: "none",
           userSelect: "none",
           transform: launch ? "scale(1.18)" : undefined,
@@ -575,9 +795,9 @@ export function SolphiaFace({ mode = "panel" }: { mode?: "hero" | "panel" | "lau
           ...(hero
             ? {
                 WebkitMaskImage:
-                  "linear-gradient(to bottom, #000 0%, #000 70%, rgba(0,0,0,0.6) 84%, transparent 96%)",
+                  "linear-gradient(to bottom, #000 0%, #000 78%, rgba(0,0,0,0.7) 90%, transparent 100%)",
                 maskImage:
-                  "linear-gradient(to bottom, #000 0%, #000 70%, rgba(0,0,0,0.6) 84%, transparent 96%)",
+                  "linear-gradient(to bottom, #000 0%, #000 78%, rgba(0,0,0,0.7) 90%, transparent 100%)",
               }
             : {}),
         }}

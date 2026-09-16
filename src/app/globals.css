@@ -161,19 +161,15 @@ body {
   will-change: transform;
 }
 
-@keyframes orbit-chip {
-  0%,
-  100% {
-    transform: translate(-50%, -50%) translate3d(0, 0, 0);
-  }
-  50% {
-    transform: translate(-50%, -50%) translate3d(10px, -16px, 0);
-  }
-}
-
 .orbit-chip {
-  animation: orbit-chip var(--hm-dur, 5.4s) ease-in-out infinite;
-  will-change: transform;
+  transform: translate(-50%, -50%);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+.orbit-chip:hover,
+.orbit-chip:focus-visible {
+  border-color: rgba(20, 241, 149, 0.85);
+  box-shadow: 0 0 22px rgba(20, 241, 149, 0.45);
+  background: rgba(4, 0, 10, 0.92);
 }
 
 .card-lift {
@@ -192,7 +188,6 @@ body {
   .reveal-right,
   .mark-float,
   .hover-mark,
-  .orbit-chip,
   .solphia-hair,
   .card-lift,
   .card-lift:hover {
