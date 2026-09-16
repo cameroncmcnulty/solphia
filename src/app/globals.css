@@ -145,6 +145,37 @@ body {
   will-change: transform;
 }
 
+@keyframes hair-drift {
+  0%,
+  100% {
+    transform: translate3d(-1.1%, 0.2%, 0) rotate(-0.55deg) scale(1.012);
+  }
+  50% {
+    transform: translate3d(1.5%, -1.2%, 0) rotate(0.7deg) scale(1.028);
+  }
+}
+
+.solphia-hair {
+  animation: hair-drift 7.2s ease-in-out infinite;
+  transform-origin: 50% 16%;
+  will-change: transform;
+}
+
+@keyframes orbit-chip {
+  0%,
+  100% {
+    transform: translate(-50%, -50%) translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate(-50%, -50%) translate3d(10px, -16px, 0);
+  }
+}
+
+.orbit-chip {
+  animation: orbit-chip var(--hm-dur, 5.4s) ease-in-out infinite;
+  will-change: transform;
+}
+
 .card-lift {
   transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.25s ease, box-shadow 0.35s ease;
 }
@@ -161,6 +192,8 @@ body {
   .reveal-right,
   .mark-float,
   .hover-mark,
+  .orbit-chip,
+  .solphia-hair,
   .card-lift,
   .card-lift:hover {
     animation: none;

@@ -13,6 +13,7 @@ type Node = {
 
 type Eye = { x: number; y: number; r: number };
 type Packet = { a: number; b: number; t: number; speed: number; wait: number };
+type Hair = { x: number; y: number; len: number; phase: number; curl: number; thick: number };
 
 function fit(iw: number, ih: number, cw: number, ch: number, mode: "contain" | "cover") {
   const ir = iw / ih;
@@ -43,7 +44,7 @@ function analyze(img: HTMLImageElement, dense: boolean) {
   off.width = w;
   off.height = h;
   const o = off.getContext("2d", { willReadFrequently: true });
-  if (!o) return { nodes: [] as Node[], eyes: [] as Eye[] };
+  if (!o) return { nodes: [] as Node[], eyes: [] as Eye[], hair: [] as Hair[] };
   o.drawImage(img, 0, 0, w, h);
   const { data } = o.getImageData(0, 0, w, h);
 
@@ -134,23 +135,55 @@ function analyze(img: HTMLImageElement, dense: boolean) {
     n.links = near.slice(0, dense ? 3 : 2).map((x) => x.j);
   }
 
-  const purple: { x: number; y: number }[] = [];
+  const iris: { x: number; y: number }[] = [];
   for (let y = Math.floor(h * 0.28); y < h * 0.52; y++) {
     for (let x = Math.floor(w * 0.18); x < w * 0.82; x++) {
       const i = (y * w + x) * 4;
       const r = data[i];
       const g = data[i + 1];
       const b = data[i + 2];
-      if (b > 150 && r > 60 && b > g + 30 && luma(r, g, b) > 50) {
-        purple.push({ x: x / w, y: y / h });
-      }
+      const L = luma(r, g, b);
+      const purple = b > 150 && r > 60 && b > g + 30 && L > 50;
+      const teal = g > 90 && b > 70 && L > 55 && L < 170 && Math.abs(x / w - 0.5) > 0.04;
+      if (purple || teal) iris.push({ x: x / w, y: y / h });
     }
   }
-  const eyes = clusterEyes(purple);
+  const eyes = clusterEyes(iris);
   for (const n of kept) {
     n.eye = eyes.some((e) => Math.hypot(n.x - e.x, n.y - e.y) < e.r * 1.35);
   }
-  return { nodes: kept, eyes };
+
+  const hairCand: { x: number; y: number; lum: number }[] = [];
+  for (let y = 2; y < h * 0.72; y += 2) {
+    for (let x = 2; x < w - 2; x += 2) {
+      const i = (y * w + x) * 4;
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      if (g < 120 || g < r + 12) continue;
+      const nx = x / w;
+      const ny = y / h;
+      const face = ((nx - 0.5) / 0.2) ** 2 + ((ny - 0.4) / 0.24) ** 2 < 1;
+      if (face) continue;
+      hairCand.push({ x: nx, y: ny, lum: luma(r, g, b) / 255 });
+    }
+  }
+  hairCand.sort((a, b) => b.lum - a.lum);
+  const hair: Hair[] = [];
+  const hairD2 = 0.0022;
+  for (const c of hairCand) {
+    if (hair.some((h0) => (h0.x - c.x) ** 2 + (h0.y - c.y) ** 2 < hairD2)) continue;
+    hair.push({
+      x: c.x,
+      y: c.y,
+      len: 0.01 + c.lum * 0.012,
+      phase: Math.random() * Math.PI * 2,
+      curl: 0.35 + Math.random() * 0.7,
+      thick: 0.6 + c.lum * 1.1,
+    });
+    if (hair.length >= (dense ? 90 : 55)) break;
+  }
+  return { nodes: kept, eyes, hair };
 }
 
 function clusterEyes(pts: { x: number; y: number }[]): Eye[] {
@@ -201,6 +234,7 @@ export function SolphiaFace({ mode = "panel" }: { mode?: "hero" | "panel" | "lau
     let raf = 0;
     let nodes: Node[] = [];
     let eyes: Eye[] = [];
+    let hair: Hair[] = [];
     let t = 0;
     let mx = 0.5;
     let my = 0.4;
@@ -224,6 +258,7 @@ export function SolphiaFace({ mode = "panel" }: { mode?: "hero" | "panel" | "lau
       const out = analyze(pic, hero || launch);
       nodes = out.nodes;
       eyes = out.eyes;
+      hair = out.hair;
     };
     pic.addEventListener("load", boot);
     if (ready) boot();
@@ -421,6 +456,29 @@ export function SolphiaFace({ mode = "panel" }: { mode?: "hero" | "panel" | "lau
         }
       }
 
+      if (!reduce && hair.length) {
+        ctx.lineCap = "round";
+        for (const s of hair) {
+          const wind = Math.sin(t * 0.012 + s.phase) * 0.55 + Math.sin(t * 0.007 + s.phase * 1.7) * 0.35;
+          const lift = Math.cos(t * 0.009 + s.phase) * 0.25;
+          ctx.beginPath();
+          let hx = s.x;
+          let hy = s.y;
+          const p0 = toScreen(hx, hy);
+          ctx.moveTo(p0.sx, p0.sy);
+          for (let step = 1; step <= 7; step++) {
+            const ang = -1.25 + s.curl * 0.4 + wind * 0.55 + step * 0.12 * s.curl;
+            hx += Math.cos(ang) * s.len;
+            hy += Math.sin(ang) * s.len - 0.0024 * lift;
+            const p = toScreen(hx, hy);
+            ctx.lineTo(p.sx, p.sy);
+          }
+          ctx.strokeStyle = `rgba(20,241,149,${0.07 + s.thick * 0.08})`;
+          ctx.lineWidth = (hero ? 1.35 : 0.95) * s.thick;
+          ctx.stroke();
+        }
+      }
+
       const washR = Math.min(box.dw, box.dh) * 0.42;
       const wash = ctx.createRadialGradient(px, py, 8, px, py, washR);
       wash.addColorStop(0, "rgba(20,241,149,0.08)");
@@ -492,11 +550,11 @@ export function SolphiaFace({ mode = "panel" }: { mode?: "hero" | "panel" | "lau
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         ref={photo}
-        src={launch ? "/solphia-launch.jpg?v=3" : hero ? "/solphia-hero.png?v=2" : "/solphia-face.png?v=5"}
+        src={launch ? "/solphia-launch.jpg?v=6" : hero ? "/solphia-hero.jpg?v=6" : "/solphia-face.jpg?v=6"}
         alt=""
         draggable={false}
         className={`pointer-events-none absolute inset-0 h-full w-full outline-none ${
-          hero ? "object-contain object-top" : launch ? "object-cover object-[78%_16%]" : "object-cover"
+          hero ? "solphia-hair object-contain object-top" : launch ? "object-cover object-[82%_42%]" : "solphia-hair object-cover"
         }`}
         style={{
           filter: launch
@@ -505,8 +563,8 @@ export function SolphiaFace({ mode = "panel" }: { mode?: "hero" | "panel" | "lau
           opacity: launch ? 0.94 : 1,
           outline: "none",
           userSelect: "none",
-          transform: launch ? "scale(1.28)" : undefined,
-          transformOrigin: launch ? "78% 16%" : undefined,
+          transform: launch ? "scale(1.18)" : undefined,
+          transformOrigin: launch ? "82% 48%" : undefined,
         }}
       />
       <canvas

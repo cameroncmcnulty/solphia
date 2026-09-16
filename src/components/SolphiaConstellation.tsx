@@ -170,10 +170,10 @@ export function SolphiaConstellation() {
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           ref={photo}
-          src="/solphia-constellation.jpg?v=3"
+          src="/solphia-constellation.jpg?v=6"
           alt=""
           draggable={false}
-          className="absolute inset-0 h-full w-full object-contain object-right opacity-40"
+          className="absolute inset-0 h-full w-full object-contain object-right opacity-[0.52]"
         />
         <canvas ref={canvas} className="pointer-events-none absolute inset-0 h-full w-full" />
       </div>

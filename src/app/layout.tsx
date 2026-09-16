@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Syne, IBM_Plex_Mono, Cormorant_Garamond } from "next/font/google";
 import "./globals.css";
 import { Shell } from "@/components/Shell";
+import { OWNER_HYDRATE_SCRIPT } from "@/lib/wallet/owner";
 
 const syne = Syne({ subsets: ["latin"], variable: "--font-syne" });
 const plex = IBM_Plex_Mono({ subsets: ["latin"], weight: ["400", "500", "600", "700"], variable: "--font-plex" });
@@ -57,6 +58,9 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: OWNER_HYDRATE_SCRIPT }} />
+      </head>
       <body className={`${syne.variable} ${plex.variable} ${cormorant.variable} font-sans antialiased`}>
         <Shell>{children}</Shell>
       </body>

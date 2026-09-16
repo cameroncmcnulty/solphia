@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { loadOwner, OWNER_EVENT } from "@/lib/wallet/owner";
 
 export function useMarket(pollMs = 15000) {
   const [data, setData] = useState<any>(null);
@@ -38,31 +39,27 @@ export function useMarket(pollMs = 15000) {
 export function useOwner() {
   const [owner, setOwner] = useState<string | null>(() => {
     if (typeof window === "undefined") return null;
-    try {
-      return localStorage.getItem("solphia_owner");
-    } catch {
-      return null;
-    }
+    return loadOwner();
   });
 
   useEffect(() => {
-    const sync = () => {
-      try {
-        setOwner(localStorage.getItem("solphia_owner"));
-      } catch {
-        setOwner(null);
-      }
-    };
+    const sync = () => setOwner(loadOwner());
     sync();
     const onCustom = (e: Event) => {
       const detail = (e as CustomEvent<string | null>).detail;
-      setOwner(detail || localStorage.getItem("solphia_owner"));
+      setOwner(detail || loadOwner());
     };
-    window.addEventListener("solphia-owner", onCustom as EventListener);
+    window.addEventListener(OWNER_EVENT, onCustom as EventListener);
     window.addEventListener("storage", sync);
+    window.addEventListener("pageshow", sync);
+    window.addEventListener("focus", sync);
+    document.addEventListener("visibilitychange", sync);
     return () => {
-      window.removeEventListener("solphia-owner", onCustom as EventListener);
+      window.removeEventListener(OWNER_EVENT, onCustom as EventListener);
       window.removeEventListener("storage", sync);
+      window.removeEventListener("pageshow", sync);
+      window.removeEventListener("focus", sync);
+      document.removeEventListener("visibilitychange", sync);
     };
   }, []);
 

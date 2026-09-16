@@ -2,16 +2,16 @@
 
 import { Keypair, PublicKey, SystemProgram, Transaction, VersionedTransaction, LAMPORTS_PER_SOL } from "@solana/web3.js";
 
+import { loadOwner as readOwner, persistOwner } from "./owner";
+
 const SECRET = "solphia_trading_secret";
-const OWNER = "solphia_owner";
 
 export function saveOwner(pubkey: string) {
-  localStorage.setItem(OWNER, pubkey);
+  persistOwner(pubkey);
 }
 
 export function loadOwner(): string | null {
-  if (typeof window === "undefined") return null;
-  return localStorage.getItem(OWNER);
+  return readOwner();
 }
 
 export function tradingKeypair(): Keypair {

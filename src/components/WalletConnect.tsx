@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { PhantomMark } from "./PhantomMark";
+import { loadOwner, persistOwner, OWNER_EVENT } from "@/lib/wallet/owner";
 
 type Provider = {
   isPhantom?: boolean;
@@ -16,6 +17,7 @@ declare global {
   interface Window {
     phantom?: { solana?: Provider };
     solana?: Provider;
+    __SOLPHIA_OWNER?: string | null;
   }
 }
 
@@ -27,10 +29,8 @@ function phantom(): Provider | null {
   return null;
 }
 
-function setOwner(pubkey: string | null) {
-  if (pubkey) localStorage.setItem("solphia_owner", pubkey);
-  else localStorage.removeItem("solphia_owner");
-  window.dispatchEvent(new CustomEvent("solphia-owner", { detail: pubkey }));
+function keep(pubkey: string | null | undefined) {
+  if (pubkey) persistOwner(pubkey);
 }
 
 function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
@@ -56,14 +56,23 @@ function openPhantomBrowse() {
   window.location.href = `https://phantom.app/ul/browse/${target}?ref=https://solphia.io`;
 }
 
-/** Disconnect then connect so Phantom opens the account picker. */
+function silentTrusted(p: Provider | null) {
+  if (!p) return;
+  p.connect({ onlyIfTrusted: true }).then(
+    (res) => keep(res?.publicKey?.toString()),
+    () => undefined,
+  );
+}
+
+/** Disconnect then connect so Phantom opens the account picker. Saved wallet is never cleared. */
 export async function switchPhantom(): Promise<string | null> {
   const found = phantom();
   if (!found) {
     openPhantomBrowse();
-    return null;
+    return loadOwner();
   }
   switching = true;
+  const previous = loadOwner();
   try {
     if (found.publicKey && found.disconnect) {
       try {
@@ -74,127 +83,142 @@ export async function switchPhantom(): Promise<string | null> {
     }
     const res = await withTimeout(found.connect(), 20000, "connect");
     const pubkey = res.publicKey.toString();
-    setOwner(pubkey);
+    persistOwner(pubkey);
     return pubkey;
   } catch {
-    const cur = found.publicKey?.toString() || (typeof window !== "undefined" ? localStorage.getItem("solphia_owner") : null);
-    if (cur) setOwner(cur);
+    const cur = found.publicKey?.toString() || previous;
+    if (cur) persistOwner(cur);
     return cur;
   } finally {
     switching = false;
   }
 }
 
-/** Keep Phantom session across phone tab sleeps. Mount once in the shell. */
+/** Keep Phantom session across phone tab sleeps and in-app switches. Mount once in the shell. */
 export function WalletKeepalive() {
   useEffect(() => {
-    const wake = () => {
-      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
-      const saved = localStorage.getItem("solphia_owner");
-      const p = phantom();
-      if (p?.publicKey) {
-        setOwner(p.publicKey.toString());
+    let poll: ReturnType<typeof setInterval> | null = null;
+    let attached: Provider | null = null;
+
+    const onAccount = (pk?: { toString(): string } | null) => {
+      if (switching) return;
+      if (!pk) {
+        const saved = loadOwner();
+        if (saved) persistOwner(saved, { server: false });
         return;
       }
-      if (saved) {
-        window.dispatchEvent(new CustomEvent("solphia-owner", { detail: saved }));
+      persistOwner(pk.toString());
+    };
+
+    const bind = (p: Provider | null) => {
+      if (attached === p) return;
+      attached?.off?.("accountChanged", onAccount);
+      attached = p;
+      p?.on?.("accountChanged", onAccount);
+    };
+
+    const wake = (opts?: { server?: boolean }) => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      const p = phantom();
+      bind(p);
+      if (p?.publicKey) {
+        persistOwner(p.publicKey.toString(), { server: opts?.server !== false });
+        return;
       }
-      p?.connect({ onlyIfTrusted: true }).then(
-        (res) => {
-          if (res?.publicKey) setOwner(res.publicKey.toString());
-        },
-        () => undefined,
-      );
+      const saved = loadOwner();
+      if (saved) persistOwner(saved, { announce: true, server: opts?.server !== false });
+      silentTrusted(p);
     };
-    const onAccount = (pk?: { toString(): string } | null) => {
-      if (!pk) return;
-      setOwner(pk.toString());
+
+    const restoreFromCookie = () => {
+      const saved = loadOwner();
+      if (saved) {
+        persistOwner(saved, { server: true });
+        return;
+      }
+      fetch("/api/wallet/remember", { credentials: "include", cache: "no-store" })
+        .then((r) => r.json())
+        .then((j) => {
+          if (j?.pubkey) persistOwner(String(j.pubkey));
+        })
+        .catch(() => undefined);
     };
-    const found = phantom();
-    found?.on?.("accountChanged", onAccount);
-    document.addEventListener("visibilitychange", wake);
-    window.addEventListener("focus", wake);
-    window.addEventListener("pageshow", wake);
-    wake();
+
+    restoreFromCookie();
+    wake({ server: true });
+
+    let tries = 0;
+    poll = setInterval(() => {
+      tries += 1;
+      const p = phantom();
+      bind(p);
+      if (p?.publicKey) {
+        persistOwner(p.publicKey.toString(), { server: tries % 8 === 0 });
+        if (tries > 20 && poll) {
+          clearInterval(poll);
+          poll = setInterval(() => wake({ server: false }), 8000);
+        }
+        return;
+      }
+      if (document.visibilityState === "visible" && tries % 5 === 1) silentTrusted(p);
+      if (tries > 40 && poll) {
+        clearInterval(poll);
+        poll = setInterval(() => wake({ server: false }), 8000);
+      }
+    }, 400);
+
+    const onShow = () => wake({ server: true });
+    document.addEventListener("visibilitychange", onShow);
+    window.addEventListener("focus", onShow);
+    window.addEventListener("pageshow", onShow);
+    window.addEventListener("online", onShow);
+    window.addEventListener("phantom#initialized", onShow as EventListener);
     return () => {
-      found?.off?.("accountChanged", onAccount);
-      document.removeEventListener("visibilitychange", wake);
-      window.removeEventListener("focus", wake);
-      window.removeEventListener("pageshow", wake);
+      if (poll) clearInterval(poll);
+      attached?.off?.("accountChanged", onAccount);
+      document.removeEventListener("visibilitychange", onShow);
+      window.removeEventListener("focus", onShow);
+      window.removeEventListener("pageshow", onShow);
+      window.removeEventListener("online", onShow);
+      window.removeEventListener("phantom#initialized", onShow as EventListener);
     };
   }, []);
   return null;
 }
 
 export function WalletConnect({ compact: _compact = false }: { compact?: boolean }) {
-  const [addr, setAddr] = useState<string | null>(null);
+  const [addr, setAddr] = useState<string | null>(() => (typeof window === "undefined" ? null : loadOwner()));
   const [busy, setBusy] = useState(false);
   const mounted = useRef(true);
 
   useEffect(() => {
     mounted.current = true;
-    const saved = typeof window !== "undefined" ? localStorage.getItem("solphia_owner") : null;
+    const saved = loadOwner();
     if (saved) setAddr(saved);
     const found = phantom();
     if (found?.publicKey) {
       const pubkey = found.publicKey.toString();
       setAddr(pubkey);
-      setOwner(pubkey);
-    } else if (found) {
-      found.connect({ onlyIfTrusted: true }).then(
-        (res) => {
-          if (!mounted.current || !res?.publicKey) return;
-          const pubkey = res.publicKey.toString();
-          setAddr(pubkey);
-          setOwner(pubkey);
-        },
-        () => undefined,
-      );
+      persistOwner(pubkey);
+    } else {
+      silentTrusted(found);
     }
     const onAccount = (pk?: { toString(): string } | null) => {
-      const next = pk ? pk.toString() : null;
-      if (!next) {
-        /* Phone browsers fire a null account when the tab backgrounds. Keep the saved wallet. */
-        return;
-      }
+      if (!pk) return;
+      const next = pk.toString();
       setAddr(next);
-      setOwner(next);
+      persistOwner(next);
     };
     found?.on?.("accountChanged", onAccount);
-    const wake = () => {
-      if (document.visibilityState !== "visible") return;
-      const p = phantom();
-      if (p?.publicKey) {
-        const pubkey = p.publicKey.toString();
-        setAddr(pubkey);
-        setOwner(pubkey);
-        return;
-      }
-      const saved = localStorage.getItem("solphia_owner");
-      if (saved) setAddr(saved);
-      p?.connect({ onlyIfTrusted: true }).then(
-        (res) => {
-          if (!res?.publicKey) return;
-          const pubkey = res.publicKey.toString();
-          setAddr(pubkey);
-          setOwner(pubkey);
-        },
-        () => undefined,
-      );
-    };
-    document.addEventListener("visibilitychange", wake);
-    window.addEventListener("focus", wake);
     const onOwner = (e: Event) => {
-      const pk = (e as CustomEvent<string | null>).detail || null;
-      setAddr(pk);
+      const pk = (e as CustomEvent<string | null>).detail || loadOwner();
+      if (pk) setAddr(pk);
     };
-    window.addEventListener("solphia-owner", onOwner as EventListener);
+    window.addEventListener(OWNER_EVENT, onOwner as EventListener);
     return () => {
       mounted.current = false;
       found?.off?.("accountChanged", onAccount);
-      window.removeEventListener("solphia-owner", onOwner as EventListener);
-      document.removeEventListener("visibilitychange", wake);
-      window.removeEventListener("focus", wake);
+      window.removeEventListener(OWNER_EVENT, onOwner as EventListener);
     };
   }, []);
 
@@ -209,7 +233,7 @@ export function WalletConnect({ compact: _compact = false }: { compact?: boolean
       const res = await withTimeout(found.connect(), 20000, "connect");
       const pubkey = res.publicKey.toString();
       setAddr(pubkey);
-      setOwner(pubkey);
+      persistOwner(pubkey);
     } catch {
       /* user closed Phantom */
     } finally {
