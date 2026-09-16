@@ -93,7 +93,7 @@ export function SolphiaFace({ mode = "panel" }: { mode?: "hero" | "panel" | "lau
   const photo = useRef<HTMLImageElement>(null);
   const hero = mode === "hero";
   const launch = mode === "launch";
-  const src = launch ? "/solphia-launch.jpg?v=7" : hero ? "/solphia-hero.jpg?v=7" : "/solphia-face.jpg?v=7";
+  const src = launch ? "/solphia-launch.png?v=8" : hero ? "/solphia-hero.png?v=8" : "/solphia-face.png?v=8";
 
   useEffect(() => {
     const c = canvas.current;

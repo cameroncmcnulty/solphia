@@ -206,20 +206,18 @@ export function SolphiaConstellation() {
 
   return (
     <div ref={wrap} className="pointer-events-none fixed inset-0 z-0 isolate overflow-hidden bg-void" aria-hidden="true">
-      <div
-        className="solphia-constellation-veil absolute inset-0 mix-blend-screen"
-      >
+      <div className="solphia-constellation-veil absolute inset-0">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           ref={photo}
-          src="/solphia-constellation.jpg?v=7"
+          src="/solphia-body.png?v=8"
           alt=""
           draggable={false}
-          className="solphia-breathe absolute inset-0 h-full w-full object-contain object-right opacity-[0.72]"
+          className="solphia-breathe absolute inset-0 h-full w-full object-contain object-right"
         />
         <canvas ref={canvas} className="pointer-events-none absolute inset-0 h-full w-full" />
       </div>
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_78%_42%,rgba(20,241,149,0.05),transparent_40%),radial-gradient(ellipse_at_22%_16%,rgba(153,69,255,0.07),transparent_46%),linear-gradient(to_right,rgba(4,0,10,0.5)_0%,rgba(4,0,10,0.08)_48%,transparent_76%)]" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_22%_16%,rgba(153,69,255,0.07),transparent_46%),linear-gradient(to_right,rgba(4,0,10,0.45)_0%,rgba(4,0,10,0.06)_42%,transparent_68%)]" />
     </div>
   );
 }
