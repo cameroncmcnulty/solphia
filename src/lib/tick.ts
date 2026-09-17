@@ -61,13 +61,21 @@ export function publicBook(book: PaperBook | null | undefined) {
     fills: fills.slice(-BOOK_FILLS_MAX).reverse(),
     curve: Array.isArray(b.curve) ? b.curve.slice(-BOOK_CURVE_MAX) : [],
     skipped: b.skipped || 0,
-    lastAction: b.lastAction,
-    lastSkipReason: b.lastSkipReason,
+    lastAction: liveClipAction(b.lastAction) ? b.lastAction : undefined,
+    lastSkipReason: undefined,
     killed: Boolean(b.killed),
     pair: b.pair || { solQty: 0, spyxQty: 0, qqqxQty: 0, gldxQty: 0, usdcQty: start },
-    tape: compactTape(b.tape).slice(-BOOK_TAPE_MAX).reverse(),
+    tape: compactTape(b.tape)
+      .filter((row) => liveClipAction(row.action))
+      .slice(-BOOK_TAPE_MAX)
+      .reverse(),
     pendingIntent: b.pendingIntent || null,
   };
+}
+
+function liveClipAction(action?: string) {
+  const a = (action || "").split("·")[0].trim().toLowerCase();
+  return a === "trade" || a === "buy" || a === "sell" || a === "deploy" || a === "flatten" || a === "kill";
 }
 
 function emptyFallback(): PaperBook {
@@ -296,7 +304,14 @@ export async function runMarketTick(): Promise<{
       shortTape,
       frames,
     });
-    lastPairPublic = publicPair(idle, prices, probe.decision, history.study);
+    lastPairPublic = {
+      ...publicPair(idle, prices, probe.decision, history.study),
+      signal: "hold",
+      reason: "",
+      lastAction: undefined,
+      lastSkipReason: undefined,
+      skipped: 0,
+    };
     lastPrices = {
       solUsd: prices.sol.usd,
       spyxUsd: prices.spyx.usd,

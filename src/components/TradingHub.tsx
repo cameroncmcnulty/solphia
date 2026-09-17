@@ -52,14 +52,18 @@ function tapeLabel(action: string) {
   if (action === "trade" || action === "buy" || action === "sell") return "TRADED";
   if (action === "deploy") return "BOUGHT";
   if (action === "flatten" || action === "kill") return "STOPPED";
-  if (action === "skip") return "WAITING";
-  return "WATCHING";
+  return "TRADED";
+}
+
+function isLiveClip(action?: string) {
+  const a = (action || "").split("·")[0].trim().toLowerCase();
+  return a === "trade" || a === "buy" || a === "sell" || a === "deploy" || a === "flatten" || a === "kill";
 }
 
 export function TradingHub() {
   const connected = useOwner();
   const owner = connected || loadOwner();
-  const { data, loading, refresh } = useMarket(12_000);
+  const { data, refresh } = useMarket(12_000);
   const [auto, setAuto] = useState<Auto | null>(null);
   const [paper, setPaper] = useState<any>(null);
   const [delegated, setDelegated] = useState(false);
@@ -239,19 +243,22 @@ export function TradingHub() {
     }
   }
 
-  const live = Boolean(data?.lastTickAt) && Date.now() - data.lastTickAt < 45_000;
-  const tape = book?.tape || [];
-  const fills = book?.fills || [];
-  const pnlPct = book ? book.pnlPct : 0;
-  const pnlUsd = book ? book.equityUsd - book.startingUsd : 0;
+  const tape = ((book?.tape || []) as { action?: string; reason?: string; at?: number; sizeUsd?: number; from?: string; to?: string; id?: string }[]).filter(
+    (row) => isLiveClip(row.action),
+  );
+  const fills = ((book?.fills || []) as { id?: string; side?: string; reason?: string; at?: number; sizeUsd?: number }[]).filter(
+    (f) => f.side === "buy" || f.side === "sell",
+  );
+  const pnlPct = armed && book ? book.pnlPct : 0;
+  const pnlUsd = armed && book ? book.equityUsd - book.startingUsd : 0;
   const uptime = armed && auto?.armedAt ? fmtDur(now - auto.armedAt) : "off";
   const status = book?.killed ? "STOPPED" : armed ? "RUNNING" : "OFF";
   const canStart = Boolean(seat?.liveSeat || seat?.founder) && bal > 0.001;
-  const halted = book?.haltReason && (book.haltedUntil || 0) > Date.now();
-  const spyxQty = book?.pair?.spyxQty ?? pair?.spyxQty ?? 0;
-  const qqqxQty = book?.pair?.qqqxQty ?? pair?.qqqxQty ?? 0;
-  const gldxQty = book?.pair?.gldxQty ?? pair?.gldxQty ?? 0;
-  const usdcQty = book?.pair?.usdcQty ?? pair?.usdcQty ?? book?.cashUsd ?? 0;
+  const halted = Boolean(armed && book?.haltReason && (book.haltedUntil || 0) > Date.now());
+  const spyxQty = armed ? Number(book?.pair?.spyxQty || 0) : 0;
+  const qqqxQty = armed ? Number(book?.pair?.qqqxQty || 0) : 0;
+  const gldxQty = armed ? Number(book?.pair?.gldxQty || 0) : 0;
+  const usdcQty = armed ? Number(book?.pair?.usdcQty || book?.cashUsd || 0) : 0;
   const spyxUsd = pair?.spyxUsd || 0;
   const qqqxUsd = pair?.qqqxUsd || 0;
   const gldxUsd = pair?.gldxUsd || 0;
@@ -329,7 +336,7 @@ export function TradingHub() {
           </div>
           <div className="font-mono text-[12px] text-mute">
             {status}
-            {armed ? (delegated ? " · live desk" : " · starting") : live ? " · prices live" : ""} · {uptime}
+            {armed ? (delegated ? " · live desk" : " · starting") : ""} · {uptime}
           </div>
         </div>
         <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-3">
@@ -345,19 +352,21 @@ export function TradingHub() {
           <Huge k="Gold" v={gldxQty ? gldxQty.toFixed(4) : "0"} sub={gldxUsd ? money(gldxQty * gldxUsd) : "GLDx"} />
         </div>
         <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
-          <Mini k="Book (USDC)" v={book ? money(book.equityUsd) : "—"} />
+          <Mini k="Book (USDC)" v={armed && book ? money(book.equityUsd) : money(0)} />
           <Mini k="Wallet SOL" v={`${bal.toFixed(3)}`} />
-          <Mini k="Trades" v={String(book?.trades ?? 0)} />
+          <Mini k="Trades" v={String(armed ? fills.length : 0)} />
         </div>
         <p className="mt-4 text-sm leading-relaxed text-mute">
           {armed
-            ? (owner && book?.lastAction) || pair?.reason || book?.lastAction || "Waiting on prices…"
+            ? isLiveClip(book?.lastAction)
+              ? book.lastAction
+              : "Live. No clip yet."
             : "Off. Pay the SOL seat, fund the trading wallet, then press Start."}
         </p>
-        {delegated && (
+        {armed && delegated && (
           <p className="mt-2 font-mono text-sm text-acid">Live desk is on. Server signs. Close the tab or switch wallets.</p>
         )}
-        {book?.pendingIntent && (
+        {armed && book?.pendingIntent && (
           <p className="mt-2 font-mono text-sm text-acid">Clip going out. You can close the tab.</p>
         )}
 
@@ -487,32 +496,26 @@ export function TradingHub() {
         </div>
 
         <div className="panel rounded-2xl p-5">
-          <div className="font-mono text-[10px] tracking-[0.22em] text-violet">ACTIVITY</div>
-          <h2 className="mt-1 font-display text-2xl text-ghost">{armed ? "What she’s doing" : "Activity"}</h2>
+          <div className="font-mono text-[10px] tracking-[0.22em] text-violet">LIVE CLIPS</div>
+          <h2 className="mt-1 font-display text-2xl text-ghost">Trades</h2>
           <div className="mt-4 max-h-[28rem] space-y-2 overflow-y-auto">
             {armed &&
-              tape.length === 0 &&
-              fills.slice(0, 12).map((f: any) => (
-                <TapeRow key={f.id} action={f.side} reason={f.reason} at={f.at} extra={money(f.sizeUsd)} />
-              ))}
-            {armed &&
-              tape.map((row: any) => (
+              tape.map((row) => (
                 <TapeRow
-                  key={row.id}
-                  action={row.action}
-                  reason={row.reason}
-                  at={row.at}
+                  key={row.id || `${row.at}-${row.action}`}
+                  action={row.action || "trade"}
+                  reason={row.reason || ""}
+                  at={row.at || 0}
                   extra={row.sizeUsd ? money(row.sizeUsd) : row.from && row.to && row.from !== "none" ? `${row.from} → ${row.to}` : ""}
                 />
               ))}
+            {armed &&
+              tape.length === 0 &&
+              fills.slice(0, 12).map((f) => (
+                <TapeRow key={f.id || `${f.at}-${f.side}`} action={f.side || "trade"} reason={f.reason || ""} at={f.at || 0} extra={money(f.sizeUsd || 0)} />
+              ))}
             {(!armed || (!tape.length && !fills.length)) && (
-              <p className="text-sm text-mute">
-                {loading
-                  ? "Loading…"
-                  : armed
-                    ? "No clips yet."
-                    : "No live clips. The backtest on the home page is the proof."}
-              </p>
+              <p className="text-sm text-mute">{armed ? "No live trades yet." : "Off. No trades."}</p>
             )}
           </div>
         </div>
