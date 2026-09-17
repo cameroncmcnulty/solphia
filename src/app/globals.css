@@ -217,10 +217,10 @@ body {
 
 .shill-wallpaper {
   background-color: #071018;
-  background-image: url("/shill-wallpaper.png?v=2");
-  background-repeat: repeat;
-  background-position: 0 0;
-  background-size: 280px 417px;
+  background-image: url("/shill-wallpaper.png?v=3");
+  background-repeat: no-repeat;
+  background-position: center center;
+  background-size: cover;
 }
 
 .tg-stage {

@@ -258,7 +258,8 @@ export default function ShillPage() {
   const online = Math.max(board.length, Object.keys(pack?.profiles || {}).length, owner ? 1 : 0);
 
   return (
-    <main className="fixed inset-0 z-40 flex flex-col bg-[#0e1621]">
+    <main className="fixed inset-0 z-40 flex h-[100dvh] max-h-[100dvh] w-full justify-center overflow-hidden bg-[#0b141a]">
+      <div className="relative flex h-full w-full max-w-[52rem] flex-col overflow-hidden bg-[#0e1621] shadow-[0_0_80px_rgba(0,0,0,0.45)] lg:border-x lg:border-white/5">
       {peek && (
         <ProfileOverlay
           pubkey={peek}
@@ -430,9 +431,9 @@ export default function ShillPage() {
         )}
       </div>
 
-      <div className="shrink-0 bg-[#17212b] pb-[max(0.4rem,env(safe-area-inset-bottom))]">
+      <div className="relative z-20 shrink-0 bg-[#17212b] pb-[max(0.5rem,env(safe-area-inset-bottom))]">
         {!owner ? (
-          <div className="flex items-center justify-between gap-3 px-3 py-3">
+          <div className="flex items-center justify-between gap-3 px-4 py-3">
             <p className="text-[14px] text-[#8e9ba8]">Connect to chat.</p>
             <WalletConnect />
           </div>
@@ -449,13 +450,13 @@ export default function ShillPage() {
               </div>
             )}
             <form
-              className="flex items-end gap-1.5 px-2 py-1.5"
+              className="flex items-center gap-2 px-3 py-2"
               onSubmit={(e) => {
                 e.preventDefault();
-                if (text.trim() || stickers) send();
+                if (text.trim()) send();
               }}
             >
-              <button type="button" className="mb-1 flex h-10 w-10 items-center justify-center text-[#8e9ba8]" onClick={() => setStickers((v) => !v)}>
+              <button type="button" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[#8e9ba8] hover:bg-white/5" onClick={() => setStickers((v) => !v)} aria-label="Stickers">
                 <Smile className="h-6 w-6" />
               </button>
               <input
@@ -465,17 +466,17 @@ export default function ShillPage() {
                   act({ action: "typing" }).catch(() => {});
                 }}
                 placeholder="Message"
-                className="mb-0.5 min-h-[40px] flex-1 rounded-2xl bg-[#242f3d] px-3.5 py-2 text-[16px] text-white outline-none"
+                className="h-11 min-w-0 flex-1 rounded-2xl bg-[#242f3d] px-4 text-[16px] text-white outline-none"
               />
-              <button type="submit" disabled={busy || !text.trim()} className="mb-1 flex h-10 w-10 items-center justify-center rounded-full bg-[#2b5278] text-white disabled:opacity-35">
+              <button type="submit" disabled={busy || !text.trim()} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#2b5278] text-white disabled:opacity-35" aria-label="Send">
                 <Send className="h-5 w-5" />
               </button>
             </form>
             {stickers && (
-              <div className="grid grid-cols-6 gap-2 border-t border-white/5 px-3 py-3">
+              <div className="grid max-h-40 grid-cols-6 gap-1 overflow-y-auto border-t border-white/5 px-3 py-2 sm:grid-cols-8">
                 {SHILL_STICKERS.map((s) => (
-                  <button key={s} type="button" className="flex items-center justify-center" onClick={() => send({ sticker: s, kind: "sticker" })}>
-                    <BurstSticker emoji={s} size={52} />
+                  <button key={s} type="button" className="flex h-12 items-center justify-center" onClick={() => send({ sticker: s, kind: "sticker" })}>
+                    <BurstSticker emoji={s} size={40} />
                   </button>
                 ))}
               </div>
@@ -548,6 +549,7 @@ export default function ShillPage() {
           </div>
         )}
       </Sheet>
+      </div>
     </main>
   );
 }
