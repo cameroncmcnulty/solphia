@@ -20,6 +20,7 @@ import { buildAdminUsers } from "./users";
 import { ensureShill, livePins } from "../shill/engine";
 import { leaderboard } from "../rank/engine";
 import { emptyLaunchBook } from "../launch/engine";
+import { buildProfitDesk } from "../profit/catalog";
 import type { AdminDesk, AdminPromo, AdminSeat, AdminSleeve, AdminTrader } from "./types";
 
 export type { AdminDesk, AdminSeat, AdminSleeve, AdminTrader } from "./types";
@@ -131,6 +132,8 @@ export function buildAdminDesk(opts?: { light?: boolean }): AdminDesk {
       discord: s.sphaSocials?.discord || "",
     },
     ownerEarningsSol: s.launch?.ownerEarningsSol || 0,
+    treasuryFeesSol: s.launch?.treasuryFeesSol || 0,
+    profits: buildProfitDesk(s),
     launchCount: s.launch?.coins?.length || 0,
     durable: storeInfo().durable,
     durableKind: storeInfo().kind,

@@ -37,9 +37,10 @@ export function LaunchSection() {
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <Mini k="Coins on pad" v={String(data.launchCount)} />
         <Mini k="Owner earnings" v={`${data.ownerEarningsSol.toFixed(4)} SOL`} />
+        <Mini k="Treasury pad fees" v={`${(data.treasuryFeesSol || 0).toFixed(4)} SOL`} />
         <Mini k="Swap fee" v="1% · 50 / 25 / 25" />
       </div>
       <section className="panel rounded-2xl p-5">

@@ -202,4 +202,6 @@ export type AdminDesk = {
   backtestLev3?: import("../types").BacktestReport | null;
   shill?: { messages: number; pins: number; members: number };
   ranks?: { cards: number; top: { pubkey: string; username: string; rank: number; xp: number }[] };
+  treasuryFeesSol: number;
+  profits: import("../profit/catalog").ProfitDesk;
 };

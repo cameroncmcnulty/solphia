@@ -9,7 +9,7 @@ import { signAndSendPhantom } from "@/lib/wallet/trading";
 import { useAdmin } from "../AdminProvider";
 import { SphaLaunch } from "../SphaLaunch";
 import { SphaSection } from "./Spha";
-import { Field, shortPk } from "../ui";
+import { Field, Mini, shortPk } from "../ui";
 import { BuybackPanel } from "../BuybackPanel";
 
 type BalRow = { pk: string; sol: number };
@@ -234,17 +234,19 @@ export function WalletsSection() {
         <div className="font-mono text-[10px] tracking-[0.28em] text-mute">PROTOCOL WALLETS</div>
         <h2 className="mt-1 font-display text-3xl text-ghost">Where SOL sits</h2>
         <p className="mt-1 max-w-2xl text-sm text-mute">
-          Treasury takes seats and is the buyback SOL source. Dev holdings are team $SPHA.
+          Treasury takes seats, 1% live/pad skims, pins, and boosts. Dev holdings are team $SPHA.
           Public market holds the 77.1% tradeable float released into circulation. Foundation / airdrop fund Circle.
           Trading keys are bot-only — never mix them with protocol SOL.
         </p>
       </div>
 
+      <ProfitsPanel />
+
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <WalletCard
           kicker="TREASURY · IN"
           title="Treasury"
-          blurb={`${data.seatSol} SOL spot seats, ${data.seatSolLev} SOL lev seats, and desk clips land here. Buybacks spend from this wallet.`}
+          blurb={`${data.seatSol} SOL spot seats, ${data.seatSolLev} SOL lev seats, 1% live clips, 1% in-house swaps, pins, and boosts land here. Buybacks spend from this wallet.`}
           pk={pack?.treasury.pk || data.treasury}
           sol={treasSol}
           solUsd={solUsd}
@@ -613,5 +615,65 @@ export function WalletsSection() {
 
       <SphaSection />
     </div>
+  );
+}
+
+function ProfitsPanel() {
+  const { data } = useAdmin();
+  const p = data?.profits;
+  if (!p) return null;
+  const solUsd = data.prices?.solUsd || 0;
+  function money(sol: number) {
+    if (!(sol > 0)) return "0 SOL";
+    const usd = solUsd > 0 ? ` · $${(sol * solUsd).toFixed(2)}` : "";
+    return `${sol.toFixed(4)} SOL${usd}`;
+  }
+  return (
+    <section className="panel rounded-2xl p-5">
+      <div className="font-mono text-[10px] tracking-[0.28em] text-acid">PROFITS</div>
+      <h2 className="mt-1 font-display text-2xl text-ghost">What we take, where it lands</h2>
+      <p className="mt-2 max-w-2xl text-sm text-mute">
+        Live desk and in-house swaps skim 1% SOL to treasury in the same transaction. Pad curve fees are 1% split 50 /
+        25 / 25. Seats, pins, and boosts pay treasury in SOL.
+      </p>
+      <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+        <Mini k="Treasury booked" v={money(p.accrued.treasurySol)} />
+        <Mini k="Owner pad cut" v={money(p.accrued.ownerSol)} />
+        <Mini k="Creator rewards" v={money(p.accrued.creatorSol)} />
+        <Mini k="Inviter cut" v={money(p.accrued.referralSol)} />
+      </div>
+      <div className="mt-4 overflow-x-auto">
+        <table className="w-full min-w-[42rem] text-left text-sm">
+          <thead className="font-mono text-[10px] tracking-[0.18em] text-mute">
+            <tr>
+              <th className="pb-2 pr-3 font-medium">Feature</th>
+              <th className="pb-2 pr-3 font-medium">Take</th>
+              <th className="pb-2 pr-3 font-medium">Wallet</th>
+              <th className="pb-2 pr-3 font-medium">Booked</th>
+              <th className="pb-2 font-medium">How it pays</th>
+            </tr>
+          </thead>
+          <tbody>
+            {p.streams.map((s) => (
+              <tr key={s.id} className="border-t border-violet/15">
+                <td className="py-2.5 pr-3 text-ghost">{s.feature}</td>
+                <td className="py-2.5 pr-3 font-mono text-[12px] text-acid">{s.rate}</td>
+                <td className="py-2.5 pr-3">
+                  <div className="text-ghost">{s.wallet === "treasury" ? "Treasury" : s.wallet === "owner" ? "Owner" : s.wallet === "creator" ? "Creator" : "Inviter"}</div>
+                  <div className="break-all font-mono text-[10px] text-mute">{s.walletPk && s.walletPk.length > 20 ? shortPk(s.walletPk, 4) : s.walletPk}</div>
+                </td>
+                <td className="py-2.5 pr-3 font-mono text-[12px] text-ghost">{s.accruedSol > 0 ? `${s.accruedSol.toFixed(4)} SOL` : "—"}</td>
+                <td className="py-2.5 text-[12px] text-mute">{s.settlement}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="mt-3 font-mono text-[11px] text-mute">
+        Pad split {p.padSplit.creator} creator / {p.padSplit.owner} owner / {p.padSplit.treasury} treasury. Referred coins:{" "}
+        {p.padSplitReferred.creator} creator / {p.padSplitReferred.referral} inviter / {p.padSplitReferred.owner} owner /{" "}
+        {p.padSplitReferred.treasury} treasury.
+      </p>
+    </section>
   );
 }
