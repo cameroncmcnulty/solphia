@@ -35,7 +35,7 @@ export default function TokenPage() {
   }, []);
 
   return (
-    <main className="relative min-h-[calc(100vh-4rem)] overflow-x-hidden pb-24">
+    <main className="relative min-h-screen overflow-x-hidden pb-24">
       <SolphiaConstellation />
       <div className="relative z-10 mx-auto max-w-6xl px-4 pt-8 md:px-8 md:pt-14">
         <p className="font-mono text-[11px] tracking-[0.28em] text-acid">PROTOCOL TOKEN</p>

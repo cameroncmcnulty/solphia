@@ -137,7 +137,7 @@ function Sheet({
 }) {
   if (!open) return null;
   return (
-    <div className="absolute inset-0 z-30 flex items-end justify-center bg-black/55 sm:items-center sm:p-6" onClick={onClose}>
+    <div className="absolute inset-0 z-30 col-span-full row-span-full flex items-end justify-center bg-black/55 sm:items-center sm:p-6" onClick={onClose}>
       <div
         className="max-h-[min(78%,36rem)] w-full overflow-y-auto rounded-t-3xl bg-[#17212b] pb-[env(safe-area-inset-bottom)] sm:max-w-lg sm:rounded-3xl sm:pb-4"
         onClick={(e) => e.stopPropagation()}
@@ -156,7 +156,6 @@ function Sheet({
 
 export default function ShillPage() {
   const owner = useOwner();
-  const frame = useRef<HTMLElement>(null);
   const [pack, setPack] = useState<Pack | null>(null);
   const [text, setText] = useState("");
   const [reply, setReply] = useState<Msg | null>(null);
@@ -203,70 +202,6 @@ export default function ShillPage() {
     const t = setInterval(() => load(false).catch(() => {}), 1800);
     return () => clearInterval(t);
   }, [load]);
-
-  useEffect(() => {
-    const el = frame.current;
-    const html = document.documentElement;
-    const body = document.body;
-    const prev = {
-      htmlOverflow: html.style.overflow,
-      htmlHeight: html.style.height,
-      bodyOverflow: body.style.overflow,
-      bodyHeight: body.style.height,
-      bodyPosition: body.style.position,
-      bodyTop: body.style.top,
-      bodyWidth: body.style.width,
-    };
-    html.style.overflow = "hidden";
-    html.style.height = "100%";
-    body.style.overflow = "hidden";
-    body.style.height = "100%";
-    window.scrollTo(0, 0);
-    const phone = () => window.matchMedia("(pointer: coarse)").matches && window.innerWidth < 900;
-    const fit = () => {
-      if (!el) return;
-      window.scrollTo(0, 0);
-      const vv = window.visualViewport;
-      const layoutH = window.innerHeight;
-      const visH = vv?.height ?? layoutH;
-      const visTop = vv?.offsetTop ?? 0;
-      const keyboard = phone() && visH < layoutH - 60;
-      if (!keyboard) {
-        el.style.top = "0px";
-        el.style.right = "0px";
-        el.style.bottom = "0px";
-        el.style.left = "0px";
-        el.style.height = "";
-        return;
-      }
-      el.style.top = `${Math.round(visTop)}px`;
-      el.style.left = "0px";
-      el.style.right = "0px";
-      el.style.bottom = "auto";
-      el.style.height = `${Math.round(visH)}px`;
-    };
-    if (phone()) {
-      body.style.position = "fixed";
-      body.style.top = "0";
-      body.style.width = "100%";
-    }
-    fit();
-    window.visualViewport?.addEventListener("resize", fit);
-    window.visualViewport?.addEventListener("scroll", fit);
-    window.addEventListener("resize", fit);
-    return () => {
-      window.visualViewport?.removeEventListener("resize", fit);
-      window.visualViewport?.removeEventListener("scroll", fit);
-      window.removeEventListener("resize", fit);
-      html.style.overflow = prev.htmlOverflow;
-      html.style.height = prev.htmlHeight;
-      body.style.overflow = prev.bodyOverflow;
-      body.style.height = prev.bodyHeight;
-      body.style.position = prev.bodyPosition;
-      body.style.top = prev.bodyTop;
-      body.style.width = prev.bodyWidth;
-    };
-  }, []);
 
   useEffect(() => {
     const el = scroller.current;
@@ -368,26 +303,10 @@ export default function ShillPage() {
   const online = Math.max(board.length, Object.keys(pack?.profiles || {}).length, owner ? 1 : 0);
 
   return (
-    <main
-      ref={frame}
-      className="fixed inset-0 z-40 flex h-dvh w-full justify-center overflow-hidden overscroll-none bg-[#0b141a]"
-    >
-      <div className="relative flex h-full min-h-0 w-full max-w-[42rem] flex-col self-stretch overflow-hidden bg-[#0e1621] shadow-[0_0_80px_rgba(0,0,0,0.45)] sm:max-w-[46rem] lg:border-x lg:border-white/5">
-      {peek && (
-        <ProfileOverlay
-          pubkey={peek}
-          viewer={owner}
-          onClose={() => setPeek(null)}
-          onModerated={() => load().catch(() => {})}
-        />
-      )}
-      {toast && (
-        <div className="pointer-events-none absolute inset-x-0 top-16 z-[60] flex justify-center">
-          <div className="rounded-full bg-[#14f195] px-5 py-2 font-display text-base text-[#04000a]">{toast}</div>
-        </div>
-      )}
-
-      <header className="flex shrink-0 items-center gap-1 border-b border-acid/25 bg-gradient-to-r from-[#10261c] via-[#17212b] to-[#1a1630] px-1 pb-2 pt-[max(0.4rem,env(safe-area-inset-top))] shadow-[0_8px_24px_rgba(0,0,0,0.35)]">
+    <main className="fixed inset-0 z-40 bg-[#0b141a]">
+      <div className="relative mx-auto grid h-full min-h-0 w-full max-w-[42rem] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden bg-[#0e1621] sm:max-w-[46rem] lg:border-x lg:border-white/5">
+      <div>
+      <header className="flex items-center gap-1 border-b border-acid/25 bg-gradient-to-r from-[#10261c] via-[#17212b] to-[#1a1630] px-1 pb-2 pt-[max(0.4rem,env(safe-area-inset-top))] shadow-[0_8px_24px_rgba(0,0,0,0.35)]">
         <Link href="/" className="flex h-11 w-11 items-center justify-center rounded-full text-white hover:bg-white/5" aria-label="Back to home">
           <ArrowLeft className="h-6 w-6" />
         </Link>
@@ -436,10 +355,11 @@ export default function ShillPage() {
           </div>
         </div>
       )}
+      </div>
 
       <div
         ref={scroller}
-        className="shill-wallpaper min-h-0 flex-1 overflow-y-auto px-2 py-3"
+        className="shill-wallpaper min-h-0 overflow-y-auto px-2 py-3"
         onClick={() => setPicker(null)}
         onScroll={(e) => {
           const el = e.currentTarget;
@@ -546,7 +466,7 @@ export default function ShillPage() {
         )}
       </div>
 
-      <div className="relative z-20 shrink-0 bg-[#17212b] pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+      <div className="relative z-20 bg-[#17212b] pb-[max(0.5rem,env(safe-area-inset-bottom))]">
         {!owner ? (
           <div className="flex items-center justify-between gap-3 px-4 py-3">
             <p className="text-[14px] text-[#8e9ba8]">Connect to chat.</p>
@@ -611,8 +531,22 @@ export default function ShillPage() {
         )}
       </div>
 
+      {peek && (
+        <ProfileOverlay
+          pubkey={peek}
+          viewer={owner}
+          onClose={() => setPeek(null)}
+          onModerated={() => load().catch(() => {})}
+        />
+      )}
+      {toast && (
+        <div className="pointer-events-none absolute inset-x-0 top-4 z-[60] flex justify-center">
+          <div className="rounded-full bg-[#14f195] px-5 py-2 font-display text-base text-[#04000a]">{toast}</div>
+        </div>
+      )}
+
       {openPin && (
-        <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/55 p-3" onClick={() => setOpenPin(null)}>
+        <div className="absolute inset-0 z-40 col-span-full row-span-full flex items-center justify-center bg-black/55 p-3" onClick={() => setOpenPin(null)}>
           <div className="w-full max-w-sm rounded-3xl border border-acid/30 bg-[#17212b] p-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center gap-3">
               {openPin.image ? (

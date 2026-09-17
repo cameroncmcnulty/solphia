@@ -17,7 +17,7 @@ export default function LegalPage() {
           Your wallet is login. Solphia never asks for a seed phrase. Trading keys, if created in the browser, stay on your device. We do not hold, freeze, or recover those keys. Clearing this browser without a backup can make funds unrecoverable.
         </p>
         <p>
-          The desk trades tokenized S&amp;P 500, Nasdaq, gold, and SOL via official xStock mints. Practice is on until you flip to live. Live swaps are signed by the trading wallet on your device — not by us. Markets move. You can lose SOL. This is not financial, tax, or investment advice. Tokens shown on the launch pad and Shill Zone are not endorsed.
+          The desk trades tokenized S&amp;P 500, Nasdaq, gold, and SOL via official xStock mints. She stays off until you pay the SOL seat, fund the trading wallet, and press Start. Live swaps are signed by the trading wallet on your device — not by us. Markets move. You can lose SOL. This is not financial, tax, or investment advice. Tokens shown on the launch pad and Shill Zone are not endorsed.
         </p>
         <p>
           Live seats are paid in SOL for a 30-day window as listed on the pricing page. First payment is signed in Phantom. Later months may renew from the on-device trading wallet while this site is open. Unsubscribe any time. We do not refund a started window.

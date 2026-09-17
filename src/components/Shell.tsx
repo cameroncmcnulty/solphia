@@ -12,6 +12,7 @@ import { HumanGate } from "./HumanGate";
 import { WalletKeepalive } from "./WalletConnect";
 import { TosGate } from "./TosGate";
 import { SiteFooter } from "./SiteFooter";
+import { clearScrollLock, lockPageScroll } from "@/lib/scrollLock";
 
 export function Shell({ children }: { children: React.ReactNode }) {
   const path = usePathname();
@@ -19,39 +20,49 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const isShill = path === "/shill" || path.startsWith("/shill/");
 
   useEffect(() => {
-    if (!isShill) return;
-    const html = document.documentElement;
-    const body = document.body;
-    const prevH = html.style.overflow;
-    const prevB = body.style.overflow;
-    html.style.overflow = "hidden";
-    body.style.overflow = "hidden";
-    return () => {
-      html.style.overflow = prevH;
-      body.style.overflow = prevB;
-    };
+    if (isShill) {
+      lockPageScroll();
+      window.scrollTo(0, 0);
+      return () => clearScrollLock();
+    }
+    clearScrollLock();
   }, [isShill]);
 
+  const runners = (
+    <>
+      <TosGate />
+      <WalletKeepalive />
+      <LiveRunner />
+      <SeatRunner />
+    </>
+  );
+
+  if (isShill) {
+    return (
+      <>
+        {children}
+        {runners}
+      </>
+    );
+  }
+
   return (
-    <div className={`relative overflow-x-hidden ${isAdmin || isShill ? "h-dvh overflow-hidden" : "min-h-screen pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:pb-8"}`}>
-      {!isAdmin && !isShill && <ParticleField />}
-      {!isAdmin && !isShill && <div className="vignette" />}
+    <div className={`relative min-h-screen overflow-x-hidden ${isAdmin ? "" : "pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:pb-8"}`}>
+      {!isAdmin && <ParticleField />}
+      {!isAdmin && <div className="vignette" />}
       {!isAdmin && (
         <Suspense fallback={null}>
           <ReferralCapture />
         </Suspense>
       )}
-      <div className={`relative z-10 ${isShill ? "h-full" : ""}`}>
-        {!isAdmin && !isShill && <Nav />}
+      <div className="relative z-10">
+        {!isAdmin && <Nav />}
         {children}
       </div>
-      {!isShill && <SiteFooter />}
-      <TosGate />
-      <WalletKeepalive />
-      <LiveRunner />
-      <SeatRunner />
-      {!isAdmin && !isShill && <HumanGate />}
-      {!isAdmin && !isShill && <BottomNav />}
+      <SiteFooter />
+      {runners}
+      {!isAdmin && <HumanGate />}
+      {!isAdmin && <BottomNav />}
     </div>
   );
 }

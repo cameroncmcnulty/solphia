@@ -133,7 +133,7 @@ function CircleInner() {
   const promos = pack?.promos || [];
 
   return (
-    <main className="relative min-h-[calc(100vh-4rem)] overflow-hidden pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:pb-4">
+    <main className="relative min-h-[calc(100vh-4rem)] overflow-x-hidden pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:pb-4">
       <TealConfetti fire={fire} />
       <div className="mx-auto flex max-w-5xl flex-col gap-4 px-3 pt-6 md:px-6">
         {!owner ? (

@@ -37,10 +37,11 @@ export function LiveRunner() {
     async function pulse() {
       if (stop || lock.current) return;
       try {
-        await arm();
         const tpk = tradingPubkey();
         const a = await fetch(`/api/auto?owner=${owner}`).then((r) => r.json());
-        if (a.auto?.mode !== "live" || a.paper?.killed) return;
+        if (!a.auto?.armed || a.paper?.killed) return;
+        if (a.auto?.mode !== "live") return;
+        if (!a.auto?.liveDelegate && !a.liveDelegate && !delegated.current) await arm();
         if (a.auto?.liveDelegate || a.liveDelegate || delegated.current) return;
         const intent = a.paper?.pendingIntent;
         if (!intent || intent.reason === lastSig.current) return;
@@ -69,7 +70,6 @@ export function LiveRunner() {
         lock.current = false;
       }
     }
-    arm();
     pulse();
     const id = setInterval(pulse, 8000);
     return () => {

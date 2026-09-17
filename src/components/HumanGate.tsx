@@ -14,6 +14,7 @@ import {
   puzzleHit,
   type PuzzleChallenge,
 } from "@/lib/human/puzzle";
+import { clearScrollLock, lockPageScroll } from "@/lib/scrollLock";
 
 export function HumanGate() {
   const [open, setOpen] = useState(false);
@@ -74,16 +75,15 @@ export function HumanGate() {
 
   useEffect(() => {
     if (!open) return;
-    const prev = document.body.style.overflow;
+    lockPageScroll();
     const prevOver = document.documentElement.style.overscrollBehavior;
-    document.body.style.overflow = "hidden";
     document.documentElement.style.overscrollBehavior = "none";
     const block = (e: TouchEvent) => {
       if (drag.current.on) e.preventDefault();
     };
     document.addEventListener("touchmove", block, { passive: false });
     return () => {
-      document.body.style.overflow = prev;
+      clearScrollLock();
       document.documentElement.style.overscrollBehavior = prevOver;
       document.removeEventListener("touchmove", block);
     };
