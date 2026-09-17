@@ -14,6 +14,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   viewportFit: "cover",
   maximumScale: 1,
+  interactiveWidget: "overlays-content",
 };
 
 export const metadata: Metadata = {

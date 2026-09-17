@@ -2,12 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { ArrowDownUp, ArrowLeft, Check, CheckCheck, Reply, Rocket, Send, Smile, Trophy, X } from "lucide-react";
 import { BurstSticker } from "@/components/BurstSticker";
 import { fmtLeft } from "@/components/BoostBuy";
 import { CartoonPfp } from "@/components/CartoonPfp";
-import { CircleSwap } from "@/components/CircleSwap";
+import { SwapWidget } from "@/components/SwapWidget";
 import { WalletConnect } from "@/components/WalletConnect";
 import { RankBadge } from "@/components/RankBadge";
 import { ProfileOverlay } from "@/components/ProfileOverlay";
@@ -90,9 +89,10 @@ function fmtMc(n?: number) {
   return `$${n.toFixed(0)}`;
 }
 
-function TokenBubble({ token }: { token: ShillToken }) {
+function TokenBubble({ token, onCopy }: { token: ShillToken; onCopy: (mint: string) => void }) {
+  const [copied, setCopied] = useState(false);
   return (
-    <div className="mt-1 flex items-center gap-2 rounded-xl bg-black/20 px-2 py-1.5">
+    <div className="mt-1 grid w-full grid-cols-[2.25rem_minmax(0,1fr)_3.4rem] items-center gap-2 rounded-xl bg-black/20 px-2 py-1.5">
       {token.image ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={token.image} alt="" className="h-9 w-9 rounded-lg object-cover" />
@@ -101,7 +101,7 @@ function TokenBubble({ token }: { token: ShillToken }) {
           {(token.symbol || "?").slice(0, 2)}
         </div>
       )}
-      <div className="min-w-0">
+      <div className="min-w-0 overflow-hidden">
         <div className="truncate text-[14px] font-semibold text-white">${(token.symbol || "").replace(/^\$/, "")}</div>
         <div className="truncate font-mono text-[10px] text-white/60">
           {token.name}
@@ -110,10 +110,15 @@ function TokenBubble({ token }: { token: ShillToken }) {
       </div>
       <button
         type="button"
-        className="shrink-0 font-mono text-[10px] text-[#6ab3f3]"
-        onClick={() => navigator.clipboard.writeText(token.mint)}
+        className="h-8 w-full rounded-full bg-white/10 font-mono text-[10px] text-[#6ab3f3]"
+        onClick={(e) => {
+          e.stopPropagation();
+          onCopy(token.mint);
+          setCopied(true);
+          window.setTimeout(() => setCopied(false), 1600);
+        }}
       >
-        copy
+        {copied ? "copied" : "copy"}
       </button>
     </div>
   );
@@ -151,7 +156,6 @@ function Sheet({
 
 export default function ShillPage() {
   const owner = useOwner();
-  const router = useRouter();
   const frame = useRef<HTMLElement>(null);
   const [pack, setPack] = useState<Pack | null>(null);
   const [text, setText] = useState("");
@@ -162,7 +166,8 @@ export default function ShillPage() {
   const [err, setErr] = useState("");
   const [pinMint, setPinMint] = useState("");
   const [pinBusy, setPinBusy] = useState(false);
-  const [sheet, setSheet] = useState<"pin" | "ranks" | null>(null);
+  const [sheet, setSheet] = useState<"pin" | "ranks" | "swap" | null>(null);
+  const [swapMint, setSwapMint] = useState("");
   const [openPin, setOpenPin] = useState<PinRow | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const hold = useRef<number>(0);
@@ -201,17 +206,43 @@ export default function ShillPage() {
 
   useEffect(() => {
     const el = frame.current;
-    if (!el) return;
+    const html = document.documentElement;
+    const body = document.body;
+    const prev = {
+      htmlOverflow: html.style.overflow,
+      bodyOverflow: body.style.overflow,
+      bodyPosition: body.style.position,
+      bodyTop: body.style.top,
+      bodyWidth: body.style.width,
+    };
+    html.style.overflow = "hidden";
+    body.style.overflow = "hidden";
+    body.style.position = "fixed";
+    body.style.top = "0";
+    body.style.width = "100%";
     const fit = () => {
-      const h = window.visualViewport?.height || window.innerHeight;
-      el.style.height = `${Math.round(h)}px`;
+      if (!el) return;
+      const vv = window.visualViewport;
+      const h = Math.round(vv?.height || window.innerHeight);
+      const top = Math.round(vv?.offsetTop || 0);
+      el.style.top = `${top}px`;
+      el.style.bottom = "auto";
+      el.style.height = `${h}px`;
+      window.scrollTo(0, 0);
     };
     fit();
     window.visualViewport?.addEventListener("resize", fit);
+    window.visualViewport?.addEventListener("scroll", fit);
     window.addEventListener("resize", fit);
     return () => {
       window.visualViewport?.removeEventListener("resize", fit);
+      window.visualViewport?.removeEventListener("scroll", fit);
       window.removeEventListener("resize", fit);
+      html.style.overflow = prev.htmlOverflow;
+      body.style.overflow = prev.bodyOverflow;
+      body.style.position = prev.bodyPosition;
+      body.style.top = prev.bodyTop;
+      body.style.width = prev.bodyWidth;
     };
   }, []);
 
@@ -275,12 +306,33 @@ export default function ShillPage() {
       await act({ action: "pin", mint: pinMint.trim(), signature: sig });
       setPinMint("");
       setSheet(null);
+      flash("Pinned");
       await load();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "pin failed");
     } finally {
       setPinBusy(false);
     }
+  }
+
+  function flash(msg: string) {
+    setToast(msg);
+    window.setTimeout(() => setToast(""), 1800);
+  }
+
+  async function copyMint(mint: string) {
+    try {
+      await navigator.clipboard.writeText(mint);
+      flash("CA copied");
+    } catch {
+      flash("Could not copy");
+    }
+  }
+
+  function openSwap(mint = "") {
+    setSwapMint(mint);
+    setOpenPin(null);
+    setSheet("swap");
   }
 
   const msgs = pack?.messages || [];
@@ -296,7 +348,7 @@ export default function ShillPage() {
   return (
     <main
       ref={frame}
-      className="fixed inset-0 z-40 flex w-full justify-center overflow-hidden bg-[#0b141a]"
+      className="fixed inset-x-0 top-0 z-40 flex w-full justify-center overflow-hidden overscroll-none bg-[#0b141a]"
       style={{ height: "100svh" }}
     >
       <div className="relative flex h-full w-full max-w-[42rem] flex-col overflow-hidden bg-[#0e1621] shadow-[0_0_80px_rgba(0,0,0,0.45)] sm:max-w-[46rem] lg:border-x lg:border-white/5">
@@ -325,7 +377,7 @@ export default function ShillPage() {
         <button type="button" className="flex h-11 w-11 items-center justify-center rounded-full text-acid hover:bg-acid/10" onClick={() => setSheet("pin")} aria-label="Boost pin">
           <Rocket className="h-5 w-5" />
         </button>
-        <button type="button" className="flex h-11 w-11 items-center justify-center rounded-full text-[#8e9ba8] hover:bg-white/5" onClick={() => router.push("/swap")} aria-label="Swap">
+        <button type="button" className="flex h-11 w-11 items-center justify-center rounded-full text-[#8e9ba8] hover:bg-white/5" onClick={() => openSwap()} aria-label="Swap">
           <ArrowDownUp className="h-5 w-5" />
         </button>
         <button type="button" className="flex h-11 w-11 items-center justify-center rounded-full text-[#8e9ba8] hover:bg-white/5" onClick={() => setSheet("ranks")} aria-label="Ranks">
@@ -398,8 +450,8 @@ export default function ShillPage() {
                 ) : (
                   <div
                     className={`relative max-w-full min-w-0 overflow-hidden rounded-2xl px-2.5 py-1.5 text-[15px] leading-[1.35] text-white ${
-                      mine ? "rounded-br-md bg-[#2b5278]" : "rounded-bl-md bg-[#182533]"
-                    }`}
+                      m.token ? "w-full" : ""
+                    } ${mine ? "rounded-br-md bg-[#2b5278]" : "rounded-bl-md bg-[#182533]"}`}
                     onContextMenu={(e) => {
                       e.preventDefault();
                       setPicker(m.id);
@@ -418,7 +470,7 @@ export default function ShillPage() {
                       </div>
                     )}
                     {m.text && <div className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{m.text}</div>}
-                    {m.token && <TokenBubble token={m.token} />}
+                    {m.token && <TokenBubble token={m.token} onCopy={copyMint} />}
                     <div className="mt-0.5 flex items-center justify-end gap-1">
                       <span className="font-mono text-[11px] text-white/45">{when(m.at)}</span>
                       {mine && (seen ? <CheckCheck className="h-3.5 w-3.5 text-[#6ab3f3]" /> : <Check className="h-3.5 w-3.5 text-white/45" />)}
@@ -507,7 +559,17 @@ export default function ShillPage() {
                   setText(e.target.value);
                   act({ action: "typing" }).catch(() => {});
                 }}
+                onFocus={() => {
+                  stickToBottom.current = true;
+                  window.scrollTo(0, 0);
+                  requestAnimationFrame(() => {
+                    window.scrollTo(0, 0);
+                    const box = scroller.current;
+                    if (box) box.scrollTop = box.scrollHeight;
+                  });
+                }}
                 placeholder="Message"
+                enterKeyHint="send"
                 className="h-11 min-w-0 flex-1 rounded-2xl bg-[#242f3d] px-4 text-[16px] text-white outline-none"
               />
               <button type="submit" disabled={busy || !text.trim()} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#2b5278] text-white disabled:opacity-35" aria-label="Send">
@@ -554,14 +616,14 @@ export default function ShillPage() {
               <button
                 type="button"
                 className="rounded-full border border-white/15 py-2.5 text-[14px] text-white"
-                onClick={() => navigator.clipboard.writeText(openPin.mint)}
+                onClick={() => copyMint(openPin.mint)}
               >
                 Copy CA
               </button>
               <button
                 type="button"
                 className="rounded-full bg-[#14f195] py-2.5 text-[14px] font-semibold text-[#04000a]"
-                onClick={() => router.push(`/swap?mint=${encodeURIComponent(openPin.mint)}`)}
+                onClick={() => openSwap(openPin.mint)}
               >
                 Buy
               </button>
@@ -627,11 +689,18 @@ export default function ShillPage() {
             </button>
           ))}
         </div>
-        {owner && (
-          <div className="mt-4">
-            <CircleSwap owner={owner} />
-          </div>
-        )}
+        <button
+          type="button"
+          onClick={() => setSheet("pin")}
+          className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-full bg-[#14f195] py-2.5 text-[15px] font-semibold text-[#04000a]"
+        >
+          <Rocket className="h-4 w-4" />
+          Pin a token
+        </button>
+      </Sheet>
+
+      <Sheet open={sheet === "swap"} title="Swap" onClose={() => setSheet(null)}>
+        <SwapWidget key={swapMint || "swap"} owner={owner} defaultMint={swapMint} />
       </Sheet>
       </div>
     </main>

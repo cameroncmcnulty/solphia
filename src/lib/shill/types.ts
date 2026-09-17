@@ -51,6 +51,8 @@ export type ShillBook = {
   pins: ShillPin[];
   members: Record<string, ShillMember>;
   typing: Record<string, number>;
+  lastHousePinAt?: number;
+  nextHousePinAt?: number;
 };
 
 export const SHILL_MSG_MAX = 240;
@@ -61,6 +63,10 @@ export const SHILL_PIN_MS = 3 * 3600_000;
 export const SHILL_PIN_SOL = 0.2;
 export const SHILL_HOUSE_PIN_MIN = 2;
 export const SHILL_HOUSE_PIN_MAX = 3;
+/** After a house pin expires, wait this long before pinning a replacement. */
+export const SHILL_HOUSE_REPLACE_MS = 2 * 60_000;
+/** After a house pin lands, wait this long before another. */
+export const SHILL_HOUSE_STAGGER_MS = 18 * 60_000;
 export const SHILL_HOUSE_OWNER = "solphia";
 export const SHILL_STICKERS = ["🚀", "🔥", "💎", "🐸", "👑", "🪩", "🎉", "💸", "🧠", "🫡", "👀"];
 export const SHILL_REACTS = ["❤️", "😂", "🔥", "🚀", "👍", "💎", "👀"];

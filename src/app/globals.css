@@ -217,7 +217,7 @@ body {
 
 .shill-wallpaper {
   background-color: #071018;
-  background-image: url("/shill-wallpaper.svg");
+  background-image: linear-gradient(rgba(7, 16, 24, 0.42), rgba(7, 16, 24, 0.55)), url("/shill-wallpaper.jpg");
   background-repeat: no-repeat;
   background-position: center center;
   background-size: cover;

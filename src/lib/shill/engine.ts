@@ -4,6 +4,8 @@ import {
   SHILL_HOUSE_OWNER,
   SHILL_HOUSE_PIN_MAX,
   SHILL_HOUSE_PIN_MIN,
+  SHILL_HOUSE_REPLACE_MS,
+  SHILL_HOUSE_STAGGER_MS,
   SHILL_KEEP_MS,
   SHILL_MSG_MAX,
   SHILL_PIN_MS,
@@ -22,7 +24,7 @@ function pushMax<T>(arr: T[], item: T, max: number) {
 }
 
 export function emptyShill(): ShillBook {
-  return { messages: [], pins: [], members: {}, typing: {} };
+  return { messages: [], pins: [], members: {}, typing: {}, lastHousePinAt: 0, nextHousePinAt: 0 };
 }
 
 /** Union two books so a empty isolate cannot wipe Redis. Local wins on the same id. */
@@ -41,6 +43,8 @@ export function mergeShill(local: ShillBook, remote: ShillBook): ShillBook {
     pins: [...pins.values()].sort((x, y) => x.at - y.at),
     members,
     typing: {},
+    lastHousePinAt: Math.max(a.lastHousePinAt || 0, b.lastHousePinAt || 0),
+    nextHousePinAt: Math.max(a.nextHousePinAt || 0, b.nextHousePinAt || 0),
   };
   pruneShill(out);
   return out;
@@ -50,9 +54,11 @@ export function slimShill(book?: ShillBook | null): ShillBook {
   const b = ensureShill(book);
   return {
     messages: b.messages.slice(-80),
-    pins: b.pins.slice(-SHILL_PIN_SLOTS),
+    pins: b.pins.slice(-16),
     members: b.members,
     typing: {},
+    lastHousePinAt: b.lastHousePinAt,
+    nextHousePinAt: b.nextHousePinAt,
   };
 }
 
@@ -71,7 +77,17 @@ export function pruneShill(book: ShillBook, now = Date.now()) {
   const cut = now - SHILL_KEEP_MS;
   if (book.messages.length) book.messages = book.messages.filter((m) => m.at >= cut);
   if (book.messages.length > SHILL_MSG_MAX) book.messages.splice(0, book.messages.length - SHILL_MSG_MAX);
-  book.pins = (book.pins || []).filter((p) => p.endsAt > now);
+  const pins = book.pins || [];
+  const expiredHouse = pins.filter((p) => p.house && p.endsAt <= now).length;
+  book.pins = pins.filter((p) => p.endsAt > now);
+  if (expiredHouse > 0) {
+    const liveHouse = book.pins.filter((p) => p.house).length;
+    if (liveHouse < SHILL_HOUSE_PIN_MAX) {
+      const soon = now + SHILL_HOUSE_REPLACE_MS;
+      const cur = book.nextHousePinAt || 0;
+      book.nextHousePinAt = cur > now ? Math.min(cur, soon) : soon;
+    }
+  }
   for (const m of book.messages) {
     if (!m.reactions) m.reactions = {};
   }
@@ -248,26 +264,9 @@ export function pinToken(
 
 export type HousePinCoin = { mint: string; symbol?: string; name?: string; image?: string; priceUsd?: number; mcUsd?: number };
 
-export function fillHousePins(book: ShillBook, candidates: HousePinCoin[], now = Date.now()): boolean {
-  pruneShill(book, now);
-  const live = livePins(book, now);
-  const n = live.length;
-  let add = 0;
-  if (n <= 0) add = SHILL_HOUSE_PIN_MIN + (Math.random() < 0.5 ? 1 : 0);
-  else if (n === 1 || n === 2) add = 1;
-  if (!add) return false;
-  if (n + add > SHILL_HOUSE_PIN_MAX && n >= SHILL_HOUSE_PIN_MIN) add = Math.max(0, SHILL_HOUSE_PIN_MAX - n);
-  if (!add) return false;
-  const taken = new Set(live.map((p) => p.mint));
-  const pool = candidates.filter((c) => c.mint && !taken.has(c.mint));
-  for (let i = pool.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [pool[i], pool[j]] = [pool[j], pool[i]];
-  }
-  const picks = pool.slice(0, add);
-  if (!picks.length) return false;
+function plantHousePins(book: ShillBook, picks: HousePinCoin[], now: number, stagger: boolean) {
   picks.forEach((c, i) => {
-    const life = (42 + Math.floor(Math.random() * 48)) * 60_000;
+    const life = stagger ? (160 + i * 35) * 60_000 : (170 + Math.floor(Math.random() * 30)) * 60_000;
     book.pins.push({
       id: `hpin${now.toString(36)}${i}${Math.random().toString(36).slice(2, 5)}`,
       mint: c.mint,
@@ -284,5 +283,35 @@ export function fillHousePins(book: ShillBook, candidates: HousePinCoin[], now =
       house: true,
     });
   });
+  book.lastHousePinAt = now;
+  book.nextHousePinAt = now + SHILL_HOUSE_STAGGER_MS;
+}
+
+export function fillHousePins(book: ShillBook, candidates: HousePinCoin[], now = Date.now()): boolean {
+  pruneShill(book, now);
+  const house = book.pins.filter((p) => p.house);
+  const n = house.length;
+  if (n >= SHILL_HOUSE_PIN_MAX) return false;
+  const taken = new Set(book.pins.map((p) => p.mint));
+  const pool = candidates.filter((c) => c.mint && !taken.has(c.mint));
+  if (!pool.length) return false;
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+
+  if (n === 0 && !book.lastHousePinAt) {
+    const count = Math.min(SHILL_HOUSE_PIN_MIN, pool.length);
+    plantHousePins(book, pool.slice(0, count), now, true);
+    return count > 0;
+  }
+
+  const due = book.nextHousePinAt || 0;
+  if (due && now < due) return false;
+  if (!due) {
+    book.nextHousePinAt = now + (n < SHILL_HOUSE_PIN_MIN ? SHILL_HOUSE_REPLACE_MS : SHILL_HOUSE_STAGGER_MS);
+    return false;
+  }
+  plantHousePins(book, pool.slice(0, 1), now, false);
   return true;
 }

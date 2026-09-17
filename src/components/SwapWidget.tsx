@@ -91,7 +91,7 @@ export function SwapWidget({
   const [quoteUnit, setQuoteUnit] = useState("tokens");
 
   useEffect(() => {
-    if (defaultMint) setMint((m) => m || defaultMint);
+    if (defaultMint) setMint(defaultMint);
   }, [defaultMint]);
 
   useEffect(() => {

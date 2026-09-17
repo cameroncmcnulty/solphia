@@ -22,7 +22,7 @@ import {
   reactShill,
   touchMember,
 } from "@/lib/shill/engine";
-import { SHILL_PIN_SOL, SHILL_REACTS, SHILL_STICKERS, type ShillToken } from "@/lib/shill/types";
+import { SHILL_HOUSE_PIN_MAX, SHILL_PIN_SOL, SHILL_REACTS, SHILL_STICKERS, type ShillToken } from "@/lib/shill/types";
 import { emptyLaunchBook } from "@/lib/launch/engine";
 import { creditRank, leaderboard, publicCard } from "@/lib/rank/engine";
 import { canModerateChat, staffRole } from "@/lib/access";
@@ -97,17 +97,21 @@ async function tapePinCoins() {
 export async function GET(req: NextRequest) {
   const pubkey = req.nextUrl.searchParams.get("pubkey") || "";
   const since = Number(req.nextUrl.searchParams.get("since") || 0);
-  if (!since) {
+  const needHouse = await withShill((st) => {
+    st.shill = ensureShill(st.shill);
+    const house = st.shill.pins.filter((p) => p.house).length;
+    if (house >= SHILL_HOUSE_PIN_MAX) return false;
+    if (house === 0 && !st.shill.lastHousePinAt) return true;
+    const due = st.shill.nextHousePinAt || 0;
+    return due > 0 && Date.now() >= due;
+  }, false);
+  if (!since || needHouse) {
     const tapeCoins = await tapePinCoins();
-    const preview = await withShill((st) => {
+    await withShill((st) => {
       st.shill = ensureShill(st.shill);
-      const before = st.shill.pins.length;
       st.shill.pins = st.shill.pins.filter((p) => !p.house || !PIN_BLOCK.has(p.mint));
-      const stripped = st.shill.pins.length !== before;
-      const filled = fillHousePins(st.shill, tapeCoins);
-      return { dirty: stripped || filled };
-    }, false);
-    if (preview.dirty) await withShill((st) => st, true);
+      fillHousePins(st.shill, tapeCoins);
+    }, true);
   }
   const s = await withShill((st) => st, false);
   const book = ensureShill(s.shill);
