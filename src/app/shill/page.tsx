@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Check, CheckCheck, Pin, Reply, Send, Smile, Trophy } from "lucide-react";
+import Link from "next/link";
+import { ArrowLeft, Check, CheckCheck, Pin, Reply, Send, Smile, Trophy, X } from "lucide-react";
 import { BurstSticker } from "@/components/BurstSticker";
 import { fmtLeft } from "@/components/BoostBuy";
 import { CartoonPfp } from "@/components/CartoonPfp";
@@ -9,8 +10,6 @@ import { CircleSwap } from "@/components/CircleSwap";
 import { WalletConnect } from "@/components/WalletConnect";
 import { RankBadge } from "@/components/RankBadge";
 import { ProfileOverlay } from "@/components/ProfileOverlay";
-import { PumpLoop } from "@/components/PumpLoop";
-import { ShillMark } from "@/components/ShillMark";
 import { useOwner } from "@/lib/hooks";
 import { paySeatFromPhantom } from "@/lib/wallet/trading";
 import { SHILL_REACTS, SHILL_STICKERS, type ShillToken } from "@/lib/shill/types";
@@ -21,7 +20,6 @@ type Msg = {
   owner: string;
   kind: "text" | "sticker" | "media";
   text?: string;
-  media?: string;
   sticker?: string;
   replyTo?: string;
   reactions: Record<string, string[]>;
@@ -91,30 +89,60 @@ function fmtMc(n?: number) {
   return `$${n.toFixed(0)}`;
 }
 
-function TokenBubble({ token, compact }: { token: ShillToken; compact?: boolean }) {
+function TokenBubble({ token }: { token: ShillToken }) {
   return (
-    <div className={`flex items-center gap-2 rounded-2xl border border-acid/30 bg-acid/[0.08] ${compact ? "p-1.5" : "p-2"}`}>
+    <div className="mt-1 flex items-center gap-2 rounded-xl bg-black/20 px-2 py-1.5">
       {token.image ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={token.image} alt="" className="h-10 w-10 rounded-xl object-cover" />
+        <img src={token.image} alt="" className="h-9 w-9 rounded-lg object-cover" />
       ) : (
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-void font-display text-sm text-acid">
+        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-void font-display text-xs text-acid">
           {(token.symbol || "?").slice(0, 2)}
         </div>
       )}
       <div className="min-w-0">
-        <div className="truncate font-display text-sm text-ghost">${(token.symbol || "").replace(/^\$/, "")}</div>
-        <div className="truncate font-mono text-[10px] text-mute">
+        <div className="truncate text-[14px] font-semibold text-white">${(token.symbol || "").replace(/^\$/, "")}</div>
+        <div className="truncate font-mono text-[10px] text-white/60">
           {token.name}
           {token.mcUsd ? ` · ${fmtMc(token.mcUsd)}` : ""}
         </div>
-        <button
-          type="button"
-          className="font-mono text-[10px] text-acid"
-          onClick={() => navigator.clipboard.writeText(token.mint)}
-        >
-          copy CA
-        </button>
+      </div>
+      <button
+        type="button"
+        className="shrink-0 font-mono text-[10px] text-[#6ab3f3]"
+        onClick={() => navigator.clipboard.writeText(token.mint)}
+      >
+        copy
+      </button>
+    </div>
+  );
+}
+
+function Sheet({
+  open,
+  title,
+  onClose,
+  children,
+}: {
+  open: boolean;
+  title: string;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  if (!open) return null;
+  return (
+    <div className="absolute inset-0 z-30 flex items-end bg-black/55" onClick={onClose}>
+      <div
+        className="max-h-[78%] w-full overflow-y-auto rounded-t-3xl bg-[#17212b] pb-[env(safe-area-inset-bottom)]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-4 py-3">
+          <div className="text-[17px] font-semibold text-white">{title}</div>
+          <button type="button" onClick={onClose} className="flex h-9 w-9 items-center justify-center rounded-full text-white/70" aria-label="Close">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        <div className="px-4 pb-5">{children}</div>
       </div>
     </div>
   );
@@ -131,10 +159,12 @@ export default function ShillPage() {
   const [err, setErr] = useState("");
   const [pinMint, setPinMint] = useState("");
   const [pinBusy, setPinBusy] = useState(false);
+  const [sheet, setSheet] = useState<"pin" | "ranks" | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const hold = useRef<number>(0);
   const [peek, setPeek] = useState<string | null>(null);
   const [toast, setToast] = useState("");
+  const stickToBottom = useRef(true);
 
   const load = useCallback(async () => {
     const q = owner ? `?pubkey=${encodeURIComponent(owner)}` : "";
@@ -151,7 +181,7 @@ export default function ShillPage() {
 
   useEffect(() => {
     const el = scroller.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    if (el && stickToBottom.current) el.scrollTop = el.scrollHeight;
   }, [pack?.messages?.length]);
 
   async function act(body: Record<string, unknown>) {
@@ -169,6 +199,7 @@ export default function ShillPage() {
   async function send(extra?: Record<string, unknown>) {
     setBusy(true);
     setErr("");
+    stickToBottom.current = true;
     try {
       const sent = await act({ action: "chat", text, replyTo: reply?.id, ...extra });
       setText("");
@@ -207,6 +238,7 @@ export default function ShillPage() {
       if (!sig) throw new Error("Payment did not send.");
       await act({ action: "pin", mint: pinMint.trim(), signature: sig });
       setPinMint("");
+      setSheet(null);
       await load();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "pin failed");
@@ -221,12 +253,12 @@ export default function ShillPage() {
   const slots = pack?.pinSlots ?? 0;
   const nextFree = pack?.nextFreeAt || 0;
   const waitMin = Math.max(1, Math.ceil((nextFree - Date.now()) / 60_000));
-
   const you = pack?.you;
   const board = pack?.board || [];
+  const online = Math.max(board.length, Object.keys(pack?.profiles || {}).length, owner ? 1 : 0);
 
   return (
-    <main className="relative flex h-[100dvh] flex-col overflow-hidden bg-[#0e1621] pb-[calc(3.6rem+env(safe-area-inset-bottom))] md:h-[calc(100dvh-5.5rem)] md:pb-0">
+    <main className="fixed inset-0 z-40 flex flex-col bg-[#0e1621]">
       {peek && (
         <ProfileOverlay
           pubkey={peek}
@@ -236,320 +268,286 @@ export default function ShillPage() {
         />
       )}
       {toast && (
-        <div className="pointer-events-none fixed inset-x-0 top-20 z-[60] flex justify-center">
-          <div className="rounded-full border border-acid/50 bg-acid px-5 py-2 font-display text-lg text-void shadow-[0_0_30px_rgba(20,241,149,0.45)]">
-            {toast}
+        <div className="pointer-events-none absolute inset-x-0 top-16 z-[60] flex justify-center">
+          <div className="rounded-full bg-[#14f195] px-5 py-2 font-display text-base text-[#04000a]">{toast}</div>
+        </div>
+      )}
+
+      <header className="flex shrink-0 items-center gap-1 bg-[#17212b] px-1 pb-2 pt-[max(0.4rem,env(safe-area-inset-top))]">
+        <Link href="/" className="flex h-11 w-11 items-center justify-center text-white" aria-label="Back to home">
+          <ArrowLeft className="h-6 w-6" />
+        </Link>
+        <button type="button" className="min-w-0 flex-1 text-left" onClick={() => setSheet("ranks")}>
+          <div className="truncate text-[17px] font-semibold text-white">Shill Zone</div>
+          <div className="truncate text-[13px] text-[#8e9ba8]">{online ? `${online} online` : "group"}</div>
+        </button>
+        <button type="button" className="flex h-11 w-11 items-center justify-center text-[#8e9ba8]" onClick={() => setSheet("pin")} aria-label="Pin">
+          <Pin className="h-5 w-5" />
+        </button>
+        <button type="button" className="flex h-11 w-11 items-center justify-center text-[#8e9ba8]" onClick={() => setSheet("ranks")} aria-label="Ranks">
+          <Trophy className="h-5 w-5" />
+        </button>
+      </header>
+
+      {pins.length > 0 && (
+        <div className="shrink-0 border-b border-white/5 bg-[#17212b] px-2 py-1.5">
+          <div className="boost-rail">
+            {pins.map((p) => {
+              const ticker = (p.symbol || "").replace(/^\$/, "");
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  title="Copy CA"
+                  onClick={() => navigator.clipboard.writeText(p.mint)}
+                  className="boost-tile"
+                >
+                  {p.image ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={p.image} alt="" className="boost-tile-art" />
+                  ) : (
+                    <div className="boost-tile-art flex items-center justify-center font-display text-xs text-acid">
+                      {(ticker || "?").slice(0, 2)}
+                    </div>
+                  )}
+                  <span className="mt-1 block w-full truncate text-center text-[12px] font-semibold text-white">
+                    ${ticker || "TOKEN"}
+                  </span>
+                  <span className="stat-num block text-center text-[11px] text-[#6ab3f3]">{fmtLeft(Math.max(0, p.endsAt - Date.now()))}</span>
+                </button>
+              );
+            })}
           </div>
         </div>
       )}
-      <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col md:max-w-none md:flex-row">
-        <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-[#0e1621]">
-          <header className="flex items-center gap-3 bg-[#17212b] px-3 py-2 pt-[max(0.5rem,env(safe-area-inset-top))]">
-            {you ? (
-              <button type="button" onClick={() => owner && setPeek(owner)} className="shrink-0">
-                <CartoonPfp seed={owner || "solphia"} src={pfpSrc(owner || "", pack?.profiles)} className="h-10 w-10" />
-              </button>
-            ) : (
-              <ShillMark className="h-10 w-10 shrink-0" />
-            )}
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-[16px] font-semibold text-ghost">Shill Zone</div>
-              <div className="truncate text-[12px] text-mute">{you ? `${you.rank} ${you.title}` : "Online"}</div>
-            </div>
-            <PumpLoop />
-            {!owner && <WalletConnect />}
-          </header>
-          {board.length > 0 && (
-            <div className="flex gap-2 overflow-x-auto bg-[#17212b] px-3 py-2 md:hidden">
-              {board.slice(0, 8).map((row, i) => (
-                <button
-                  key={row.pubkey}
-                  type="button"
-                  onClick={() => setPeek(row.pubkey)}
-                  className="flex shrink-0 items-center gap-1.5 rounded-full border border-violet/25 bg-[#0e1621] px-2 py-1"
-                >
-                  <span className="font-mono text-[10px] text-mute">{i + 1}</span>
-                  <RankBadge rank={row.rank} size={22} />
-                  <span className="max-w-[7rem] truncate text-[11px] text-ghost">{row.username ? `@${row.username}` : `${row.pubkey.slice(0, 4)}…`}</span>
-                </button>
-              ))}
-            </div>
-          )}
-          {pins.length > 0 && (
-            <div className="bg-[#17212b] px-2 py-2">
-              <div className="boost-rail">
-                {pins.map((p) => {
-                  const ticker = (p.symbol || "").replace(/^\$/, "");
-                  return (
-                    <button
-                      key={p.id}
-                      type="button"
-                      title="Copy CA"
-                      onClick={() => navigator.clipboard.writeText(p.mint)}
-                      className="boost-tile"
-                    >
-                      {p.image ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={p.image} alt="" className="boost-tile-art" />
-                      ) : (
-                        <div className="boost-tile-art flex items-center justify-center font-display text-xs text-acid">
-                          {(ticker || "?").slice(0, 2)}
-                        </div>
-                      )}
-                      <span className="mt-1 block w-full truncate text-center text-[12px] font-semibold text-ghost">
-                        ${ticker || "TOKEN"}
-                      </span>
-                      <span className="stat-num block text-center text-[11px] text-acid">{fmtLeft(Math.max(0, p.endsAt - Date.now()))}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-          <div ref={scroller} className="shill-wallpaper min-h-0 flex-1 space-y-1 overflow-y-auto px-2 py-3" onClick={() => setPicker(null)}>
-            {msgs.map((m) => {
-              const mine = m.owner === owner;
-              const quoted = m.replyTo ? byId[m.replyTo] : null;
-              const reacts = Object.entries(m.reactions || {}).filter(([, pks]) => pks.length);
-              const seen = mine && Date.now() - m.at > 1600;
-              return (
-                <div key={m.id} className={`flex items-end gap-2 ${mine ? "flex-row-reverse" : ""}`}>
-                  <CartoonPfp
-                    seed={m.owner}
-                    src={pfpSrc(m.owner, pack?.profiles)}
-                    className="h-8 w-8 shrink-0"
-                    onClick={() => setPeek(m.owner)}
-                  />
-                  <div className={`relative max-w-[78%] ${mine ? "items-end" : "items-start"} flex flex-col`}>
-                    <div className="mb-0.5 flex items-center gap-1.5 font-mono text-[10px] text-mute">
-                      <button type="button" className="hover:text-acid" onClick={() => setPeek(m.owner)}>
-                        {nameOf(m.owner, pack?.profiles)}
-                      </button>
-                      {pack?.profiles?.[m.owner]?.role ? (
-                        <span className={`rounded-full px-1.5 py-[1px] text-[9px] ${pack.profiles[m.owner].role === "admin" ? "bg-blood/25 text-blood" : "bg-cyan/20 text-cyan"}`}>
-                          {pack.profiles[m.owner].role === "admin" ? "ADMIN" : "MOD"}
-                        </span>
-                      ) : (
-                        <span className="rounded-full bg-acid/15 px-1.5 py-[1px] text-[9px] text-acid">
-                          {rankOf(m.owner, pack?.profiles)}
-                        </span>
-                      )}
-                    </div>
-                    <div
-                      className={`relative max-w-[78vw] rounded-xl px-2.5 py-1.5 text-[15px] leading-[1.35] ${
-                        mine ? "rounded-br-sm bg-[#2b5278] text-white" : "rounded-bl-sm bg-[#182533] text-white"
-                      }`}
-                      onContextMenu={(e) => {
-                        e.preventDefault();
-                        setPicker(m.id);
-                      }}
-                      onDoubleClick={() => react(m.id, "❤️")}
-                      onTouchStart={() => {
-                        window.clearTimeout(hold.current);
-                        hold.current = window.setTimeout(() => setPicker(m.id), 450);
-                      }}
-                      onTouchEnd={() => window.clearTimeout(hold.current)}
-                      onTouchMove={() => window.clearTimeout(hold.current)}
-                    >
-                      {quoted && (
-                        <div className="mb-1 rounded-lg border-l-2 border-acid/60 bg-black/25 px-2 py-1 text-[11px] text-mute">
-                          {quoted.sticker || quoted.text || "photo"}
-                        </div>
-                      )}
-                      {m.kind === "sticker" && m.sticker && (
-                        <BurstSticker emoji={m.sticker} className="text-5xl leading-none" />
-                      )}
-                      {m.text && <div className="whitespace-pre-wrap break-words">{m.text}</div>}
-                      {m.token && (
-                        <div className="mt-2">
-                          <TokenBubble token={m.token} />
-                        </div>
-                      )}
-                    </div>
-                    {reacts.length > 0 && (
-                      <div className={`mt-1 flex flex-wrap gap-1 ${mine ? "justify-end" : "justify-start"}`}>
-                        {reacts.map(([emoji, pks]) => (
-                          <button
-                            key={emoji}
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              react(m.id, emoji);
-                            }}
-                            className={`inline-flex items-center gap-0.5 rounded-full border px-1.5 py-[2px] text-[13px] ${
-                              owner && pks.includes(owner) ? "border-acid/50 bg-acid/15" : "border-white/10 bg-[#12081c]"
-                            }`}
-                          >
-                            <span>{emoji}</span>
-                            {pks.length > 1 ? <span className="font-mono text-[10px] text-mute">{pks.length}</span> : null}
-                          </button>
-                        ))}
+
+      <div
+        ref={scroller}
+        className="shill-wallpaper min-h-0 flex-1 overflow-y-auto px-2 py-3"
+        onClick={() => setPicker(null)}
+        onScroll={(e) => {
+          const el = e.currentTarget;
+          stickToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+        }}
+      >
+        {msgs.map((m) => {
+          const mine = m.owner === owner;
+          const quoted = m.replyTo ? byId[m.replyTo] : null;
+          const reacts = Object.entries(m.reactions || {}).filter(([, pks]) => pks.length);
+          const seen = mine && Date.now() - m.at > 1600;
+          const sticker = m.kind === "sticker" && m.sticker;
+          return (
+            <div key={m.id} className={`mb-1.5 flex items-end gap-1.5 ${mine ? "flex-row-reverse" : ""}`}>
+              {!mine && (
+                <CartoonPfp seed={m.owner} src={pfpSrc(m.owner, pack?.profiles)} className="h-8 w-8 shrink-0" onClick={() => setPeek(m.owner)} />
+              )}
+              <div className={`flex max-w-[82%] flex-col ${mine ? "items-end" : "items-start"}`}>
+                {!mine && (
+                  <button type="button" className="mb-0.5 px-1 text-[13px] font-medium text-[#6ab3f3]" onClick={() => setPeek(m.owner)}>
+                    {nameOf(m.owner, pack?.profiles)}
+                    <span className="ml-1.5 font-mono text-[10px] text-white/40">{rankOf(m.owner, pack?.profiles)}</span>
+                  </button>
+                )}
+                {sticker ? (
+                  <button type="button" onClick={() => setPicker(m.id)} className="px-1">
+                    <BurstSticker emoji={m.sticker!} size={112} />
+                  </button>
+                ) : (
+                  <div
+                    className={`relative rounded-2xl px-2.5 py-1.5 text-[16px] leading-[1.35] text-white ${
+                      mine ? "rounded-br-md bg-[#2b5278]" : "rounded-bl-md bg-[#182533]"
+                    }`}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      setPicker(m.id);
+                    }}
+                    onDoubleClick={() => react(m.id, "❤️")}
+                    onTouchStart={() => {
+                      window.clearTimeout(hold.current);
+                      hold.current = window.setTimeout(() => setPicker(m.id), 450);
+                    }}
+                    onTouchEnd={() => window.clearTimeout(hold.current)}
+                    onTouchMove={() => window.clearTimeout(hold.current)}
+                  >
+                    {quoted && (
+                      <div className="mb-1 rounded-lg border-l-2 border-[#6ab3f3] bg-black/20 px-2 py-1 text-[12px] text-white/70">
+                        {quoted.sticker || quoted.text || "message"}
                       </div>
                     )}
-                    {picker === m.id && (
-                      <div className="z-20 mt-1 flex gap-1 rounded-full border border-violet/30 bg-[#12081c] px-2 py-1 shadow-lg">
-                        {SHILL_REACTS.map((emoji) => (
-                          <button key={emoji} type="button" className="text-lg leading-none" onClick={() => react(m.id, emoji)}>
-                            {emoji}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                    <div className="mt-1 flex items-center gap-2">
-                      <span className="font-mono text-[9px] text-mute">{when(m.at)}</span>
-                      {mine && (seen ? <CheckCheck className="h-3 w-3 text-acid" /> : <Check className="h-3 w-3 text-mute" />)}
-                      <button type="button" className="text-mute hover:text-acid" onClick={() => setReply(m)} title="Reply">
-                        <Reply className="h-3 w-3" />
-                      </button>
-                      {pack?.you?.staff && (
-                        <button
-                          type="button"
-                          className="text-[10px] text-mute hover:text-blood"
-                          onClick={() => act({ action: "delete", id: m.id }).then(() => load())}
-                        >
-                          ×
-                        </button>
-                      )}
+                    {m.text && <div className="whitespace-pre-wrap break-words">{m.text}</div>}
+                    {m.token && <TokenBubble token={m.token} />}
+                    <div className="mt-0.5 flex items-center justify-end gap-1">
+                      <span className="font-mono text-[11px] text-white/45">{when(m.at)}</span>
+                      {mine && (seen ? <CheckCheck className="h-3.5 w-3.5 text-[#6ab3f3]" /> : <Check className="h-3.5 w-3.5 text-white/45" />)}
                     </div>
                   </div>
-                </div>
-              );
-            })}
-            {(pack?.typing || []).length > 0 && (
-              <div className="font-mono text-[11px] text-acid">
-                {(pack?.typing || []).map((pk) => nameOf(pk, pack?.profiles)).join(", ")} typing…
+                )}
+                {reacts.length > 0 && (
+                  <div className={`mt-1 flex flex-wrap gap-1 ${mine ? "justify-end" : "justify-start"}`}>
+                    {reacts.map(([emoji, pks]) => (
+                      <button
+                        key={emoji}
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          react(m.id, emoji);
+                        }}
+                        className={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-[2px] text-[15px] ${
+                          owner && pks.includes(owner) ? "bg-[#2b5278]" : "bg-[#182533]"
+                        }`}
+                      >
+                        <BurstSticker emoji={emoji} size={18} />
+                        {pks.length > 1 ? <span className="font-mono text-[10px] text-white/70">{pks.length}</span> : null}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {picker === m.id && (
+                  <div className="z-20 mt-1 flex gap-1 rounded-full bg-[#17212b] px-2 py-1 shadow-lg">
+                    {SHILL_REACTS.map((emoji) => (
+                      <button key={emoji} type="button" className="px-0.5" onClick={() => react(m.id, emoji)}>
+                        <BurstSticker emoji={emoji} size={28} />
+                      </button>
+                    ))}
+                    <button type="button" className="px-1 text-white/50" onClick={() => setReply(m)} title="Reply">
+                      <Reply className="h-4 w-4" />
+                    </button>
+                    {pack?.you?.staff && (
+                      <button type="button" className="px-1 text-white/50" onClick={() => act({ action: "delete", id: m.id }).then(() => load())}>
+                        <X className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+        {(pack?.typing || []).length > 0 && (
+          <div className="px-2 font-mono text-[12px] text-[#8e9ba8]">
+            {(pack?.typing || []).map((pk) => nameOf(pk, pack?.profiles)).join(", ")} typing…
+          </div>
+        )}
+      </div>
+
+      <div className="shrink-0 bg-[#17212b] pb-[max(0.4rem,env(safe-area-inset-bottom))]">
+        {!owner ? (
+          <div className="flex items-center justify-between gap-3 px-3 py-3">
+            <p className="text-[14px] text-[#8e9ba8]">Connect to chat.</p>
+            <WalletConnect />
+          </div>
+        ) : (
+          <>
+            {reply && (
+              <div className="flex items-center justify-between border-b border-white/5 px-3 py-1.5 text-[13px] text-[#8e9ba8]">
+                <span className="truncate">
+                  Reply to {nameOf(reply.owner, pack?.profiles)}: {reply.text || reply.sticker || "message"}
+                </span>
+                <button type="button" onClick={() => setReply(null)} className="ml-2 text-white/60">
+                  <X className="h-4 w-4" />
+                </button>
               </div>
             )}
-          </div>
-          {!owner ? (
-            <div className="bg-[#17212b] p-4 text-center text-sm text-mute">Connect to chat.</div>
-          ) : (
-            <>
-              {reply && (
-                <div className="flex items-center justify-between bg-[#17212b] px-3 py-1.5 text-[12px] text-mute">
-                  <span>
-                    Replying to {nameOf(reply.owner, pack?.profiles)}: {reply.text || reply.sticker || "photo"}
-                  </span>
-                  <button type="button" onClick={() => setReply(null)}>
-                    ×
-                  </button>
-                </div>
-              )}
-              <form
-                className="flex items-end gap-2 bg-[#17212b] px-2 py-2"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  send();
+            <form
+              className="flex items-end gap-1.5 px-2 py-1.5"
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (text.trim() || stickers) send();
+              }}
+            >
+              <button type="button" className="mb-1 flex h-10 w-10 items-center justify-center text-[#8e9ba8]" onClick={() => setStickers((v) => !v)}>
+                <Smile className="h-6 w-6" />
+              </button>
+              <input
+                value={text}
+                onChange={(e) => {
+                  setText(e.target.value);
+                  act({ action: "typing" }).catch(() => {});
                 }}
-              >
-                <button type="button" className="text-mute hover:text-acid" onClick={() => setStickers((v) => !v)}>
-                  <Smile className="h-5 w-5" />
-                </button>
-                <input
-                  value={text}
-                  onChange={(e) => {
-                    setText(e.target.value);
-                    act({ action: "typing" }).catch(() => {});
-                  }}
-                  placeholder="Message"
-                  className="min-h-[40px] flex-1 rounded-2xl bg-[#242f3d] px-3 py-2 text-[15px] text-white outline-none"
-                />
-                <button type="submit" disabled={busy} className="rounded-full bg-[#2b5278] p-2.5 text-white disabled:opacity-40">
-                  <Send className="h-4 w-4" />
-                </button>
-              </form>
-              {stickers && (
-                <div className="flex flex-wrap gap-2 border-t border-violet/20 bg-[#17212b] px-3 py-2 text-2xl">
-                  {SHILL_STICKERS.map((s) => (
-                    <button key={s} type="button" onClick={() => send({ sticker: s, kind: "sticker" })}>
-                      <BurstSticker emoji={s} className="text-3xl" />
-                    </button>
-                  ))}
-                </div>
-              )}
-              {err && <p className="px-4 pb-2 text-sm text-blood">{err}</p>}
-            </>
-          )}
-        </section>
+                placeholder="Message"
+                className="mb-0.5 min-h-[40px] flex-1 rounded-2xl bg-[#242f3d] px-3.5 py-2 text-[16px] text-white outline-none"
+              />
+              <button type="submit" disabled={busy || !text.trim()} className="mb-1 flex h-10 w-10 items-center justify-center rounded-full bg-[#2b5278] text-white disabled:opacity-35">
+                <Send className="h-5 w-5" />
+              </button>
+            </form>
+            {stickers && (
+              <div className="grid grid-cols-6 gap-2 border-t border-white/5 px-3 py-3">
+                {SHILL_STICKERS.map((s) => (
+                  <button key={s} type="button" className="flex items-center justify-center" onClick={() => send({ sticker: s, kind: "sticker" })}>
+                    <BurstSticker emoji={s} size={52} />
+                  </button>
+                ))}
+              </div>
+            )}
+            {err && <p className="px-4 pb-2 text-sm text-[#ff6b6b]">{err}</p>}
+          </>
+        )}
+      </div>
 
-        <aside className="hidden w-[300px] shrink-0 flex-col gap-3 overflow-y-auto bg-[#0e1621] p-3 md:flex">
-          {you && (
+      <Sheet open={sheet === "pin"} title="Pin to the top" onClose={() => setSheet(null)}>
+        <p className="text-[14px] text-[#8e9ba8]">👀 Pin your project to the top of the chat. 0.2 SOL · 3 hours.</p>
+        <p className="mt-1 font-mono text-[12px] text-white/70">{slots > 0 ? `${slots} paid spots open` : `No paid spots · next in ${waitMin}m`}</p>
+        {owner ? (
+          <>
+            <input
+              value={pinMint}
+              onChange={(e) => setPinMint(e.target.value.trim())}
+              placeholder="Token CA"
+              className="mt-3 w-full rounded-xl bg-[#242f3d] px-3 py-2.5 font-mono text-[13px] text-white outline-none"
+            />
             <button
               type="button"
-              onClick={() => owner && setPeek(owner)}
-              className="rounded-3xl border border-acid/30 bg-gradient-to-br from-acid/15 to-violet/20 p-4 text-left"
+              disabled={pinBusy || !pinMint}
+              onClick={pin}
+              className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-full bg-[#14f195] py-2.5 text-[15px] font-semibold text-[#04000a] disabled:opacity-40"
             >
-              <div className="flex items-center gap-3">
-                <RankBadge rank={you.rank} size={56} />
-                <div className="min-w-0">
-                  <div className="font-mono text-[10px] tracking-[0.18em] text-acid">YOUR RANK</div>
-                  <div className="font-display text-2xl text-ghost">
-                    {you.rank} · {you.title}
-                  </div>
-                  <div className="font-mono text-[10px] text-mute">{you.need === 0 ? "Maxed" : `${you.need} XP to next`}</div>
-                </div>
-              </div>
-              <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-void">
-                <div className="h-full bg-acid" style={{ width: `${Math.round((you.pct || 0) * 100)}%` }} />
-              </div>
-              <p className="mt-2 text-[12px] text-mute">Launch. Chat. Invite. Swap. The badge on your PFP is the receipt.</p>
+              <Pin className="h-4 w-4" />
+              {pinBusy ? "Paying…" : "Pin · 0.2 SOL"}
             </button>
-          )}
-          <div className="rounded-3xl border border-violet/25 bg-void/50 p-4">
-            <div className="flex items-center gap-2 font-mono text-[10px] tracking-[0.18em] text-acid">
-              <Trophy className="h-3.5 w-3.5" />
-              TOP SHILLERS
-            </div>
-            <div className="mt-2 space-y-1.5">
-              {board.length === 0 && <p className="text-[12px] text-mute">Be first on the board. Drop a CA.</p>}
-              {board.map((row, i) => (
-                <button
-                  key={row.pubkey}
-                  type="button"
-                  onClick={() => setPeek(row.pubkey)}
-                  className="flex w-full items-center gap-2 rounded-xl px-1 py-1 text-left hover:bg-white/5"
-                >
-                  <span className="w-4 font-mono text-[11px] text-mute">{i + 1}</span>
-                  <RankBadge rank={row.rank} size={28} />
-                  <span className="min-w-0 flex-1 truncate text-sm text-ghost">{row.username ? `@${row.username}` : `${row.pubkey.slice(0, 4)}…`}</span>
-                  <span className="font-mono text-[10px] text-acid">{row.rank}</span>
-                </button>
-              ))}
-            </div>
+          </>
+        ) : (
+          <div className="mt-3">
+            <WalletConnect />
           </div>
-          <div className="rounded-3xl border border-acid/25 bg-acid/[0.06] p-4">
-            <div className="font-mono text-[10px] tracking-[0.22em] text-acid">👀 PIN · 0.2 SOL · 3H</div>
-            <p className="mt-1 text-sm text-mute">Pin your project to the top of the chat.</p>
-            <div className="mt-2 font-mono text-[11px] text-ghost">
-              {slots > 0 ? `${slots} spots open` : `No spots · next in ${waitMin}m`}
+        )}
+      </Sheet>
+
+      <Sheet open={sheet === "ranks"} title="Top shillers" onClose={() => setSheet(null)}>
+        {you && (
+          <button type="button" onClick={() => owner && setPeek(owner)} className="mb-4 flex w-full items-center gap-3 rounded-2xl bg-[#0e1621] p-3 text-left">
+            <RankBadge rank={you.rank} size={48} />
+            <div className="min-w-0">
+              <div className="text-[15px] font-semibold text-white">{you.rank} · {you.title}</div>
+              <div className="font-mono text-[11px] text-[#8e9ba8]">{you.need === 0 ? "Maxed" : `${you.need} XP to next`}</div>
             </div>
-            {owner ? (
-              <>
-                <input
-                  value={pinMint}
-                  onChange={(e) => setPinMint(e.target.value.trim())}
-                  placeholder="Token CA"
-                  className="mt-2 w-full rounded-xl border border-violet/25 bg-void px-3 py-2 font-mono text-[11px] text-ghost outline-none"
-                />
-                <button
-                  type="button"
-                  disabled={pinBusy || !pinMint}
-                  onClick={pin}
-                  className="btn-acid mt-2 inline-flex w-full items-center justify-center gap-2 rounded-full py-2 text-sm disabled:opacity-40"
-                >
-                  <Pin className="h-4 w-4" />
-                  {pinBusy ? "Paying…" : "Pin · 0.2 SOL"}
-                </button>
-              </>
-            ) : (
-              <div className="mt-3">
-                <WalletConnect />
-              </div>
-            )}
+          </button>
+        )}
+        <div className="space-y-1">
+          {board.length === 0 && <p className="text-[14px] text-[#8e9ba8]">Be first on the board. Drop a CA.</p>}
+          {board.map((row, i) => (
+            <button
+              key={row.pubkey}
+              type="button"
+              onClick={() => {
+                setSheet(null);
+                setPeek(row.pubkey);
+              }}
+              className="flex w-full items-center gap-2 rounded-xl px-1 py-1.5 text-left"
+            >
+              <span className="w-5 font-mono text-[12px] text-[#8e9ba8]">{i + 1}</span>
+              <RankBadge rank={row.rank} size={28} />
+              <span className="min-w-0 flex-1 truncate text-[15px] text-white">{row.username ? `@${row.username}` : `${row.pubkey.slice(0, 4)}…`}</span>
+              <span className="font-mono text-[11px] text-[#6ab3f3]">{row.rank}</span>
+            </button>
+          ))}
+        </div>
+        {owner && (
+          <div className="mt-4">
+            <CircleSwap owner={owner} />
           </div>
-          {owner && <CircleSwap owner={owner} />}
-        </aside>
-      </div>
+        )}
+      </Sheet>
     </main>
   );
 }

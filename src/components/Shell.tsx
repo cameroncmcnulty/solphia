@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense } from "react";
+import { Suspense, useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { Nav } from "./Nav";
 import { ParticleField } from "./ParticleField";
@@ -17,6 +17,21 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const path = usePathname();
   const isAdmin = path.startsWith("/admin");
   const isShill = path === "/shill" || path.startsWith("/shill/");
+
+  useEffect(() => {
+    if (!isShill) return;
+    const html = document.documentElement;
+    const body = document.body;
+    const prevH = html.style.overflow;
+    const prevB = body.style.overflow;
+    html.style.overflow = "hidden";
+    body.style.overflow = "hidden";
+    return () => {
+      html.style.overflow = prevH;
+      body.style.overflow = prevB;
+    };
+  }, [isShill]);
+
   return (
     <div className={`relative min-h-screen overflow-x-hidden ${isAdmin || isShill ? "" : "pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:pb-8"}`}>
       {!isAdmin && !isShill && <ParticleField />}
@@ -27,16 +42,16 @@ export function Shell({ children }: { children: React.ReactNode }) {
         </Suspense>
       )}
       <div className="relative z-10">
-        {!isAdmin && <div className={isShill ? "hidden md:block" : ""}><Nav /></div>}
+        {!isAdmin && !isShill && <Nav />}
         {children}
       </div>
-      <SiteFooter />
+      {!isShill && <SiteFooter />}
       <TosGate />
       <WalletKeepalive />
       <LiveRunner />
       <SeatRunner />
-      {!isAdmin && <HumanGate />}
-      {!isAdmin && <BottomNav />}
+      {!isAdmin && !isShill && <HumanGate />}
+      {!isAdmin && !isShill && <BottomNav />}
     </div>
   );
 }
