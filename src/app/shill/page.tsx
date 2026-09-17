@@ -154,8 +154,21 @@ function Sheet({
   );
 }
 
+function windowsBottomLift() {
+  if (typeof window === "undefined") return 0;
+  if (!/Windows/i.test(navigator.userAgent || "")) return 0;
+  const screenH = window.screen?.height || 0;
+  const availH = window.screen?.availHeight || 0;
+  const measured = Math.max(0, screenH - availH);
+  const outer = window.outerHeight || 0;
+  const fillsScreen = screenH > 0 && outer >= Math.min(screenH, availH || screenH) - 16;
+  if (!fillsScreen) return 12;
+  return Math.max(measured, 48);
+}
+
 export default function ShillPage() {
   const owner = useOwner();
+  const frame = useRef<HTMLElement>(null);
   const [pack, setPack] = useState<Pack | null>(null);
   const [text, setText] = useState("");
   const [reply, setReply] = useState<Msg | null>(null);
@@ -202,6 +215,34 @@ export default function ShillPage() {
     const t = setInterval(() => load(false).catch(() => {}), 1800);
     return () => clearInterval(t);
   }, [load]);
+
+  useEffect(() => {
+    const el = frame.current;
+    if (!el) return;
+    const fit = () => {
+      const vv = window.visualViewport;
+      const visH = Math.round(vv?.height || window.innerHeight);
+      const visTop = Math.round(vv?.offsetTop || 0);
+      const keyboard = visTop > 0 || visH < window.innerHeight - 80;
+      const lift = keyboard ? 0 : windowsBottomLift();
+      el.style.top = `${visTop}px`;
+      el.style.right = "0px";
+      el.style.left = "0px";
+      el.style.bottom = "auto";
+      el.style.height = `${Math.max(280, visH - lift)}px`;
+      el.style.setProperty("--shill-lift", `${lift}px`);
+      window.scrollTo(0, 0);
+    };
+    fit();
+    window.visualViewport?.addEventListener("resize", fit);
+    window.visualViewport?.addEventListener("scroll", fit);
+    window.addEventListener("resize", fit);
+    return () => {
+      window.visualViewport?.removeEventListener("resize", fit);
+      window.visualViewport?.removeEventListener("scroll", fit);
+      window.removeEventListener("resize", fit);
+    };
+  }, []);
 
   useEffect(() => {
     const el = scroller.current;
@@ -303,7 +344,7 @@ export default function ShillPage() {
   const online = Math.max(board.length, Object.keys(pack?.profiles || {}).length, owner ? 1 : 0);
 
   return (
-    <main className="fixed inset-0 z-40 bg-[#0b141a]">
+    <main ref={frame} className="fixed inset-x-0 top-0 z-40 bg-[#0b141a]">
       <div className="relative mx-auto grid h-full min-h-0 w-full max-w-[42rem] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden bg-[#0e1621] sm:max-w-[46rem] lg:border-x lg:border-white/5">
       <div>
       <header className="flex items-center gap-1 border-b border-acid/25 bg-gradient-to-r from-[#10261c] via-[#17212b] to-[#1a1630] px-1 pb-2 pt-[max(0.4rem,env(safe-area-inset-top))] shadow-[0_8px_24px_rgba(0,0,0,0.35)]">
