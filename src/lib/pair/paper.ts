@@ -537,40 +537,26 @@ export function tickPairBook(opts: {
     decision.action === "flatten" ||
     decision.action === "deploy" ||
     decision.action === "rebalance";
-  if (live && actionable) {
-    const prev = opts.book.pendingIntent;
-    const liveAction = decision.action as PairIntent["action"];
-    const same = prev && prev.action === liveAction && prev.reason === decision.reason && opts.now - prev.at < 90_000;
-    if (!same) {
-      const intent: PairIntent = {
-        action: liveAction,
-        from: decision.from,
-        to: decision.to,
-        clipUsd: decision.clipUsd,
-        reason: decision.reason,
-        at: opts.now,
-        solPct: decision.solPct,
-        asset: decision.asset,
-        pairId: decision.pairId,
-      };
-      opts.book.pendingIntent = intent;
-      pushTape(
-        opts.book,
-        tapeOf(
-          opts.now,
-          decision.action === "flatten" ? "flatten" : decision.action === "deploy" ? "deploy" : "trade",
-          opts.auto.liveDelegate
-            ? `Live · sending from server. ${decision.reason}`
-            : `Live · waiting for signature. ${decision.reason}`,
-          {
-            z: decision.z7,
-            ratio: decision.ratio,
-            sizeUsd: decision.clipUsd,
-            from: decision.from,
-            to: decision.to,
-          },
-        ),
-      );
+  if (live) {
+    if (actionable) {
+      const prev = opts.book.pendingIntent;
+      const liveAction = decision.action as PairIntent["action"];
+      const same = prev && prev.action === liveAction && prev.reason === decision.reason && opts.now - prev.at < 90_000;
+      if (!same) {
+        opts.book.pendingIntent = {
+          action: liveAction,
+          from: decision.from,
+          to: decision.to,
+          clipUsd: decision.clipUsd,
+          reason: decision.reason,
+          at: opts.now,
+          solPct: decision.solPct,
+          asset: decision.asset,
+          pairId: decision.pairId,
+        };
+      }
+    } else {
+      opts.book.pendingIntent = null;
     }
     markPair(opts.book, opts.prices);
     bumpCurve(opts.book, opts.now);

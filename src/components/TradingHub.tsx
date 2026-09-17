@@ -366,9 +366,6 @@ export function TradingHub() {
         {armed && delegated && (
           <p className="mt-2 font-mono text-sm text-acid">Live desk is on. Server signs. Close the tab or switch wallets.</p>
         )}
-        {armed && book?.pendingIntent && (
-          <p className="mt-2 font-mono text-sm text-acid">Clip going out. You can close the tab.</p>
-        )}
 
         <div className="mt-6 border-t border-violet/20 pt-5">
           {owner && tradePk ? (

@@ -1,9 +1,8 @@
 import { Connection, Keypair, Transaction, VersionedTransaction } from "@solana/web3.js";
-import { applyPairDecision, BOOK_TAPE_MAX, tapeOf } from "../pair/paper";
+import { applyPairDecision } from "../pair/paper";
 import { quoteBestRoute } from "../pair/jupiter";
 import { SOL_MINT, USDC_MINT } from "../pair/mints";
 import type { PairPrices } from "../pair/prices";
-import { pushBounded } from "../store";
 import type { Mind, PaperBook, PairIntent, TraderAccount } from "../types";
 import { decisionFromIntent } from "./fill";
 import { planIntentSwaps } from "./intent";
@@ -90,19 +89,10 @@ export async function executeIntentOnchain(opts: {
   return sig;
 }
 
-function noteFail(book: PaperBook, now: number, reason: string) {
-  if (!book.tape) book.tape = [];
-  pushBounded(
-    book.tape,
-    tapeOf(now, "skip", reason, {
-      from: book.pendingIntent?.from,
-      to: book.pendingIntent?.to,
-      sizeUsd: book.pendingIntent?.clipUsd,
-    }),
-    BOOK_TAPE_MAX,
-  );
-  book.lastAction = `skip · ${reason}`;
+function noteFail(book: PaperBook, _now: number, reason: string) {
+  book.lastAction = undefined;
   book.lastSkipReason = reason;
+  book.pendingIntent = null;
 }
 
 export async function fillLiveIntent(

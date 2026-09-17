@@ -56,26 +56,33 @@ export function publicBook(book: PaperBook | null | undefined) {
     winCount: b.winCount || 0,
     lossCount: b.lossCount || 0,
     open: positions.length,
-    trades: fills.filter((f) => f.side === "sell").length,
+    trades: fills.filter((f) => f.side === "sell" && onchainNote(f.reason)).length,
     positions,
-    fills: fills.slice(-BOOK_FILLS_MAX).reverse(),
+    fills: fills.filter((f) => onchainNote(f.reason)).slice(-BOOK_FILLS_MAX).reverse(),
     curve: Array.isArray(b.curve) ? b.curve.slice(-BOOK_CURVE_MAX) : [],
-    skipped: b.skipped || 0,
-    lastAction: liveClipAction(b.lastAction) ? b.lastAction : undefined,
+    skipped: 0,
+    lastAction: onchainNote(b.lastAction) ? b.lastAction : undefined,
     lastSkipReason: undefined,
     killed: Boolean(b.killed),
     pair: b.pair || { solQty: 0, spyxQty: 0, qqqxQty: 0, gldxQty: 0, usdcQty: start },
     tape: compactTape(b.tape)
-      .filter((row) => liveClipAction(row.action))
+      .filter((row) => onchainNote(row.reason) && liveClipAction(row.action))
       .slice(-BOOK_TAPE_MAX)
       .reverse(),
-    pendingIntent: b.pendingIntent || null,
+    pendingIntent: null,
   };
 }
 
 function liveClipAction(action?: string) {
   const a = (action || "").split("·")[0].trim().toLowerCase();
   return a === "trade" || a === "buy" || a === "sell" || a === "deploy" || a === "flatten" || a === "kill";
+}
+
+/** Real clips stamp an on-chain signature into the reason. Probe/paper rows do not. */
+function onchainNote(text?: string) {
+  if (!text) return false;
+  if (/^Live · (waiting|sending)/i.test(text)) return false;
+  return /·\s*[1-9A-HJ-NP-Za-km-z]{8}/.test(text);
 }
 
 function emptyFallback(): PaperBook {
