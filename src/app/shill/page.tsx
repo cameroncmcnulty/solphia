@@ -137,9 +137,9 @@ function Sheet({
 }) {
   if (!open) return null;
   return (
-    <div className="absolute inset-0 z-30 flex items-end bg-black/55" onClick={onClose}>
+    <div className="absolute inset-0 z-30 flex items-end justify-center bg-black/55 sm:items-center sm:p-6" onClick={onClose}>
       <div
-        className="max-h-[78%] w-full overflow-y-auto rounded-t-3xl bg-[#17212b] pb-[env(safe-area-inset-bottom)]"
+        className="max-h-[min(78%,36rem)] w-full overflow-y-auto rounded-t-3xl bg-[#17212b] pb-[env(safe-area-inset-bottom)] sm:max-w-lg sm:rounded-3xl sm:pb-4"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-4 py-3">
@@ -210,26 +210,46 @@ export default function ShillPage() {
     const body = document.body;
     const prev = {
       htmlOverflow: html.style.overflow,
+      htmlHeight: html.style.height,
       bodyOverflow: body.style.overflow,
+      bodyHeight: body.style.height,
       bodyPosition: body.style.position,
       bodyTop: body.style.top,
       bodyWidth: body.style.width,
     };
     html.style.overflow = "hidden";
+    html.style.height = "100%";
     body.style.overflow = "hidden";
-    body.style.position = "fixed";
-    body.style.top = "0";
-    body.style.width = "100%";
+    body.style.height = "100%";
+    window.scrollTo(0, 0);
+    const phone = () => window.matchMedia("(pointer: coarse)").matches && window.innerWidth < 900;
     const fit = () => {
       if (!el) return;
-      const vv = window.visualViewport;
-      const h = Math.round(vv?.height || window.innerHeight);
-      const top = Math.round(vv?.offsetTop || 0);
-      el.style.top = `${top}px`;
-      el.style.bottom = "auto";
-      el.style.height = `${h}px`;
       window.scrollTo(0, 0);
+      const vv = window.visualViewport;
+      const layoutH = window.innerHeight;
+      const visH = vv?.height ?? layoutH;
+      const visTop = vv?.offsetTop ?? 0;
+      const keyboard = phone() && visH < layoutH - 60;
+      if (!keyboard) {
+        el.style.top = "0px";
+        el.style.right = "0px";
+        el.style.bottom = "0px";
+        el.style.left = "0px";
+        el.style.height = "";
+        return;
+      }
+      el.style.top = `${Math.round(visTop)}px`;
+      el.style.left = "0px";
+      el.style.right = "0px";
+      el.style.bottom = "auto";
+      el.style.height = `${Math.round(visH)}px`;
     };
+    if (phone()) {
+      body.style.position = "fixed";
+      body.style.top = "0";
+      body.style.width = "100%";
+    }
     fit();
     window.visualViewport?.addEventListener("resize", fit);
     window.visualViewport?.addEventListener("scroll", fit);
@@ -239,7 +259,9 @@ export default function ShillPage() {
       window.visualViewport?.removeEventListener("scroll", fit);
       window.removeEventListener("resize", fit);
       html.style.overflow = prev.htmlOverflow;
+      html.style.height = prev.htmlHeight;
       body.style.overflow = prev.bodyOverflow;
+      body.style.height = prev.bodyHeight;
       body.style.position = prev.bodyPosition;
       body.style.top = prev.bodyTop;
       body.style.width = prev.bodyWidth;
@@ -348,10 +370,9 @@ export default function ShillPage() {
   return (
     <main
       ref={frame}
-      className="fixed inset-x-0 top-0 z-40 flex w-full justify-center overflow-hidden overscroll-none bg-[#0b141a]"
-      style={{ height: "100svh" }}
+      className="fixed inset-0 z-40 flex h-dvh w-full justify-center overflow-hidden overscroll-none bg-[#0b141a]"
     >
-      <div className="relative flex h-full w-full max-w-[42rem] flex-col overflow-hidden bg-[#0e1621] shadow-[0_0_80px_rgba(0,0,0,0.45)] sm:max-w-[46rem] lg:border-x lg:border-white/5">
+      <div className="relative flex h-full min-h-0 w-full max-w-[42rem] flex-col self-stretch overflow-hidden bg-[#0e1621] shadow-[0_0_80px_rgba(0,0,0,0.45)] sm:max-w-[46rem] lg:border-x lg:border-white/5">
       {peek && (
         <ProfileOverlay
           pubkey={peek}
@@ -591,7 +612,7 @@ export default function ShillPage() {
       </div>
 
       {openPin && (
-        <div className="absolute inset-0 z-40 flex items-end justify-center bg-black/55 p-3 sm:items-center" onClick={() => setOpenPin(null)}>
+        <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/55 p-3" onClick={() => setOpenPin(null)}>
           <div className="w-full max-w-sm rounded-3xl border border-acid/30 bg-[#17212b] p-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center gap-3">
               {openPin.image ? (

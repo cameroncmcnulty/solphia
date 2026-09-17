@@ -33,7 +33,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
   }, [isShill]);
 
   return (
-    <div className={`relative min-h-screen overflow-x-hidden ${isAdmin || isShill ? "" : "pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:pb-8"}`}>
+    <div className={`relative overflow-x-hidden ${isAdmin || isShill ? "h-dvh overflow-hidden" : "min-h-screen pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:pb-8"}`}>
       {!isAdmin && !isShill && <ParticleField />}
       {!isAdmin && !isShill && <div className="vignette" />}
       {!isAdmin && (
@@ -41,7 +41,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
           <ReferralCapture />
         </Suspense>
       )}
-      <div className="relative z-10">
+      <div className={`relative z-10 ${isShill ? "h-full" : ""}`}>
         {!isAdmin && !isShill && <Nav />}
         {children}
       </div>
