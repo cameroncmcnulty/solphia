@@ -39,6 +39,11 @@ export function displayMedia(url?: string | null): string {
   return `/api/media?u=${encodeURIComponent(raw)}`;
 }
 
+/** Public gateway URL for metadata URIs and Dexscreener. Not the /api/media proxy. */
+export function pinataPublicUrl(cid: string): string {
+  return `${GATEWAY}/${cid}`;
+}
+
 export function pinataConfigured(): boolean {
   const jwt = (process.env.PINATA_JWT || "").trim();
   const key = (process.env.PINATA_API_KEY || "").trim();
@@ -99,7 +104,7 @@ export async function pinBytes(
   const type = (mime || "image/jpeg").split(";")[0].trim() || "image/jpeg";
   const form = new FormData();
   const blob = new Blob([new Uint8Array(bytes)], { type });
-  const ext = type.includes("png") ? "png" : type.includes("webp") ? "webp" : "jpg";
+  const ext = type.includes("json") ? "json" : type.includes("png") ? "png" : type.includes("webp") ? "webp" : "jpg";
   form.append("file", blob, `${name.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 24) || "token"}.${ext}`);
   form.append("pinataMetadata", JSON.stringify({ name: `solphia-${name.slice(0, 24)}` }));
   try {
@@ -112,7 +117,7 @@ export async function pinBytes(
     const j = (await r.json().catch(() => ({}))) as { IpfsHash?: string };
     if (!r.ok || !j.IpfsHash) return null;
     const cid = j.IpfsHash;
-    return { cid, url: displayMedia(`${GATEWAY}/${cid}`) };
+    return { cid, url: pinataPublicUrl(cid) };
   } catch {
     return null;
   }

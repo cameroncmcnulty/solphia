@@ -2,7 +2,14 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { blankSnapshot } from "../lib/feeds/normalize";
 import { DEFAULT_SETTINGS } from "../lib/config";
-import { emptyState } from "../lib/store";
+import { emptyBook } from "../lib/auto";
+import { emptyState as blankState } from "../lib/store";
+
+function emptyState() {
+  const s = blankState();
+  s.paper = emptyBook(1000);
+  return s;
+}
 import { scoreToken } from "../lib/risk/engine";
 import { graduationRead, armLaunch, armMigrate } from "../lib/desk/grad";
 import { toxicFlow } from "../lib/desk/toxic";

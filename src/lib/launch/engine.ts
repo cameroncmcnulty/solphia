@@ -19,7 +19,7 @@ import {
   type CurveState,
 } from "./curve";
 import { socialHref } from "./links";
-import { imageOk, validateLaunchCreate } from "./validate";
+import { imageOk, storedImage, validateLaunchCreate } from "./validate";
 import type { LaunchBoost } from "./boost";
 import { ensureBoosts, tickBoosts } from "./boost";
 
@@ -487,6 +487,7 @@ export function createCoin(
     discord?: string;
     launchBuySol?: number;
     now?: number;
+    mint?: string;
   },
 ): { ok: true; coin: LaunchCoin } | { ok: false; error: string } {
   const issues = validateLaunchCreate(opts);
@@ -501,11 +502,14 @@ export function createCoin(
   if (book.coins.some((c) => c.symbol === symbol && c.status === "curve")) {
     return { ok: false, error: "ticker_taken" };
   }
-  const img = imageOk(opts.image);
+  const img = storedImage(opts.image);
   if (opts.image && !img) return { ok: false, error: "bad_image" };
   const launchBuy = Math.min(launchDevBuyCap(), Math.max(0, Number(opts.launchBuySol) || 0));
   const now = opts.now || Date.now();
-  const mint = `curve:${symbol}:${now.toString(36)}`;
+  const mint = opts.mint && isSolanaAddress(opts.mint) ? opts.mint : `curve:${symbol}:${now.toString(36)}`;
+  if (book.coins.some((c) => c.mint === mint)) {
+    return { ok: false, error: "mint_taken" };
+  }
   const creatorAcc = ensureAccount(book, opts.creator);
   const coin: LaunchCoin = {
     id: id("ln"),

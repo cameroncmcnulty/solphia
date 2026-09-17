@@ -50,6 +50,15 @@ export function imageOk(raw?: string): string {
   return s;
 }
 
+/** Data-URL upload or a public https image already pinned. */
+export function storedImage(raw?: string): string {
+  const data = imageOk(raw);
+  if (data) return data;
+  const s = (raw || "").trim();
+  if (/^https:\/\//i.test(s) && s.length <= 512) return s;
+  return "";
+}
+
 export function validateLaunchCreate(input: LaunchCreateInput): Partial<Record<LaunchField, string>> {
   const errors: Partial<Record<LaunchField, string>> = {};
   if (!input.creator || !walletOk(input.creator)) {

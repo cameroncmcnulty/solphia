@@ -1,4 +1,4 @@
-import { DEFAULT_AUTO, lockedAuto, bankrollUsd, maybeResizeBook, emptyBook } from "./auto";
+import { ARM_V, DEFAULT_AUTO, lockedAuto, bankrollUsd, maybeResizeBook, emptyBook } from "./auto";
 import { liveTradingEnabled } from "./liveFlag";
 import { publicMind } from "./mind/engine";
 import { tickPairBook } from "./pair/paper";
@@ -15,7 +15,6 @@ import { fillLiveIntent, MAX_LIVE_FILLS_PER_TICK } from "./live/execute";
 import { maybeRenewLiveSeats } from "./live/renew";
 import { liveSeatOk, levSeatOk } from "./access";
 import { leverageUnlocked } from "./leverage";
-import { treasuryAddress } from "./treasury";
 import type { FeedHealth, PaperBook } from "./types";
 import { estimateStoreBytes, lastKnownPinata, recordHealthSample } from "./health/probe";
 
@@ -40,7 +39,7 @@ export function publicBook(book: PaperBook | null | undefined) {
   const b = book || emptyFallback();
   const positions = Array.isArray(b.positions) ? b.positions : [];
   const fills = Array.isArray(b.fills) ? b.fills : [];
-  const start = Number(b.startingUsd) || 1000;
+  const start = Number.isFinite(Number(b.startingUsd)) ? Number(b.startingUsd) : 0;
   const equity = Number.isFinite(b.equityUsd) ? b.equityUsd : start;
   return {
     startingUsd: start,
@@ -72,25 +71,7 @@ export function publicBook(book: PaperBook | null | undefined) {
 }
 
 function emptyFallback(): PaperBook {
-  const now = Date.now();
-  return {
-    startingUsd: 1000,
-    startedAt: now,
-    cashUsd: 1000,
-    equityUsd: 1000,
-    realizedPnlUsd: 0,
-    feesPaidUsd: 0,
-    slippagePaidUsd: 0,
-    winCount: 0,
-    lossCount: 0,
-    positions: [],
-    fills: [],
-    curve: [{ t: now, equity: 1000 }],
-    skipped: 0,
-    killed: false,
-    pair: { solQty: 0, spyxQty: 0, qqqxQty: 0, gldxQty: 0, usdcQty: 1000 },
-    tape: [],
-  };
+  return emptyBook(0);
 }
 
 function round2(n: number) {
@@ -235,12 +216,15 @@ export async function runMarketTick(): Promise<{
     }
     for (const trader of hot) {
       const owner = trader.owner;
-      const seatOk = !treasuryAddress() || liveSeatOk(state, owner);
-      const liveOn = liveTradingEnabled() && seatOk;
+      const seatOk = liveSeatOk(state, owner);
+      const funded = (trader.depositedSol || 0) > 0.001;
+      const explicit = Boolean(trader.auto?.armed) && Number(trader.auto?.armV || 0) >= ARM_V;
+      const liveOn = liveTradingEnabled() && seatOk && funded && explicit && !trader.book.killed;
       trader.auto = lockedAuto({
         ...trader.auto,
         mode: "live",
-        armed: !trader.book.killed && liveOn,
+        armed: liveOn,
+        armV: liveOn ? ARM_V : 0,
         tradingPubkey: trader.auto?.tradingPubkey,
         liveDelegate: trader.auto?.liveDelegate,
         armedAt: trader.auto?.armedAt,

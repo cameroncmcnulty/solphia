@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { bankrollUsd, emptyTrader, maybeResizeBook, DEFAULT_AUTO } from "../lib/auto";
+import { ARM_V, bankrollUsd, emptyTrader, maybeResizeBook, DEFAULT_AUTO, lockedAuto } from "../lib/auto";
 
 describe("auto bankroll", () => {
-  it("uses the $1000 demo book when they have not deposited", () => {
-    assert.equal(bankrollUsd(0, 100), 1000);
-    assert.equal(bankrollUsd(0.0001, 100), 1000);
+  it("stays at zero until they deposit SOL — no demo paper book", () => {
+    assert.equal(bankrollUsd(0, 100), 0);
+    assert.equal(bankrollUsd(0.0001, 100), 0);
+    assert.equal(emptyTrader("D4uCNcBKAbG9NAkmhQg7pBiztuejNzbWrZDcZmFGut81").auto.armed, false);
+    assert.equal(emptyTrader("D4uCNcBKAbG9NAkmhQg7pBiztuejNzbWrZDcZmFGut81").book.startingUsd, 0);
   });
 
   it("sizes the book to deposited SOL once they fund the trading wallet", () => {
@@ -34,7 +36,9 @@ describe("auto bankroll", () => {
     });
     const same = maybeResizeBook(t.book, 500);
     assert.equal(same.fills.length, 1);
-    assert.equal(DEFAULT_AUTO.armed, true);
+    assert.equal(DEFAULT_AUTO.armed, false);
+    assert.equal(lockedAuto({ armed: true }).armed, false);
+    assert.equal(lockedAuto({ armed: true, armV: ARM_V }).armed, true);
     assert.equal(DEFAULT_AUTO.mode, "live");
     assert.equal(DEFAULT_AUTO.armedAt, undefined);
     assert.equal(DEFAULT_AUTO.style, "scalp");

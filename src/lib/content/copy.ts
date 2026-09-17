@@ -73,7 +73,7 @@ const JOB =
 const HEADLINES: Record<Layout, string[]> = {
   face: ["She watches the tape", "Your SOL. Her night shift.", "The face of the desk", "Calm. Then a clip."],
   desk: ["SOL vs S&P, Nasdaq, gold", "Five sleeves. One home.", "Official xStocks only", "The book is USDC."],
-  story: ["Add SOL. She runs.", "Connect once. No popups.", "Paper first. Then live.", "She sits when nothing moved."],
+  story: ["Add SOL. She runs.", "Connect once. No popups.", "Backtest first. Then live.", "She sits when nothing moved."],
   tape: ["When it stretches, she clips", "A quiet range. Then 1%.", "Mean revert. Not a knife.", "The short tape just spoke."],
   split: ["Watch the stretch", "SOL dumped. Gold held.", "She fades the gap", "Chart in one eye. Pair in the other."],
   sleeves: ["Split the bag. Wait.", "20% each. Fire the stretched one.", "USDC is home.", "Gold sleeve for bad days."],
@@ -82,7 +82,7 @@ const HEADLINES: Record<Layout, string[]> = {
   session: ["Cash hours hit different", "After 4pm this is not New York", "Weekend gold still moves", "She knows the session."],
   kill: ["KILL flattens her.", "One switch. Back to dry powder.", "You stay in charge.", "Pause. Withdraw. Done."],
   pairs: ["Ten pairs. Nothing else.", "USDC / gold is a trade.", "Not a memecoin menu.", "Official rails only."],
-  curve: ["Quiet compounding", "The line is the point", "Fees already in the mark", "Paper so the PnL isn’t a fairy tale."],
+  curve: ["Quiet compounding", "The line is the point", "Fees already in the mark", "Backtest so the PnL isn’t a fairy tale."],
 };
 
 const SUBS = [

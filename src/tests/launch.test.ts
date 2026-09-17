@@ -120,6 +120,17 @@ describe("fair launch book", () => {
     assert.equal(r.coin.freezeAuthority, "revoked");
   });
 
+  it("keeps a real Solana mint when the pad confirms on-chain", () => {
+    const book = emptyLaunchBook();
+    const mint = "So11111111111111111111111111111111111111112";
+    const r = createCoin(book, { creator: A, name: "Onchain Fox", symbol: "OFOX", mint });
+    assert.equal(r.ok, true);
+    if (!r.ok) return;
+    assert.equal(r.coin.mint, mint);
+    const dup = createCoin(book, { creator: A, name: "Copy", symbol: "COPY", mint });
+    assert.equal(dup.ok, false);
+  });
+
   it("locks authorities, stores socials, and lets the creator buy at launch", () => {
     const book = emptyLaunchBook();
     const r = createCoin(book, {

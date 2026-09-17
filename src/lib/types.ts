@@ -331,6 +331,8 @@ export interface AppUser {
 export interface AutoSettings {
   armed: boolean;
   armedAt?: number;
+  /** 2+ means they pressed Start after paper-off. Stale Redis armed flags do not count. */
+  armV?: number;
   mode: "paper" | "live";
   allocationPct: number;
   style: PairStyle;

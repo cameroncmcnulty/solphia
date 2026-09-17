@@ -121,7 +121,7 @@ export function TradingHub() {
         fetch("/api/auto", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ owner, tradingPubkey: tpk, auto: { armed: true, mode: "live" } }),
+          body: JSON.stringify({ owner, tradingPubkey: tpk }),
         }).then(() => refreshAuto(owner));
       } catch {
         refreshAuto(owner);
@@ -134,11 +134,6 @@ export function TradingHub() {
     const id = setInterval(() => refreshAuto(owner), 12_000);
     return () => clearInterval(id);
   }, [owner]);
-
-  useEffect(() => {
-    if (!owner || delegated || book?.killed) return;
-    ensureLive();
-  }, [owner, delegated, book?.killed]);
 
   useEffect(() => {
     if (!armed) return;
@@ -154,9 +149,18 @@ export function TradingHub() {
       body: JSON.stringify({ owner, auto: partial }),
     });
     const j = await r.json();
-    setAuto(j.auto);
-    setPaper(j.paper);
+    if (j.auto) setAuto(j.auto);
+    if (j.paper) setPaper(j.paper);
     setDelegated(Boolean(j.liveDelegate || j.auto?.liveDelegate));
+    if (!r.ok) {
+      const err = String(j.error || "");
+      if (err === "need_seat") setMsg("Pay the SOL seat first. She stays off until then.");
+      else if (err === "need_sol") setMsg("Fund the trading wallet with SOL, then press Start.");
+      else if (err === "live_paused") setMsg("Live desk is paused.");
+      else setMsg(j.error || "Could not arm.");
+      return false;
+    }
+    return true;
   }
 
   async function ensureLive() {
@@ -240,8 +244,9 @@ export function TradingHub() {
   const fills = book?.fills || [];
   const pnlPct = book ? book.pnlPct : 0;
   const pnlUsd = book ? book.equityUsd - book.startingUsd : 0;
-  const uptime = book?.startedAt ? fmtDur(now - book.startedAt) : auto?.armedAt ? fmtDur(now - auto.armedAt) : "on";
-  const status = book?.killed ? "STOPPED" : "RUNNING";
+  const uptime = armed && auto?.armedAt ? fmtDur(now - auto.armedAt) : "off";
+  const status = book?.killed ? "STOPPED" : armed ? "RUNNING" : "OFF";
+  const canStart = Boolean(seat?.liveSeat || seat?.founder) && bal > 0.001;
   const halted = book?.haltReason && (book.haltedUntil || 0) > Date.now();
   const spyxQty = book?.pair?.spyxQty ?? pair?.spyxQty ?? 0;
   const qqqxQty = book?.pair?.qqqxQty ?? pair?.qqqxQty ?? 0;
@@ -258,8 +263,8 @@ export function TradingHub() {
           <p className="font-mono text-[11px] tracking-[0.28em] text-violet">USDC · S&P 500 · NASDAQ · GOLD</p>
           <h1 className="mt-1 font-display text-3xl leading-none text-ghost sm:text-4xl md:text-6xl">Automate</h1>
           <p className="mt-3 max-w-xl text-base text-mute sm:text-lg">
-            Connect, fund the trading wallet, leave her running. She scalps tokenized S&P, Nasdaq, and gold from USDC on
-            the live desk.
+            She stays off until you pay the SOL seat, fund the trading wallet, and press Start. No paper book. The
+            backtest on the home page is the proof.
           </p>
         </div>
         <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-row sm:items-center sm:gap-3">
@@ -269,20 +274,30 @@ export function TradingHub() {
           >
             <WalletConnect />
           </div>
-          {book?.killed ? (
+          {!armed || book?.killed ? (
             <button
               type="button"
+              disabled={busy}
               onClick={async () => {
-                await patch({ armed: true, mode: "live" });
-                await ensureLive();
+                if (!owner) return setMsg("Connect Phantom first.");
+                if (!canStart) {
+                  setMsg(
+                    seat?.liveSeat || seat?.founder
+                      ? "Fund the trading wallet with SOL, then press Start."
+                      : "Pay the SOL seat first. She stays off until then.",
+                  );
+                  return;
+                }
+                const ok = await patch({ armed: true, mode: "live" });
+                if (ok) await ensureLive();
               }}
-              className="btn-acid col-span-1 inline-flex min-h-[48px] w-full items-center justify-center rounded-full px-4 py-3 text-sm sm:min-h-[56px] sm:w-auto sm:px-8 sm:text-lg"
+              className="btn-acid col-span-1 inline-flex min-h-[48px] w-full items-center justify-center rounded-full px-4 py-3 text-sm sm:min-h-[56px] sm:w-auto sm:px-8 sm:text-lg disabled:opacity-40"
             >
               START
             </button>
           ) : (
             <div className="btn-on col-span-1 inline-flex min-h-[48px] w-full items-center justify-center rounded-full px-4 py-3 text-sm sm:min-h-[56px] sm:w-auto sm:px-8 sm:text-lg">
-              {delegated ? "RUNNING" : armed ? "STARTING" : "ON"}
+              {delegated ? "RUNNING" : "STARTING"}
             </div>
           )}
           <button
@@ -297,9 +312,9 @@ export function TradingHub() {
       </header>
 
       <ol className="mt-5 grid gap-3 sm:grid-cols-3">
-        <How n="1" t="Connect" d="Your wallet is login. We never hold a key." />
-        <How n="2" t="Move SOL" d="Connected wallet ↔ trading wallet. Back up that key." />
-        <How n="3" t="Leave her on" d="The server signs 24/7. Close the tab. Stop flattens and pauses." />
+        <How n="1" t="Pay SOL" d="0.1 SOL seat (0.15 for 2×/3×). That is the on-switch." />
+        <How n="2" t="Fund her" d="Move SOL into the trading wallet. Back up that key." />
+        <How n="3" t="Press Start" d="She stays off until you do. Stop flattens and pauses." />
       </ol>
 
       <div className="mt-5 rounded-2xl border border-blood/40 bg-blood/10 px-4 py-3 text-sm text-ghost">
@@ -313,7 +328,8 @@ export function TradingHub() {
             <h2 className="mt-1 font-display text-3xl text-ghost md:text-4xl">What she holds</h2>
           </div>
           <div className="font-mono text-[12px] text-mute">
-            {status} {delegated ? "· live desk" : armed ? "· watching" : live ? "· prices live" : ""} · {uptime}
+            {status}
+            {armed ? (delegated ? " · live desk" : " · starting") : live ? " · prices live" : ""} · {uptime}
           </div>
         </div>
         <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-3">
@@ -334,7 +350,9 @@ export function TradingHub() {
           <Mini k="Trades" v={String(book?.trades ?? 0)} />
         </div>
         <p className="mt-4 text-sm leading-relaxed text-mute">
-          {(owner && book?.lastAction) || pair?.reason || book?.lastAction || "Waiting on prices…"}
+          {armed
+            ? (owner && book?.lastAction) || pair?.reason || book?.lastAction || "Waiting on prices…"
+            : "Off. Pay the SOL seat, fund the trading wallet, then press Start."}
         </p>
         {delegated && (
           <p className="mt-2 font-mono text-sm text-acid">Live desk is on. Server signs. Close the tab or switch wallets.</p>
@@ -351,7 +369,6 @@ export function TradingHub() {
               tradeBal={bal}
               onDone={() => {
                 refreshAuto(owner);
-                ensureLive();
               }}
             />
           ) : (
@@ -471,23 +488,31 @@ export function TradingHub() {
 
         <div className="panel rounded-2xl p-5">
           <div className="font-mono text-[10px] tracking-[0.22em] text-violet">ACTIVITY</div>
-          <h2 className="mt-1 font-display text-2xl text-ghost">{armed ? "What she’s doing" : "Preview"}</h2>
+          <h2 className="mt-1 font-display text-2xl text-ghost">{armed ? "What she’s doing" : "Activity"}</h2>
           <div className="mt-4 max-h-[28rem] space-y-2 overflow-y-auto">
-            {tape.length === 0 &&
+            {armed &&
+              tape.length === 0 &&
               fills.slice(0, 12).map((f: any) => (
                 <TapeRow key={f.id} action={f.side} reason={f.reason} at={f.at} extra={money(f.sizeUsd)} />
               ))}
-            {tape.map((row: any) => (
-              <TapeRow
-                key={row.id}
-                action={row.action}
-                reason={row.reason}
-                at={row.at}
-                extra={row.sizeUsd ? money(row.sizeUsd) : row.from && row.to && row.from !== "none" ? `${row.from} → ${row.to}` : ""}
-              />
-            ))}
-            {!tape.length && !fills.length && (
-              <p className="text-sm text-mute">{loading ? "Loading…" : "No decisions yet."}</p>
+            {armed &&
+              tape.map((row: any) => (
+                <TapeRow
+                  key={row.id}
+                  action={row.action}
+                  reason={row.reason}
+                  at={row.at}
+                  extra={row.sizeUsd ? money(row.sizeUsd) : row.from && row.to && row.from !== "none" ? `${row.from} → ${row.to}` : ""}
+                />
+              ))}
+            {(!armed || (!tape.length && !fills.length)) && (
+              <p className="text-sm text-mute">
+                {loading
+                  ? "Loading…"
+                  : armed
+                    ? "No clips yet."
+                    : "No live clips. The backtest on the home page is the proof."}
+              </p>
             )}
           </div>
         </div>

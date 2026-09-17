@@ -105,13 +105,13 @@ describe("SOL/USDT desk rules", () => {
       v: 4000,
     }));
     const h1 = series(Array.from({ length: 50 }, () => 100), 2);
-    const d = decideSol(m15, h1, emptyBook(), Date.now());
+    const d = decideSol(m15, h1, emptyBook(1000), Date.now());
     assert.equal(d.ok, false);
     assert.match(d.reason, /spike|ATR/i);
   });
 
   it("refuses when daily goal is already hit", () => {
-    const book = emptyBook();
+    const book = emptyBook(1000);
     book.fills.push({
       id: "f",
       mint: "So11111111111111111111111111111111111111112",
@@ -138,7 +138,7 @@ describe("SOL/USDT desk rules", () => {
   });
 
   it("counts only enter-sol fills as today's entries", () => {
-    const book = emptyBook();
+    const book = emptyBook(1000);
     book.fills.push({
       id: "a",
       mint: "x",
@@ -180,7 +180,7 @@ describe("SOL/USDT desk rules", () => {
   });
 
   it("does not open when there is no setup, and never uses a sub-0.5% stop on a fill", () => {
-    const book = emptyBook();
+    const book = emptyBook(1000);
     const m15 = series(Array.from({ length: 80 }, () => 100 + Math.random() * 0.05));
     const h1 = series(Array.from({ length: 50 }, () => 100), 2);
     applySolTick(book, m15, h1, Date.now());

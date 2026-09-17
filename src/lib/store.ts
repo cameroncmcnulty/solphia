@@ -1,7 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { DEFAULT_SETTINGS } from "./config";
-import { emptyBook, emptyTrader } from "./auto";
+import { emptyBook, emptyTrader, lockedAuto } from "./auto";
 import { emptyLaunchBook, mergeLaunch, slimLaunch, type LaunchBook } from "./launch/engine";
 import { emptyLab, mergeLab } from "./desk/shadow";
 import { emptyMind, mergeMind } from "./mind/engine";
@@ -464,13 +464,10 @@ export async function enrollPaperBot(owner: string): Promise<TraderAccount> {
   const existing = state.traders[owner] || (await loadTrader(owner));
   if (existing) {
     state.traders[owner] = existing;
-    if (!existing.book.killed && existing.auto) existing.auto.armed = existing.auto.mode === "live" ? Boolean(existing.auto.armed) : true;
-    await saveTrader(existing);
+    if (existing.auto) existing.auto = lockedAuto({ ...existing.auto, armed: Boolean(existing.auto.armed) });
     return existing;
   }
-  const t = emptyTrader(owner);
-  await saveTrader(t);
-  return t;
+  return emptyTrader(owner);
 }
 
 export async function deleteTrader(owner: string): Promise<void> {

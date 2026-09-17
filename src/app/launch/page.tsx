@@ -383,7 +383,7 @@ export default function LaunchPage() {
     return () => window.clearTimeout(t);
   }, [isSwap]);
 
-  function launchToken() {
+  async function launchToken() {
     const issues = validateLaunchCreate({
       creator: owner || "",
       name,
@@ -402,18 +402,103 @@ export default function LaunchPage() {
       return;
     }
     createErr.ok();
-    act({
-      action: "create",
-      name,
-      symbol,
-      blurb,
-      image,
-      website,
-      x,
-      telegram,
-      discord,
-      launchBuySol: devBuy,
-    });
+    if (!owner) {
+      createErr.fail({ wallet: "Connect your wallet to launch." });
+      return;
+    }
+    setBusy(true);
+    setMsg("");
+    setErr("");
+    try {
+      const { Keypair, Transaction } = await import("@solana/web3.js");
+      const { encodeTx } = await import("@/lib/token/mint");
+      const mint = Keypair.generate();
+      setMsg("Building the mint on Solana…");
+      const prep = await fetch("/api/launch", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          action: "prepare",
+          pubkey: owner,
+          mint: mint.publicKey.toBase58(),
+          name,
+          symbol,
+          blurb,
+          image,
+          website,
+          x,
+          telegram,
+          discord,
+          launchBuySol: devBuy,
+        }),
+      });
+      const pj = await prep.json();
+      if (!prep.ok || !Array.isArray(pj.txs) || !pj.txs.length) {
+        const code = typeof pj.error === "string" ? pj.error : "";
+        const message = pj.message || launchError(code) || "Could not build the mint.";
+        const field = launchCodeToField(code);
+        if (field !== "form") createErr.fail({ [field]: message } as Partial<Record<LaunchField, string>>, message);
+        else createErr.fail({}, message);
+        throw new Error(message);
+      }
+      const sigs: string[] = [];
+      for (let i = 0; i < pj.txs.length; i++) {
+        setMsg(`Sign tx ${i + 1} of ${pj.txs.length} in Phantom…`);
+        const raw = Uint8Array.from(atob(String(pj.txs[i])), (c) => c.charCodeAt(0));
+        const tx = Transaction.from(raw);
+        if (i === 0) tx.partialSign(mint);
+        sigs.push(await signAndSendPhantom(encodeTx(tx)));
+      }
+      setMsg("Confirming the mint…");
+      const r = await fetch("/api/launch", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          action: "confirm",
+          pubkey: owner,
+          mint: mint.publicKey.toBase58(),
+          sigs,
+          name,
+          symbol,
+          blurb,
+          image: pj.image || image,
+          website,
+          x,
+          telegram,
+          discord,
+          launchBuySol: devBuy,
+          uri: pj.uri,
+        }),
+      });
+      const j = await r.json();
+      if (!r.ok) {
+        const code = typeof j.error === "string" ? j.error : "";
+        const message = j.message || launchError(code) || "Mint landed but the pad could not list it yet.";
+        createErr.fail({}, message);
+        throw new Error(message);
+      }
+      if (j.coin) {
+        setOpen(j.coin);
+        setCoins((prev) => [j.coin, ...prev.filter((c) => c.id !== j.coin.id)]);
+      }
+      await Promise.all([refreshPad(), refreshTape()]);
+      createErr.ok();
+      setName("");
+      setSymbol("");
+      setBlurb("");
+      setImage("");
+      setWebsite("");
+      setX("");
+      setTelegram("");
+      setDiscord("");
+      setDevBuy(0);
+      setTab("tape");
+      setMsg(`Live on Solana. CA ${mint.publicKey.toBase58()}. Mint and freeze are locked.`);
+    } catch (e) {
+      if (!createErr.banner) setErr(e instanceof Error ? e.message : "launch failed");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function act(body: Record<string, unknown>) {
@@ -512,6 +597,11 @@ export default function LaunchPage() {
       <div className="relative z-10 mx-auto max-w-6xl px-4 pt-6 md:px-8 md:pt-10">
         <p className="font-mono text-[11px] tracking-[0.28em] text-acid">{isSwap ? "SWAP" : "LAUNCHPAD"}</p>
         <h1 className="mt-2 font-display text-4xl text-ghost sm:text-5xl">{isSwap ? "Discover. Swap." : "Launch a token."}</h1>
+        {!isSwap && (
+          <p className="mt-3 max-w-xl text-sm text-mute">
+            Phantom creates a live SPL mint on Solana. Supply lands in your wallet. Mint and freeze are revoked.
+          </p>
+        )}
 
         <div className={`mt-8 grid gap-5 ${isSwap ? "" : "lg:grid-cols-[minmax(280px,0.72fr)_minmax(0,1.28fr)]"}`}>
           {!isSwap && (
@@ -695,9 +785,10 @@ export default function LaunchPage() {
                     onClick={launchToken}
                     className="btn-acid min-h-[48px] rounded-full px-6 disabled:opacity-40"
                   >
-                    {busy ? "Launching…" : "Launch"}
+                    {busy ? "Launching…" : "Launch on Solana"}
                   </button>
                 </div>
+                <p className="mt-2 text-xs text-mute">Two Phantom prompts: create the mint, then seed supply and lock authorities.</p>
                 <FieldError error={createErr.errors.wallet} />
                 <div className="mt-3">
                   <FormAlert error={createErr.banner} />

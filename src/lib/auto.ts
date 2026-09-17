@@ -1,10 +1,12 @@
 import type { AutoSettings, PaperBook, TraderAccount } from "./types";
-import { PAPER_STARTING_USD } from "./config";
 import { clampLev, SPOT_LEVERAGE, type Lev } from "./leverage";
 
 /** Locked knobs. The hub does not expose these — scalp, normal band, 60m cooldown. */
+export const ARM_V = 2;
+
 export const DEFAULT_AUTO: AutoSettings = {
-  armed: true,
+  armed: false,
+  armV: 0,
   mode: "live",
   allocationPct: 0.88,
   style: "scalp",
@@ -21,10 +23,12 @@ export const DEFAULT_AUTO: AutoSettings = {
 
 /** Production settings: live only. Backtests are separate. */
 export function lockedAuto(partial?: Partial<AutoSettings>): AutoSettings {
+  const armV = Number(partial?.armV || 0) >= ARM_V ? ARM_V : 0;
   return {
     ...DEFAULT_AUTO,
     mode: "live",
-    armed: partial?.armed !== false,
+    armed: Boolean(partial?.armed) && armV >= ARM_V,
+    armV,
     armedAt: partial?.armedAt,
     tradingPubkey: partial?.tradingPubkey,
     liveDelegate: Boolean(partial?.liveDelegate),
@@ -32,7 +36,7 @@ export function lockedAuto(partial?: Partial<AutoSettings>): AutoSettings {
   };
 }
 
-export function emptyBook(startingUsd = PAPER_STARTING_USD): PaperBook {
+export function emptyBook(startingUsd = 0): PaperBook {
   const now = Date.now();
   return {
     startingUsd,
@@ -58,16 +62,16 @@ export function emptyTrader(owner: string): TraderAccount {
   return {
     owner,
     depositedSol: 0,
-    auto: lockedAuto({ armed: true, armedAt: Date.now() }),
-    book: emptyBook(),
+    auto: lockedAuto({ armed: false }),
+    book: emptyBook(0),
     updatedAt: Date.now(),
   };
 }
 
-/** Size a personal book to deposited SOL, or the demo $1,000 if they have not funded yet. */
+/** Size a personal book to deposited SOL. Zero until they fund — no demo paper book. */
 export function bankrollUsd(depositedSol: number, solUsd: number): number {
   if (depositedSol > 0.001 && solUsd > 0) return Math.round(depositedSol * solUsd * 100) / 100;
-  return PAPER_STARTING_USD;
+  return 0;
 }
 
 export function maybeResizeBook(book: PaperBook, targetUsd: number): PaperBook {

@@ -15,7 +15,6 @@ import { setUsername } from "@/lib/launch/username";
 import { launchError } from "@/lib/launch/errors";
 import { IMAGE_DATA_MAX } from "@/lib/launch/validate";
 import { lastPairPrices } from "@/lib/tick";
-import { enrollPaperBot } from "@/lib/store";
 import { creditRank, publicRank } from "@/lib/rank/engine";
 
 export const dynamic = "force-dynamic";
@@ -143,14 +142,6 @@ export async function POST(req: NextRequest) {
 
   if (!out || !("ok" in out) || !out.ok) {
     return fail((out as { error?: string })?.error || "failed");
-  }
-
-  if (b.action === "hello") {
-    try {
-      await enrollPaperBot(b.pubkey);
-    } catch {
-      /* launch bind still counts */
-    }
   }
 
   const s = await withLaunch((st) => st, false);

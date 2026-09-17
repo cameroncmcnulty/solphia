@@ -2,7 +2,14 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { closePartial, closePosition, openPaperBuy, tickPaper } from "../lib/paper/engine";
 import { tokenPriceUsd } from "../lib/paper/price";
-import { emptyState } from "../lib/store";
+import { emptyBook } from "../lib/auto";
+import { emptyState as blankState } from "../lib/store";
+
+function emptyState() {
+  const s = blankState();
+  s.paper = emptyBook(1000);
+  return s;
+}
 import { blankSnapshot } from "../lib/feeds/normalize";
 import { applyFee } from "../lib/risk/engine";
 

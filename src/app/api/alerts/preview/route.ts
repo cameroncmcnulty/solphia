@@ -9,7 +9,7 @@ export async function GET() {
     at: Date.now(),
     kind: "migration",
     title: "MIGRATION PEPECAT",
-    body: "Organic curve 91% · safety 81 · Solphia would paper-buy $42 from the $1,000 book.",
+    body: "Organic curve 91% · safety 81.",
     mint: "CRAMvzDsSpXYsFpcoDr6vFLJMBeftez1E7277xwPpump",
     score: 81,
     strategy: "migration_snipe",
