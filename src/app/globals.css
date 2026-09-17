@@ -217,7 +217,7 @@ body {
 
 .shill-wallpaper {
   background-color: #071018;
-  background-image: url("/shill-wallpaper.png?v=3");
+  background-image: url("/shill-wallpaper.svg");
   background-repeat: no-repeat;
   background-position: center center;
   background-size: cover;
@@ -251,16 +251,16 @@ body {
   z-index: 0;
   background: conic-gradient(from 0deg, rgba(20, 241, 149, 0.0), rgba(20, 241, 149, 0.35), rgba(153, 69, 255, 0.0), rgba(255, 210, 74, 0.3), rgba(20, 241, 149, 0));
   border-radius: 50%;
-  animation: tg-spin 1.1s linear both;
+  animation: tg-spin 2.4s linear infinite;
   opacity: 0.7;
 }
-.tg-rocket .tg-face { animation: tg-fly 0.85s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.tg-rocket .tg-face { animation: tg-fly-loop 1.35s ease-in-out infinite; }
 .tg-bit-flame {
   width: 7px;
   height: 10px;
   background: linear-gradient(#ffb020, #ff4d2e);
   transform: rotate(calc(var(--i) * 18deg - 40deg)) translateY(28px);
-  animation: tg-ember 0.7s ease-out both;
+  animation: tg-ember 0.9s ease-out infinite;
   animation-delay: calc(var(--i) * 40ms);
 }
 .tg-fire .tg-face { animation: tg-flicker 0.9s ease-in-out both infinite; }
@@ -272,16 +272,16 @@ body {
   animation-delay: calc(var(--i) * 80ms);
   left: calc(38% + var(--i) * 4%);
 }
-.tg-gem .tg-face { animation: tg-spin-in 0.7s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.tg-gem .tg-face { animation: tg-gem-loop 1.6s ease-in-out infinite; }
 .tg-bit-spark {
   width: 4px;
   height: 10px;
   background: #80eaff;
-  animation: tg-spark 0.7s ease-out both;
+  animation: tg-spark 1.1s ease-out infinite;
   animation-delay: calc(var(--i) * 35ms);
   transform: rotate(calc(var(--i) * 45deg)) translateY(-34px);
 }
-.tg-hop .tg-face { animation: tg-bounce 0.75s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.tg-hop .tg-face { animation: tg-bounce 0.9s cubic-bezier(0.22, 1, 0.36, 1) infinite; }
 .tg-crown .tg-face { animation: tg-bob 1.4s ease-in-out both infinite; }
 .tg-bit-gold {
   width: 5px;
@@ -291,54 +291,79 @@ body {
   animation-delay: calc(var(--i) * 90ms);
   left: calc(30% + var(--i) * 7%);
 }
-.tg-disco .tg-face { animation: tg-spin 0.9s linear both; }
-.tg-party .tg-face { animation: tg-pop-big 0.7s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.tg-disco .tg-face { animation: tg-spin 1.4s linear infinite; }
+.tg-party .tg-face { animation: tg-party-loop 1.1s ease-in-out infinite; }
 .tg-bit-confetti {
   width: 6px;
   height: 3px;
   background: hsl(calc(var(--i) * 36), 90%, 60%);
-  animation: tg-confetti 0.8s ease-out both;
+  animation: tg-confetti 1.2s ease-out infinite;
   animation-delay: calc(var(--i) * 30ms);
   transform: rotate(calc(var(--i) * 36deg)) translateY(-30px);
 }
-.tg-cash .tg-face { animation: tg-drop 0.7s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.tg-cash .tg-face { animation: tg-cash-loop 1.3s ease-in-out infinite; }
 .tg-bit-bill {
   width: 10px;
   height: 6px;
   background: #14f195;
-  animation: tg-fall 0.85s ease-out both;
+  animation: tg-fall 1.2s ease-out infinite;
   animation-delay: calc(var(--i) * 50ms);
   left: calc(28% + var(--i) * 8%);
 }
 .tg-brain .tg-face { animation: tg-pulse 1.1s ease-in-out both infinite; }
-.tg-salute .tg-face { animation: tg-snap 0.5s ease-out both; }
+.tg-salute .tg-face { animation: tg-salute-loop 1.2s ease-in-out infinite; }
 .tg-eyes .tg-face { animation: tg-look 1.6s ease-in-out both infinite; }
-.tg-heart .tg-face { animation: tg-beat 0.85s ease-in-out both; }
+.tg-heart .tg-face { animation: tg-beat 0.85s ease-in-out infinite; }
 .tg-bit-miniheart {
   width: 8px;
   height: 8px;
   background: #ff4d6d;
   border-radius: 50% 50% 50% 0;
   transform: rotate(-45deg);
-  animation: tg-rise 0.9s ease-out both;
+  animation: tg-rise 1.1s ease-out infinite;
   animation-delay: calc(var(--i) * 70ms);
   left: calc(32% + var(--i) * 8%);
 }
-.tg-laugh .tg-face { animation: tg-wobble 0.55s ease-in-out both; }
-.tg-up .tg-face { animation: tg-pop-big 0.5s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.tg-laugh .tg-face { animation: tg-wobble 0.7s ease-in-out infinite; }
+.tg-up .tg-face { animation: tg-up-loop 1s ease-in-out infinite; }
 .tg-bit-burst {
   width: 4px;
   height: 4px;
   background: #14f195;
-  animation: tg-spark 0.55s ease-out both;
+  animation: tg-spark 1s ease-out infinite;
   transform: rotate(calc(var(--i) * 60deg)) translateY(-28px);
 }
-.tg-pop .tg-face { animation: tg-pop-big 0.4s ease-out both; }
+.tg-pop .tg-face { animation: tg-pulse 1.2s ease-in-out infinite; }
 
 @keyframes tg-fly {
   0% { transform: translate3d(0, 28px, 0) scale(0.55) rotate(-18deg); opacity: 0; }
   55% { transform: translate3d(0, -14px, 0) scale(1.12) rotate(8deg); opacity: 1; }
   100% { transform: translate3d(0, 0, 0) scale(1) rotate(0); }
+}
+@keyframes tg-fly-loop {
+  0%, 100% { transform: translate3d(0, 5px, 0) rotate(-8deg); }
+  50% { transform: translate3d(0, -11px, 0) rotate(8deg); }
+}
+@keyframes tg-gem-loop {
+  0%, 100% { transform: rotate(-12deg) scale(1); }
+  50% { transform: rotate(12deg) scale(1.08); }
+}
+@keyframes tg-party-loop {
+  0%, 100% { transform: rotate(-8deg) scale(1); }
+  50% { transform: rotate(8deg) scale(1.12); }
+}
+@keyframes tg-cash-loop {
+  0%, 100% { transform: translateY(0) rotate(-6deg); }
+  50% { transform: translateY(6px) rotate(6deg); }
+}
+@keyframes tg-salute-loop {
+  0%, 100% { transform: rotate(0); }
+  40% { transform: rotate(16deg) translateX(-4px); }
+  70% { transform: rotate(-4deg); }
+}
+@keyframes tg-up-loop {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-7px) scale(1.08); }
 }
 @keyframes tg-ember { 0% { opacity: 0; transform: rotate(calc(var(--i) * 18deg - 40deg)) translateY(8px) scale(0.4); } 40% { opacity: 1; } 100% { opacity: 0; transform: rotate(calc(var(--i) * 18deg - 40deg)) translateY(42px) scale(0.2); } }
 @keyframes tg-flicker { 0%, 100% { transform: scale(1) rotate(-3deg); } 50% { transform: scale(1.14) rotate(4deg); } }

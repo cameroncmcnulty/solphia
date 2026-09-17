@@ -97,16 +97,18 @@ async function tapePinCoins() {
 export async function GET(req: NextRequest) {
   const pubkey = req.nextUrl.searchParams.get("pubkey") || "";
   const since = Number(req.nextUrl.searchParams.get("since") || 0);
-  const tapeCoins = await tapePinCoins();
-  const preview = await withShill((st) => {
-    st.shill = ensureShill(st.shill);
-    const before = st.shill.pins.length;
-    st.shill.pins = st.shill.pins.filter((p) => !p.house || !PIN_BLOCK.has(p.mint));
-    const stripped = st.shill.pins.length !== before;
-    const filled = fillHousePins(st.shill, tapeCoins);
-    return { dirty: stripped || filled };
-  }, false);
-  if (preview.dirty) await withShill((st) => st, true);
+  if (!since) {
+    const tapeCoins = await tapePinCoins();
+    const preview = await withShill((st) => {
+      st.shill = ensureShill(st.shill);
+      const before = st.shill.pins.length;
+      st.shill.pins = st.shill.pins.filter((p) => !p.house || !PIN_BLOCK.has(p.mint));
+      const stripped = st.shill.pins.length !== before;
+      const filled = fillHousePins(st.shill, tapeCoins);
+      return { dirty: stripped || filled };
+    }, false);
+    if (preview.dirty) await withShill((st) => st, true);
+  }
   const s = await withShill((st) => st, false);
   const book = ensureShill(s.shill);
   const now = Date.now();

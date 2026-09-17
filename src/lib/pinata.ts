@@ -7,6 +7,27 @@ const PIN_URL = "https://api.pinata.cloud/pinning/pinFileToIPFS";
 const USAGE_URL = "https://api.pinata.cloud/data/userPinnedDataTotal";
 const GATEWAY = (process.env.PINATA_GATEWAY || "https://gateway.pinata.cloud/ipfs").replace(/\/$/, "");
 
+const DIRECT_IMG = [
+  "dd.dexscreener.com",
+  "cdn.dexscreener.com",
+  "image.solanatracker.io",
+  "ipfs.io",
+  "cloudflare-ipfs.com",
+  "nftstorage.link",
+  "arweave.net",
+  "shdw-drive.genesysgo.net",
+];
+
+function directImage(raw: string): boolean {
+  try {
+    const host = new URL(raw).hostname.toLowerCase();
+    if (host.endsWith(".mypinata.cloud") || host.endsWith(".ipfs.nftstorage.link")) return true;
+    return DIRECT_IMG.some((d) => host === d || host.endsWith(`.${d}`));
+  } catch {
+    return false;
+  }
+}
+
 /** Same-origin proxy so Pinata/IPFS images actually render in the app. */
 export function displayMedia(url?: string | null): string {
   const raw = (url || "").trim();
@@ -14,6 +35,7 @@ export function displayMedia(url?: string | null): string {
   if (raw.startsWith("data:image/")) return raw;
   if (raw.startsWith("/api/media")) return raw;
   if (!/^https?:\/\//i.test(raw)) return raw;
+  if (directImage(raw)) return raw;
   return `/api/media?u=${encodeURIComponent(raw)}`;
 }
 

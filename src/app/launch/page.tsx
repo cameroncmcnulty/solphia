@@ -255,6 +255,7 @@ export default function LaunchPage() {
   const [caBusy, setCaBusy] = useState(false);
   const [caErr, setCaErr] = useState("");
   const [lookedMint, setLookedMint] = useState<string | null>(null);
+  const bootMint = useRef(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const devPct = buySupplyPct(emptyCurve(), devBuy);
 
@@ -369,6 +370,18 @@ export default function LaunchPage() {
       setCaBusy(false);
     }
   }
+
+  useEffect(() => {
+    if (!isSwap || bootMint.current) return;
+    const mint = new URLSearchParams(window.location.search).get("mint") || "";
+    if (!mint || !isSolanaAddress(mint)) return;
+    bootMint.current = true;
+    setCaQuery(mint);
+    const t = window.setTimeout(() => {
+      searchMint(mint).catch(() => {});
+    }, 500);
+    return () => window.clearTimeout(t);
+  }, [isSwap]);
 
   function launchToken() {
     const issues = validateLaunchCreate({

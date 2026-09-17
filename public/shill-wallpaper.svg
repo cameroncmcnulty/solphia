@@ -1,0 +1,130 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 1200" preserveAspectRatio="xMidYMid slice">
+  <rect width="800" height="1200" fill="#071018"/>
+  <g fill="none" stroke="#7fd9c4" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" opacity="0.55">
+    <path d="M70 70l18 42 8-28 22 8-28 14 10 26z"/>
+    <circle cx="170" cy="92" r="16"/>
+    <text x="170" y="97" text-anchor="middle" fill="#7fd9c4" stroke="none" font-size="9" font-family="ui-monospace,monospace">SOL</text>
+    <circle cx="250" cy="80" r="22"/>
+    <circle cx="242" cy="74" r="3"/><circle cx="258" cy="74" r="3"/>
+    <path d="M236 88c6 8 22 8 28 0"/>
+    <path d="M340 58c12 0 22 14 22 28 0 18-16 30-28 38-12-8-28-20-28-38 0-14 10-28 22-28z"/>
+    <path d="M430 72c18 0 18 28 0 28s-18-28 0-28z"/>
+    <path d="M500 110l40-28"/>
+    <path d="M500 110l12-4 4-12"/>
+    <path d="M620 64c20 8 36-4 40-16" stroke-linecap="round"/>
+    <path d="M590 88l48 0"/>
+    <text x="614" y="82" text-anchor="middle" fill="#7fd9c4" stroke="none" font-size="13" font-family="cursive">to the moon</text>
+    <path d="M80 180c18 0 28 22 14 36-10 10-28 6-34-8-4-12 6-28 20-28z"/>
+    <path d="M70 196c8 10 24 10 32 0"/>
+    <path d="M200 200l14 24 14-24-14 8z"/>
+    <path d="M280 168l12 38 6-24 20 6-24 12 8 24z"/>
+    <path d="M400 190c16 0 24 18 12 30-10 8-26 4-30-8-4-10 4-22 18-22z"/>
+    <circle cx="392" cy="186" r="3"/><circle cx="408" cy="186" r="3"/>
+    <path d="M388 198c8 6 16 6 24 0"/>
+    <path d="M392 178l-6-8M408 178l6-8"/>
+    <circle cx="510" cy="200" r="18"/>
+    <text x="510" y="205" text-anchor="middle" fill="#7fd9c4" stroke="none" font-size="9" font-family="ui-monospace,monospace">SPHA</text>
+    <path d="M600 188c8-16 28-16 36 0 4 10-2 22-18 28-16-6-22-18-18-28z"/>
+    <path d="M700 170l18 12-18 12-18-12z"/>
+    <path d="M90 300l8-18 8 18-20-6 16-12"/>
+    <circle cx="180" cy="310" r="20"/>
+    <circle cx="173" cy="304" r="2.5"/><circle cx="187" cy="304" r="2.5"/>
+    <path d="M170 316c6 6 14 6 20 0"/>
+    <path d="M168 296l-8-10M192 296l8-10"/>
+    <path d="M280 290c14 0 22 16 10 28-8 8-24 4-28-8-2-10 6-20 18-20z"/>
+    <path d="M400 320l14 36 6-22 18 6-22 12 8 22z"/>
+    <circle cx="520" cy="300" r="14"/>
+    <circle cx="514" cy="296" r="2"/><circle cx="526" cy="296" r="2"/>
+    <path d="M512 306c5 4 11 4 16 0"/>
+    <path d="M620 280c10 0 16 12 8 20-6 6-16 4-20-6-2-8 4-14 12-14z"/>
+    <circle cx="720" cy="310" r="20"/>
+    <circle cx="713" cy="304" r="2.5"/><circle cx="727" cy="304" r="2.5"/>
+    <path d="M710 316c6 6 14 6 20 0"/>
+    <path d="M70 430c16 0 24 18 12 30-8 8-24 4-28-8-2-10 6-22 16-22z"/>
+    <path d="M180 410l12 38 6-24 20 6-24 12 8 24z"/>
+    <circle cx="300" cy="430" r="16"/>
+    <text x="300" y="435" text-anchor="middle" fill="#7fd9c4" stroke="none" font-size="8" font-family="ui-monospace,monospace">SOL</text>
+    <path d="M390 400h28v10h-8v10h-12v-10h-8z"/>
+    <path d="M390 400l14-8 14 8"/>
+    <path d="M500 420c12-4 24 8 16 20-10 8-24 2-24-8 0-8 4-10 8-12z"/>
+    <path d="M600 400l6 20 8-16 10 22 8-28"/>
+    <path d="M700 390l14 40 6-26 18 8-26 12 10 24z"/>
+    <path d="M80 540c18 0 28 22 14 36-10 10-28 6-34-8-4-12 6-28 20-28z"/>
+    <path d="M70 556c8 10 24 10 32 0"/>
+    <path d="M200 530l12 38 6-24 20 6-24 12 8 24z"/>
+    <path d="M320 560c16 0 24 18 12 30-10 8-26 4-30-8-4-10 4-22 18-22z"/>
+    <circle cx="312" cy="556" r="3"/><circle cx="328" cy="556" r="3"/>
+    <path d="M308 568c8 6 16 6 24 0"/>
+    <path d="M312 548l-6-8M328 548l6-8"/>
+    <circle cx="440" cy="550" r="16"/>
+    <text x="440" y="555" text-anchor="middle" fill="#7fd9c4" stroke="none" font-size="8" font-family="ui-monospace,monospace">SOL</text>
+    <path d="M540 530l40-20"/>
+    <path d="M540 530l10-4 4-10"/>
+    <circle cx="660" cy="560" r="22"/>
+    <circle cx="652" cy="554" r="3"/><circle cx="668" cy="554" r="3"/>
+    <path d="M646 568c8 8 20 8 28 0"/>
+    <path d="M90 670l8-18 8 18-20-6 16-12"/>
+    <path d="M180 650c18 0 18 28 0 28s-18-28 0-28z"/>
+    <circle cx="280" cy="680" r="20"/>
+    <circle cx="273" cy="674" r="2.5"/><circle cx="287" cy="674" r="2.5"/>
+    <path d="M270 686c6 6 14 6 20 0"/>
+    <path d="M268 666l-8-10M292 666l8-10"/>
+    <path d="M400 650l14 24 14-24-14 8z"/>
+    <path d="M520 670c10 0 16 12 8 20-6 6-16 4-20-6-2-8 4-14 12-14z"/>
+    <circle cx="620" cy="680" r="18"/>
+    <text x="620" y="685" text-anchor="middle" fill="#7fd9c4" stroke="none" font-size="8" font-family="ui-monospace,monospace">SPHA</text>
+    <path d="M720 650c18 0 28 22 14 36-10 10-28 6-34-8-4-12 6-28 20-28z"/>
+    <path d="M80 790l12 38 6-24 20 6-24 12 8 24z"/>
+    <circle cx="200" cy="810" r="16"/>
+    <text x="200" y="815" text-anchor="middle" fill="#7fd9c4" stroke="none" font-size="8" font-family="ui-monospace,monospace">SOL</text>
+    <path d="M300 800l6 20 8-16 10 22 8-28"/>
+    <path d="M430 780c16 0 24 18 12 30-10 8-26 4-30-8-4-10 4-22 18-22z"/>
+    <circle cx="422" cy="776" r="3"/><circle cx="438" cy="776" r="3"/>
+    <path d="M418 788c8 6 16 6 24 0"/>
+    <path d="M500 810c12 0 18 14 8 22-8 6-20 4-24-8-2-10 6-14 16-14z"/>
+    <circle cx="620" cy="790" r="20"/>
+    <circle cx="613" cy="784" r="2.5"/><circle cx="627" cy="784" r="2.5"/>
+    <path d="M610 796c6 6 14 6 20 0"/>
+    <path d="M720 800l14 40 6-26 18 8-26 12 10 24z"/>
+    <circle cx="90" cy="930" r="18"/>
+    <text x="90" y="935" text-anchor="middle" fill="#7fd9c4" stroke="none" font-size="8" font-family="ui-monospace,monospace">SPHA</text>
+    <circle cx="190" cy="940" r="20"/>
+    <circle cx="183" cy="934" r="2.5"/><circle cx="197" cy="934" r="2.5"/>
+    <path d="M180 946c6 6 14 6 20 0"/>
+    <path d="M300 910c18 0 28 22 14 36-10 10-28 6-34-8-4-12 6-28 20-28z"/>
+    <path d="M400 940c16 0 24 18 12 30-10 8-26 4-30-8-4-10 4-22 18-22z"/>
+    <circle cx="392" cy="936" r="3"/><circle cx="408" cy="936" r="3"/>
+    <path d="M388 948c8 6 16 6 24 0"/>
+    <path d="M392 928l-6-8M408 928l6-8"/>
+    <circle cx="530" cy="940" r="20"/>
+    <circle cx="523" cy="934" r="2.5"/><circle cx="537" cy="934" r="2.5"/>
+    <path d="M520 946c6 6 14 6 20 0"/>
+    <circle cx="680" cy="950" r="22"/>
+    <path d="M668 948c8 10 16 10 24 0"/>
+    <path d="M90 1080h22v8h-6v8h-10v-8h-6z"/>
+    <path d="M90 1080l11-7 11 7"/>
+    <path d="M180 1060l12 38 6-24 20 6-24 12 8 24z"/>
+    <path d="M320 1080c16 0 24 18 12 30-10 8-26 4-30-8-4-10 4-22 18-22z"/>
+    <circle cx="312" cy="1076" r="3"/><circle cx="328" cy="1076" r="3"/>
+    <path d="M308 1088c8 6 16 6 24 0"/>
+    <path d="M312 1068l-6-8M328 1068l6-8"/>
+    <circle cx="440" cy="1080" r="20"/>
+    <circle cx="433" cy="1074" r="2.5"/><circle cx="447" cy="1074" r="2.5"/>
+    <path d="M430 1086c6 6 14 6 20 0"/>
+    <circle cx="560" cy="1090" r="16"/>
+    <path d="M680 1060c20 8 36-4 40-16"/>
+    <path d="M650 1084h48"/>
+    <text x="674" y="1078" text-anchor="middle" fill="#7fd9c4" stroke="none" font-size="13" font-family="cursive">to the moon</text>
+  </g>
+  <g fill="#7fd9c4" opacity="0.35">
+    <circle cx="120" cy="140" r="1.6"/><circle cx="360" cy="150" r="1.4"/><circle cx="640" cy="130" r="1.8"/>
+    <circle cx="40" cy="360" r="1.5"/><circle cx="760" cy="380" r="1.6"/><circle cx="140" cy="500" r="1.3"/>
+    <circle cx="470" cy="480" r="1.7"/><circle cx="40" cy="720" r="1.4"/><circle cx="760" cy="740" r="1.5"/>
+    <circle cx="130" cy="860" r="1.6"/><circle cx="500" cy="880" r="1.3"/><circle cx="740" cy="1020" r="1.5"/>
+    <path d="M150 250l4 0M152 248l0 4" stroke="#7fd9c4" stroke-width="1.2"/>
+    <path d="M560 250l4 0M562 248l0 4" stroke="#7fd9c4" stroke-width="1.2"/>
+    <path d="M240 620l4 0M242 618l0 4" stroke="#7fd9c4" stroke-width="1.2"/>
+    <path d="M580 620l4 0M582 618l0 4" stroke="#7fd9c4" stroke-width="1.2"/>
+    <path d="M360 980l4 0M362 978l0 4" stroke="#7fd9c4" stroke-width="1.2"/>
+  </g>
+</svg>

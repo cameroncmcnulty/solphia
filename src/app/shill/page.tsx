@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Check, CheckCheck, Pin, Reply, Send, Smile, Trophy, X } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ArrowDownUp, ArrowLeft, Check, CheckCheck, Reply, Rocket, Send, Smile, Trophy, X } from "lucide-react";
 import { BurstSticker } from "@/components/BurstSticker";
 import { fmtLeft } from "@/components/BoostBuy";
 import { CartoonPfp } from "@/components/CartoonPfp";
@@ -150,6 +151,8 @@ function Sheet({
 
 export default function ShillPage() {
   const owner = useOwner();
+  const router = useRouter();
+  const frame = useRef<HTMLElement>(null);
   const [pack, setPack] = useState<Pack | null>(null);
   const [text, setText] = useState("");
   const [reply, setReply] = useState<Msg | null>(null);
@@ -160,24 +163,57 @@ export default function ShillPage() {
   const [pinMint, setPinMint] = useState("");
   const [pinBusy, setPinBusy] = useState(false);
   const [sheet, setSheet] = useState<"pin" | "ranks" | null>(null);
+  const [openPin, setOpenPin] = useState<PinRow | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const hold = useRef<number>(0);
+  const lastAt = useRef(0);
   const [peek, setPeek] = useState<string | null>(null);
   const [toast, setToast] = useState("");
   const stickToBottom = useRef(true);
 
-  const load = useCallback(async () => {
-    const q = owner ? `?pubkey=${encodeURIComponent(owner)}` : "";
-    const r = await fetch(`/api/shill${q}`, { cache: "no-store" });
+  const load = useCallback(async (full = false) => {
+    const since = !full && lastAt.current ? lastAt.current : 0;
+    const q = new URLSearchParams();
+    if (owner) q.set("pubkey", owner);
+    if (since) q.set("since", String(since));
+    const r = await fetch(`/api/shill?${q}`, { cache: "no-store" });
     const j = await r.json();
-    setPack(j);
+    setPack((prev) => {
+      if (!since || !prev) return j;
+      const seen = new Set((prev.messages || []).map((m) => m.id));
+      const extra = (j.messages || []).filter((m: Msg) => !seen.has(m.id));
+      return {
+        ...prev,
+        ...j,
+        messages: extra.length ? [...(prev.messages || []), ...extra] : prev.messages,
+      };
+    });
+    const latest = (j.messages || []) as Msg[];
+    if (latest.length) lastAt.current = Math.max(lastAt.current, latest[latest.length - 1].at);
   }, [owner]);
 
   useEffect(() => {
-    load().catch(() => {});
-    const t = setInterval(() => load().catch(() => {}), 3500);
+    lastAt.current = 0;
+    load(true).catch(() => {});
+    const t = setInterval(() => load(false).catch(() => {}), 1800);
     return () => clearInterval(t);
   }, [load]);
+
+  useEffect(() => {
+    const el = frame.current;
+    if (!el) return;
+    const fit = () => {
+      const h = window.visualViewport?.height || window.innerHeight;
+      el.style.height = `${Math.round(h)}px`;
+    };
+    fit();
+    window.visualViewport?.addEventListener("resize", fit);
+    window.addEventListener("resize", fit);
+    return () => {
+      window.visualViewport?.removeEventListener("resize", fit);
+      window.removeEventListener("resize", fit);
+    };
+  }, []);
 
   useEffect(() => {
     const el = scroller.current;
@@ -258,8 +294,12 @@ export default function ShillPage() {
   const online = Math.max(board.length, Object.keys(pack?.profiles || {}).length, owner ? 1 : 0);
 
   return (
-    <main className="fixed inset-0 z-40 flex h-[100dvh] max-h-[100dvh] w-full justify-center overflow-hidden bg-[#0b141a]">
-      <div className="relative flex h-full w-full max-w-[52rem] flex-col overflow-hidden bg-[#0e1621] shadow-[0_0_80px_rgba(0,0,0,0.45)] lg:border-x lg:border-white/5">
+    <main
+      ref={frame}
+      className="fixed inset-0 z-40 flex w-full justify-center overflow-hidden bg-[#0b141a]"
+      style={{ height: "100svh" }}
+    >
+      <div className="relative flex h-full w-full max-w-[42rem] flex-col overflow-hidden bg-[#0e1621] shadow-[0_0_80px_rgba(0,0,0,0.45)] sm:max-w-[46rem] lg:border-x lg:border-white/5">
       {peek && (
         <ProfileOverlay
           pubkey={peek}
@@ -274,18 +314,21 @@ export default function ShillPage() {
         </div>
       )}
 
-      <header className="flex shrink-0 items-center gap-1 bg-[#17212b] px-1 pb-2 pt-[max(0.4rem,env(safe-area-inset-top))]">
-        <Link href="/" className="flex h-11 w-11 items-center justify-center text-white" aria-label="Back to home">
+      <header className="flex shrink-0 items-center gap-1 border-b border-acid/25 bg-gradient-to-r from-[#10261c] via-[#17212b] to-[#1a1630] px-1 pb-2 pt-[max(0.4rem,env(safe-area-inset-top))] shadow-[0_8px_24px_rgba(0,0,0,0.35)]">
+        <Link href="/" className="flex h-11 w-11 items-center justify-center rounded-full text-white hover:bg-white/5" aria-label="Back to home">
           <ArrowLeft className="h-6 w-6" />
         </Link>
         <button type="button" className="min-w-0 flex-1 text-left" onClick={() => setSheet("ranks")}>
-          <div className="truncate text-[17px] font-semibold text-white">Shill Zone</div>
-          <div className="truncate text-[13px] text-[#8e9ba8]">{online ? `${online} online` : "group"}</div>
+          <div className="truncate font-display text-[18px] tracking-tight text-white">Shill Zone</div>
+          <div className="truncate text-[12px] text-acid/80">{online ? `${online} online` : "live"}</div>
         </button>
-        <button type="button" className="flex h-11 w-11 items-center justify-center text-[#8e9ba8]" onClick={() => setSheet("pin")} aria-label="Pin">
-          <Pin className="h-5 w-5" />
+        <button type="button" className="flex h-11 w-11 items-center justify-center rounded-full text-acid hover:bg-acid/10" onClick={() => setSheet("pin")} aria-label="Boost pin">
+          <Rocket className="h-5 w-5" />
         </button>
-        <button type="button" className="flex h-11 w-11 items-center justify-center text-[#8e9ba8]" onClick={() => setSheet("ranks")} aria-label="Ranks">
+        <button type="button" className="flex h-11 w-11 items-center justify-center rounded-full text-[#8e9ba8] hover:bg-white/5" onClick={() => router.push("/swap")} aria-label="Swap">
+          <ArrowDownUp className="h-5 w-5" />
+        </button>
+        <button type="button" className="flex h-11 w-11 items-center justify-center rounded-full text-[#8e9ba8] hover:bg-white/5" onClick={() => setSheet("ranks")} aria-label="Ranks">
           <Trophy className="h-5 w-5" />
         </button>
       </header>
@@ -299,9 +342,8 @@ export default function ShillPage() {
                 <button
                   key={p.id}
                   type="button"
-                  title="Copy CA"
-                  onClick={() => navigator.clipboard.writeText(p.mint)}
-                  className="boost-tile"
+                  onClick={() => setOpenPin(p)}
+                  className="boost-tile gold"
                 >
                   {p.image ? (
                     // eslint-disable-next-line @next/next/no-img-element
@@ -314,7 +356,7 @@ export default function ShillPage() {
                   <span className="mt-1 block w-full truncate text-center text-[12px] font-semibold text-white">
                     ${ticker || "TOKEN"}
                   </span>
-                  <span className="stat-num block text-center text-[11px] text-[#6ab3f3]">{fmtLeft(Math.max(0, p.endsAt - Date.now()))}</span>
+                  <span className="stat-num block text-center text-[11px] text-[#ffd24a]">{fmtLeft(Math.max(0, p.endsAt - Date.now()))}</span>
                 </button>
               );
             })}
@@ -342,7 +384,7 @@ export default function ShillPage() {
               {!mine && (
                 <CartoonPfp seed={m.owner} src={pfpSrc(m.owner, pack?.profiles)} className="h-8 w-8 shrink-0" onClick={() => setPeek(m.owner)} />
               )}
-              <div className={`flex max-w-[82%] flex-col ${mine ? "items-end" : "items-start"}`}>
+              <div className={`flex min-w-0 max-w-[min(78%,calc(100%-2.5rem))] flex-col ${mine ? "items-end" : "items-start"}`}>
                 {!mine && (
                   <button type="button" className="mb-0.5 px-1 text-[13px] font-medium text-[#6ab3f3]" onClick={() => setPeek(m.owner)}>
                     {nameOf(m.owner, pack?.profiles)}
@@ -351,11 +393,11 @@ export default function ShillPage() {
                 )}
                 {sticker ? (
                   <button type="button" onClick={() => setPicker(m.id)} className="px-1">
-                    <BurstSticker emoji={m.sticker!} size={112} />
+                    <BurstSticker emoji={m.sticker!} size={88} />
                   </button>
                 ) : (
                   <div
-                    className={`relative rounded-2xl px-2.5 py-1.5 text-[16px] leading-[1.35] text-white ${
+                    className={`relative max-w-full min-w-0 overflow-hidden rounded-2xl px-2.5 py-1.5 text-[15px] leading-[1.35] text-white ${
                       mine ? "rounded-br-md bg-[#2b5278]" : "rounded-bl-md bg-[#182533]"
                     }`}
                     onContextMenu={(e) => {
@@ -375,7 +417,7 @@ export default function ShillPage() {
                         {quoted.sticker || quoted.text || "message"}
                       </div>
                     )}
-                    {m.text && <div className="whitespace-pre-wrap break-words">{m.text}</div>}
+                    {m.text && <div className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{m.text}</div>}
                     {m.token && <TokenBubble token={m.token} />}
                     <div className="mt-0.5 flex items-center justify-end gap-1">
                       <span className="font-mono text-[11px] text-white/45">{when(m.at)}</span>
@@ -486,6 +528,48 @@ export default function ShillPage() {
         )}
       </div>
 
+      {openPin && (
+        <div className="absolute inset-0 z-40 flex items-end justify-center bg-black/55 p-3 sm:items-center" onClick={() => setOpenPin(null)}>
+          <div className="w-full max-w-sm rounded-3xl border border-acid/30 bg-[#17212b] p-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-3">
+              {openPin.image ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={openPin.image} alt="" className="h-14 w-14 rounded-2xl object-cover" />
+              ) : (
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-void font-display text-acid">
+                  {(openPin.symbol || "?").slice(0, 2)}
+                </div>
+              )}
+              <div className="min-w-0 flex-1">
+                <div className="truncate font-display text-xl text-white">${(openPin.symbol || "").replace(/^\$/, "")}</div>
+                <div className="truncate text-[13px] text-[#8e9ba8]">{openPin.name}</div>
+                {openPin.mcUsd ? <div className="stat-num text-[12px] text-acid">{fmtMc(openPin.mcUsd)}</div> : null}
+              </div>
+              <button type="button" onClick={() => setOpenPin(null)} className="text-white/50" aria-label="Close">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <p className="mt-3 break-all font-mono text-[11px] text-white/50">{openPin.mint}</p>
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                className="rounded-full border border-white/15 py-2.5 text-[14px] text-white"
+                onClick={() => navigator.clipboard.writeText(openPin.mint)}
+              >
+                Copy CA
+              </button>
+              <button
+                type="button"
+                className="rounded-full bg-[#14f195] py-2.5 text-[14px] font-semibold text-[#04000a]"
+                onClick={() => router.push(`/swap?mint=${encodeURIComponent(openPin.mint)}`)}
+              >
+                Buy
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <Sheet open={sheet === "pin"} title="Pin to the top" onClose={() => setSheet(null)}>
         <p className="text-[14px] text-[#8e9ba8]">👀 Pin your project to the top of the chat. 0.2 SOL · 3 hours.</p>
         <p className="mt-1 font-mono text-[12px] text-white/70">{slots > 0 ? `${slots} paid spots open` : `No paid spots · next in ${waitMin}m`}</p>
@@ -503,7 +587,7 @@ export default function ShillPage() {
               onClick={pin}
               className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-full bg-[#14f195] py-2.5 text-[15px] font-semibold text-[#04000a] disabled:opacity-40"
             >
-              <Pin className="h-4 w-4" />
+              <Rocket className="h-4 w-4" />
               {pinBusy ? "Paying…" : "Pin · 0.2 SOL"}
             </button>
           </>
