@@ -8,6 +8,7 @@ import { SolphiaConstellation } from "@/components/SolphiaConstellation";
 import { solphiaTokenDesk } from "@/lib/token/solphia";
 import { Reveal } from "@/components/Reveal";
 import { Tokenomics } from "@/components/Tokenomics";
+import { SphaRoadmap } from "@/components/SphaRoadmap";
 import { JoinFoundersButton } from "@/components/JoinFoundersButton";
 
 function tick(symbol: string) {
@@ -93,7 +94,11 @@ export default function TokenPage() {
           <Tokenomics />
         </div>
 
-        <div className="mt-10">
+        <div className="mt-16 md:mt-24">
+          <SphaRoadmap />
+        </div>
+
+        <div className="mt-14">
           <JoinFoundersButton />
         </div>
       </div>
