@@ -3,6 +3,7 @@ import { quoteOpenSwap, type JupiterQuote } from "../pair/jupiter";
 import { SOL_MINT } from "../pair/mints";
 import { isSolanaAddress } from "../security";
 import { assembleSwapTx } from "./build";
+import { buildPadTradeTx, padCurveReady, quoteBuyRaw, quoteSellRaw } from "../launch/program";
 
 export const PAD_SWAP_FEE_BPS = SWAP_FEE_BPS;
 
@@ -25,18 +26,54 @@ export async function quotePadSwap(opts: {
 }): Promise<
   | {
       ok: true;
-      quote: JupiterQuote;
+      via: "curve" | "jupiter";
+      quote?: JupiterQuote;
       impactPct: number;
       outAmount: number;
       feeSol: number;
       spendSol: number;
       inMint: string;
       outMint: string;
+      creator?: string;
     }
   | { ok: false; reason: string }
 > {
   if (!isSolanaAddress(opts.mint) || opts.mint === SOL_MINT) return { ok: false, reason: "Bad mint." };
   if (!(opts.amount > 0)) return { ok: false, reason: "Enter an amount." };
+  const live = await padCurveReady(opts.mint);
+  if (live.ok && live.curve.phase === "curve") {
+    const vs = BigInt(Math.round(live.curve.virtualSol * 1e9));
+    const vt = BigInt(Math.round(live.curve.virtualTokens * 1e6));
+    if (opts.side === "buy") {
+      if (opts.amount < 0.01) return { ok: false, reason: "Amount is too small." };
+      const q = quoteBuyRaw(vs, vt, BigInt(Math.round(opts.amount * 1e9)));
+      if (q.tokensOut <= 0n) return { ok: false, reason: "That size would print zero tokens." };
+      return {
+        ok: true,
+        via: "curve",
+        impactPct: 0,
+        outAmount: Number(q.tokensOut) / 1e6,
+        feeSol: Number(q.fee) / 1e9,
+        spendSol: opts.amount,
+        inMint: SOL_MINT,
+        outMint: opts.mint,
+        creator: live.creator,
+      };
+    }
+    const q = quoteSellRaw(vs, vt, BigInt(Math.round(opts.amount * 1e6)));
+    if (q.solOut <= 0n) return { ok: false, reason: "That size would print zero SOL." };
+    return {
+      ok: true,
+      via: "curve",
+      impactPct: 0,
+      outAmount: Number(q.solOut) / 1e9,
+      feeSol: Number(q.fee) / 1e9,
+      spendSol: opts.amount,
+      inMint: opts.mint,
+      outMint: SOL_MINT,
+      creator: live.creator,
+    };
+  }
   const slip = opts.slippageBps || 100;
   if (opts.side === "buy") {
     const { feeSol, swapSol } = opts.skipFee ? { feeSol: 0, swapSol: opts.amount } : splitPadSpend(opts.amount);
@@ -51,6 +88,7 @@ export async function quotePadSwap(opts: {
     if (!q.ok) return q;
     return {
       ok: true,
+      via: "jupiter",
       quote: q.quote,
       impactPct: q.impactPct,
       outAmount: q.outAmount,
@@ -71,6 +109,7 @@ export async function quotePadSwap(opts: {
   const feeSol = opts.skipFee ? 0 : feeSolOf(q.outAmount);
   return {
     ok: true,
+    via: "jupiter",
     quote: q.quote,
     impactPct: q.impactPct,
     outAmount: Math.max(0, q.outAmount - feeSol),
@@ -83,10 +122,30 @@ export async function quotePadSwap(opts: {
 
 export async function buildPadSwapTx(opts: {
   owner: string;
-  quote: JupiterQuote;
+  mint?: string;
+  side?: "buy" | "sell";
+  amount?: number;
+  quote?: JupiterQuote;
   feeSol: number;
   feeAfter?: boolean;
+  via?: "curve" | "jupiter";
+  creator?: string;
 }): Promise<{ ok: true; transaction: string } | { ok: false; reason: string }> {
   if (!isSolanaAddress(opts.owner)) return { ok: false, reason: "Connect Phantom first." };
+  if (opts.via === "curve" && opts.mint && opts.side) {
+    const live = await padCurveReady(opts.mint);
+    const creator = opts.creator || (live.ok ? live.creator : opts.owner);
+    const built = await buildPadTradeTx({
+      mint: opts.mint,
+      owner: opts.owner,
+      creator,
+      side: opts.side,
+      sol: opts.side === "buy" ? opts.amount : undefined,
+      tokens: opts.side === "sell" ? opts.amount : undefined,
+    });
+    if (!built.ok) return { ok: false, reason: "Could not build the curve swap." };
+    return { ok: true, transaction: built.transaction };
+  }
+  if (!opts.quote) return { ok: false, reason: "Could not build the swap." };
   return assembleSwapTx({ owner: opts.owner, quote: opts.quote, feeSol: opts.feeSol, feeAfter: opts.feeAfter });
 }

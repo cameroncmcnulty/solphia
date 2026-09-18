@@ -188,12 +188,19 @@ function tradeIx(opts: {
   return new TransactionInstruction({ programId: PAD_PROGRAM_ID, keys, data });
 }
 
-export async function padCurveReady(mint: string): Promise<{ ok: true; curve: CurveState } | { ok: false; error: string }> {
+export async function padCurveReady(
+  mint: string,
+): Promise<{ ok: true; curve: CurveState; creator: string } | { ok: false; error: string }> {
   try {
     const info = await connection().getAccountInfo(curvePda(mint), "confirmed");
     if (!info || info.data.length < 138) return { ok: false, error: "curve_missing" };
     if (Buffer.from(info.data.slice(0, 8)).toString() !== "splhcrv1") return { ok: false, error: "curve_missing" };
-    return { ok: true, curve: curveFromAccount(info.data as Buffer) };
+    const buf = info.data as Buffer;
+    return {
+      ok: true,
+      curve: curveFromAccount(buf),
+      creator: new PublicKey(buf.subarray(40, 72)).toBase58(),
+    };
   } catch {
     return { ok: false, error: "curve_missing" };
   }

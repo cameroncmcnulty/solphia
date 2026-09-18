@@ -29,9 +29,14 @@ export async function POST(req: NextRequest) {
   if (!q.ok) return NextResponse.json({ error: q.reason }, { status: 400 });
   const tx = await buildPadSwapTx({
     owner: parsed.data.owner,
+    mint: parsed.data.mint,
+    side: parsed.data.side,
+    amount: parsed.data.amount,
     quote: q.quote,
     feeSol: q.feeSol,
     feeAfter: parsed.data.side === "sell",
+    via: q.via,
+    creator: q.creator,
   });
   if (!tx.ok) return NextResponse.json({ error: tx.reason }, { status: 400 });
   try {

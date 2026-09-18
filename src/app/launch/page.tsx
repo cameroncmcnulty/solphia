@@ -1397,7 +1397,7 @@ function CoinDesk({
         </div>
 
         <SwapShell title={`Trade ${tick(open.symbol)}`} subtitle="You sign. Tokens land in the wallet you connected.">
-          {!open.born ? (
+          {!(open.born || open.venue === "solphia") ? (
             <MarketSwap open={open} owner={owner} sol={sol} setSol={setSol} solUsd={solUsd} />
           ) : (
             <>
@@ -1471,8 +1471,8 @@ function CoinDesk({
                         return;
                       }
                       tradeErr.ok();
-                      if (side === "buy") onAct({ action: "buy", id: open.id, sol });
-                      else onAct({ action: "sell", id: open.id, tokens: open.myTokens || 0 });
+                      if (side === "buy") onAct({ action: "buy", id: open.id, mint: open.mint, sol });
+                      else onAct({ action: "sell", id: open.id, mint: open.mint, tokens: open.myTokens || 0 });
                     }}
                     className="btn-acid mt-4 min-h-[52px] w-full rounded-full disabled:opacity-40"
                   >

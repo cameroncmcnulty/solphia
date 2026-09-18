@@ -54,6 +54,7 @@ export async function runBuybackBurn(opts: { mint: string; sol: number }): Promi
   const owner = kp.publicKey.toBase58();
   const quoted = await quotePadSwap({ side: "buy", mint, amount: sol, skipFee: false });
   if (!quoted.ok) return { ok: false, error: "quote", message: quoted.reason };
+  if (!quoted.quote) return { ok: false, error: "quote", message: "No Jupiter route for that mint." };
   const built = await assembleSwapTx({ owner, quote: quoted.quote, feeSol: quoted.feeSol });
   if (!built.ok) return { ok: false, error: "build", message: built.reason };
   const conn = new Connection(rpcUrl(), "confirmed");

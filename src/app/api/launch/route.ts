@@ -28,6 +28,7 @@ import {
   buildPadLaunchTx,
   buildPadTradeTx,
   hydratePadCoins,
+  padCurveReady,
   waitForPadCurve,
   quotePadTrade,
 } from "@/lib/launch/program";
@@ -289,17 +290,18 @@ export async function POST(req: NextRequest) {
 
   if (b.action === "buy" || b.action === "sell") {
     const snap = await withLaunch((st) => st, false);
-    const coin = bookOf(snap).coins.find((c) => c.id === b.id);
-    if (!coin) return fail("not_found", 404);
-    if (coin.venue === "solphia" || coin.venue === "pump") {
+    const coin = bookOf(snap).coins.find((c) => c.id === b.id || (b.mint && c.mint === b.mint));
+    const mint = coin?.mint || b.mint || "";
+    const live = mint && isSolanaAddress(mint) ? await padCurveReady(mint) : { ok: false as const, error: "curve_missing" };
+    if (coin?.venue === "solphia" || coin?.venue === "pump" || live.ok) {
       const built = await buildPadTradeTx({
-        mint: coin.mint,
+        mint,
         owner: b.pubkey,
-        creator: coin.creator,
+        creator: coin?.creator || (live.ok ? live.creator : b.pubkey),
         side: b.action,
         sol: b.sol,
         tokens: b.tokens,
-        referrer: coin.referrer,
+        referrer: coin?.referrer,
       });
       if (!built.ok) return fail(built.error);
       return NextResponse.json({
@@ -311,9 +313,10 @@ export async function POST(req: NextRequest) {
         sol: built.sol,
         tokens: built.tokens,
         feeSol: built.feeSol,
-        coin: publicCoin(coin, solUsd, b.pubkey, bookOf(snap)),
+        coin: coin ? publicCoin(coin, solUsd, b.pubkey, bookOf(snap)) : undefined,
       });
     }
+    if (!coin) return fail("not_found", 404);
   }
 
   if (b.action === "trade_confirm") {

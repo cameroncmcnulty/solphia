@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { clientIp, isSolanaAddress, rateLimit } from "@/lib/security";
 import { lookupMarketMint } from "@/lib/launch/market";
+import { emptyLaunchBook, publicCoin } from "@/lib/launch/engine";
+import { withLaunch } from "@/lib/store";
+import { padCurveReady } from "@/lib/launch/program";
+import { lastPairPrices } from "@/lib/tick";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 20;
@@ -12,6 +16,40 @@ export async function GET(req: NextRequest) {
   const mint = (req.nextUrl.searchParams.get("mint") || "").trim();
   if (!isSolanaAddress(mint)) return NextResponse.json({ error: "bad_mint" }, { status: 400 });
   try {
+    const solUsd = lastPairPrices().solUsd || 0;
+    const s = await withLaunch((st) => st, false);
+    const book = s.launch || emptyLaunchBook();
+    const owned = book.coins.find((c) => c.mint === mint || c.id === mint);
+    if (owned) {
+      return NextResponse.json({ coin: publicCoin(owned, solUsd), solUsd });
+    }
+    const live = await padCurveReady(mint);
+    if (live.ok) {
+      return NextResponse.json({
+        coin: {
+          id: mint,
+          mint,
+          born: true,
+          venue: "solphia",
+          name: "Solphia curve",
+          symbol: mint.slice(0, 4).toUpperCase(),
+          blurb: "",
+          creator: live.creator,
+          createdAt: Date.now(),
+          status: live.curve.phase === "graduated" ? "graduated" : "curve",
+          priceSol: 0,
+          marketCapSol: 0,
+          marketCapUsd: 0,
+          progress: 0,
+          realSol: live.curve.realSol,
+          holders: 0,
+          fills: [],
+          curve: live.curve,
+          devRewardsSol: 0,
+        },
+        solUsd,
+      });
+    }
     const row = await lookupMarketMint(mint);
     if (!row) return NextResponse.json({ error: "not_found" }, { status: 404 });
     return NextResponse.json({
