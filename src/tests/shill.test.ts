@@ -95,6 +95,9 @@ describe("shill zone", () => {
     ];
     assert.equal(fillHousePins(book, coins, 1_000), true);
     assert.equal(book.pins.length, SHILL_HOUSE_PIN_MIN);
+    for (const p of book.pins) {
+      assert.equal(p.endsAt - p.at, SHILL_PIN_MS);
+    }
     const firstIds = book.pins.map((p) => p.id);
     assert.equal(fillHousePins(book, coins, 2_000), false, "must not reshuffle live house pins");
     assert.deepEqual(book.pins.map((p) => p.id), firstIds);
@@ -122,5 +125,21 @@ describe("shill zone", () => {
     });
     assert.equal(paid.ok, true);
     assert.ok(book.pins.filter((p) => p.house).length <= SHILL_HOUSE_PIN_MAX);
+  });
+
+  it("clamps a house pin that somehow lasted past 3h and keeps pin order stable", () => {
+    const book = emptyShill();
+    const coins = [
+      { mint: CA, symbol: "SOL", name: "Solana" },
+      { mint: A, symbol: "AAA", name: "Alpha" },
+      { mint: B, symbol: "BBB", name: "Beta" },
+    ];
+    const t0 = 10_000;
+    fillHousePins(book, coins, t0);
+    const order = book.pins.map((p) => p.id);
+    book.pins[0].endsAt = t0 + 5 * 3600_000;
+    pruneShill(book, t0 + 1_000);
+    assert.ok(book.pins[0].endsAt - book.pins[0].at <= SHILL_PIN_MS);
+    assert.deepEqual(book.pins.map((p) => p.id), order);
   });
 });

@@ -71,9 +71,23 @@ const PIN_BLOCK = new Set([SOL_MINT, SPYX_MINT_OFFICIAL, QQQX_MINT_OFFICIAL, GLD
 
 async function tapePinCoins() {
   try {
-    const pack = await loadMarketTape();
-    const seen = new Set<string>();
     const out: { mint: string; symbol?: string; name?: string; image?: string; priceUsd?: number; mcUsd?: number }[] = [];
+    const seen = new Set<string>();
+    const launch = await withLaunch((st) => st, false);
+    const book = launch.launch || emptyLaunchBook();
+    for (const c of book.coins) {
+      if (!c.mint || PIN_BLOCK.has(c.mint) || seen.has(c.mint) || c.status === "graduated") continue;
+      seen.add(c.mint);
+      out.push({
+        mint: c.mint,
+        symbol: c.symbol,
+        name: c.name,
+        image: c.image,
+        mcUsd: undefined,
+      });
+      if (out.length >= 16) return out;
+    }
+    const pack = await loadMarketTape();
     for (const row of pack.rows) {
       const c = row.coin;
       if (!c?.mint || PIN_BLOCK.has(c.mint) || seen.has(c.mint)) continue;
@@ -105,7 +119,7 @@ export async function GET(req: NextRequest) {
     const due = st.shill.nextHousePinAt || 0;
     return due > 0 && Date.now() >= due;
   }, false);
-  if (!since || needHouse) {
+  if (needHouse) {
     const tapeCoins = await tapePinCoins();
     await withShill((st) => {
       st.shill = ensureShill(st.shill);

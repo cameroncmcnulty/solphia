@@ -78,6 +78,11 @@ export function pruneShill(book: ShillBook, now = Date.now()) {
   if (book.messages.length) book.messages = book.messages.filter((m) => m.at >= cut);
   if (book.messages.length > SHILL_MSG_MAX) book.messages.splice(0, book.messages.length - SHILL_MSG_MAX);
   const pins = book.pins || [];
+  const cap = SHILL_PIN_MS;
+  for (const p of pins) {
+    if (!(p.at > 0)) p.at = Math.max(0, (p.endsAt || now) - cap);
+    if (p.endsAt > p.at + cap) p.endsAt = p.at + cap;
+  }
   const expiredHouse = pins.filter((p) => p.house && p.endsAt <= now).length;
   book.pins = pins.filter((p) => p.endsAt > now);
   if (expiredHouse > 0) {
@@ -124,7 +129,7 @@ export function extractCas(text: string): string[] {
 
 export function livePins(book: ShillBook, now = Date.now()): ShillPin[] {
   pruneShill(book, now);
-  return [...book.pins].sort((a, b) => b.at - a.at);
+  return [...book.pins].sort((a, b) => a.at - b.at || a.id.localeCompare(b.id));
 }
 
 export function pinSlotsLeft(book: ShillBook, now = Date.now()): number {
@@ -264,9 +269,8 @@ export function pinToken(
 
 export type HousePinCoin = { mint: string; symbol?: string; name?: string; image?: string; priceUsd?: number; mcUsd?: number };
 
-function plantHousePins(book: ShillBook, picks: HousePinCoin[], now: number, stagger: boolean) {
+function plantHousePins(book: ShillBook, picks: HousePinCoin[], now: number) {
   picks.forEach((c, i) => {
-    const life = stagger ? (160 + i * 35) * 60_000 : (170 + Math.floor(Math.random() * 30)) * 60_000;
     book.pins.push({
       id: `hpin${now.toString(36)}${i}${Math.random().toString(36).slice(2, 5)}`,
       mint: c.mint,
@@ -278,8 +282,8 @@ function plantHousePins(book: ShillBook, picks: HousePinCoin[], now: number, sta
       owner: SHILL_HOUSE_OWNER,
       sig: `house_pin_${c.mint}_${now}_${i}`.padEnd(40, "x"),
       paidSol: 0,
-      at: now - i,
-      endsAt: now + life,
+      at: now + i,
+      endsAt: now + i + SHILL_PIN_MS,
       house: true,
     });
   });
@@ -302,7 +306,7 @@ export function fillHousePins(book: ShillBook, candidates: HousePinCoin[], now =
 
   if (n === 0 && !book.lastHousePinAt) {
     const count = Math.min(SHILL_HOUSE_PIN_MIN, pool.length);
-    plantHousePins(book, pool.slice(0, count), now, true);
+    plantHousePins(book, pool.slice(0, count), now);
     return count > 0;
   }
 
@@ -312,6 +316,6 @@ export function fillHousePins(book: ShillBook, candidates: HousePinCoin[], now =
     book.nextHousePinAt = now + (n < SHILL_HOUSE_PIN_MIN ? SHILL_HOUSE_REPLACE_MS : SHILL_HOUSE_STAGGER_MS);
     return false;
   }
-  plantHousePins(book, pool.slice(0, 1), now, false);
+  plantHousePins(book, pool.slice(0, 1), now);
   return true;
 }

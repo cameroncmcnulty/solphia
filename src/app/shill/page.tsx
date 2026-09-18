@@ -389,7 +389,7 @@ export default function ShillPage() {
                   <span className="mt-1 block w-full truncate text-center text-[12px] font-semibold text-white">
                     ${ticker || "TOKEN"}
                   </span>
-                  <span className="stat-num block text-center text-[11px] text-[#ffd24a]">{fmtLeft(Math.max(0, p.endsAt - Date.now()))}</span>
+                  <span className="stat-num block text-center text-[11px] text-[#ffd24a]">{fmtLeft(Math.min(3 * 3600_000, Math.max(0, p.endsAt - Date.now())))}</span>
                 </button>
               );
             })}
