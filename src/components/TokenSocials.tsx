@@ -101,6 +101,11 @@ export function SocialInput({
         <Icon />
       </span>
       <input
+        type="text"
+        inputMode="text"
+        autoComplete="off"
+        autoCorrect="off"
+        spellCheck={false}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}

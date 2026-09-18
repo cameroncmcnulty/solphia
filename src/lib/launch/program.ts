@@ -22,6 +22,7 @@ import { DEFAULT_TREASURY } from "../config";
 import { PAD_PROGRAM_ID as PAD_PROGRAM_ID_STR } from "./ids";
 import type { CurveState } from "./curve";
 import { MIN_TRADE_SOL } from "./curve";
+import { isSolanaAddress } from "../security";
 import type { LaunchCoin } from "./engine";
 
 export const PAD_PROGRAM_ID = new PublicKey(PAD_PROGRAM_ID_STR);
@@ -34,8 +35,8 @@ const VIRTUAL_SOL = 30n * 1_000_000_000n;
 const VIRTUAL_TOKENS = 1_073_000_191n * 1_000_000n;
 const GRADUATE_SOL = 85n * 1_000_000_000n;
 const FEE_BPS = 100n;
-const CREATE_CU = 400_000;
-const TRADE_CU = 250_000;
+const CREATE_CU = 600_000;
+const TRADE_CU = 300_000;
 const CU_PRICE = 100_000;
 
 export function curvePda(mint: PublicKey | string): PublicKey {
@@ -123,8 +124,9 @@ async function simulateOrThrow(tx: Transaction): Promise<void> {
     commitment: "confirmed",
   });
   if (sim.value.err) {
-    const logs = (sim.value.logs || []).filter((l) => /Error|failed|custom program/i.test(l)).slice(-4);
-    throw new Error(logs.join(" · ") || "Pad simulation failed.");
+    const logs = (sim.value.logs || []).slice(-6);
+    const hint = logs.filter((l) => /Error|failed|custom program|missing/i.test(l)).join(" · ");
+    throw new Error(hint || "Launch simulation failed. Check SOL for rent and try again.");
   }
 }
 
@@ -136,7 +138,10 @@ function initializeIx(opts: {
 }): TransactionInstruction {
   const curve = curvePda(opts.mint);
   const curveAta = getAssociatedTokenAddressSync(opts.mint, curve, true);
-  const referrer = opts.referrer && opts.referrer !== opts.creator.toBase58() ? new PublicKey(opts.referrer) : PublicKey.default;
+  const referrer =
+    opts.referrer && isSolanaAddress(opts.referrer) && opts.referrer !== opts.creator.toBase58()
+      ? new PublicKey(opts.referrer)
+      : PublicKey.default;
   const data = Buffer.concat([Buffer.from([1]), referrer.toBuffer()]);
   return new TransactionInstruction({
     programId: PAD_PROGRAM_ID,
@@ -184,7 +189,9 @@ function tradeIx(opts: {
     { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
   ];
   if (opts.side === "buy") keys.push({ pubkey: SystemProgram.programId, isSigner: false, isWritable: false });
-  if (opts.referrer) keys.push({ pubkey: new PublicKey(opts.referrer), isSigner: false, isWritable: true });
+  if (opts.referrer && isSolanaAddress(opts.referrer)) {
+    keys.push({ pubkey: new PublicKey(opts.referrer), isSigner: false, isWritable: true });
+  }
   return new TransactionInstruction({ programId: PAD_PROGRAM_ID, keys, data });
 }
 

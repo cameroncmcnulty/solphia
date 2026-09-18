@@ -716,7 +716,16 @@ export default function LaunchPage() {
                     }}
                   />
                 </div>
+                <form
+                  noValidate
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    launchToken().catch(() => {});
+                  }}
+                >
                 <input
+                  type="text"
+                  autoComplete="off"
                   value={name}
                   data-field="name"
                   onChange={(e) => {
@@ -734,6 +743,10 @@ export default function LaunchPage() {
                 >
                   <span className="pr-1 text-acid">$</span>
                   <input
+                    type="text"
+                    autoComplete="off"
+                    autoCapitalize="characters"
+                    spellCheck={false}
                     value={symbol}
                     onChange={(e) => {
                       setSymbol(e.target.value.replace(/^\$+/, "").toUpperCase());
@@ -842,9 +855,8 @@ export default function LaunchPage() {
                     <WalletConnect />
                   </div>
                   <button
-                    type="button"
+                    type="submit"
                     disabled={busy}
-                    onClick={launchToken}
                     className="btn-acid min-h-[48px] rounded-full px-6 disabled:opacity-40"
                   >
                     {busy ? "Launching…" : "Launch on Solana"}
@@ -855,6 +867,7 @@ export default function LaunchPage() {
                 <div className="mt-3">
                   <FormAlert error={createErr.banner} />
                 </div>
+                </form>
               </>
             )}
           </section>
@@ -1412,13 +1425,14 @@ function CoinDesk({
                     <SwapBox label={side === "buy" ? "YOU PAY" : "YOU SELL"} unit={side === "buy" ? "SOL" : tick(open.symbol) || "TOKEN"}>
                       {side === "buy" ? (
                         <input
-                          type="number"
-                          min={0.01}
-                          step={0.01}
-                          value={sol}
+                          type="text"
+                          inputMode="decimal"
+                          autoComplete="off"
+                          value={String(sol)}
                           data-field="amount"
                           onChange={(e) => {
-                            setSol(Number(e.target.value));
+                            const n = Number(e.target.value.replace(",", "."));
+                            setSol(Number.isFinite(n) ? n : 0);
                             tradeErr.clear("amount");
                           }}
                           aria-invalid={Boolean(tradeErr.errors.amount)}
@@ -1622,13 +1636,14 @@ function MarketSwap({
             <SwapBox label={side === "buy" ? "YOU PAY" : "YOU SELL"} unit={side === "buy" ? "SOL" : tick(open.symbol) || "TOKEN"}>
               {side === "buy" ? (
                 <input
-                  type="number"
-                  min={0.01}
-                  step={0.01}
-                  value={sol}
+                  type="text"
+                  inputMode="decimal"
+                  autoComplete="off"
+                  value={String(sol)}
                   data-field="amount"
                   onChange={(e) => {
-                    setSol(Number(e.target.value));
+                    const n = Number(e.target.value.replace(",", "."));
+                    setSol(Number.isFinite(n) ? n : 0);
                     tradeErr.clear("amount");
                   }}
                   aria-invalid={Boolean(tradeErr.errors.amount)}

@@ -54,7 +54,7 @@ export function createMetadataV3Ix(opts: {
       { pubkey: opts.mint, isSigner: false, isWritable: false },
       { pubkey: opts.mintAuthority, isSigner: true, isWritable: false },
       { pubkey: opts.payer, isSigner: true, isWritable: true },
-      { pubkey: opts.updateAuthority, isSigner: false, isWritable: false },
+      { pubkey: opts.updateAuthority, isSigner: true, isWritable: false },
       { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
       { pubkey: SYSVAR_RENT_PUBKEY, isSigner: false, isWritable: false },
     ],

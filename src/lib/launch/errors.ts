@@ -39,7 +39,7 @@ export const LAUNCH_ERRORS: Record<string, string> = {
   username_reserved: "That name is reserved.",
   bad_email: "That is not a valid email.",
   rate_limited: "Too many requests. Wait a few seconds.",
-  bad_request: "Bad request. Check the amount and try again.",
+  bad_request: "Check name, ticker, and image, then try again.",
   admin_only: "Admin only.",
 };
 

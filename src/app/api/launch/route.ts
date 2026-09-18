@@ -55,7 +55,7 @@ const Body = z.object({
   name: z.string().optional(),
   symbol: z.string().optional(),
   blurb: z.string().optional(),
-  image: z.string().max(IMAGE_DATA_MAX).optional(),
+  image: z.string().max(400_000).optional(),
   website: z.string().optional(),
   x: z.string().optional(),
   telegram: z.string().optional(),
@@ -66,9 +66,9 @@ const Body = z.object({
   ownerWallet: z.string().optional(),
   adminSecret: z.string().optional(),
   mint: z.string().optional(),
-  sigs: z.array(z.string().min(32).max(128)).max(8).optional(),
-  sig: z.string().min(32).max(128).optional(),
-  uri: z.string().max(400).optional(),
+  sigs: z.array(z.string().max(128)).max(8).optional(),
+  sig: z.string().max(128).optional(),
+  uri: z.string().max(512).optional(),
   side: z.enum(["buy", "sell"]).optional(),
   feeSol: z.number().optional(),
 });
@@ -156,8 +156,9 @@ async function prepareMint(b: LaunchBody) {
       image: art.image,
       tokensOut: built.tokensOut,
     });
-  } catch {
-    return fail("chain_failed");
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Could not build the launch.";
+    return NextResponse.json({ error: "chain_failed", message }, { status: 400 });
   }
 }
 
@@ -251,7 +252,11 @@ export async function POST(req: NextRequest) {
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
     const img = parsed.error.issues.some((i) => i.path.includes("image"));
-    return fail(img ? "bad_image" : "bad_request");
+    const first = parsed.error.issues[0];
+    const message = first?.message && first.message !== "Required" ? first.message : undefined;
+    if (img) return fail("bad_image");
+    if (message) return NextResponse.json({ error: "bad_request", message }, { status: 400 });
+    return fail("bad_request");
   }
   if (!isSolanaAddress(parsed.data.pubkey)) {
     return fail("bad_wallet");
