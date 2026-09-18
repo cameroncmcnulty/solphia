@@ -56,7 +56,8 @@ pub fn process_instruction(program_id: &Pubkey, accounts: &[AccountInfo], data: 
 }
 
 /// Founder treasury / owner until `init_global` overrides on-chain.
-const HARDCODED_TREASURY: Pubkey = solana_program::pubkey!("2jNYVsfptvRLrg8V8AoLMVq6pnmpi7BHVo7Hsx5PTpma");
+const HARDCODED_TREASURY: Pubkey = solana_program::pubkey!("BobXWqFWhRwyBS3Wra3fornbmnwpmN1Ctp5brN1RZ9y3");
+const HARDCODED_OWNER: Pubkey = solana_program::pubkey!("AidbgKaN6BhMmqQSERaW2rc3i8Dax4i295q3UTpTdhg4");
 
 fn init_global(program_id: &Pubkey, accounts: &[AccountInfo]) -> ProgramResult {
     let acc = &mut accounts.iter();
@@ -401,14 +402,14 @@ fn fee_dest(global: &AccountInfo, program_id: &Pubkey) -> Result<Global, Program
     if global.lamports() == 0 || global.data_len() < GLOBAL_LEN {
         return Ok(Global {
             treasury: HARDCODED_TREASURY,
-            owner: HARDCODED_TREASURY,
+            owner: HARDCODED_OWNER,
         });
     }
     let data = global.try_borrow_data()?;
     if &data[0..8] != DISC_GLOBAL {
         return Ok(Global {
             treasury: HARDCODED_TREASURY,
-            owner: HARDCODED_TREASURY,
+            owner: HARDCODED_OWNER,
         });
     }
     Ok(Global {

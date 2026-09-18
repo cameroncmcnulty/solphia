@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { DEFAULT_SETTINGS } from "./config";
+import { DEFAULT_FUND, DEFAULT_OWNER, DEFAULT_TREASURY } from "./protocolWallets";
 import { emptyBook, emptyTrader, lockedAuto } from "./auto";
 import { emptyLaunchBook, mergeLaunch, slimLaunch, type LaunchBook } from "./launch/engine";
 import { emptyLab, mergeLab } from "./desk/shadow";
@@ -62,7 +63,7 @@ export function emptyState(): AppState {
     lastTickAt: 0,
     lastSnapshots: [],
     pairSamples: [],
-    treasuryWallet: "",
+    treasuryWallet: DEFAULT_TREASURY,
     liveTrading: undefined,
     liveV: 2,
     promos: [],
@@ -72,10 +73,10 @@ export function emptyState(): AppState {
     backtestLev2: null,
     backtestLev3: null,
     launch: emptyLaunchBook(),
-    ownerWallet: "",
+    ownerWallet: DEFAULT_OWNER,
     devWallet: "",
     sphaMint: "",
-    foundationWallet: "",
+    foundationWallet: DEFAULT_FUND,
     airdropWallet: "",
     lpWallet: "",
     sphaNetwork: "devnet",
@@ -126,7 +127,7 @@ function hydrateFromRaw(raw: AppState): AppState {
     hotAt: raw.hotAt && typeof raw.hotAt === "object" ? raw.hotAt : {},
     adminWallets: raw.adminWallets || [],
     modWallets: Array.isArray(raw.modWallets) ? raw.modWallets.filter(Boolean) : [],
-    treasuryWallet: raw.treasuryWallet || "",
+    treasuryWallet: raw.treasuryWallet || DEFAULT_TREASURY,
     liveV: 2,
     liveTrading: raw.liveV === 2 && typeof raw.liveTrading === "boolean" ? raw.liveTrading : undefined,
     promos: Array.isArray(raw.promos) ? raw.promos : [],
@@ -139,10 +140,10 @@ function hydrateFromRaw(raw: AppState): AppState {
       raw.launch && Array.isArray(raw.launch.coins)
         ? { ...emptyLaunchBook(), ...raw.launch, accounts: raw.launch.accounts || {} }
         : emptyLaunchBook(),
-    ownerWallet: raw.ownerWallet || raw.launch?.ownerWallet || "",
+    ownerWallet: raw.ownerWallet || raw.launch?.ownerWallet || DEFAULT_OWNER,
     devWallet: raw.devWallet || "",
     sphaMint: raw.sphaMint || "",
-    foundationWallet: raw.foundationWallet || "",
+    foundationWallet: raw.foundationWallet || DEFAULT_FUND,
     airdropWallet: raw.airdropWallet || "",
     lpWallet: raw.lpWallet || "",
     sphaNetwork: raw.sphaNetwork === "mainnet-beta" ? "mainnet-beta" : "devnet",

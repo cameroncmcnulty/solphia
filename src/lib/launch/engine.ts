@@ -1,4 +1,5 @@
 import { isSolanaAddress } from "../security";
+import { DEFAULT_OWNER } from "../protocolWallets";
 import {
   ANTI_SNIPE_MS,
   ANTI_SNIPE_SOL,
@@ -115,7 +116,7 @@ export type LaunchBook = {
 };
 
 export function emptyLaunchBook(): LaunchBook {
-  return { coins: [], ownerWallet: "", ownerEarningsSol: 0, treasuryFeesSol: 0, accounts: {}, boosts: [] };
+  return { coins: [], ownerWallet: DEFAULT_OWNER, ownerEarningsSol: 0, treasuryFeesSol: 0, accounts: {}, boosts: [] };
 }
 
 export function emptyAccount(pubkey: string): LaunchAccount {

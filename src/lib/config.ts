@@ -14,9 +14,9 @@ export const PAIR_FEE_BPS = 5;
 export const PAIR_SLIP_BPS = 4;
 /** Bot swap slip. Tight so a 0.5% scalp is not given back. */
 export const BOT_SLIPPAGE_BPS = 35;
-/** Founder treasury. Admin can override; empty override falls back here. */
-export const DEFAULT_TREASURY = "2jNYVsfptvRLrg8V8AoLMVq6pnmpi7BHVo7Hsx5PTpma";
-export const TREASURY = (process.env.SOLPHIA_TREASURY || "").trim() || DEFAULT_TREASURY;
+export { DEFAULT_FUND, DEFAULT_TREASURY, DEFAULT_OWNER } from "./protocolWallets";
+import { DEFAULT_TREASURY as TREASURY_DEFAULT } from "./protocolWallets";
+export const TREASURY = (process.env.SOLPHIA_TREASURY || "").trim() || TREASURY_DEFAULT;
 export const ADMIN_SECRET = process.env.ADMIN_SECRET || "";
 /** AES key material for delegated 24/7 trading-wallet secrets. Falls back to ADMIN_SECRET. */
 export const LIVE_SIGNER_SECRET = (process.env.LIVE_SIGNER_SECRET || "").trim() || ADMIN_SECRET;

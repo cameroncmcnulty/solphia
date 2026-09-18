@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { clampSlide, makePuzzle, PIECE_BOX, PUZZLE_W, puzzleHit } from "../lib/human/puzzle";
+import { clampSlide, HUMAN_KEY, makePuzzle, PIECE_BOX, PUZZLE_W, puzzleHit } from "../lib/human/puzzle";
 
 describe("human puzzle", () => {
   it("same seed always lands the piece in the same slot", () => {
@@ -25,6 +25,10 @@ describe("human puzzle", () => {
     assert.equal(clampSlide(-40), 0);
     assert.equal(clampSlide(PUZZLE_W), PUZZLE_W - PIECE_BOX);
     assert.equal(clampSlide(40), 40);
+  });
+
+  it("uses a session key so one pass lasts the tab", () => {
+    assert.equal(HUMAN_KEY, "solphia_human");
   });
 
   it("rolls a different cartoon slot for a different seed", () => {

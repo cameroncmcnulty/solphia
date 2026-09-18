@@ -45,10 +45,16 @@ export function clampSlide(x: number): number {
 export function humanVerified(): boolean {
   if (typeof window === "undefined") return false;
   try {
-    return sessionStorage.getItem(HUMAN_KEY) === "1";
+    if (sessionStorage.getItem(HUMAN_KEY) === "1") return true;
   } catch {
-    return false;
+    /* private / ITP */
   }
+  try {
+    if (document.cookie.split(";").some((c) => c.trim() === `${HUMAN_KEY}=1`)) return true;
+  } catch {
+    /* */
+  }
+  return false;
 }
 
 export function markHuman(): void {
@@ -57,5 +63,10 @@ export function markHuman(): void {
     sessionStorage.setItem(HUMAN_KEY, "1");
   } catch {
     /* private mode */
+  }
+  try {
+    document.cookie = `${HUMAN_KEY}=1; path=/; SameSite=Lax`;
+  } catch {
+    /* */
   }
 }

@@ -18,7 +18,7 @@ import {
 import { connection } from "../solana/connection";
 import { encodeTx } from "../token/mint";
 import { createMetadataV3Ix } from "../token/metadata";
-import { DEFAULT_TREASURY } from "../config";
+import { DEFAULT_OWNER, DEFAULT_TREASURY } from "../protocolWallets";
 import { PAD_PROGRAM_ID as PAD_PROGRAM_ID_STR } from "./ids";
 import type { CurveState } from "./curve";
 import { MIN_TRADE_SOL } from "./curve";
@@ -27,6 +27,7 @@ import type { LaunchCoin } from "./engine";
 
 export const PAD_PROGRAM_ID = new PublicKey(PAD_PROGRAM_ID_STR);
 export const PAD_FEE_TREASURY = new PublicKey(DEFAULT_TREASURY);
+export const PAD_FEE_OWNER = new PublicKey(DEFAULT_OWNER);
 
 export const PAD_DECIMALS = 6;
 const TOKEN_SUPPLY_RAW = 1_000_000_000n * 1_000_000n;
@@ -184,7 +185,7 @@ function tradeIx(opts: {
     { pubkey: userAta, isSigner: false, isWritable: true },
     { pubkey: globalPda(), isSigner: false, isWritable: false },
     { pubkey: opts.creator, isSigner: false, isWritable: true },
-    { pubkey: PAD_FEE_TREASURY, isSigner: false, isWritable: true },
+    { pubkey: PAD_FEE_OWNER, isSigner: false, isWritable: true },
     { pubkey: PAD_FEE_TREASURY, isSigner: false, isWritable: true },
     { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
   ];

@@ -19,4 +19,4 @@ solana program deploy programs/solphia-pad/target/deploy/solphia_pad.so --progra
 
 Until this is on mainnet, `/launch` simulate will fail with `curve_missing` / program not found.
 
-Fee destinations default to `2jNYVsfptvRLrg8V8AoLMVq6pnmpi7BHVo7Hsx5PTpma`. Optional `init_global` (disc 0) lets that authority rotate treasury/owner.
+Fee destinations: treasury `BobXWqFWhRwyBS3Wra3fornbmnwpmN1Ctp5brN1RZ9y3`, owner `AidbgKaN6BhMmqQSERaW2rc3i8Dax4i295q3UTpTdhg4`. `init_global` (disc 0) rotates them.

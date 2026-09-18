@@ -57,9 +57,12 @@ export function HumanGate() {
   }, []);
 
   useEffect(() => {
-    if (humanVerified()) return;
+    if (humanVerified()) {
+      setOpen(false);
+      return;
+    }
     setOpen(true);
-    setPuzzle(makePuzzle());
+    setPuzzle((p) => p || makePuzzle());
   }, []);
 
   useLayoutEffect(() => {
