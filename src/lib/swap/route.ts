@@ -1,3 +1,4 @@
+/** Live desk router (official xStocks). Pad coins use src/lib/swap/pad.ts instead. */
 import { BOT_SLIPPAGE_BPS, PROTOCOL_FEE_BPS } from "../config";
 import { SWAP_FEE_BPS } from "../launch/curve";
 import { assembleSwapTx } from "./build";

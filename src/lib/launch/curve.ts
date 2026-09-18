@@ -12,11 +12,12 @@
  * (taken from owner + treasury, never from the creator’s 50%).
  *
  * Live launches go through the Solphia pad program. This module is the spec
- * that program must match.
+ * that program must match. Graduation at 85 SOL is a milestone — the same
+ * program stays the AMM. Remaining supply keeps trading on the curve.
  */
 
 export const TOKEN_SUPPLY = 1_000_000_000;
-/** ~80% sold on the curve; 20% seeds the graduated AMM with curve SOL. */
+/** Bonding-phase cap. After graduate the remaining 200M still sell on this curve. */
 export const CURVE_SALE = 800_000_000;
 export const LP_RESERVE = TOKEN_SUPPLY - CURVE_SALE;
 export const VIRTUAL_SOL = 30;
@@ -95,6 +96,11 @@ export function feeOn(sol: number): number {
   return Math.max(0, sol) * (SWAP_FEE_BPS / 10_000);
 }
 
+/** Tokens that can still leave the curve ATA from this state. */
+export function curveSaleCap(c: CurveState): number {
+  return c.phase === "graduated" ? TOKEN_SUPPLY : CURVE_SALE;
+}
+
 export type Quote = {
   ok: true;
   solIn?: number;
@@ -111,7 +117,6 @@ export type Quote = {
 export type QuoteErr = { ok: false; error: string };
 
 export function quoteBuy(c: CurveState, solIn: number): Quote | QuoteErr {
-  if (c.phase !== "curve") return { ok: false, error: "graduated" };
   if (!(solIn >= MIN_TRADE_SOL)) return { ok: false, error: "too_small" };
   if (solIn > MAX_TRADE_SOL) return { ok: false, error: "too_large" };
   const feeSol = feeOn(solIn);
@@ -121,7 +126,7 @@ export function quoteBuy(c: CurveState, solIn: number): Quote | QuoteErr {
   const newVirtualTokens = K / newVirtualSol;
   const tokensOut = c.virtualTokens - newVirtualTokens;
   if (!(tokensOut > 0)) return { ok: false, error: "zero_out" };
-  const left = CURVE_SALE - c.tokensSold;
+  const left = curveSaleCap(c) - c.tokensSold;
   if (tokensOut > left) return { ok: false, error: "curve_empty" };
   const px0 = spotPriceSol(c);
   const next: CurveState = {
@@ -129,7 +134,7 @@ export function quoteBuy(c: CurveState, solIn: number): Quote | QuoteErr {
     virtualTokens: newVirtualTokens,
     realSol: c.realSol + net,
     tokensSold: c.tokensSold + tokensOut,
-    phase: c.realSol + net >= GRADUATE_SOL ? "graduated" : "curve",
+    phase: c.phase === "graduated" || c.realSol + net >= GRADUATE_SOL ? "graduated" : "curve",
   };
   const px1 = spotPriceSol(next);
   return {
@@ -145,7 +150,6 @@ export function quoteBuy(c: CurveState, solIn: number): Quote | QuoteErr {
 }
 
 export function quoteSell(c: CurveState, tokensIn: number): Quote | QuoteErr {
-  if (c.phase !== "curve") return { ok: false, error: "graduated" };
   if (!(tokensIn > 0)) return { ok: false, error: "too_small" };
   if (tokensIn > c.tokensSold + 1e-6) return { ok: false, error: "not_enough_sold" };
   const newVirtualTokens = c.virtualTokens + tokensIn;
@@ -161,7 +165,7 @@ export function quoteSell(c: CurveState, tokensIn: number): Quote | QuoteErr {
     virtualTokens: newVirtualTokens,
     realSol: c.realSol - grossSol,
     tokensSold: c.tokensSold - tokensIn,
-    phase: "curve",
+    phase: c.phase === "graduated" ? "graduated" : "curve",
   };
   const px1 = spotPriceSol(next);
   return {
@@ -179,14 +183,13 @@ export function quoteSell(c: CurveState, tokensIn: number): Quote | QuoteErr {
 export function graduatePool(c: CurveState): { sol: number; tokens: number } | null {
   if (c.phase !== "graduated") return null;
   const sol = Math.max(0, c.realSol - GRADUATE_FEE_SOL);
-  const tokens = LP_RESERVE + Math.max(0, CURVE_SALE - c.tokensSold);
+  const tokens = Math.max(0, TOKEN_SUPPLY - c.tokensSold);
   return { sol, tokens };
 }
 
 /** Largest SOL buy that stays under the 2% wallet cap from this curve state. */
 export function maxBuySol(c: CurveState, heldTokens = 0): number {
-  if (c.phase !== "curve") return 0;
-  const cap = Math.min((TOKEN_SUPPLY * MAX_WALLET_BPS) / 10_000, Math.max(0, CURVE_SALE - c.tokensSold));
+  const cap = Math.min((TOKEN_SUPPLY * MAX_WALLET_BPS) / 10_000, Math.max(0, curveSaleCap(c) - c.tokensSold));
   const room = Math.max(0, cap - heldTokens);
   if (room <= 0) return 0;
   const floor = quoteBuy(c, MIN_TRADE_SOL);

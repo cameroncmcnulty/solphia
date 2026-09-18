@@ -3,7 +3,6 @@ import { DEFAULT_OWNER } from "../protocolWallets";
 import {
   ANTI_SNIPE_MS,
   ANTI_SNIPE_SOL,
-  CURVE_SALE,
   emptyCurve,
   graduatePool,
   launchDevBuyCap,
@@ -638,7 +637,6 @@ export function buyCoin(
   if (!isSolanaAddress(opts.owner)) return { ok: false, error: "bad_wallet" };
   const coin = book.coins.find((c) => c.id === opts.id);
   if (!coin) return { ok: false, error: "not_found" };
-  if (coin.status !== "curve") return { ok: false, error: "graduated" };
   const now = opts.now || Date.now();
   const creator = coin.creator === opts.owner;
   if (!opts.skipSnipe && !creator && now - coin.createdAt < ANTI_SNIPE_MS && opts.sol > ANTI_SNIPE_SOL) {
@@ -649,7 +647,6 @@ export function buyCoin(
   const h = holderOf(coin, opts.owner);
   const nextTokens = h.tokens + (q.tokensOut || 0);
   if (nextTokens > (TOKEN_SUPPLY * MAX_WALLET_BPS) / 10_000) return { ok: false, error: "wallet_cap" };
-  if (nextTokens > CURVE_SALE) return { ok: false, error: "wallet_cap" };
   coin.curve = q.newCurve;
   h.tokens = nextTokens;
   h.spentSol += opts.sol;
@@ -677,7 +674,6 @@ export function sellCoin(
   if (!isSolanaAddress(opts.owner)) return { ok: false, error: "bad_wallet" };
   const coin = book.coins.find((c) => c.id === opts.id);
   if (!coin) return { ok: false, error: "not_found" };
-  if (coin.status !== "curve") return { ok: false, error: "graduated" };
   const h = holderOf(coin, opts.owner);
   if (opts.tokens > h.tokens + 1e-9) return { ok: false, error: "not_enough" };
   const q = quoteSell(coin.curve, opts.tokens);

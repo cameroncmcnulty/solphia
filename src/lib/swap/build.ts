@@ -58,7 +58,7 @@ export async function fetchSwapInstructions(quote: JupiterQuote, userPublicKey: 
   return null;
 }
 
-/** One transaction: optional protocol SOL skim + Jupiter swap. Beats a follow-up fee tx. */
+/** Desk / market only. Pad launches never call this — they go through the Solphia program. */
 export async function assembleSwapTx(opts: {
   owner: string;
   quote: JupiterQuote;

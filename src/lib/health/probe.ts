@@ -1,7 +1,10 @@
+import { PublicKey } from "@solana/web3.js";
 import { HELIUS_API_KEY, rpcUrl, XAI_API_KEY } from "../config";
+import { PAD_PROGRAM_ID } from "../launch/ids";
 import { signerConfigured } from "../live/crypto";
 import { pinataConfigured, pinataUsage } from "../pinata";
 import { durableConfigured, durableKind, kvGetJson, kvMemoryBytes, KEYS } from "../persist";
+import { connection } from "../solana/connection";
 import { pushBounded } from "../store";
 import type { AppState } from "../types";
 import { SERVICES, tierOf, type HealthTiers, type ServiceId } from "./catalog";
@@ -95,12 +98,21 @@ export async function probeHealth(state: AppState): Promise<{
   sample: HealthSample;
 }> {
   const rpc = rpcUrl();
-  const [rpcPing, jupPing, dexPing, pin, storePing, redisBytes] = await Promise.all([
+  const [rpcPing, padPing, jupPing, dexPing, pin, storePing, redisBytes] = await Promise.all([
     ping(rpc, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "getHealth" }),
     }),
+    (async () => {
+      const t0 = Date.now();
+      try {
+        const info = await connection().getAccountInfo(new PublicKey(PAD_PROGRAM_ID), "confirmed");
+        return { ok: Boolean(info?.executable), ms: Date.now() - t0 };
+      } catch {
+        return { ok: false, ms: Date.now() - t0 };
+      }
+    })(),
     ping("https://lite-api.jup.ag/swap/v1/quote?inputMint=So11111111111111111111111111111111111111112&outputMint=EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v&amount=1000000&slippageBps=50"),
     ping("https://api.dexscreener.com/latest/dex/search?q=SOL"),
     pinataUsage(),
@@ -119,7 +131,8 @@ export async function probeHealth(state: AppState): Promise<{
   const tickAgeMs = state.lastTickAt ? Date.now() - state.lastTickAt : -1;
   const speeds: SpeedRow[] = [
     { id: "rpc", label: "Solana RPC", ms: rpcPing.ms, ok: rpcPing.ok, detail: HELIUS_API_KEY ? "Helius" : "public RPC" },
-    { id: "jup", label: "Jupiter", ms: jupPing.ms, ok: jupPing.ok },
+    { id: "pad", label: "Solphia pad", ms: padPing.ms, ok: padPing.ok, detail: "in-house curve" },
+    { id: "jup", label: "xStock desk (Jupiter)", ms: jupPing.ms, ok: jupPing.ok },
     { id: "dex", label: "Dexscreener", ms: dexPing.ms, ok: dexPing.ok },
     {
       id: "pinata",

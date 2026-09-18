@@ -9,6 +9,7 @@ import { planTreasuryWithdraw, treasuryHot, treasuryKeypair } from "@/lib/treasu
 import { audit, loadAllTraders, mutateState, pushBounded, readyState } from "@/lib/store";
 import { lastPairPrices } from "@/lib/tick";
 import { sphaMintOf } from "@/lib/token/solphia";
+import { sendSignedTx } from "@/lib/tx/send";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -141,7 +142,9 @@ export async function POST(req: NextRequest) {
   const kp = treasuryKeypair();
   if (kp) {
     tx.sign(kp);
-    const sig = await conn.sendRawTransaction(tx.serialize(), { skipPreflight: false });
+    const sent = await sendSignedTx(tx, { conn });
+    if (!sent.ok) return NextResponse.json({ error: sent.error }, { status: 400 });
+    const sig = sent.signature;
     await mutateState((s) => {
       pushBounded(s.audit, audit("admin", "treasury_withdraw", `${plan.sol.toFixed(4)} SOL → ${to} ${sig.slice(0, 8)}`, clientIp(req)), 400);
     });

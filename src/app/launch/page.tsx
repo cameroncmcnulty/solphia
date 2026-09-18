@@ -1537,6 +1537,7 @@ function MarketSwap({
   const [feeSol, setFeeSol] = useState(0);
   const [held, setHeld] = useState(0);
   const [msg, setMsg] = useState("");
+  const [hint, setHint] = useState("");
   const tradeErr = useConfirmErrors<"wallet" | "amount">();
   const mint = open.mint || "";
 
@@ -1568,11 +1569,18 @@ function MarketSwap({
         .then((r) => r.json())
         .then((j) => {
           if (j.ok) {
+            setHint("");
             setOut(Number(j.outAmount) || 0);
             setFeeSol(Number(j.feeSol) || 0);
-          } else setOut(null);
+          } else {
+            setOut(null);
+            setHint(typeof j.error === "string" ? j.error : "Not on the Solphia curve.");
+          }
         })
-        .catch(() => setOut(null));
+        .catch(() => {
+          setOut(null);
+          setHint("Not on the Solphia curve.");
+        });
     }, 280);
     return () => {
       clearTimeout(t);
@@ -1684,6 +1692,7 @@ function MarketSwap({
           <button type="button" disabled={busy} onClick={go} className="btn-acid mt-4 min-h-[52px] w-full rounded-full disabled:opacity-40">
             {busy ? "Swapping…" : side === "buy" ? `Buy ${tick(open.symbol)}` : `Sell ${tick(open.symbol)}`}
           </button>
+          {hint && !msg && <p className="mt-3 text-[12px] leading-snug text-mute">{hint}</p>}
           {msg && <p className="mt-3 font-mono text-sm text-acid">{msg}</p>}
         </>
       )}

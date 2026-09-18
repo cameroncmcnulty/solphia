@@ -7,7 +7,7 @@ import type { AppState } from "../types";
 import { ensureShill } from "../shill/engine";
 import { emptyLaunchBook } from "../launch/engine";
 
-/** Live in-house skim. Same 1% as pad Jupiter swaps. Not the 10 bps paper pair model. */
+/** Live in-house skim. Same 1% as pad curve swaps. Not the 10 bps paper pair model. */
 export const LIVE_SKIM_BPS = SWAP_FEE_BPS;
 export const PAD_CURVE_BPS = SWAP_FEE_BPS;
 
@@ -70,7 +70,7 @@ export function buildProfitDesk(state: AppState): ProfitDesk {
     },
     {
       id: "swap",
-      feature: "In-house / pad Jupiter swaps",
+      feature: "Pad curve swaps",
       rate: "1% of SOL",
       wallet: "treasury",
       walletPk: treasury,

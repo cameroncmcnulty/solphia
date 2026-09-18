@@ -43,6 +43,7 @@ export function PadPitch() {
           <p className="mt-3 max-w-lg text-sm leading-relaxed text-mute">
             Same virtual AMM family as Pump.fun. Cheaper for buyers. Richer for the wallet that launched.
             Supply never dumps into the creator — it sits on the Solphia program until someone buys.
+            After 85 SOL the same program stays the AMM. No Jupiter hop.
           </p>
           <div className="mt-5 grid grid-cols-3 gap-2">
             {[

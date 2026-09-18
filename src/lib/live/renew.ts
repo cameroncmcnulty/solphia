@@ -5,6 +5,7 @@ import { extendSeat, seatDue, seatLamports } from "../seat";
 import { treasuryAddress } from "../treasury";
 import type { AppState, TraderAccount } from "../types";
 import { loadDelegatedKeypair } from "./signer";
+import { sendSignedTx } from "../tx/send";
 
 /** Pay the next seat month from the delegated trading wallet so 24/7 does not need the tab. */
 export async function renewLiveSeat(state: AppState, trader: TraderAccount): Promise<boolean> {
@@ -32,7 +33,8 @@ export async function renewLiveSeat(state: AppState, trader: TraderAccount): Pro
   tx.feePayer = kp.publicKey;
   tx.recentBlockhash = blockhash;
   tx.sign(kp);
-  await conn.sendRawTransaction(tx.serialize(), { skipPreflight: false });
+  const sent = await sendSignedTx(tx, { conn });
+  if (!sent.ok) return false;
   extendSeat(user, Date.now(), true, user.plan === "lev" ? "lev" : "live");
   return true;
 }

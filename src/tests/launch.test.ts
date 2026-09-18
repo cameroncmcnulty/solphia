@@ -267,7 +267,8 @@ describe("fair launch book", () => {
     assert.equal(made.coin.status, "graduated");
     assert.ok(made.coin.pool && made.coin.pool.sol > 0 && made.coin.pool.tokens > 0);
     const after = buyCoin(book, { id: made.coin.id, owner: B, sol: 1, now: now + 99_000 });
-    assert.equal(after.ok, false);
+    assert.equal(after.ok, true);
+    if (after.ok) assert.ok((after.fill.tokens || 0) > 0);
   });
 
   it("is deterministic: same buys produce the same tokens", () => {

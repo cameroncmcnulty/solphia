@@ -18,6 +18,7 @@ import { readyState } from "../store";
 import { sphaMintOf } from "../token/solphia";
 import { treasuryAddress } from "../treasury";
 import { treasuryKeypair } from "../treasury/withdraw";
+import { sendSignedTx } from "../tx/send";
 
 function keypairFromEnv(raw: string): Keypair | null {
   const v = (raw || "").trim();
@@ -81,10 +82,7 @@ export async function sendCircleDrop(
     tx.add(SystemProgram.transfer({ fromPubkey: fromKey, toPubkey: toKey, lamports }));
   }
   tx.sign(hot);
-  try {
-    const sig = await conn.sendRawTransaction(tx.serialize(), { skipPreflight: false });
-    return { ok: true, signature: sig };
-  } catch (e) {
-    return { ok: false, error: "send", message: e instanceof Error ? e.message : "Send failed." };
-  }
+  const sent = await sendSignedTx(tx, { conn });
+  if (!sent.ok) return { ok: false, error: "send", message: sent.error };
+  return { ok: true, signature: sent.signature };
 }

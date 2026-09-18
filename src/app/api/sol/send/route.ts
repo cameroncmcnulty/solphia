@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Connection } from "@solana/web3.js";
-import { rpcUrl } from "@/lib/config";
 import { clientIp, rateLimit } from "@/lib/security";
+import { sendRawAndConfirm } from "@/lib/tx/send";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -13,17 +12,9 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
   const b64 = typeof body?.transaction === "string" ? body.transaction : "";
   if (!b64 || b64.length > 24_000) return NextResponse.json({ error: "bad_tx" }, { status: 400 });
-  try {
-    const raw = Buffer.from(b64, "base64");
-    const conn = new Connection(rpcUrl(), { commitment: "confirmed" });
-    const sig = await conn.sendRawTransaction(raw, { skipPreflight: false, maxRetries: 4 });
-    const latest = await conn.getLatestBlockhash("confirmed");
-    const conf = await conn.confirmTransaction({ signature: sig, ...latest }, "confirmed");
-    if (conf.value.err) {
-      return NextResponse.json({ error: "Transaction landed but failed on Solana.", signature: sig }, { status: 400 });
-    }
-    return NextResponse.json({ signature: sig });
-  } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : "send failed" }, { status: 400 });
+  const sent = await sendRawAndConfirm(Buffer.from(b64, "base64"));
+  if (!sent.ok) {
+    return NextResponse.json({ error: sent.error, signature: sent.signature }, { status: 400 });
   }
+  return NextResponse.json({ signature: sent.signature });
 }

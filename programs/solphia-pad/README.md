@@ -17,6 +17,6 @@ cargo build-sbf --manifest-path programs/solphia-pad/Cargo.toml
 solana program deploy programs/solphia-pad/target/deploy/solphia_pad.so --program-id programs/solphia-pad/keys/program.json
 ```
 
-Until this is on mainnet, `/launch` simulate will fail with `curve_missing` / program not found.
+Graduation at 85 SOL is a milestone flag. Buy and sell stay on this program after graduate — remaining supply does not hop to Jupiter.
 
 Fee destinations: treasury `BobXWqFWhRwyBS3Wra3fornbmnwpmN1Ctp5brN1RZ9y3`, owner `AidbgKaN6BhMmqQSERaW2rc3i8Dax4i295q3UTpTdhg4`. `init_global` (disc 0) rotates them.

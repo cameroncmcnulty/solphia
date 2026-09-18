@@ -24,11 +24,11 @@ export async function POST(req: NextRequest) {
   if (!q.ok) return NextResponse.json({ error: q.reason }, { status: 400 });
   return NextResponse.json({
     ok: true,
+    via: q.via,
     outAmount: q.outAmount,
     feeSol: q.feeSol,
     spendSol: q.spendSol,
     impactPct: q.impactPct,
-    quote: q.quote,
     inMint: q.inMint,
     outMint: q.outMint,
   });

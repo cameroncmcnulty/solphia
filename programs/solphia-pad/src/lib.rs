@@ -1,5 +1,7 @@
 //! Solphia pad: constant-product virtual AMM (same family as Pump.fun).
-//! 1B supply @ 6 decimals, 800M sold on the curve, graduate at 85 SOL.
+//! 1B supply @ 6 decimals, 800M sold on the bonding curve, graduate at 85 SOL.
+//! Graduation is a milestone flag. The same program stays the AMM — no Jupiter hop.
+//! After graduate, the remaining 200M still trade on this curve.
 //! One fee: 1.00% of SOL, split 50 creator / 25 owner / 25 treasury.
 //! Tokens live on the curve ATA. Only an optional first buy hits the creator.
 
@@ -238,9 +240,6 @@ fn buy(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> ProgramRes
     }
 
     let mut st = load_curve(curve)?;
-    if st.complete != 0 {
-        return Err(ProgramError::InvalidAccountData);
-    }
     if st.mint != *mint.key || st.creator != *creator.key {
         return Err(ProgramError::InvalidArgument);
     }
@@ -254,7 +253,8 @@ fn buy(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> ProgramRes
     if tokens_out < min_tokens || tokens_out == 0 {
         return Err(ProgramError::InvalidArgument);
     }
-    if st.tokens_sold.saturating_add(tokens_out) > CURVE_SALE {
+    let sale_cap = if st.complete == 0 { CURVE_SALE } else { TOKEN_SUPPLY };
+    if st.tokens_sold.saturating_add(tokens_out) > sale_cap {
         return Err(ProgramError::InvalidArgument);
     }
 
@@ -290,7 +290,7 @@ fn buy(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> ProgramRes
     st.virtual_tokens = st.virtual_tokens.saturating_sub(tokens_out);
     st.real_sol = st.real_sol.saturating_add(net);
     st.tokens_sold = st.tokens_sold.saturating_add(tokens_out);
-    if st.real_sol >= GRADUATE_SOL {
+    if st.complete == 0 && st.real_sol >= GRADUATE_SOL {
         st.complete = 1;
         if st.real_sol > GRADUATE_FEE {
             **curve.try_borrow_mut_lamports()? -= GRADUATE_FEE;
@@ -337,9 +337,6 @@ fn sell(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> ProgramRe
         return Err(ProgramError::InvalidSeeds);
     }
     let mut st = load_curve(curve)?;
-    if st.complete != 0 {
-        return Err(ProgramError::InvalidAccountData);
-    }
     if tokens_in > st.tokens_sold {
         return Err(ProgramError::InsufficientFunds);
     }

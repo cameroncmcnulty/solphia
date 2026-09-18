@@ -1,4 +1,4 @@
-import { Connection, Keypair, Transaction, VersionedTransaction } from "@solana/web3.js";
+import { Connection, Keypair } from "@solana/web3.js";
 import { applyPairDecision } from "../pair/paper";
 import { quoteBestRoute } from "../pair/jupiter";
 import { SOL_MINT, USDC_MINT } from "../pair/mints";
@@ -10,22 +10,14 @@ import { loadDelegatedKeypair } from "./signer";
 import { assembleSwapTx } from "../swap/build";
 import { liveClipFeeSol } from "../swap/route";
 import { BOT_SLIPPAGE_BPS, rpcUrl } from "../config";
+import { signSendAndConfirm } from "../tx/send";
 
 export const MAX_LIVE_FILLS_PER_TICK = 2;
 
 async function signAndSend(conn: Connection, kp: Keypair, transactionB64: string): Promise<string> {
-  const raw = Buffer.from(transactionB64, "base64");
-  let signed: Uint8Array;
-  try {
-    const tx = VersionedTransaction.deserialize(raw);
-    tx.sign([kp]);
-    signed = tx.serialize();
-  } catch {
-    const tx = Transaction.from(raw);
-    tx.partialSign(kp);
-    signed = tx.serialize();
-  }
-  return conn.sendRawTransaction(signed, { skipPreflight: false });
+  const sent = await signSendAndConfirm(kp, transactionB64, { conn });
+  if (!sent.ok) throw new Error(sent.error);
+  return sent.signature;
 }
 
 async function swapDirect(

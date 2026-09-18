@@ -10,7 +10,7 @@ const PRESETS = [0.1, 0.25, 0.5, 1];
 
 export function SwapShell({
   title = "Swap",
-  subtitle = "Buy or sell from the wallet you connected. You sign. Tokens land there.",
+  subtitle = "Solphia curve only. You sign. Tokens land in the wallet you connected.",
   children,
 }: {
   title?: string;
@@ -119,8 +119,10 @@ export function SwapWidget({
         .then((j) => {
           if (!j?.ok) {
             setQuote("");
+            setErr(typeof j?.error === "string" ? j.error : "");
             return;
           }
+          setErr("");
           if (side === "buy") {
             setQuote(Number(j.outAmount || 0).toLocaleString(undefined, { maximumFractionDigits: 2 }));
             setQuoteUnit("tokens");
@@ -157,7 +159,7 @@ export function SwapWidget({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ owner, mint, side, amount: n }),
       }).then((r) => r.json());
-      if (!built.transaction) throw new Error(built.error || "No route.");
+      if (!built.transaction) throw new Error(built.error || "Not on the Solphia curve.");
       const sig = await signAndSendPhantom(built.transaction);
       setOut(`${side === "buy" ? "Bought" : "Sold"} · ${sig.slice(0, 8)}…`);
     } catch (e) {

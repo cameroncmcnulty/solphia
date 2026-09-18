@@ -26,7 +26,7 @@ export default function LegalPage() {
           Shill Zone, launch, and chat are public. Do not post illegal content. We may mute, ban, or delete to keep the room usable. Boosts and pins are paid placements, not investment offers.
         </p>
         <p>
-          The site is provided as-is. Solana congestion, RPC faults, Jupiter routes, and third-party tokens can fail without notice. We are not liable for lost keys, failed transactions, or token price.
+          The site is provided as-is. Solana congestion, RPC faults, and third-party tokens can fail without notice. Pad trades go through the Solphia on-chain program. The live desk uses Jupiter to reach official xStock liquidity. We are not liable for lost keys, failed transactions, or token price.
         </p>
         <p>
           We may update these terms by posting a new version here. Continued use after the date above is acceptance.
@@ -44,7 +44,7 @@ export default function LegalPage() {
           Wallet addresses are public on Solana. Chat is public. We use first-party cookies and local storage so your wallet stays connected in this browser. We do not sell personal information.
         </p>
         <p>
-          Profile images and chat media may be stored with our hosting and pinning providers so the site can show them. RPC and swap quotes go through Helius and Jupiter. Durable desk state is stored in Redis (Upstash) so it survives deploys.
+          Profile images and chat media may be stored with our hosting and pinning providers so the site can show them. RPC goes through Helius. Pad quotes are computed from our on-chain curve. Live-desk xStock quotes go through Jupiter. Durable desk state is stored in Redis (Upstash) so it survives deploys.
         </p>
         <p>
           You can disconnect, clear this browser, or ask us to mute or delete a profile you control. On-chain transfers cannot be reversed. For privacy questions use the contact path posted with the project.

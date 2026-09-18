@@ -24,6 +24,7 @@ import type { CurveState } from "./curve";
 import { MIN_TRADE_SOL } from "./curve";
 import { isSolanaAddress } from "../security";
 import type { LaunchCoin } from "./engine";
+import { confirmSig } from "../tx/send";
 
 export const PAD_PROGRAM_ID = new PublicKey(PAD_PROGRAM_ID_STR);
 export const PAD_FEE_TREASURY = new PublicKey(DEFAULT_TREASURY);
@@ -221,9 +222,8 @@ export async function waitForPadCurve(
   const conn = connection();
   if (sig) {
     try {
-      const latest = await conn.getLatestBlockhash("confirmed");
-      const conf = await conn.confirmTransaction({ signature: sig, ...latest }, "confirmed");
-      if (conf.value.err) return { ok: false, error: "chain_failed" };
+      const conf = await confirmSig(conn, sig);
+      if (!conf.ok) return { ok: false, error: "chain_failed" };
     } catch {
       /* still poll the curve */
     }
@@ -329,21 +329,21 @@ export async function quotePadTrade(opts: {
 > {
   const ready = await padCurveReady(opts.mint);
   if (!ready.ok) return ready;
-  if (ready.curve.phase === "graduated") return { ok: false, error: "graduated" };
   const vs = BigInt(Math.round(ready.curve.virtualSol * 1e9));
   const vt = BigInt(Math.round(ready.curve.virtualTokens * 1e6));
+  const complete = ready.curve.phase === "graduated";
   if (opts.side === "buy") {
     const sol = Number(opts.sol) || 0;
     if (sol < MIN_TRADE_SOL) return { ok: false, error: "too_small" };
     const q = quoteBuyRaw(vs, vt, lamports(sol));
     if (q.tokensOut <= 0n) return { ok: false, error: "zero_out" };
-    return { ok: true, tokensOut: fromRaw(q.tokensOut), feeSol: fromLamports(q.fee), complete: false };
+    return { ok: true, tokensOut: fromRaw(q.tokensOut), feeSol: fromLamports(q.fee), complete };
   }
   const tokens = Number(opts.tokens) || 0;
   if (!(tokens > 0)) return { ok: false, error: "not_enough" };
   const q = quoteSellRaw(vs, vt, BigInt(Math.round(tokens * 1e6)));
   if (q.solOut <= 0n) return { ok: false, error: "zero_out" };
-  return { ok: true, solOut: fromLamports(q.solOut), feeSol: fromLamports(q.fee), complete: false };
+  return { ok: true, solOut: fromLamports(q.solOut), feeSol: fromLamports(q.fee), complete };
 }
 
 export async function buildPadTradeTx(opts: {

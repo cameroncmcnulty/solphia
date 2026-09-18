@@ -32,10 +32,6 @@ export async function POST(req: NextRequest) {
     mint: parsed.data.mint,
     side: parsed.data.side,
     amount: parsed.data.amount,
-    quote: q.quote,
-    feeSol: q.feeSol,
-    feeAfter: parsed.data.side === "sell",
-    via: q.via,
     creator: q.creator,
   });
   if (!tx.ok) return NextResponse.json({ error: tx.reason }, { status: 400 });
@@ -49,6 +45,7 @@ export async function POST(req: NextRequest) {
   }
   return NextResponse.json({
     transaction: tx.transaction,
+    via: q.via,
     outAmount: q.outAmount,
     feeSol: q.feeSol,
     impactPct: q.impactPct,
