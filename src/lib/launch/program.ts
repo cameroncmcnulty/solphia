@@ -199,6 +199,34 @@ export async function padCurveReady(mint: string): Promise<{ ok: true; curve: Cu
   }
 }
 
+export async function waitForPadCurve(
+  mint: string,
+  sig?: string,
+): Promise<{ ok: true; curve: CurveState } | { ok: false; error: string }> {
+  const conn = connection();
+  if (sig) {
+    try {
+      const latest = await conn.getLatestBlockhash("confirmed");
+      const conf = await conn.confirmTransaction({ signature: sig, ...latest }, "confirmed");
+      if (conf.value.err) return { ok: false, error: "chain_failed" };
+    } catch {
+      /* still poll the curve */
+    }
+    try {
+      const tx = await conn.getTransaction(sig, { commitment: "confirmed", maxSupportedTransactionVersion: 0 });
+      if (tx?.meta?.err) return { ok: false, error: "chain_failed" };
+    } catch {
+      /* RPC lag */
+    }
+  }
+  let ready = await padCurveReady(mint);
+  for (let i = 0; i < 24 && !ready.ok; i++) {
+    await new Promise((r) => setTimeout(r, 750));
+    ready = await padCurveReady(mint);
+  }
+  return ready;
+}
+
 export async function hydratePadCoins(coins: LaunchCoin[]): Promise<void> {
   const rows = coins.filter((c) => (c.venue === "solphia" || c.venue === "pump") && c.mint.length >= 32 && !c.mint.startsWith("curve:"));
   if (!rows.length) return;

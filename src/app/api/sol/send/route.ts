@@ -4,6 +4,7 @@ import { rpcUrl } from "@/lib/config";
 import { clientIp, rateLimit } from "@/lib/security";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 30;
 
 export async function POST(req: NextRequest) {
   if (!rateLimit(clientIp(req) + ":send", 12, 60_000)) {
@@ -15,7 +16,12 @@ export async function POST(req: NextRequest) {
   try {
     const raw = Buffer.from(b64, "base64");
     const conn = new Connection(rpcUrl(), { commitment: "confirmed" });
-    const sig = await conn.sendRawTransaction(raw, { skipPreflight: false });
+    const sig = await conn.sendRawTransaction(raw, { skipPreflight: false, maxRetries: 4 });
+    const latest = await conn.getLatestBlockhash("confirmed");
+    const conf = await conn.confirmTransaction({ signature: sig, ...latest }, "confirmed");
+    if (conf.value.err) {
+      return NextResponse.json({ error: "Transaction landed but failed on Solana.", signature: sig }, { status: 400 });
+    }
     return NextResponse.json({ signature: sig });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "send failed" }, { status: 400 });

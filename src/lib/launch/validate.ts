@@ -45,7 +45,7 @@ export function nameOk(s: string): boolean {
 export function imageOk(raw?: string): string {
   const s = (raw || "").trim();
   if (!s) return "";
-  if (!/^data:image\/(png|jpeg|jpg|webp);base64,/i.test(s)) return "";
+  if (!/^data:image\/(png|jpeg|jpg|webp|gif|bmp|heic|heif|avif|tiff|tif);base64,/i.test(s)) return "";
   if (s.length > IMAGE_DATA_MAX) return "";
   return s;
 }
@@ -77,8 +77,8 @@ export function validateLaunchCreate(input: LaunchCreateInput): Partial<Record<L
   if (input.image) {
     if (!imageOk(input.image)) {
       errors.image = input.image.startsWith("data:image")
-        ? "Image is too heavy. Try a simpler square PNG or JPEG."
-        : "Use a PNG, JPEG, or WebP. We crop a square.";
+        ? "Image is too heavy. Try a simpler photo."
+        : "Use a photo from your camera roll. We crop a square.";
     }
   }
 

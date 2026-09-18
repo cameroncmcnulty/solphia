@@ -28,7 +28,7 @@ import {
   buildPadLaunchTx,
   buildPadTradeTx,
   hydratePadCoins,
-  padCurveReady,
+  waitForPadCurve,
   quotePadTrade,
 } from "@/lib/launch/program";
 
@@ -164,11 +164,7 @@ async function confirmMint(b: LaunchBody, solUsd: number) {
   const name = sanitizeText(b.name || "", 24);
   const symbol = sanitizeText(b.symbol || "", 10).toUpperCase();
   if (!b.mint || !isSolanaAddress(b.mint)) return fail("bad_mint");
-  let ready = await padCurveReady(b.mint);
-  for (let i = 0; i < 8 && !ready.ok; i++) {
-    await new Promise((r) => setTimeout(r, 800));
-    ready = await padCurveReady(b.mint);
-  }
+  const ready = await waitForPadCurve(b.mint, b.sigs?.[0] || b.sig);
   if (!ready.ok) return fail(ready.error);
   const liveCurve = ready.curve;
   let image = storedImage(b.image);

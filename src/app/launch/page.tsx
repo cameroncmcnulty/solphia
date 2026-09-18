@@ -148,32 +148,54 @@ function tick(symbol?: string) {
   return s ? `$${s}` : "";
 }
 
-async function squareTokenImage(file: File): Promise<string> {
-  if (file.size > 4_000_000) throw new Error("Image must be under 4 MB.");
-  const url = URL.createObjectURL(file);
+async function decodeLaunchImage(file: File): Promise<{ w: number; h: number; draw: CanvasImageSource }> {
+  const heic = /heic|heif/i.test(file.type) || /\.hei[cf]$/i.test(file.name);
+  let blob: Blob = file;
+  if (heic) {
+    try {
+      const { default: heic2any } = await import("heic2any");
+      const out = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.82 });
+      blob = Array.isArray(out) ? out[0] : out;
+    } catch {
+      /* Safari can often decode HEIC without this */
+    }
+  }
+  try {
+    const bmp = await createImageBitmap(blob, { imageOrientation: "from-image" } as ImageBitmapOptions);
+    return { w: bmp.width, h: bmp.height, draw: bmp };
+  } catch {
+    /* fall through */
+  }
+  const url = URL.createObjectURL(blob);
   try {
     const img = await new Promise<HTMLImageElement>((resolve, reject) => {
       const el = new Image();
       el.onload = () => resolve(el);
-      el.onerror = () => reject(new Error("Could not read that image."));
+      el.onerror = () => reject(new Error("Could not read that image. Try another photo from your camera roll."));
       el.src = url;
     });
-    const side = Math.min(img.naturalWidth, img.naturalHeight);
-    if (side < 512) throw new Error("Use a square image at least 512×512.");
-    const full = document.createElement("canvas");
-    full.width = TOKEN_PX;
-    full.height = TOKEN_PX;
-    const fctx = full.getContext("2d");
-    if (!fctx) throw new Error("Could not crop image.");
-    fctx.drawImage(img, (img.naturalWidth - side) / 2, (img.naturalHeight - side) / 2, side, side, 0, 0, TOKEN_PX, TOKEN_PX);
-    const store = document.createElement("canvas");
-    store.width = STORE_PX;
-    store.height = STORE_PX;
-    store.getContext("2d")?.drawImage(full, 0, 0, STORE_PX, STORE_PX);
-    return jpegFit(store);
+    return { w: img.naturalWidth, h: img.naturalHeight, draw: img };
   } finally {
     URL.revokeObjectURL(url);
   }
+}
+
+async function squareTokenImage(file: File): Promise<string> {
+  if (file.size > 25_000_000) throw new Error("Image must be under 25 MB.");
+  const img = await decodeLaunchImage(file);
+  const side = Math.min(img.w, img.h);
+  if (side < 64) throw new Error("That image is too small.");
+  const full = document.createElement("canvas");
+  full.width = TOKEN_PX;
+  full.height = TOKEN_PX;
+  const fctx = full.getContext("2d");
+  if (!fctx) throw new Error("Could not crop image.");
+  fctx.drawImage(img.draw, (img.w - side) / 2, (img.h - side) / 2, side, side, 0, 0, TOKEN_PX, TOKEN_PX);
+  const store = document.createElement("canvas");
+  store.width = STORE_PX;
+  store.height = STORE_PX;
+  store.getContext("2d")?.drawImage(full, 0, 0, STORE_PX, STORE_PX);
+  return jpegFit(store);
 }
 
 function jpegFit(canvas: HTMLCanvasElement, max = IMAGE_DATA_MAX): string {
@@ -445,29 +467,40 @@ export default function LaunchPage() {
       }
       setMsg("Sign once in Phantom…");
       const sig = await signPumpLaunch(packed, mint);
-      setMsg("Confirming the bonding curve…");
-      const r = await fetch("/api/launch", {
+      setMsg("Waiting for the curve on Solana…");
+      const confirmBody = {
+        action: "confirm",
+        pubkey: owner,
+        mint: mintPk,
+        sigs: [sig],
+        tokens: Number(pj.tokensOut) || 0,
+        name,
+        symbol,
+        blurb,
+        image: pj.image || image,
+        website,
+        x,
+        telegram,
+        discord,
+        launchBuySol: devBuy,
+        uri: pj.uri,
+      };
+      let r = await fetch("/api/launch", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          action: "confirm",
-          pubkey: owner,
-          mint: mintPk,
-          sigs: [sig],
-          tokens: Number(pj.tokensOut) || 0,
-          name,
-          symbol,
-          blurb,
-          image: pj.image || image,
-          website,
-          x,
-          telegram,
-          discord,
-          launchBuySol: devBuy,
-          uri: pj.uri,
-        }),
+        body: JSON.stringify(confirmBody),
       });
-      const j = await r.json();
+      let j = await r.json();
+      for (let i = 0; i < 4 && !r.ok && j.error === "curve_missing"; i++) {
+        setMsg("Signature is in. Waiting on Solana…");
+        await new Promise((res) => setTimeout(res, 2000));
+        r = await fetch("/api/launch", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(confirmBody),
+        });
+        j = await r.json();
+      }
       if (!r.ok) {
         const code = typeof j.error === "string" ? j.error : "";
         const message = j.message || launchError(code) || "Curve landed but the pad could not list it yet.";
@@ -659,13 +692,13 @@ export default function LaunchPage() {
                     )}
                   </button>
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm text-mute">Square art. Optional.</p>
+                    <p className="text-sm text-mute">Any photo. We crop a square. Optional.</p>
                     <FieldError error={createErr.errors.image} />
                   </div>
                   <input
                     ref={fileRef}
                     type="file"
-                    accept="image/png,image/jpeg,image/webp"
+                    accept="image/*,.heic,.heif,.jpg,.jpeg,.png,.webp,.gif,.bmp,.tif,.tiff"
                     className="hidden"
                     onChange={async (e) => {
                       const f = e.target.files?.[0];
