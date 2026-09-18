@@ -11,8 +11,8 @@
  * If the creator was invited, the inviter also gets 25% of the fee for life
  * (taken from owner + treasury, never from the creator’s 50%).
  *
- * Live on-chain custody needs the Solphia launch program. This module is the
- * canonical math both paper and that program must match.
+ * Live launches go through the Solphia pad program. This module is the spec
+ * that program must match.
  */
 
 export const TOKEN_SUPPLY = 1_000_000_000;

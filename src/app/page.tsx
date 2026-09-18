@@ -64,7 +64,7 @@ export default function Home() {
           <Reveal delay={120}><Eco
             n="02"
             t="Launch"
-            d="Launch a token. Swap it. Boost it to the top."
+            d="1.00% curve. Creators take half. Cheaper than Pump.fun, live on mainnet."
             href="/launch"
             c="Launch"
           /></Reveal>

@@ -118,6 +118,7 @@ async function sendFromTrading(to: string, sol: number): Promise<string> {
 export function phantomProvider(): {
   isPhantom?: boolean;
   signAndSendTransaction: (tx: Transaction | VersionedTransaction) => Promise<{ signature?: string } | string>;
+  signTransaction: (tx: Transaction | VersionedTransaction) => Promise<Transaction | VersionedTransaction>;
 } | null {
   if (typeof window === "undefined") return null;
   const w = window as unknown as { phantom?: { solana?: any }; solana?: any };
@@ -139,6 +140,37 @@ export async function signAndSendPhantom(transactionB64: string): Promise<string
   const sig = String(typeof sent === "string" ? sent : sent.signature || "");
   if (!sig) throw new Error("Phantom did not return a signature.");
   return sig;
+}
+
+async function sendSignedB64(b64: string): Promise<string> {
+  const r = await fetch("/api/sol/send", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ transaction: b64 }),
+  });
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.error || "send failed");
+  return j.signature as string;
+}
+
+/**
+ * Pump.fun create: mint key is a second signer. Phantom docs: signTransaction
+ * first (one remaining signer from Phantom's view), then attach the mint
+ * signature, then send. signAndSendTransaction with a pre-signed mint is what
+ * Blowfish flags as "This dApp could be malicious."
+ */
+export async function signPumpLaunch(transactionB64: string, mint: Keypair): Promise<string> {
+  const provider = phantomProvider();
+  if (!provider) throw new Error("Open this page in Phantom (browser or in-app).");
+  const raw = Uint8Array.from(atob(transactionB64), (c) => c.charCodeAt(0));
+  const tx = Transaction.from(raw);
+  const signed = await provider.signTransaction(tx);
+  if (typeof (signed as Transaction).partialSign !== "function") {
+    throw new Error("Phantom did not return a signable transaction.");
+  }
+  const legacy = signed as Transaction;
+  legacy.partialSign(mint);
+  return sendSignedB64(toB64(legacy.serialize()));
 }
 
 /** First-month seat: Phantom (owner) → treasury. */

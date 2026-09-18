@@ -118,6 +118,7 @@ describe("fair launch book", () => {
     assert.equal(r.coin.devRewardsSol, 0);
     assert.equal(r.coin.mintAuthority, "revoked");
     assert.equal(r.coin.freezeAuthority, "revoked");
+    assert.equal(publicCoin(r.coin).venue, "launchlab");
   });
 
   it("keeps a real Solana mint when the pad confirms on-chain", () => {

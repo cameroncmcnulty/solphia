@@ -41,15 +41,14 @@ export function LaunchSection() {
         <Mini k="Coins on pad" v={String(data.launchCount)} />
         <Mini k="Owner earnings" v={`${data.ownerEarningsSol.toFixed(4)} SOL`} />
         <Mini k="Treasury pad fees" v={`${(data.treasuryFeesSol || 0).toFixed(4)} SOL`} />
-        <Mini k="Swap fee" v="1% · 50 / 25 / 25" />
+        <Mini k="Venue" v="Solphia curve · 1%" />
       </div>
       <section className="panel rounded-2xl p-5">
         <div className="font-mono text-[10px] tracking-[0.3em] text-mute">SOLPHIA BONDING CURVE</div>
         <h2 className="mt-1 font-display text-2xl text-ghost">Same pad as the website</h2>
         <p className="mt-2 max-w-2xl text-sm text-mute">
-          Pump/Moonshot-style virtual AMM: 1B supply, 80% sold on the curve, 20% reserved for the public
-          market at graduation. Image, ticker, blurb, and socials are required the same way on /launch. $SPHA itself
-          launches from Project with that same metadata, then the 77.1% public-market slice is the tradeable float.
+          Mainnet program 5s26ZJDhyErFMx3ELo9CYXS3Y5BcwZvQ5EceYq8WFv4d. 1.00% total — under Pump.fun’s 1.25%.
+          Creators take 50% of that fee on-chain. $SPHA itself still launches from Project.
         </p>
         <div className="mt-4 flex flex-wrap gap-3">
           <a href="/launch" className="btn-acid rounded-full px-5 py-2 text-sm">

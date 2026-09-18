@@ -7,8 +7,10 @@ import {
   graduatePool,
   launchDevBuyCap,
   splitFee,
+  feeOn,
   marketCapSol,
   maxBuySol,
+  MAX_TRADE_SOL,
   MAX_WALLET_BPS,
   MIN_TRADE_SOL,
   progressPct,
@@ -53,6 +55,8 @@ export type LaunchLinks = {
   discord?: string;
 };
 
+export type LaunchVenue = "solphia" | "pump" | "launchlab";
+
 export type LaunchCoin = {
   id: string;
   mint: string;
@@ -76,6 +80,8 @@ export type LaunchCoin = {
   referrer?: string;
   graduatedAt?: number;
   pool?: { sol: number; tokens: number };
+  /** Pump.fun on-chain curve. Tokens sit on the bonding-curve ATA, not the creator. */
+  venue?: LaunchVenue;
 };
 
 export type LaunchAccount = {
@@ -399,7 +405,7 @@ export function publicCoin(c: LaunchCoin, solUsd = 0, viewer?: string, book?: La
     id: c.id,
     mint: c.mint,
     born: true as const,
-    venue: "launchlab" as const,
+    venue: c.venue === "solphia" ? ("solphia" as const) : c.venue === "pump" ? ("pumpfun" as const) : ("launchlab" as const),
     name: c.name,
     symbol: c.symbol,
     image: c.image || "",
@@ -462,7 +468,7 @@ export function publicCoin(c: LaunchCoin, solUsd = 0, viewer?: string, book?: La
     graduatedAt: c.graduatedAt || null,
     myTokens: mine?.tokens || 0,
     mySpentSol: mine?.spentSol || 0,
-    maxBuySol: maxBuySol(c.curve, mine?.tokens || 0),
+    maxBuySol: c.venue === "solphia" || c.venue === "pump" ? MAX_TRADE_SOL : maxBuySol(c.curve, mine?.tokens || 0),
     curve: {
       virtualSol: c.curve.virtualSol,
       virtualTokens: c.curve.virtualTokens,
@@ -488,6 +494,7 @@ export function createCoin(
     launchBuySol?: number;
     now?: number;
     mint?: string;
+    venue?: LaunchVenue;
   },
 ): { ok: true; coin: LaunchCoin } | { ok: false; error: string } {
   const issues = validateLaunchCreate(opts);
@@ -537,15 +544,59 @@ export function createCoin(
     treasuryFeesSol: 0,
     referralFeesSol: 0,
     referrer: creatorAcc.referrer || undefined,
+    venue: opts.venue === "solphia" || opts.venue === "pump" ? opts.venue : undefined,
   };
   book.coins.unshift(coin);
   if (book.coins.length > 120) book.coins.length = 120;
-  if (launchBuy >= MIN_TRADE_SOL) {
+  // Pump.fun first buy is on-chain in the same create tx. Do not book tokens here.
+  if (coin.venue !== "solphia" && coin.venue !== "pump" && launchBuy >= MIN_TRADE_SOL) {
     const bought = buyCoin(book, { id: coin.id, owner: opts.creator, sol: launchBuy, now, skipSnipe: true });
     if (!bought.ok) return bought;
     return { ok: true, coin: bought.coin };
   }
   return { ok: true, coin };
+}
+
+export function applyCurveState(coin: LaunchCoin, curve: CurveState) {
+  coin.curve = curve;
+  if (curve.phase === "graduated" && coin.status !== "graduated") {
+    coin.status = "graduated";
+    coin.graduatedAt = coin.graduatedAt || Date.now();
+  }
+}
+
+/** Tape a confirmed on-chain Pump.fun fill. Curve reserves come from chain, not this book. */
+export function recordOnchainFill(
+  book: LaunchBook,
+  opts: { id: string; owner: string; side: "buy" | "sell"; sol: number; tokens: number; feeSol?: number; now?: number },
+): { ok: true; fill: LaunchFill; coin: LaunchCoin } | { ok: false; error: string } {
+  if (!isSolanaAddress(opts.owner)) return { ok: false, error: "bad_wallet" };
+  const coin = book.coins.find((c) => c.id === opts.id || c.mint === opts.id);
+  if (!coin) return { ok: false, error: "not_found" };
+  const now = opts.now || Date.now();
+  const feeSol = Math.max(0, opts.feeSol ?? feeOn(opts.sol));
+  const h = holderOf(coin, opts.owner);
+  if (opts.side === "buy") {
+    h.tokens += opts.tokens;
+    h.spentSol += opts.sol;
+  } else {
+    h.tokens = Math.max(0, h.tokens - opts.tokens);
+    h.receivedSol += opts.sol;
+  }
+  const fill: LaunchFill = {
+    id: id("lf"),
+    at: now,
+    owner: opts.owner,
+    side: opts.side,
+    sol: opts.sol,
+    tokens: opts.tokens,
+    feeSol,
+    priceSol: opts.tokens > 0 ? opts.sol / opts.tokens : 0,
+  };
+  coin.fills.push(fill);
+  if (coin.fills.length > 200) coin.fills.splice(0, coin.fills.length - 200);
+  book.treasuryFeesSol += splitFee(feeSol, Boolean(coin.referrer)).treasury;
+  return { ok: true, fill, coin };
 }
 
 function holderOf(coin: LaunchCoin, owner: string): LaunchHolder {

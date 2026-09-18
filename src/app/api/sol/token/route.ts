@@ -16,10 +16,17 @@ export async function GET(req: NextRequest) {
   }
   try {
     const conn = new Connection(rpcUrl(), { commitment: "confirmed" });
-    const rows = await conn.getParsedTokenAccountsByOwner(new PublicKey(owner), { mint: new PublicKey(mint) });
+    const ownerPk = new PublicKey(owner);
+    const mintPk = new PublicKey(mint);
+    const TOKEN_2022 = new PublicKey("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
+    const [legacy, t22] = await Promise.all([
+      conn.getParsedTokenAccountsByOwner(ownerPk, { mint: mintPk }),
+      conn.getParsedTokenAccountsByOwner(ownerPk, { mint: mintPk, programId: TOKEN_2022 }),
+    ]);
+    const rows = [...legacy.value, ...t22.value];
     let amount = 0;
     let decimals = 6;
-    for (const row of rows.value) {
+    for (const row of rows) {
       const info = row.account.data.parsed?.info?.tokenAmount;
       if (!info) continue;
       decimals = Number(info.decimals) || decimals;

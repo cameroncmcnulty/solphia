@@ -29,10 +29,11 @@ import {
   type LaunchField,
 } from "@/lib/launch/validate";
 import { FieldError, FormAlert, fieldClass, useConfirmErrors } from "@/components/form/confirm";
-import { loadOwner, signAndSendPhantom } from "@/lib/wallet/trading";
+import { loadOwner, signAndSendPhantom, signPumpLaunch } from "@/lib/wallet/trading";
 
 import { auditLaunchCoin, rankTape, scoreTape, type LaunchAudit } from "@/lib/launch/audit";
 import { BoostBuy, BoostRail, fmtLeft } from "@/components/BoostBuy";
+import { PadPitch } from "@/components/PadPitch";
 
 import { SwapBox, SwapShell, SwapTabs, SwapWidget } from "@/components/SwapWidget";
 import type { BoostRank } from "@/lib/launch/boost";
@@ -410,17 +411,17 @@ export default function LaunchPage() {
     setMsg("");
     setErr("");
     try {
-      const { Keypair, Transaction } = await import("@solana/web3.js");
-      const { encodeTx } = await import("@/lib/token/mint");
+      const { Keypair } = await import("@solana/web3.js");
       const mint = Keypair.generate();
-      setMsg("Building the mint on Solana…");
+      const mintPk = mint.publicKey.toBase58();
+      setMsg("Building the Solphia curve…");
       const prep = await fetch("/api/launch", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           action: "prepare",
           pubkey: owner,
-          mint: mint.publicKey.toBase58(),
+          mint: mintPk,
           name,
           symbol,
           blurb,
@@ -433,31 +434,27 @@ export default function LaunchPage() {
         }),
       });
       const pj = await prep.json();
-      if (!prep.ok || !Array.isArray(pj.txs) || !pj.txs.length) {
+      const packed = typeof pj.tx === "string" ? pj.tx : Array.isArray(pj.txs) ? pj.txs[0] : "";
+      if (!prep.ok || !packed) {
         const code = typeof pj.error === "string" ? pj.error : "";
-        const message = pj.message || launchError(code) || "Could not build the mint.";
+        const message = pj.message || launchError(code) || "Could not build the launch.";
         const field = launchCodeToField(code);
         if (field !== "form") createErr.fail({ [field]: message } as Partial<Record<LaunchField, string>>, message);
         else createErr.fail({}, message);
         throw new Error(message);
       }
-      const sigs: string[] = [];
-      for (let i = 0; i < pj.txs.length; i++) {
-        setMsg(`Sign tx ${i + 1} of ${pj.txs.length} in Phantom…`);
-        const raw = Uint8Array.from(atob(String(pj.txs[i])), (c) => c.charCodeAt(0));
-        const tx = Transaction.from(raw);
-        if (i === 0) tx.partialSign(mint);
-        sigs.push(await signAndSendPhantom(encodeTx(tx)));
-      }
-      setMsg("Confirming the mint…");
+      setMsg("Sign once in Phantom…");
+      const sig = await signPumpLaunch(packed, mint);
+      setMsg("Confirming the bonding curve…");
       const r = await fetch("/api/launch", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           action: "confirm",
           pubkey: owner,
-          mint: mint.publicKey.toBase58(),
-          sigs,
+          mint: mintPk,
+          sigs: [sig],
+          tokens: Number(pj.tokensOut) || 0,
           name,
           symbol,
           blurb,
@@ -473,7 +470,7 @@ export default function LaunchPage() {
       const j = await r.json();
       if (!r.ok) {
         const code = typeof j.error === "string" ? j.error : "";
-        const message = j.message || launchError(code) || "Mint landed but the pad could not list it yet.";
+        const message = j.message || launchError(code) || "Curve landed but the pad could not list it yet.";
         createErr.fail({}, message);
         throw new Error(message);
       }
@@ -493,7 +490,11 @@ export default function LaunchPage() {
       setDiscord("");
       setDevBuy(0);
       setTab("tape");
-      setMsg(`Live on Solana. CA ${mint.publicKey.toBase58()}. Mint and freeze are locked.`);
+      setMsg(
+        devBuy > 0
+          ? `Live on the Solphia curve. CA ${mintPk}. Your first buy landed in this wallet.`
+          : `Live on the Solphia curve. CA ${mintPk}. Supply sits on the bonding curve.`,
+      );
     } catch (e) {
       if (!createErr.banner) setErr(e instanceof Error ? e.message : "launch failed");
     } finally {
@@ -527,9 +528,31 @@ export default function LaunchPage() {
         }
         throw new Error(message);
       }
-      if (j.coin) {
-        setOpen(j.coin);
-        setCoins((prev) => [j.coin, ...prev.filter((c) => c.id !== j.coin.id)]);
+      let listed = j;
+      if (j.needsSign && j.transaction) {
+        setMsg("Sign the swap in Phantom…");
+        const sig = await signAndSendPhantom(j.transaction);
+        const conf = await fetch("/api/launch", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            action: "trade_confirm",
+            pubkey: owner,
+            id: body.id,
+            mint: j.coin?.mint,
+            side: body.action === "sell" ? "sell" : "buy",
+            sol: body.action === "sell" ? j.solOut : body.sol,
+            tokens: body.action === "sell" ? body.tokens : j.tokensOut,
+            feeSol: j.feeSol,
+            sig,
+          }),
+        });
+        listed = await conf.json();
+        if (!conf.ok) throw new Error(listed.message || launchError(listed.error) || "Trade landed but the tape missed it.");
+      }
+      if (listed.coin) {
+        setOpen(listed.coin);
+        setCoins((prev) => [listed.coin, ...prev.filter((c: { id: string }) => c.id !== listed.coin.id)]);
       }
       await Promise.all([refreshPad(), refreshTape()]);
       if (body.action === "create") {
@@ -544,9 +567,9 @@ export default function LaunchPage() {
         setDiscord("");
         setDevBuy(0);
         setTab("tape");
-        setMsg("Live. Mint and freeze are locked.");
+        setMsg("Live on the Solphia curve.");
       } else if (body.action === "withdraw_dev") setMsg("Dev rewards booked.");
-      else setMsg("Filled.");
+      else setMsg("Filled. Tokens are in your wallet.");
     } catch (e) {
       if (body.action !== "create") setErr(e instanceof Error ? e.message : "failed");
     } finally {
@@ -596,11 +619,17 @@ export default function LaunchPage() {
       <SolphiaConstellation />
       <div className="relative z-10 mx-auto max-w-6xl px-4 pt-6 md:px-8 md:pt-10">
         <p className="font-mono text-[11px] tracking-[0.28em] text-acid">{isSwap ? "SWAP" : "LAUNCHPAD"}</p>
-        <h1 className="mt-2 font-display text-4xl text-ghost sm:text-5xl">{isSwap ? "Discover. Swap." : "Launch a token."}</h1>
+        <h1 className="mt-2 font-display text-4xl text-ghost sm:text-5xl">{isSwap ? "Discover. Swap." : "Cheaper curve. Fatter dev cut."}</h1>
         {!isSwap && (
-          <p className="mt-3 max-w-xl text-sm text-mute">
-            Phantom creates a live SPL mint on Solana. Supply lands in your wallet. Mint and freeze are revoked.
+          <p className="mt-3 max-w-2xl text-sm text-mute">
+            1.00% on every buy and sell — under Pump.fun’s 1.25%. Creators take 0.50% of volume, not 0.30%. One Phantom
+            signature. Supply lives on the mainnet program, not in your wallet.
           </p>
+        )}
+        {!isSwap && (
+          <div className="mt-6">
+            <PadPitch />
+          </div>
         )}
 
         <div className={`mt-8 grid gap-5 ${isSwap ? "" : "lg:grid-cols-[minmax(280px,0.72fr)_minmax(0,1.28fr)]"}`}>
@@ -771,8 +800,8 @@ export default function LaunchPage() {
                   />
                   <FieldError error={createErr.errors.launchBuySol} />
                   <p className="mt-1 text-xs text-mute">
-                    Optional first buy. Capped at 5% of supply ({fmtSol(DEV_CAP, 2)} SOL at open) so a 2 SOL slide cannot
-                    overbuy.
+                    Optional first buy into this wallet, bundled in the same signature. Leave at 0 to put the whole
+                    supply on the curve. Capped at 5% of supply ({fmtSol(DEV_CAP, 2)} SOL at open).
                   </p>
                 </label>
                 <div className="mt-4 flex flex-wrap items-center gap-3">
@@ -788,7 +817,7 @@ export default function LaunchPage() {
                     {busy ? "Launching…" : "Launch on Solana"}
                   </button>
                 </div>
-                <p className="mt-2 text-xs text-mute">Two Phantom prompts: create the mint, then seed supply and lock authorities.</p>
+                <p className="mt-2 text-xs text-mute">One Phantom prompt. 1% total. Half of that fee hits the creator on-chain.</p>
                 <FieldError error={createErr.errors.wallet} />
                 <div className="mt-3">
                   <FormAlert error={createErr.banner} />
@@ -1222,7 +1251,7 @@ function CoinDesk({
   const creator = Boolean(owner && open.creator === owner);
   const snipeLeft = Math.max(0, ANTI_SNIPE_MS - (Date.now() - open.createdAt));
   const cap = open.maxBuySol ?? 0;
-  const snipeCap = !creator && snipeLeft > 0 ? ANTI_SNIPE_SOL : Infinity;
+  const snipeCap = open.venue === "solphia" || open.venue === "pumpfun" || creator || snipeLeft <= 0 ? Infinity : ANTI_SNIPE_SOL;
   const maxOk = Math.min(cap || 40, snipeCap, 40);
   const quote = useMemo(() => {
     if (!open.curve || open.status !== "curve") return null;

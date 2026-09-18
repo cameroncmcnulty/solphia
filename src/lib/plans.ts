@@ -92,4 +92,8 @@ export const FAQS: { q: string; a: string }[] = [
     q: "How do I pay?",
     a: "Live is 0.1 SOL / 30 days. SOL 2×/3× is 0.15 SOL / 30 days. First pay from your wallet. Later months renew from the trading wallet while this site is open.",
   },
+  {
+    q: "How is the launch pad cheaper than Pump.fun?",
+    a: "Solphia’s curve charges 1.00% on buys and sells. Pump.fun charges 1.25%. Creators here take 0.50% of volume (half of our 1%). Pump.fun creators take 0.30%. The program is on Solana mainnet; supply sits on the curve, not in the launcher wallet.",
+  },
 ];

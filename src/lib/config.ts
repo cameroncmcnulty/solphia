@@ -27,6 +27,7 @@ export const XAI_MODEL = "grok-4.6";
 export const XAI_BASE = "https://api.x.ai/v1";
 
 export const PUBLIC_RPC = "https://api.mainnet-beta.solana.com";
+export { PAD_PROGRAM_ID } from "./launch/ids";
 
 export function rpcUrl(): string {
   if (HELIUS_API_KEY) return `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`;

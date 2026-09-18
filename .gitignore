@@ -17,3 +17,5 @@ tsconfig.tsbuildinfo
 
 .vercel
 .env*
+programs/solphia-pad/keys/
+programs/solphia-pad/target/

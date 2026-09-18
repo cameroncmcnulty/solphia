@@ -80,11 +80,11 @@ export function buildProfitDesk(state: AppState): ProfitDesk {
     {
       id: "pad-treasury",
       feature: "Pad curve buys and sells",
-      rate: "1% of trade · 25% of that fee",
+      rate: "1% of SOL · 25% of that fee",
       wallet: "treasury",
       walletPk: treasury,
       accruedSol: padTreasury,
-      settlement: "Booked on the pad; withdraw with protocol tools",
+      settlement: "On-chain SOL transfer in the same pad swap tx",
     },
     {
       id: "pad-owner",
@@ -102,7 +102,7 @@ export function buildProfitDesk(state: AppState): ProfitDesk {
       wallet: "creator",
       walletPk: "coin creator",
       accruedSol: padCreator,
-      settlement: "Creator Dev Rewards withdraw",
+      settlement: "On-chain SOL to the creator in the same swap tx",
     },
     {
       id: "pad-ref",

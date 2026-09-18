@@ -1,15 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PublicKey } from "@solana/web3.js";
 import { z } from "zod";
 import { clientIp, isSolanaAddress, rateLimit, sanitizeText } from "@/lib/security";
 import { withLaunch } from "@/lib/store";
 import { emptyLaunchBook } from "@/lib/launch/engine";
 import {
+  applyCurveState,
   buyCoin,
   createCoin,
   launchError,
   publicCoin,
   quotePreview,
+  recordOnchainFill,
   sellCoin,
   setOwnerWallet,
   withdrawDev,
@@ -22,12 +23,17 @@ import { IMAGE_DATA_MAX, storedImage, validateLaunchCreate } from "@/lib/launch/
 import { pinDataUrl, pinJson } from "@/lib/pinata";
 import { creditRank } from "@/lib/rank/engine";
 import { SITE_URL } from "@/lib/config";
-import { connection } from "@/lib/solana/connection";
-import { buildPadMintTxs, padMintReady } from "@/lib/launch/onchain";
-import { encodeTx } from "@/lib/token/mint";
 import { tokenMetadataJson } from "@/lib/token/metadata";
+import {
+  buildPadLaunchTx,
+  buildPadTradeTx,
+  hydratePadCoins,
+  padCurveReady,
+  quotePadTrade,
+} from "@/lib/launch/program";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 30;
 
 const Body = z.object({
   action: z.enum([
@@ -36,6 +42,7 @@ const Body = z.object({
     "create",
     "buy",
     "sell",
+    "trade_confirm",
     "quote",
     "withdraw_dev",
     "withdraw_owner",
@@ -59,7 +66,10 @@ const Body = z.object({
   adminSecret: z.string().optional(),
   mint: z.string().optional(),
   sigs: z.array(z.string().min(32).max(128)).max(8).optional(),
+  sig: z.string().min(32).max(128).optional(),
   uri: z.string().max(400).optional(),
+  side: z.enum(["buy", "sell"]).optional(),
+  feeSol: z.number().optional(),
 });
 
 function bookOf(s: { launch?: ReturnType<typeof emptyLaunchBook>; ownerWallet?: string }) {
@@ -127,20 +137,23 @@ async function prepareMint(b: LaunchBody) {
     return fail("chain_failed");
   }
   try {
-    const set = await buildPadMintTxs({
-      conn: connection(),
+    const built = await buildPadLaunchTx({
       payer: b.pubkey,
-      mint: new PublicKey(b.mint),
+      mint: b.mint,
       name,
       symbol,
       uri: art.uri,
+      buySol: Number(b.launchBuySol) || 0,
+      referrer: book.accounts?.[b.pubkey]?.referrer,
     });
     return NextResponse.json({
       ok: true,
-      mint: set.mint,
-      txs: set.txs.map(encodeTx),
+      mint: built.mint,
+      tx: built.transaction,
+      txs: [built.transaction],
       uri: art.uri,
       image: art.image,
+      tokensOut: built.tokensOut,
     });
   } catch {
     return fail("chain_failed");
@@ -151,12 +164,13 @@ async function confirmMint(b: LaunchBody, solUsd: number) {
   const name = sanitizeText(b.name || "", 24);
   const symbol = sanitizeText(b.symbol || "", 10).toUpperCase();
   if (!b.mint || !isSolanaAddress(b.mint)) return fail("bad_mint");
-  let ready = await padMintReady(connection(), b.mint);
-  for (let i = 0; i < 6 && !ready.ok; i++) {
+  let ready = await padCurveReady(b.mint);
+  for (let i = 0; i < 8 && !ready.ok; i++) {
     await new Promise((r) => setTimeout(r, 800));
-    ready = await padMintReady(connection(), b.mint);
+    ready = await padCurveReady(b.mint);
   }
   if (!ready.ok) return fail(ready.error);
+  const liveCurve = ready.curve;
   let image = storedImage(b.image);
   if (b.image?.startsWith("data:")) {
     const pinned = await pinDataUrl(b.image, symbol);
@@ -178,8 +192,23 @@ async function confirmMint(b: LaunchBody, solUsd: number) {
       discord: sanitizeText(b.discord || "", 120),
       launchBuySol: Number(b.launchBuySol) || 0,
       mint: b.mint,
+      venue: "solphia",
     });
-    if (made.ok) creditRank(book, b.pubkey, "launch");
+    if (made.ok) {
+      applyCurveState(made.coin, liveCurve);
+      const buySol = Number(b.launchBuySol) || 0;
+      const tokensOut = Number(b.tokens) || 0;
+      if (buySol > 0 && tokensOut > 0) {
+        recordOnchainFill(book, {
+          id: made.coin.id,
+          owner: b.pubkey,
+          side: "buy",
+          sol: buySol,
+          tokens: tokensOut,
+        });
+      }
+      creditRank(book, b.pubkey, "launch");
+    }
     return made;
   }, true);
   if (!out || !("ok" in out) || !out.ok) {
@@ -201,9 +230,10 @@ export async function GET(req: NextRequest) {
   const viewer = req.nextUrl.searchParams.get("pubkey") || "";
   const s = await withLaunch((st) => st, false);
   const book = bookOf(s);
+  await hydratePadCoins(book.coins);
   const solUsd = lastPairPrices().solUsd || 0;
   if (id) {
-    const coin = book.coins.find((c) => c.id === id);
+    const coin = book.coins.find((c) => c.id === id || c.mint === id);
     if (!coin) return fail("not_found", 404);
     return NextResponse.json({ coin: publicCoin(coin, solUsd, viewer, book), solUsd });
   }
@@ -246,8 +276,82 @@ export async function POST(req: NextRequest) {
     const s = await withLaunch((st) => st, false);
     const coin = bookOf(s).coins.find((c) => c.id === b.id);
     if (!coin) return fail("not_found", 404);
+    if (coin.venue === "solphia" || coin.venue === "pump") {
+      const q = await quotePadTrade({
+        mint: coin.mint,
+        owner: b.pubkey,
+        side: b.tokens ? "sell" : "buy",
+        sol: b.sol,
+        tokens: b.tokens,
+      });
+      if (!q.ok) return fail(q.error);
+      return NextResponse.json({ quote: q, coin: publicCoin(coin, solUsd, b.pubkey, bookOf(s)) });
+    }
     const q = quotePreview(coin, b.tokens ? "sell" : "buy", b.tokens || b.sol || 0);
     return NextResponse.json({ quote: q, coin: publicCoin(coin, solUsd, b.pubkey, bookOf(s)) });
+  }
+
+  if (b.action === "buy" || b.action === "sell") {
+    const snap = await withLaunch((st) => st, false);
+    const coin = bookOf(snap).coins.find((c) => c.id === b.id);
+    if (!coin) return fail("not_found", 404);
+    if (coin.venue === "solphia" || coin.venue === "pump") {
+      const built = await buildPadTradeTx({
+        mint: coin.mint,
+        owner: b.pubkey,
+        creator: coin.creator,
+        side: b.action,
+        sol: b.sol,
+        tokens: b.tokens,
+        referrer: coin.referrer,
+      });
+      if (!built.ok) return fail(built.error);
+      return NextResponse.json({
+        ok: true,
+        needsSign: true,
+        transaction: built.transaction,
+        tokensOut: built.tokensOut,
+        solOut: built.solOut,
+        sol: built.sol,
+        tokens: built.tokens,
+        feeSol: built.feeSol,
+        coin: publicCoin(coin, solUsd, b.pubkey, bookOf(snap)),
+      });
+    }
+  }
+
+  if (b.action === "trade_confirm") {
+    const mint = b.mint || "";
+    const out = await withLaunch(async (s) => {
+      const book = bookOf(s);
+      const coin = book.coins.find((c) => c.id === b.id || (mint && c.mint === mint));
+      if (!coin) return { ok: false as const, error: "not_found" };
+      const side = b.side || (b.tokens ? "sell" : "buy");
+      const sol = Number(b.sol) || 0;
+      const tokens = Number(b.tokens) || 0;
+      const rec = recordOnchainFill(book, {
+        id: coin.id,
+        owner: b.pubkey,
+        side,
+        sol,
+        tokens,
+        feeSol: Number(b.feeSol) || undefined,
+      });
+      if (rec.ok) {
+        creditRank(book, b.pubkey, "swap", { sol: side === "buy" ? sol : 0 });
+        await hydratePadCoins([rec.coin]);
+      }
+      return rec;
+    }, true);
+    if (!out || !("ok" in out) || !out.ok) return fail((out as { error?: string })?.error || "failed");
+    const bookSnap = await withLaunch((st) => bookOf(st), false);
+    const coin = bookSnap.coins.find((c) => c.id === b.id || (mint && c.mint === mint));
+    return NextResponse.json({
+      ok: true,
+      coin: coin ? publicCoin(coin, solUsd, b.pubkey, bookSnap) : undefined,
+      fill: "fill" in out ? out.fill : undefined,
+      sig: b.sig,
+    });
   }
 
   let bookSnap: ReturnType<typeof emptyLaunchBook> | undefined;
