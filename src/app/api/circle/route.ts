@@ -112,6 +112,7 @@ export async function GET(req: NextRequest) {
     official,
     link: pubkey ? inviteUrl(SITE_URL, pubkey) : "",
     promos: ready ? (book.promos || []).map((p) => ({ ...p, url: displayMedia(p.url) })) : [],
+    jobs: ready ? book.jobs || [] : [],
   };
   if (!me || banned) {
     return NextResponse.json({ ...base, member: null, banned: Boolean(banned), ready: false });

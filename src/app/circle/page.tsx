@@ -3,19 +3,21 @@
 import { Suspense, useCallback, useEffect, useState, type ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
 import { Gift } from "lucide-react";
-import { CartoonPfp } from "@/components/CartoonPfp";
+import { CircleHangout } from "@/components/CircleHangout";
 import { TealConfetti } from "@/components/TealConfetti";
 import { WalletConnect } from "@/components/WalletConnect";
 import { peekRef } from "@/components/ReferralCapture";
 import { useOwner } from "@/lib/hooks";
 
 type Promo = { id: string; url: string; caption?: string };
+type Job = { id: string; title: string; blurb: string; href?: string };
 type Pack = {
   members: number;
   ready?: boolean;
   banned?: boolean;
   link?: string;
   promos?: Promo[];
+  jobs?: Job[];
   member: null | {
     pubkey: string;
     role: string;
@@ -175,63 +177,26 @@ function CircleInner() {
             {err && <p className="mt-2 text-sm text-blood">{err}</p>}
           </Gate>
         ) : (
-          <>
-            <header className="rounded-3xl border border-acid/25 bg-acid/[0.06] p-5">
-              <div className="flex items-center gap-3">
-                <CartoonPfp
-                  seed={owner}
-                  src={member.hasPfp ? `/api/circle/avatar?pk=${encodeURIComponent(owner)}` : undefined}
-                  className="h-12 w-12"
-                />
-                <div>
-                  <div className="font-mono text-[10px] tracking-[0.22em] text-acid">FOUNDERS CIRCLE</div>
-                  <h1 className="font-display text-3xl text-ghost">You&apos;re in</h1>
-                </div>
-              </div>
-              <p className="mt-2 text-sm text-mute">
-                {pack.members} founders · {member.refs} invited · {member.boostPct}% airdrop boost
-              </p>
-              <div className="mt-4 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  disabled={busy || !(member.unclaimed > 0)}
-                  onClick={withdraw}
-                  className="btn-acid inline-flex items-center justify-center gap-2 rounded-full px-4 py-2.5 text-sm disabled:opacity-40"
-                >
-                  <Gift className="h-4 w-4" />
-                  Withdraw {member.unclaimed > 0 ? member.unclaimed.toFixed(2) : "airdrop"}
-                </button>
-                <button
-                  type="button"
-                  className="rounded-full border border-violet/30 px-4 py-2 font-mono text-[11px] text-ghost"
-                  onClick={async () => {
-                    await navigator.clipboard.writeText(link);
-                    setCopied(true);
-                    setTimeout(() => setCopied(false), 1200);
-                  }}
-                >
-                  {copied ? "copied" : "copy invite"}
-                </button>
-              </div>
-              {note && <p className="mt-2 text-sm text-acid">{note}</p>}
-              {err && <p className="mt-2 text-sm text-blood">{err}</p>}
-            </header>
-
-            {promos.length > 0 && (
-              <section>
-                <div className="font-mono text-[10px] tracking-[0.22em] text-mute">MEDIA</div>
-                <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
-                  {promos.map((p) => (
-                    <figure key={p.id} className="overflow-hidden rounded-2xl border border-violet/20 bg-void/40">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={p.url} alt={p.caption || ""} className="aspect-square w-full object-cover" />
-                      {p.caption && <figcaption className="px-2 py-1.5 text-[11px] text-mute">{p.caption}</figcaption>}
-                    </figure>
-                  ))}
-                </div>
-              </section>
-            )}
-          </>
+          <CircleHangout
+            seed={owner}
+            pfpSrc={member.hasPfp ? `/api/circle/avatar?pk=${encodeURIComponent(owner)}` : undefined}
+            members={pack.members}
+            refs={member.refs}
+            boostPct={member.boostPct}
+            unclaimed={member.unclaimed}
+            promos={promos}
+            jobs={pack.jobs || []}
+            busy={busy}
+            note={note}
+            err={err}
+            copied={copied}
+            onWithdraw={withdraw}
+            onCopyInvite={async () => {
+              await navigator.clipboard.writeText(link);
+              setCopied(true);
+              setTimeout(() => setCopied(false), 1200);
+            }}
+          />
         )}
       </div>
     </main>

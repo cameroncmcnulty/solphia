@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  addJob,
   airdropWeight,
   boostPct,
   emptyCircle,
@@ -9,6 +10,7 @@ import {
   postMessage,
   pruneCircle,
   reactMessage,
+  removeJob,
   runAirdrop,
 } from "../lib/circle/engine";
 import { CIRCLE_BOOST_PCT } from "../lib/circle/types";
@@ -54,6 +56,19 @@ describe("founders circle", () => {
     pruneCircle(book);
     assert.equal(book.messages.length, 1);
     assert.equal(book.messages[0].text, "fresh");
+  });
+
+  it("keeps an empty jobs board until a listing is posted", () => {
+    const book = emptyCircle();
+    assert.equal(book.jobs.length, 0);
+    const miss = addJob(book, { title: "  " });
+    assert.equal(miss.ok, false);
+    const ok = addJob(book, { title: "Protocol engineer", blurb: "Curve and desk.", href: "https://solphia.io" });
+    assert.equal(ok.ok, true);
+    if (!ok.ok) return;
+    assert.equal(book.jobs[0].title, "Protocol engineer");
+    assert.equal(removeJob(book, ok.job.id), true);
+    assert.equal(book.jobs.length, 0);
   });
 
   it("lets a vip wallet in without inviting anyone", () => {

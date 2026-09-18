@@ -6,8 +6,10 @@ import {
   CIRCLE_DEFAULT_CAP,
   CIRCLE_KEEP_MS,
   CIRCLE_MSG_MAX,
+  CIRCLE_JOB_MAX,
   CIRCLE_PROMO_MAX,
   type CircleBook,
+  type CircleJob,
   type CircleMember,
   type CircleMessage,
   type CirclePromo,
@@ -20,7 +22,7 @@ function pushMax<T>(arr: T[], item: T, max: number) {
 }
 
 export function emptyCircle(): CircleBook {
-  return { cap: CIRCLE_DEFAULT_CAP, members: {}, messages: [], airdrops: [], typing: {}, promos: [] };
+  return { cap: CIRCLE_DEFAULT_CAP, members: {}, messages: [], airdrops: [], typing: {}, promos: [], jobs: [] };
 }
 
 export function mergeCircle(local: CircleBook, remote: CircleBook): CircleBook {
@@ -43,6 +45,8 @@ export function mergeCircle(local: CircleBook, remote: CircleBook): CircleBook {
   }
   const promo = new Map((b.promos || []).map((p) => [p.id, p]));
   for (const p of a.promos || []) promo.set(p.id, p);
+  const jobs = new Map((b.jobs || []).map((j) => [j.id, j]));
+  for (const j of a.jobs || []) jobs.set(j.id, j);
   const out: CircleBook = {
     cap: Math.max(a.cap || 0, b.cap || 0) || CIRCLE_DEFAULT_CAP,
     members,
@@ -50,6 +54,7 @@ export function mergeCircle(local: CircleBook, remote: CircleBook): CircleBook {
     airdrops: a.airdrops.length >= b.airdrops.length ? a.airdrops : b.airdrops,
     typing: {},
     promos: [...promo.values()].sort((x, y) => x.at - y.at).slice(-CIRCLE_PROMO_MAX),
+    jobs: [...jobs.values()].sort((x, y) => y.at - x.at).slice(0, CIRCLE_JOB_MAX),
   };
   return ensureCircle(out);
 }
@@ -61,6 +66,7 @@ export function ensureCircle(book?: CircleBook | null): CircleBook {
   if (!b.airdrops) b.airdrops = [];
   if (!b.typing) b.typing = {};
   if (!b.promos) b.promos = [];
+  if (!b.jobs) b.jobs = [];
   b.typing = {};
   if (!(b.cap > 0)) b.cap = CIRCLE_DEFAULT_CAP;
   pruneCircle(b);
@@ -205,6 +211,35 @@ export function removePromo(book: CircleBook, id: string): boolean {
   const i = (book.promos || []).findIndex((p) => p.id === id);
   if (i < 0) return false;
   book.promos.splice(i, 1);
+  return true;
+}
+
+export function addJob(
+  book: CircleBook,
+  opts: { title: string; blurb?: string; href?: string; now?: number },
+): { ok: true; job: CircleJob } | { ok: false; error: string } {
+  const title = (opts.title || "").trim().slice(0, 80);
+  const blurb = (opts.blurb || "").trim().slice(0, 400);
+  if (!title) return { ok: false, error: "need_title" };
+  if ((book.jobs || []).length >= CIRCLE_JOB_MAX) return { ok: false, error: "full" };
+  const href = (opts.href || "").trim().slice(0, 300);
+  const job: CircleJob = {
+    id: `j${(opts.now || Date.now()).toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+    title,
+    blurb: blurb || "Open role with Solphia.",
+    href: href || undefined,
+    at: opts.now || Date.now(),
+  };
+  if (!book.jobs) book.jobs = [];
+  book.jobs.unshift(job);
+  if (book.jobs.length > CIRCLE_JOB_MAX) book.jobs.length = CIRCLE_JOB_MAX;
+  return { ok: true, job };
+}
+
+export function removeJob(book: CircleBook, id: string): boolean {
+  const i = (book.jobs || []).findIndex((j) => j.id === id);
+  if (i < 0) return false;
+  book.jobs.splice(i, 1);
   return true;
 }
 

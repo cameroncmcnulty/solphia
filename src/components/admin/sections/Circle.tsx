@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Gift } from "lucide-react";
+import { CircleHangout } from "@/components/CircleHangout";
 import { useAdmin } from "../AdminProvider";
 import { shortPk } from "../ui";
 
@@ -19,11 +20,13 @@ type Row = {
 };
 
 type Promo = { id: string; url: string; caption?: string };
+type Job = { id: string; title: string; blurb: string; href?: string };
 type Pack = {
   active: number;
   members: Row[];
   airdrops: { id: string; at: number; total: number; heads: number }[];
   promos?: Promo[];
+  jobs?: Job[];
 };
 
 export function CircleSection() {
@@ -34,6 +37,10 @@ export function CircleSection() {
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
   const [caption, setCaption] = useState("");
+  const [jobTitle, setJobTitle] = useState("");
+  const [jobBlurb, setJobBlurb] = useState("");
+  const [jobHref, setJobHref] = useState("");
+  const [copied, setCopied] = useState(false);
 
   const load = useCallback(async () => {
     const r = await fetch("/api/admin/circle", { cache: "no-store" });
@@ -68,15 +75,87 @@ export function CircleSection() {
     }
   }
 
+  const hangLink = typeof window !== "undefined" ? `${window.location.origin}/circle` : "https://solphia.io/circle";
+  const jobs = pack?.jobs || [];
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div>
         <div className="font-mono text-[10px] tracking-[0.28em] text-mute">FOUNDERS CIRCLE</div>
-        <h2 className="mt-1 font-display text-3xl text-ghost">The exclusive hang</h2>
+        <h2 className="mt-1 font-display text-3xl text-ghost">Same hang as the site</h2>
         <p className="mt-1 max-w-2xl text-sm text-mute">
-          Wallet + email, then one invite unlocks both seats. Upload up to 30 promo images for the hang. Chat lives in
-          Shill Zone.
+          This is the circle members see after they&apos;re in. No invite gate. Chat still lives in Shill Zone.
         </p>
+      </div>
+
+      <CircleHangout
+        seed="solphia-circle"
+        members={pack?.active ?? data?.circle.members ?? 0}
+        refs={0}
+        boostPct={5}
+        unclaimed={0}
+        promos={pack?.promos || []}
+        jobs={jobs}
+        copied={copied}
+        onCopyInvite={async () => {
+          await navigator.clipboard.writeText(hangLink);
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1200);
+        }}
+      />
+
+      <div className="rounded-3xl border border-violet/20 p-5">
+        <div className="font-mono text-[10px] tracking-[0.2em] text-mute">POST A LISTING · {jobs.length}/20</div>
+        <p className="mt-1 text-sm text-mute">Shows in the hang above. Empty hang copy stays until you add one.</p>
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          <input
+            value={jobTitle}
+            onChange={(e) => setJobTitle(e.target.value)}
+            placeholder="Role title"
+            className="rounded-full border border-violet/30 bg-void px-4 py-2 text-sm text-ghost"
+          />
+          <input
+            value={jobHref}
+            onChange={(e) => setJobHref(e.target.value)}
+            placeholder="apply link (optional)"
+            className="rounded-full border border-violet/30 bg-void px-4 py-2 text-sm text-ghost"
+          />
+        </div>
+        <textarea
+          value={jobBlurb}
+          onChange={(e) => setJobBlurb(e.target.value)}
+          placeholder="What the work is"
+          rows={3}
+          className="mt-2 w-full rounded-2xl border border-violet/30 bg-void px-4 py-2 text-sm text-ghost"
+        />
+        <button
+          type="button"
+          disabled={busy || !jobTitle.trim()}
+          onClick={async () => {
+            await post({ jobTitle, jobBlurb, jobHref });
+            setJobTitle("");
+            setJobBlurb("");
+            setJobHref("");
+          }}
+          className="btn-acid mt-3 rounded-full px-5 py-2 text-sm disabled:opacity-40"
+        >
+          Post listing
+        </button>
+        {jobs.length > 0 && (
+          <ul className="mt-4 space-y-2">
+            {jobs.map((j) => (
+              <li key={j.id} className="flex items-start justify-between gap-3 rounded-2xl border border-violet/15 px-3 py-2">
+                <div>
+                  <div className="text-sm text-ghost">{j.title}</div>
+                  <div className="text-[12px] text-mute">{j.blurb}</div>
+                </div>
+                <button type="button" className="rounded-full border border-violet/30 px-2 py-0.5 text-[11px]" onClick={() => post({ deleteJobId: j.id })}>
+                  Remove
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">

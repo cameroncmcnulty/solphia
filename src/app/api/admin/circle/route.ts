@@ -6,6 +6,7 @@ import { audit, mutateState, pushBounded, withCircle } from "@/lib/store";
 import { displayMedia } from "@/lib/pinata";
 import {
   activeMembers,
+  addJob,
   addPromo,
   airdropWeight,
   banMember,
@@ -14,6 +15,7 @@ import {
   ensureCircle,
   muteMember,
   referralCount,
+  removeJob,
   removePromo,
   runAirdrop,
   setRole,
@@ -35,6 +37,10 @@ const Patch = z.object({
   promoCaption: z.string().max(80).optional(),
   deletePromoId: z.string().optional(),
   access: z.enum(["pending", "ready"]).optional(),
+  jobTitle: z.string().max(80).optional(),
+  jobBlurb: z.string().max(400).optional(),
+  jobHref: z.string().max(300).optional(),
+  deleteJobId: z.string().optional(),
 });
 
 export async function GET(req: NextRequest) {
@@ -59,6 +65,7 @@ export async function GET(req: NextRequest) {
     messages: book.messages.slice(-80),
     airdrops: book.airdrops.slice(-20).reverse(),
     promos: (book.promos || []).map((p) => ({ ...p, url: displayMedia(p.url) })),
+    jobs: book.jobs || [],
   });
 }
 
@@ -84,21 +91,29 @@ export async function POST(req: NextRequest) {
       }
     }
     if (b.deletePromoId) removePromo(book, b.deletePromoId);
+    if (b.deleteJobId) removeJob(book, b.deleteJobId);
     let promo = null as ReturnType<typeof addPromo> | null;
     if (b.promoUrl) promo = addPromo(book, { url: b.promoUrl, caption: b.promoCaption });
+    let job = null as ReturnType<typeof addJob> | null;
+    if (b.jobTitle) job = addJob(book, { title: b.jobTitle, blurb: b.jobBlurb || "", href: b.jobHref });
     let drop = null as ReturnType<typeof runAirdrop> | null;
     if (b.airdrop) drop = runAirdrop(book, b.airdrop);
     pushBounded(s.audit, audit("admin", "circle", JSON.stringify(Object.keys(b)), ip), 400);
-    return { drop, promo };
+    return { drop, promo, job };
   });
   if (out.drop && !out.drop.ok) return NextResponse.json({ error: out.drop.error, message: "Airdrop failed." }, { status: 400 });
   if (out.promo && !out.promo.ok) {
     const message = out.promo.error === "full" ? "All 30 promo spots are filled." : "Could not save that image.";
     return NextResponse.json({ error: out.promo.error, message }, { status: 400 });
   }
+  if (out.job && !out.job.ok) {
+    const message = out.job.error === "need_title" ? "Give the listing a title." : "Could not save that listing.";
+    return NextResponse.json({ error: out.job.error, message }, { status: 400 });
+  }
   return NextResponse.json({
     ok: true,
     drop: out.drop && out.drop.ok ? { id: out.drop.id, heads: out.drop.heads } : null,
     promo: out.promo && out.promo.ok ? out.promo.promo : null,
+    job: out.job && out.job.ok ? out.job.job : null,
   });
 }

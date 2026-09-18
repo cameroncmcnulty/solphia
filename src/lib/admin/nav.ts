@@ -105,7 +105,7 @@ export const ADMIN_NAV = [
     id: "circle",
     group: "protocol",
     label: "Founders Circle",
-    hint: "Members, mods, bans, airdrops",
+    hint: "Hangout, jobs, members, airdrops",
     icon: "circle" as const,
     badge: (d: AdminDesk) => d.circle?.members || null,
   },
