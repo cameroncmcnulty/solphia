@@ -455,6 +455,7 @@ export default function LaunchPage() {
           discord,
           launchBuySol: devBuy,
         }),
+        signal: AbortSignal.timeout(28_000),
       });
       const pj = await prep.json();
       const packed = typeof pj.tx === "string" ? pj.tx : Array.isArray(pj.txs) ? pj.txs[0] : "";
@@ -530,7 +531,10 @@ export default function LaunchPage() {
           : `Live on the Solphia curve. CA ${mintPk}. Supply sits on the bonding curve.`,
       );
     } catch (e) {
-      if (!createErr.banner) setErr(e instanceof Error ? e.message : "launch failed");
+      const timed = e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError");
+      if (!createErr.banner) {
+        setErr(timed ? "Launch timed out building the curve. Try again." : e instanceof Error ? e.message : "launch failed");
+      }
     } finally {
       setBusy(false);
     }
@@ -699,7 +703,7 @@ export default function LaunchPage() {
                   <input
                     ref={fileRef}
                     type="file"
-                    accept="image/*,.heic,.heif,.jpg,.jpeg,.png,.webp,.gif,.bmp,.tif,.tiff"
+                    accept="image/*"
                     className="hidden"
                     onChange={async (e) => {
                       const f = e.target.files?.[0];
@@ -721,6 +725,7 @@ export default function LaunchPage() {
                   noValidate
                   onSubmit={(e) => {
                     e.preventDefault();
+                    e.stopPropagation();
                     launchToken().catch(() => {});
                   }}
                 >
@@ -857,6 +862,7 @@ export default function LaunchPage() {
                   </div>
                   <button
                     type="submit"
+                    formNoValidate
                     disabled={busy}
                     className="btn-acid min-h-[48px] rounded-full px-6 disabled:opacity-40"
                   >

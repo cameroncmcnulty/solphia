@@ -137,7 +137,7 @@ function initializeIx(opts: {
   payer: PublicKey;
   mint: PublicKey;
   creator: PublicKey;
-  nonce: Buffer;
+  nonce: Buffer | Uint8Array;
   name: string;
   symbol: string;
   uri: string;
@@ -274,7 +274,7 @@ export async function hydratePadCoins(coins: LaunchCoin[]): Promise<void> {
 
 export async function buildPadLaunchTx(opts: {
   payer: string;
-  nonce: Buffer;
+  nonce: Uint8Array;
   name: string;
   symbol: string;
   uri: string;
@@ -284,6 +284,7 @@ export async function buildPadLaunchTx(opts: {
   const conn = connection();
   const payer = new PublicKey(opts.payer);
   if (opts.nonce.length !== 8) throw new Error("Bad mint nonce.");
+  const nonce = Buffer.from(opts.nonce);
   const mint = mintPda(payer, opts.nonce);
   const { blockhash } = await conn.getLatestBlockhash("confirmed");
   const ixs: TransactionInstruction[] = [
@@ -291,7 +292,7 @@ export async function buildPadLaunchTx(opts: {
       payer,
       mint,
       creator: payer,
-      nonce: opts.nonce,
+      nonce,
       name: opts.name.slice(0, 32),
       symbol: opts.symbol.slice(0, 10),
       uri: opts.uri.slice(0, 200),
