@@ -32,6 +32,7 @@ import {
   waitForPadCurve,
   quotePadTrade,
 } from "@/lib/launch/program";
+import { mintPda, nonceFromB64 } from "@/lib/launch/pda";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -66,6 +67,7 @@ const Body = z.object({
   ownerWallet: z.string().optional(),
   adminSecret: z.string().optional(),
   mint: z.string().optional(),
+  nonce: z.string().max(24).optional(),
   sigs: z.array(z.string().max(128)).max(8).optional(),
   sig: z.string().max(128).optional(),
   uri: z.string().max(512).optional(),
@@ -126,21 +128,24 @@ async function prepareMint(b: LaunchBody) {
   if (issues.image) return fail("bad_image");
   if (issues.launchBuySol) return fail("dev_buy_cap");
   if (issues.website || issues.x || issues.telegram || issues.discord) return fail("bad_link");
-  if (!b.mint || !isSolanaAddress(b.mint)) return fail("bad_mint");
+  const nonce = nonceFromB64(b.nonce || "");
+  if (!nonce) return fail("bad_mint");
+  const mint = mintPda(b.pubkey, nonce).toBase58();
+  if (b.mint && b.mint !== mint) return fail("bad_mint");
   const s = await withLaunch((st) => st, false);
   const book = bookOf(s);
   if (book.coins.some((c) => c.symbol === symbol && c.status === "curve")) return fail("ticker_taken");
-  if (book.coins.some((c) => c.mint === b.mint)) return fail("mint_taken");
+  if (book.coins.some((c) => c.mint === mint)) return fail("mint_taken");
   let art: { image: string; uri: string };
   try {
-    art = await resolveArt({ image: b.image, name, symbol, blurb, website, mint: b.mint });
+    art = await resolveArt({ image: b.image, name, symbol, blurb, website, mint });
   } catch {
     return fail("chain_failed");
   }
   try {
     const built = await buildPadLaunchTx({
       payer: b.pubkey,
-      mint: b.mint,
+      nonce,
       name,
       symbol,
       uri: art.uri,
@@ -276,21 +281,27 @@ export async function POST(req: NextRequest) {
 
   if (b.action === "quote") {
     const s = await withLaunch((st) => st, false);
-    const coin = bookOf(s).coins.find((c) => c.id === b.id);
-    if (!coin) return fail("not_found", 404);
-    if (coin.venue === "solphia" || coin.venue === "pump") {
+    const book = bookOf(s);
+    const coin = book.coins.find((c) => c.id === b.id || (b.mint && c.mint === b.mint));
+    const mint = coin?.mint || b.mint || "";
+    const live = mint && isSolanaAddress(mint) ? await padCurveReady(mint) : { ok: false as const, error: "curve_missing" };
+    if (coin?.venue === "solphia" || coin?.venue === "pump" || live.ok) {
       const q = await quotePadTrade({
-        mint: coin.mint,
+        mint,
         owner: b.pubkey,
         side: b.tokens ? "sell" : "buy",
         sol: b.sol,
         tokens: b.tokens,
       });
       if (!q.ok) return fail(q.error);
-      return NextResponse.json({ quote: q, coin: publicCoin(coin, solUsd, b.pubkey, bookOf(s)) });
+      return NextResponse.json({
+        quote: q,
+        coin: coin ? publicCoin(coin, solUsd, b.pubkey, book) : undefined,
+      });
     }
+    if (!coin) return fail("not_found", 404);
     const q = quotePreview(coin, b.tokens ? "sell" : "buy", b.tokens || b.sol || 0);
-    return NextResponse.json({ quote: q, coin: publicCoin(coin, solUsd, b.pubkey, bookOf(s)) });
+    return NextResponse.json({ quote: q, coin: publicCoin(coin, solUsd, b.pubkey, book) });
   }
 
   if (b.action === "buy" || b.action === "sell") {

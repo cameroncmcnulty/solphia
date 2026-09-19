@@ -5,7 +5,7 @@ import { Keypair } from "@solana/web3.js";
 import { Connection } from "@solana/web3.js";
 import { SPHA_NAME, SPHA_SUPPLY, SPHA_SYMBOL, type SphaNetwork } from "@/lib/token/omics";
 import { buildSphaLaunchTxs, encodeTx } from "@/lib/token/mint";
-import { signAndSendPhantom } from "@/lib/wallet/trading";
+import { signAndSendPhantom, signPumpLaunch } from "@/lib/wallet/trading";
 import { useAdmin } from "./AdminProvider";
 import { Tokenomics } from "@/components/Tokenomics";
 import { Field, shortPk } from "./ui";
@@ -117,10 +117,9 @@ export function SphaLaunch() {
       const sigs: string[] = [];
       for (let i = 0; i < set.txs.length; i++) {
         const tx = set.txs[i];
-        if (i === 0) tx.partialSign(mint);
         setLog(`Sign tx ${i + 1} of ${set.txs.length} in Phantom…`);
         const encoded = encodeTx(tx);
-        const sig = await signAndSendPhantom(encoded);
+        const sig = i === 0 ? await signPumpLaunch(encoded, mint) : await signAndSendPhantom(encoded);
         sigs.push(sig);
       }
       await fetch("/api/admin/spha", {

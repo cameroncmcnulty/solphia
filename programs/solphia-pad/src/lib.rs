@@ -9,6 +9,7 @@ use solana_program::{
     account_info::{next_account_info, AccountInfo},
     entrypoint,
     entrypoint::ProgramResult,
+    instruction::{AccountMeta, Instruction},
     program::{invoke, invoke_signed},
     program_error::ProgramError,
     pubkey::Pubkey,
@@ -18,6 +19,8 @@ use solana_program::{
 };
 
 pub const ID: Pubkey = solana_program::pubkey!("5s26ZJDhyErFMx3ELo9CYXS3Y5BcwZvQ5EceYq8WFv4d");
+const TOKEN_METADATA: Pubkey = solana_program::pubkey!("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s");
+const MINT_LEN: u64 = 82;
 
 const DISC_CURVE: &[u8; 8] = b"splhcrv1";
 const DISC_GLOBAL: &[u8; 8] = b"splhglb1";
@@ -106,10 +109,19 @@ fn init_global(program_id: &Pubkey, accounts: &[AccountInfo]) -> ProgramResult {
 }
 
 fn initialize(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> ProgramResult {
-    if data.len() < 32 {
+    // referrer(32) + nonce(8) + name + symbol + uri. Mint is a PDA so Phantom sees one signer.
+    if data.len() < 43 {
         return Err(ProgramError::InvalidInstructionData);
     }
     let referrer = Pubkey::try_from(&data[0..32]).map_err(|_| ProgramError::InvalidInstructionData)?;
+    let nonce = &data[32..40];
+    let mut i = 40usize;
+    let name = take_str(data, &mut i)?;
+    let symbol = take_str(data, &mut i)?;
+    let uri = take_str(data, &mut i)?;
+    if name.is_empty() || symbol.is_empty() {
+        return Err(ProgramError::InvalidInstructionData);
+    }
 
     let acc = &mut accounts.iter();
     let payer = next_account_info(acc)?;
@@ -121,22 +133,68 @@ fn initialize(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> Pro
     let token_program = next_account_info(acc)?;
     let ata_program = next_account_info(acc)?;
     let system = next_account_info(acc)?;
-    if !payer.is_signer || !mint.is_signer {
+    let metadata = next_account_info(acc)?;
+    let metadata_program = next_account_info(acc)?;
+    let rent_sys = next_account_info(acc)?;
+    if !payer.is_signer {
         return Err(ProgramError::MissingRequiredSignature);
+    }
+    if mint.is_signer {
+        return Err(ProgramError::InvalidArgument);
     }
     if *creator.key != *payer.key {
         return Err(ProgramError::InvalidArgument);
     }
+    if *metadata_program.key != TOKEN_METADATA {
+        return Err(ProgramError::IncorrectProgramId);
+    }
     let _ = fee_dest(global, program_id)?;
-    let (pda, bump) = Pubkey::find_program_address(&[b"curve", mint.key.as_ref()], program_id);
-    if pda != *curve.key {
+
+    let (mint_pda, mint_bump) = Pubkey::find_program_address(&[b"mint", payer.key.as_ref(), nonce], program_id);
+    if mint_pda != *mint.key {
+        return Err(ProgramError::InvalidSeeds);
+    }
+    if mint.lamports() > 0 {
+        return Err(ProgramError::AccountAlreadyInitialized);
+    }
+    let (curve_pda, bump) = Pubkey::find_program_address(&[b"curve", mint.key.as_ref()], program_id);
+    if curve_pda != *curve.key {
+        return Err(ProgramError::InvalidSeeds);
+    }
+    let (md_pda, _) = Pubkey::find_program_address(
+        &[b"metadata", TOKEN_METADATA.as_ref(), mint.key.as_ref()],
+        &TOKEN_METADATA,
+    );
+    if md_pda != *metadata.key {
         return Err(ProgramError::InvalidSeeds);
     }
 
     let rent = Rent::get()?;
-    let lamports = rent.minimum_balance(CURVE_LEN);
+    let mint_seeds: &[&[u8]] = &[b"mint", payer.key.as_ref(), nonce, &[mint_bump]];
     invoke_signed(
-        &system_instruction::create_account(payer.key, curve.key, lamports, CURVE_LEN as u64, program_id),
+        &system_instruction::create_account(
+            payer.key,
+            mint.key,
+            rent.minimum_balance(MINT_LEN as usize),
+            MINT_LEN,
+            token_program.key,
+        ),
+        &[payer.clone(), mint.clone(), system.clone()],
+        &[mint_seeds],
+    )?;
+    invoke(
+        &spl_token::instruction::initialize_mint2(token_program.key, mint.key, payer.key, Some(payer.key), DECIMALS)?,
+        &[mint.clone(), token_program.clone()],
+    )?;
+
+    invoke_signed(
+        &system_instruction::create_account(
+            payer.key,
+            curve.key,
+            rent.minimum_balance(CURVE_LEN),
+            CURVE_LEN as u64,
+            program_id,
+        ),
         &[payer.clone(), curve.clone(), system.clone()],
         &[&[b"curve", mint.key.as_ref(), &[bump]]],
     )?;
@@ -151,15 +209,39 @@ fn initialize(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> Pro
         &[payer.clone(), curve_ata.clone(), curve.clone(), mint.clone(), system.clone(), token_program.clone(), ata_program.clone()],
     )?;
 
+    let mut md = Vec::with_capacity(64 + name.len() + symbol.len() + uri.len());
+    md.push(33u8);
+    md.extend_from_slice(&packed_str(name));
+    md.extend_from_slice(&packed_str(symbol));
+    md.extend_from_slice(&packed_str(uri));
+    md.extend_from_slice(&0u16.to_le_bytes());
+    md.extend_from_slice(&[0, 0, 0, 1, 0]);
     invoke(
-        &spl_token::instruction::mint_to(
-            token_program.key,
-            mint.key,
-            curve_ata.key,
-            payer.key,
-            &[],
-            TOKEN_SUPPLY,
-        )?,
+        &Instruction {
+            program_id: TOKEN_METADATA,
+            accounts: vec![
+                AccountMeta::new(*metadata.key, false),
+                AccountMeta::new_readonly(*mint.key, false),
+                AccountMeta::new_readonly(*payer.key, true),
+                AccountMeta::new(*payer.key, true),
+                AccountMeta::new_readonly(*payer.key, true),
+                AccountMeta::new_readonly(*system.key, false),
+                AccountMeta::new_readonly(*rent_sys.key, false),
+            ],
+            data: md,
+        },
+        &[
+            metadata.clone(),
+            mint.clone(),
+            payer.clone(),
+            system.clone(),
+            rent_sys.clone(),
+            metadata_program.clone(),
+        ],
+    )?;
+
+    invoke(
+        &spl_token::instruction::mint_to(token_program.key, mint.key, curve_ata.key, payer.key, &[], TOKEN_SUPPLY)?,
         &[mint.clone(), curve_ata.clone(), payer.clone(), token_program.clone()],
     )?;
     invoke(
@@ -471,6 +553,27 @@ fn quote_sell(virtual_sol: u64, virtual_tokens: u64, tokens_in: u64) -> Result<u
     let out = vs.checked_mul(t).ok_or(ProgramError::InvalidArgument)?
         / vt.checked_add(t).ok_or(ProgramError::InvalidArgument)?;
     Ok(out as u64)
+}
+
+fn packed_str(s: &[u8]) -> Vec<u8> {
+    let mut v = Vec::with_capacity(4 + s.len());
+    v.extend_from_slice(&(s.len() as u32).to_le_bytes());
+    v.extend_from_slice(s);
+    v
+}
+
+fn take_str<'a>(data: &'a [u8], i: &mut usize) -> Result<&'a [u8], ProgramError> {
+    if *i >= data.len() {
+        return Err(ProgramError::InvalidInstructionData);
+    }
+    let n = data[*i] as usize;
+    *i += 1;
+    if n > 200 || *i + n > data.len() {
+        return Err(ProgramError::InvalidInstructionData);
+    }
+    let s = &data[*i..*i + n];
+    *i += n;
+    Ok(s)
 }
 
 fn split_fee(fee: u64, referred: bool) -> (u64, u64, u64, u64) {

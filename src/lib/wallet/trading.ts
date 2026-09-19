@@ -127,19 +127,31 @@ export function phantomProvider(): {
 }
 
 export async function signAndSendPhantom(transactionB64: string): Promise<string> {
+  return signPhantomAndSend(transactionB64);
+}
+
+/**
+ * Phantom docs: one signer, signTransaction (so Blowfish can simulate), then we send.
+ * Extra signers (mint keypairs) must be attached AFTER Phantom signs — never before.
+ * https://docs.phantom.com/developer-powertools/domain-and-transaction-warnings
+ */
+export async function signLegacyTx(tx: Transaction, extra?: Keypair): Promise<string> {
+  const unsigned = tx.serialize({ requireAllSignatures: false, verifySignatures: false });
+  return signPhantomAndSend(toB64(unsigned), extra);
+}
+
+export async function signPhantomAndSend(transactionB64: string, extra?: Keypair): Promise<string> {
   const provider = phantomProvider();
   if (!provider) throw new Error("Open this page in Phantom (browser or in-app).");
   const raw = Uint8Array.from(atob(transactionB64), (c) => c.charCodeAt(0));
-  let tx: Transaction | VersionedTransaction;
-  try {
-    tx = VersionedTransaction.deserialize(raw);
-  } catch {
-    tx = Transaction.from(raw);
+  const tx = Transaction.from(raw);
+  const signed = await provider.signTransaction(tx);
+  if (typeof (signed as Transaction).partialSign !== "function") {
+    throw new Error("Phantom did not return a signable transaction.");
   }
-  const sent = await provider.signAndSendTransaction(tx);
-  const sig = String(typeof sent === "string" ? sent : sent.signature || "");
-  if (!sig) throw new Error("Phantom did not return a signature.");
-  return sig;
+  const legacy = signed as Transaction;
+  if (extra) legacy.partialSign(extra);
+  return sendSignedB64(toB64(legacy.serialize()));
 }
 
 async function sendSignedB64(b64: string): Promise<string> {
@@ -153,33 +165,14 @@ async function sendSignedB64(b64: string): Promise<string> {
   return j.signature as string;
 }
 
-/**
- * Pump.fun create: mint key is a second signer. Phantom docs: signTransaction
- * first (one remaining signer from Phantom's view), then attach the mint
- * signature, then send. signAndSendTransaction with a pre-signed mint is what
- * Blowfish flags as "This dApp could be malicious."
- */
+/** @deprecated pad launches are one-signer PDAs. Extra mint signer only for admin $SPHA. */
 export async function signPumpLaunch(transactionB64: string, mint: Keypair): Promise<string> {
-  const provider = phantomProvider();
-  if (!provider) throw new Error("Open this page in Phantom (browser or in-app).");
-  const raw = Uint8Array.from(atob(transactionB64), (c) => c.charCodeAt(0));
-  const tx = Transaction.from(raw);
-  const signed = await provider.signTransaction(tx);
-  if (typeof (signed as Transaction).partialSign !== "function") {
-    throw new Error("Phantom did not return a signable transaction.");
-  }
-  const legacy = signed as Transaction;
-  legacy.partialSign(mint);
-  return sendSignedB64(toB64(legacy.serialize()));
+  return signPhantomAndSend(transactionB64, mint);
 }
 
 /** First-month seat: Phantom (owner) → treasury. */
 export async function paySeatFromPhantom(owner: string, treasury: string, sol: number): Promise<string> {
-  const provider = phantomProvider();
-  if (!provider) throw new Error("Open this page in Phantom (browser or in-app).");
-  const tx = await buildTransfer(owner, treasury, sol);
-  const sent = await provider.signAndSendTransaction(tx);
-  return String(typeof sent === "string" ? sent : sent.signature || "");
+  return signLegacyTx(await buildTransfer(owner, treasury, sol));
 }
 
 /** Later months: on-device trading wallet → treasury. No extra Phantom popup. */

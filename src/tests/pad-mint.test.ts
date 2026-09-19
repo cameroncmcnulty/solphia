@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import { TOKEN_SUPPLY } from "../lib/launch/curve";
 import { PAD_PROGRAM_ID } from "../lib/launch/ids";
 import { quoteBuyRaw, quoteSellRaw } from "../lib/launch/program";
+import { mintPda } from "../lib/launch/pda";
 import { storedImage } from "../lib/launch/validate";
 import { createCoin, emptyLaunchBook, publicCoin, recordOnchainFill } from "../lib/launch/engine";
 
@@ -11,6 +12,12 @@ const A = "CyaE1VxvBrahnPWkqm5VsdCvyS2QmNht2UFrKJHga54o";
 describe("pad on-chain mint", () => {
   it("points at the mainnet Solphia pad program", () => {
     assert.equal(PAD_PROGRAM_ID, "5s26ZJDhyErFMx3ELo9CYXS3Y5BcwZvQ5EceYq8WFv4d");
+  });
+  it("derives a mint PDA so launch has one Phantom signer", () => {
+    const nonce = Buffer.from("12345678");
+    const a = mintPda(A, nonce).toBase58();
+    assert.equal(a, mintPda(A, nonce).toBase58());
+    assert.notEqual(a, mintPda(A, Buffer.from("87654321")).toBase58());
   });
   it("matches Pump.fun 1B supply at 6 decimals without minting into the creator", () => {
     assert.equal(TOKEN_SUPPLY, 1_000_000_000);

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { loadOwner, saveOwner, tradingPubkey, buildTransfer, withdrawToOwner } from "@/lib/wallet/trading";
+import { loadOwner, saveOwner, tradingPubkey, buildTransfer, withdrawToOwner, signLegacyTx } from "@/lib/wallet/trading";
 import { ConfigDesk, type ConfigShape } from "./ConfigDesk";
 import { FieldError, FormAlert, useConfirmErrors } from "./form/confirm";
 
@@ -117,8 +117,8 @@ export function AutoPilot({ owner }: { owner: string | null }) {
     try {
       const tpk = tradingPubkey();
       const tx = await buildTransfer(owner, tpk, solAmt);
-      const sent = await provider.signAndSendTransaction(tx);
-      setMsg(`Deposited ${solAmt} SOL · ${String(sent.signature || sent).slice(0, 16)}…`);
+      const sig = await signLegacyTx(tx);
+      setMsg(`Deposited ${solAmt} SOL · ${sig.slice(0, 16)}…`);
       setTimeout(() => refresh(owner), 2500);
     } catch (e) {
       fundErr.fail({}, e instanceof Error ? e.message : "deposit rejected");

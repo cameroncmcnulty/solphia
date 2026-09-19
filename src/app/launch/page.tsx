@@ -29,7 +29,8 @@ import {
   type LaunchField,
 } from "@/lib/launch/validate";
 import { FieldError, FormAlert, fieldClass, useConfirmErrors } from "@/components/form/confirm";
-import { loadOwner, signAndSendPhantom, signPumpLaunch } from "@/lib/wallet/trading";
+import { loadOwner, signPhantomAndSend } from "@/lib/wallet/trading";
+import { mintPda, newMintNonce, nonceToB64 } from "@/lib/launch/pda";
 
 import { auditLaunchCoin, rankTape, scoreTape, type LaunchAudit } from "@/lib/launch/audit";
 import { BoostBuy, BoostRail, fmtLeft } from "@/components/BoostBuy";
@@ -433,9 +434,8 @@ export default function LaunchPage() {
     setMsg("");
     setErr("");
     try {
-      const { Keypair } = await import("@solana/web3.js");
-      const mint = Keypair.generate();
-      const mintPk = mint.publicKey.toBase58();
+      const nonce = newMintNonce();
+      const mintPk = mintPda(owner, nonce).toBase58();
       setMsg("Building the Solphia curve…");
       const prep = await fetch("/api/launch", {
         method: "POST",
@@ -444,6 +444,7 @@ export default function LaunchPage() {
           action: "prepare",
           pubkey: owner,
           mint: mintPk,
+          nonce: nonceToB64(nonce),
           name,
           symbol,
           blurb,
@@ -466,7 +467,7 @@ export default function LaunchPage() {
         throw new Error(message);
       }
       setMsg("Sign once in Phantom…");
-      const sig = await signPumpLaunch(packed, mint);
+      const sig = await signPhantomAndSend(packed);
       setMsg("Waiting for the curve on Solana…");
       const confirmBody = {
         action: "confirm",
@@ -564,7 +565,7 @@ export default function LaunchPage() {
       let listed = j;
       if (j.needsSign && j.transaction) {
         setMsg("Sign the swap in Phantom…");
-        const sig = await signAndSendPhantom(j.transaction);
+        const sig = await signPhantomAndSend(j.transaction);
         const conf = await fetch("/api/launch", {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -1292,33 +1293,78 @@ function CoinDesk({
   onAct: (body: Record<string, unknown>) => void;
 }) {
   const [side, setSide] = useState<"buy" | "sell">("buy");
+  const [liveOut, setLiveOut] = useState<number | null>(null);
   const tradeErr = useConfirmErrors<"wallet" | "amount">();
   const audit = useMemo(() => auditLaunchCoin(open, solUsd), [open, solUsd]);
   const creator = Boolean(owner && open.creator === owner);
+  const padTrade = Boolean(open.born || open.venue === "solphia" || open.venue === "pumpfun");
   const snipeLeft = Math.max(0, ANTI_SNIPE_MS - (Date.now() - open.createdAt));
   const cap = open.maxBuySol ?? 0;
   const snipeCap = open.venue === "solphia" || open.venue === "pumpfun" || creator || snipeLeft <= 0 ? Infinity : ANTI_SNIPE_SOL;
   const maxOk = Math.min(cap || 40, snipeCap, 40);
   const quote = useMemo(() => {
-    if (!open.curve || open.status !== "curve") return null;
+    if (!open.curve) return null;
     if (side === "buy") return quoteBuy(open.curve, sol);
     if (!(open.myTokens || 0)) return null;
     return quoteSell(open.curve, open.myTokens || 0);
-  }, [open.curve, open.status, open.myTokens, sol, side]);
+  }, [open.curve, open.myTokens, sol, side]);
+  useEffect(() => {
+    if (!padTrade || !open.mint) {
+      setLiveOut(null);
+      return;
+    }
+    const tokens = open.myTokens || 0;
+    if (side === "buy" && !(sol > 0)) {
+      setLiveOut(null);
+      return;
+    }
+    if (side === "sell" && !(tokens > 0)) {
+      setLiveOut(null);
+      return;
+    }
+    const ctrl = new AbortController();
+    const t = window.setTimeout(() => {
+      fetch("/api/launch", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          action: "quote",
+          pubkey: owner || open.creator,
+          id: open.id,
+          mint: open.mint,
+          sol: side === "buy" ? sol : undefined,
+          tokens: side === "sell" ? tokens : undefined,
+        }),
+        signal: ctrl.signal,
+      })
+        .then((r) => r.json())
+        .then((j) => {
+          const q = j.quote;
+          if (!q?.ok) {
+            setLiveOut(null);
+            return;
+          }
+          setLiveOut(side === "buy" ? Number(q.tokensOut) || 0 : Number(q.solOut) || 0);
+        })
+        .catch(() => setLiveOut(null));
+    }, 250);
+    return () => {
+      ctrl.abort();
+      window.clearTimeout(t);
+    };
+  }, [padTrade, open.mint, open.id, open.creator, open.myTokens, owner, sol, side]);
   const blocked =
-    open.status !== "curve"
-      ? "Graduated."
-      : side === "sell"
-        ? !(open.myTokens || 0)
-          ? "You have no tokens."
-          : ""
-        : sol < MIN_TRADE_SOL
-          ? `Min ${MIN_TRADE_SOL} SOL.`
-          : sol > maxOk + 1e-9
-            ? snipeLeft > 0 && !creator && sol > ANTI_SNIPE_SOL
-              ? `First 60s: max ${ANTI_SNIPE_SOL} SOL.`
-              : `5% wallet cap. Max ${fmtSol(maxOk, 3)} SOL.`
-            : "";
+    side === "sell"
+      ? !(open.myTokens || 0)
+        ? "You have no tokens."
+        : ""
+      : sol < MIN_TRADE_SOL
+        ? `Min ${MIN_TRADE_SOL} SOL.`
+        : sol > maxOk + 1e-9
+          ? snipeLeft > 0 && !creator && sol > ANTI_SNIPE_SOL
+            ? `First 60s: max ${ANTI_SNIPE_SOL} SOL.`
+            : `5% wallet cap. Max ${fmtSol(maxOk, 3)} SOL.`
+          : "";
 
   return (
     <section className="panel-bubble flex min-w-0 flex-col gap-5 overflow-x-hidden rounded-3xl p-3 sm:p-5">
@@ -1410,7 +1456,7 @@ function CoinDesk({
         </div>
 
         <SwapShell title={`Trade ${tick(open.symbol)}`} subtitle="You sign. Tokens land in the wallet you connected.">
-          {!(open.born || open.venue === "solphia") ? (
+          {!padTrade ? (
             <MarketSwap open={open} owner={owner} sol={sol} setSol={setSol} solUsd={solUsd} />
           ) : (
             <>
@@ -1468,7 +1514,15 @@ function CoinDesk({
                   <div className="mt-3">
                     <SwapBox label="YOU GET" unit={side === "buy" ? tick(open.symbol) || "TOKEN" : "SOL"}>
                       <div className="font-display text-3xl text-ghost">
-                        {quote && quote.ok ? (side === "buy" ? fmtTok(quote.tokensOut || 0) : fmtSol(quote.solOut || 0, 4)) : "—"}
+                        {liveOut != null
+                          ? side === "buy"
+                            ? fmtTok(liveOut)
+                            : fmtSol(liveOut, 4)
+                          : quote && quote.ok
+                            ? side === "buy"
+                              ? fmtTok(quote.tokensOut || 0)
+                              : fmtSol(quote.solOut || 0, 4)
+                            : "—"}
                       </div>
                     </SwapBox>
                   </div>
@@ -1617,7 +1671,7 @@ function MarketSwap({
       });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || "Could not build the swap.");
-      const sig = await signAndSendPhantom(j.transaction);
+      const sig = await signPhantomAndSend(j.transaction);
       setMsg(`Filled · ${sig.slice(0, 8)}… Tokens landed in your wallet.`);
       if (owner && mint) {
         const b = await fetch(`/api/sol/token?owner=${encodeURIComponent(owner)}&mint=${encodeURIComponent(mint)}`).then((x) => x.json());

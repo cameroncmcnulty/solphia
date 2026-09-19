@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { buildTransfer, phantomProvider, withdrawToOwner } from "@/lib/wallet/trading";
+import { buildTransfer, phantomProvider, signLegacyTx, withdrawToOwner } from "@/lib/wallet/trading";
 import { FieldError, useConfirmErrors } from "./form/confirm";
 
 const PRESETS = [0.1, 0.5, 1, 2];
@@ -39,8 +39,8 @@ export function WalletMove({
     setMsg("");
     try {
       const tx = await buildTransfer(owner, tradePk, sol);
-      const sent = await provider.signAndSendTransaction(tx);
-      setMsg(`Sent ${sol} SOL to the trading wallet · ${String(typeof sent === "string" ? sent : sent.signature || "").slice(0, 16)}…`);
+      const sig = await signLegacyTx(tx);
+      setMsg(`Sent ${sol} SOL to the trading wallet · ${sig.slice(0, 16)}…`);
       setTimeout(() => onDone?.(), 2500);
     } catch (e) {
       err.fail({}, e instanceof Error ? e.message : "transfer rejected");

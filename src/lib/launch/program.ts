@@ -1,6 +1,7 @@
 import {
   ComputeBudgetProgram,
   PublicKey,
+  SYSVAR_RENT_PUBKEY,
   SystemProgram,
   Transaction,
   TransactionInstruction,
@@ -10,15 +11,13 @@ import {
   ASSOCIATED_TOKEN_PROGRAM_ID,
   TOKEN_PROGRAM_ID,
   createAssociatedTokenAccountIdempotentInstruction,
-  createInitializeMint2Instruction,
   getAssociatedTokenAddressSync,
-  getMinimumBalanceForRentExemptMint,
-  MINT_SIZE,
 } from "@solana/spl-token";
 import { connection } from "../solana/connection";
 import { encodeTx } from "../token/mint";
-import { createMetadataV3Ix } from "../token/metadata";
+import { metadataPda, TOKEN_METADATA_PROGRAM_ID } from "../token/metadata";
 import { DEFAULT_OWNER, DEFAULT_TREASURY } from "../protocolWallets";
+import { mintPda } from "./pda";
 import { PAD_PROGRAM_ID as PAD_PROGRAM_ID_STR } from "./ids";
 import type { CurveState } from "./curve";
 import { MIN_TRADE_SOL } from "./curve";
@@ -31,13 +30,10 @@ export const PAD_FEE_TREASURY = new PublicKey(DEFAULT_TREASURY);
 export const PAD_FEE_OWNER = new PublicKey(DEFAULT_OWNER);
 
 export const PAD_DECIMALS = 6;
-const TOKEN_SUPPLY_RAW = 1_000_000_000n * 1_000_000n;
-const CURVE_SALE_RAW = 800_000_000n * 1_000_000n;
 const VIRTUAL_SOL = 30n * 1_000_000_000n;
 const VIRTUAL_TOKENS = 1_073_000_191n * 1_000_000n;
-const GRADUATE_SOL = 85n * 1_000_000_000n;
 const FEE_BPS = 100n;
-const CREATE_CU = 600_000;
+const CREATE_CU = 800_000;
 const TRADE_CU = 300_000;
 const CU_PRICE = 100_000;
 
@@ -132,10 +128,19 @@ async function simulateOrThrow(tx: Transaction): Promise<void> {
   }
 }
 
+function packedU8Str(s: string, max: number): Buffer {
+  const raw = Buffer.from(s.slice(0, max), "utf8");
+  return Buffer.concat([Buffer.from([raw.length]), raw]);
+}
+
 function initializeIx(opts: {
   payer: PublicKey;
   mint: PublicKey;
   creator: PublicKey;
+  nonce: Buffer;
+  name: string;
+  symbol: string;
+  uri: string;
   referrer?: string;
 }): TransactionInstruction {
   const curve = curvePda(opts.mint);
@@ -144,12 +149,19 @@ function initializeIx(opts: {
     opts.referrer && isSolanaAddress(opts.referrer) && opts.referrer !== opts.creator.toBase58()
       ? new PublicKey(opts.referrer)
       : PublicKey.default;
-  const data = Buffer.concat([Buffer.from([1]), referrer.toBuffer()]);
+  const data = Buffer.concat([
+    Buffer.from([1]),
+    referrer.toBuffer(),
+    opts.nonce,
+    packedU8Str(opts.name, 32),
+    packedU8Str(opts.symbol, 10),
+    packedU8Str(opts.uri, 200),
+  ]);
   return new TransactionInstruction({
     programId: PAD_PROGRAM_ID,
     keys: [
       { pubkey: opts.payer, isSigner: true, isWritable: true },
-      { pubkey: opts.mint, isSigner: true, isWritable: true },
+      { pubkey: opts.mint, isSigner: false, isWritable: true },
       { pubkey: curve, isSigner: false, isWritable: true },
       { pubkey: curveAta, isSigner: false, isWritable: true },
       { pubkey: globalPda(), isSigner: false, isWritable: false },
@@ -157,6 +169,9 @@ function initializeIx(opts: {
       { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
       { pubkey: ASSOCIATED_TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
       { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+      { pubkey: metadataPda(opts.mint), isSigner: false, isWritable: true },
+      { pubkey: TOKEN_METADATA_PROGRAM_ID, isSigner: false, isWritable: false },
+      { pubkey: SYSVAR_RENT_PUBKEY, isSigner: false, isWritable: false },
     ],
     data,
   });
@@ -259,7 +274,7 @@ export async function hydratePadCoins(coins: LaunchCoin[]): Promise<void> {
 
 export async function buildPadLaunchTx(opts: {
   payer: string;
-  mint: string;
+  nonce: Buffer;
   name: string;
   symbol: string;
   uri: string;
@@ -268,28 +283,20 @@ export async function buildPadLaunchTx(opts: {
 }): Promise<{ transaction: string; mint: string; tokensOut: number; feeSol: number }> {
   const conn = connection();
   const payer = new PublicKey(opts.payer);
-  const mint = new PublicKey(opts.mint);
-  const rent = await getMinimumBalanceForRentExemptMint(conn);
+  if (opts.nonce.length !== 8) throw new Error("Bad mint nonce.");
+  const mint = mintPda(payer, opts.nonce);
   const { blockhash } = await conn.getLatestBlockhash("confirmed");
   const ixs: TransactionInstruction[] = [
-    SystemProgram.createAccount({
-      fromPubkey: payer,
-      newAccountPubkey: mint,
-      space: MINT_SIZE,
-      lamports: rent,
-      programId: TOKEN_PROGRAM_ID,
-    }),
-    createInitializeMint2Instruction(mint, PAD_DECIMALS, payer, payer, TOKEN_PROGRAM_ID),
-    createMetadataV3Ix({
-      mint,
-      mintAuthority: payer,
+    initializeIx({
       payer,
-      updateAuthority: payer,
+      mint,
+      creator: payer,
+      nonce: opts.nonce,
       name: opts.name.slice(0, 32),
       symbol: opts.symbol.slice(0, 10),
       uri: opts.uri.slice(0, 200),
+      referrer: opts.referrer,
     }),
-    initializeIx({ payer, mint, creator: payer, referrer: opts.referrer }),
   ];
   const buySol = Math.max(0, Number(opts.buySol) || 0);
   let tokensOut = 0;
