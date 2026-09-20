@@ -35,6 +35,7 @@ import { mintPda, newMintNonce, nonceToB64 } from "@/lib/launch/pda";
 import { auditLaunchCoin, rankTape, scoreTape, type LaunchAudit } from "@/lib/launch/audit";
 import { BoostBuy, BoostRail, fmtLeft } from "@/components/BoostBuy";
 import { PadPitch } from "@/components/PadPitch";
+import { yourLaunches } from "@/lib/launch/yours";
 
 import { SwapBox, SwapShell, SwapTabs, SwapWidget } from "@/components/SwapWidget";
 import type { BoostRank } from "@/lib/launch/boost";
@@ -524,7 +525,7 @@ export default function LaunchPage() {
       setTelegram("");
       setDiscord("");
       setDevBuy(0);
-      setTab("tape");
+      setTab("mine");
       setMsg(
         devBuy > 0
           ? `Live on the Solphia curve. CA ${mintPk}. Your first buy landed in this wallet.`
@@ -604,7 +605,7 @@ export default function LaunchPage() {
         setTelegram("");
         setDiscord("");
         setDevBuy(0);
-        setTab("tape");
+        setTab("mine");
         setMsg("Live on the Solphia curve.");
       } else if (body.action === "withdraw_dev") setMsg("Dev rewards booked.");
       else setMsg("Filled. Tokens are in your wallet.");
@@ -615,17 +616,22 @@ export default function LaunchPage() {
     }
   }
 
-  const mine = owner ? coins.filter((c) => c.creator === owner && c.born) : [];
-  const pool = owner && tab === "mine" ? mine : coins;
+  const mine = yourLaunches(coins, owner);
+  const pool = isSwap ? coins : mine;
   const board = useMemo(() => {
+    if (!isSwap) {
+      const rows = mine
+        .slice()
+        .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
+        .map((coin) => ({ coin, rank: 0, audit: undefined as undefined, boost: undefined as undefined }));
+      return rows;
+    }
     const sourced =
-      tab === "mine"
-        ? pool
-        : source === "born"
-          ? pool.filter((c) => c.born)
-          : source === "market"
-            ? pool.filter((c) => !c.born)
-            : pool;
+      source === "born"
+        ? pool.filter((c) => c.born)
+        : source === "market"
+          ? pool.filter((c) => !c.born)
+          : pool;
     const aged = filterTape(sourced, age);
     const rows = ranked ? rankTape(aged, solUsd) : scoreTape(sortTape(aged, vol), solUsd);
     const boosted = [];
@@ -649,7 +655,7 @@ export default function LaunchPage() {
       }
     }
     return next;
-  }, [pool, age, vol, ranked, solUsd, source, tab, boostRank, lookedMint, coins]);
+  }, [isSwap, mine, pool, age, vol, ranked, solUsd, source, boostRank, lookedMint, coins]);
   const rows = board.map((r) => r.coin);
 
   return (
@@ -888,6 +894,12 @@ export default function LaunchPage() {
               </div>
             )}
             <h2 className="font-display text-2xl text-ghost">{isSwap ? "Market" : "Yours"}</h2>
+            {!isSwap && (
+              <p className="mt-1 text-sm text-mute">
+                Coins you launched. Buy and sell on the Solphia curve here — Phantom&apos;s Swap tab uses Jupiter and
+                will say no pairs.
+              </p>
+            )}
             <div className="mt-3 space-y-2">
               {isSwap && (
                 <BoostRail
@@ -1028,8 +1040,8 @@ export default function LaunchPage() {
               )}
             </div>
             <div className="mt-3 max-h-[44rem] space-y-1.5 overflow-y-auto overflow-x-hidden">
-              {rows.length > 0 && <TapeHead />}
-              {rows.length === 0 && tapeLoading && tab !== "mine" && (
+              {rows.length > 0 && isSwap && <TapeHead />}
+              {rows.length === 0 && tapeLoading && isSwap && (
                 <div className="space-y-2">
                   {Array.from({ length: 8 }).map((_, i) => (
                     <div key={i} className="h-[88px] animate-pulse rounded-2xl bg-violet/10" />
@@ -1038,8 +1050,10 @@ export default function LaunchPage() {
               )}
               {rows.length === 0 && !tapeLoading && (
                 <p className="text-sm text-mute">
-                  {tab === "mine"
-                    ? "Nothing launched yet."
+                  {!isSwap
+                    ? owner
+                      ? "Nothing launched from this wallet yet."
+                      : "Connect Phantom to manage coins you launched."
                     : ranked
                       ? "Nothing in this window ranks yet."
                       : "No coins in this window passed the gate."}
@@ -1047,17 +1061,25 @@ export default function LaunchPage() {
               )}
               {board.map((row) => (
                 <div key={row.coin.id} className="space-y-2">
+                  {isSwap ? (
                   <CoinCard
                     c={row.coin}
                     solUsd={solUsd}
                     active={open?.id === row.coin.id}
                     onOpen={() => setOpen((cur) => (cur?.id === row.coin.id ? null : row.coin))}
                     rank={ranked ? row.rank : 0}
-                    audit={row.audit}
+                    audit={row.audit ?? null}
                     vol={ranked ? null : vol}
                     rockets={row.boost?.rockets}
                     boostLeft={row.boost?.leftMs}
                   />
+                  ) : (
+                  <YoursCard
+                    c={row.coin}
+                    active={open?.id === row.coin.id}
+                    onOpen={() => setOpen((cur) => (cur?.id === row.coin.id ? null : row.coin))}
+                  />
+                  )}
                   {open?.id === row.coin.id && (
                     <CoinDesk
                       open={open}
@@ -1158,6 +1180,47 @@ function StatCell({ k, v, tone }: { k: string; v: ReactNode; tone?: string }) {
     <div className="min-w-0">
       <div className="font-mono text-[9px] tracking-[0.14em] text-mute">{k}</div>
       <div className={`stat-num truncate text-[13px] ${tone || "text-ghost"}`}>{v}</div>
+    </div>
+  );
+}
+
+function YoursCard({
+  c,
+  active,
+  onOpen,
+}: {
+  c: Coin;
+  active: boolean;
+  onOpen: () => void;
+}) {
+  const mc = c.marketCapUsd ? fmtUsd(c.marketCapUsd) : `${fmtSol(c.marketCapSol, 1)} SOL`;
+  const progress = Math.max(0, Math.min(100, Math.round((c.progress || 0) * 100)));
+  return (
+    <div
+      className={`rounded-2xl border px-3 py-3 ${active ? "border-acid/50 bg-acid/10" : "border-violet/25 bg-void/40"}`}
+    >
+      <button type="button" onClick={onOpen} className="flex w-full min-w-0 items-center gap-3 text-left">
+        <TokenArt src={c.image} mint={c.mint} label={c.symbol} className="h-12 w-12 shrink-0 rounded-xl" />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="truncate font-display text-lg text-ghost">{tick(c.symbol) || c.name}</span>
+            <span className="rounded-full bg-acid/15 px-1.5 py-0.5 font-mono text-[9px] text-acid">CURVE</span>
+          </div>
+          <p className="mt-0.5 truncate text-[13px] text-mute">{c.name}</p>
+        </div>
+        <div className="shrink-0 text-right">
+          <div className="stat-num text-sm text-ghost">{mc}</div>
+          <div className="font-mono text-[10px] text-mute">{progress}% to 85 SOL</div>
+        </div>
+      </button>
+      {c.mint ? (
+        <div className="mt-2 flex items-center justify-between gap-2" onClick={(e) => e.stopPropagation()}>
+          <CopyCa ca={c.mint} compact />
+          <button type="button" onClick={onOpen} className="rounded-full bg-acid/15 px-3 py-1 font-mono text-[11px] text-acid">
+            {active ? "Close" : "Buy / sell"}
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -1461,7 +1524,10 @@ function CoinDesk({
           </div>
         </div>
 
-        <SwapShell title={`Trade ${tick(open.symbol)}`} subtitle="You sign. Tokens land in the wallet you connected.">
+        <SwapShell
+          title={`Trade ${tick(open.symbol)}`}
+          subtitle="Solphia curve. Phantom Swap will say no pairs — that tab is Jupiter, not this program."
+        >
           {!padTrade ? (
             <MarketSwap open={open} owner={owner} sol={sol} setSol={setSol} solUsd={solUsd} />
           ) : (

@@ -241,8 +241,11 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ coin: publicCoin(coin, solUsd, viewer, book), solUsd });
   }
   tickBoosts(book);
+  const listed = viewer
+    ? book.coins.filter((c) => c.creator === viewer)
+    : book.coins;
   return NextResponse.json({
-    coins: book.coins.slice(0, 80).map((c) => publicCoin(c, solUsd, viewer, book)),
+    coins: listed.slice(0, 80).map((c) => publicCoin(c, solUsd, viewer, book)),
     solUsd,
     ownerWallet: book.ownerWallet || null,
     ownerEarningsSol: book.ownerEarningsSol,

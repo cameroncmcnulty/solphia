@@ -25,6 +25,7 @@ import {
 } from "../lib/launch/curve";
 import { buyCoin, createCoin, emptyLaunchBook, mergeLaunch, publicCoin, sellCoin, sparkCandles, withdrawDev, withdrawOwner, setOwnerWallet } from "../lib/launch/engine";
 import { launchError } from "../lib/launch/errors";
+import { yourLaunches } from "../lib/launch/yours";
 import { IMAGE_DATA_MAX, firstErrorKey, validateLaunchCreate } from "../lib/launch/validate";
 
 const A = "CyaE1VxvBrahnPWkqm5VsdCvyS2QmNht2UFrKJHga54o";
@@ -353,5 +354,19 @@ describe("launch create validation", () => {
   it("accepts a minimal valid create", () => {
     const e = validateLaunchCreate({ creator: A, name: "Test Coin", symbol: "TEST" });
     assert.deepEqual(e, {});
+  });
+});
+
+describe("yours list", () => {
+  it("is empty without a wallet and never includes someone else's coin", () => {
+    const rows = [
+      { creator: A, symbol: "MINE" },
+      { creator: B, symbol: "OTHER" },
+    ];
+    assert.deepEqual(yourLaunches(rows, null), []);
+    assert.deepEqual(
+      yourLaunches(rows, A).map((c) => c.symbol),
+      ["MINE"],
+    );
   });
 });
