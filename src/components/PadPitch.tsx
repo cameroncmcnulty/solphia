@@ -1,7 +1,7 @@
 "use client";
 
 import { CopyCa } from "@/components/CopyCa";
-import { PAD_PROGRAM_ID } from "@/lib/launch/ids";
+import { DBC_PROGRAM_ID } from "@/lib/launch/dbcIds";
 
 const ROWS: { k: string; us: string; them: string; usW: number; themW: number }[] = [
   { k: "Trade fee", us: "1.00%", them: "1.25%", usW: 100, themW: 125 },
@@ -35,15 +35,15 @@ export function PadPitch() {
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-[#04000a] via-[#04000a]/92 to-[#04000a]/55" />
       <div className="relative z-10 grid gap-6 p-5 sm:p-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(240px,0.85fr)]">
         <div>
-          <p className="font-mono text-[11px] tracking-[0.28em] text-acid">MAINNET CURVE · LIVE</p>
+          <p className="font-mono text-[11px] tracking-[0.28em] text-acid">METEORA DBC · JUPITER ROUTED</p>
           <h2 className="mt-2 font-display text-3xl leading-tight text-ghost sm:text-4xl">
             1% curve.
-            <span className="block text-acid">Devs take half.</span>
+            <span className="block text-acid">Phantom can buy it.</span>
           </h2>
           <p className="mt-3 max-w-lg text-sm leading-relaxed text-mute">
-            Same virtual AMM family as Pump.fun. Cheaper for buyers. Richer for the wallet that launched.
-            Supply never dumps into the creator — it sits on the Solphia program until someone buys.
-            After 85 SOL the same program stays the AMM. No Jupiter hop.
+            Same virtual AMM family as Pump.fun, on Meteora’s Dynamic Bonding Curve — the program Jupiter Instant
+            Routing already indexes. Paste the CA into Phantom Swap and it quotes, like a Pump.fun coin before
+            graduation. After the curve fills it moves to Meteora DAMM v2, still Jupiter-routable.
           </p>
           <div className="mt-5 grid grid-cols-3 gap-2">
             {[
@@ -82,8 +82,8 @@ export function PadPitch() {
             0.25% treasury), paid in the same swap. Create is 0 SOL on both.
           </p>
           <div className="mt-3 flex flex-wrap items-center gap-2">
-            <span className="font-mono text-[10px] uppercase tracking-wider text-mute">Program</span>
-            <CopyCa ca={PAD_PROGRAM_ID} compact />
+            <span className="font-mono text-[10px] uppercase tracking-wider text-mute">Meteora DBC</span>
+            <CopyCa ca={DBC_PROGRAM_ID} compact />
           </div>
         </div>
         <div className="hidden min-h-[220px] lg:block" />

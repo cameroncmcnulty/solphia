@@ -27,10 +27,42 @@ const securityHeaders = [
   },
 ];
 
+const noDbcTrace = [
+  "/api/swap/:path*",
+  "/api/cron/:path*",
+  "/api/health/:path*",
+  "/api/sol/:path*",
+  "/api/admin/:path*",
+  "/api/auto/:path*",
+  "/api/paper/:path*",
+  "/api/pair/:path*",
+  "/api/feed/:path*",
+  "/api/shill/:path*",
+  "/api/spha/:path*",
+  "/api/subscribe/:path*",
+  "/api/session/:path*",
+  "/api/account/:path*",
+  "/api/wallets/:path*",
+  "/api/wallet/:path*",
+  "/api/alerts/:path*",
+  "/api/charts/:path*",
+  "/api/circle/:path*",
+  "/api/copy/:path*",
+  "/api/live/:path*",
+  "/api/media/:path*",
+  "/api/profile/:path*",
+  "/api/risk/:path*",
+  "/api/access/:path*",
+  "/api/backtest/:path*",
+  "/api/solphia/:path*",
+];
+const dbcTraceExclude = ["node_modules/@meteora-ag/**", "node_modules/@coral-xyz/anchor/**"];
+
 const nextConfig: NextConfig = {
   outputFileTracingRoot: path.join(__dirname),
   poweredByHeader: false,
   serverExternalPackages: ["@meteora-ag/dynamic-bonding-curve-sdk", "@coral-xyz/anchor", "bn.js"],
+  outputFileTracingExcludes: Object.fromEntries(noDbcTrace.map((route) => [route, dbcTraceExclude])),
   async redirects() {
     return [
       { source: "/subscribe", destination: "/pricing", permanent: false },

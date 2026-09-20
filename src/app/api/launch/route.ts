@@ -33,10 +33,15 @@ import {
   quotePadTrade,
 } from "@/lib/launch/program";
 import { mintPda, nonceFromB64 } from "@/lib/launch/pda";
-import { buildDbcLaunchTx, buildDbcTradeTx, dbcEnabled, quoteDbcTrade, waitForDbcPool } from "@/lib/launch/dbc";
+import { dbcEnabled } from "@/lib/launch/dbcIds";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 export const maxDuration = 30;
+
+async function dbcApi() {
+  return import("@/lib/launch/dbc");
+}
 
 const Body = z.object({
   action: z.enum([
@@ -152,7 +157,7 @@ async function prepareMint(b: LaunchBody) {
   }
   try {
     const built = useDbc
-      ? await buildDbcLaunchTx({
+      ? await (await dbcApi()).buildDbcLaunchTx({
           payer: b.pubkey,
           mint,
           name,
@@ -190,7 +195,7 @@ async function confirmMint(b: LaunchBody, solUsd: number) {
   if (!b.mint || !isSolanaAddress(b.mint)) return fail("bad_mint");
   let liveCurve: import("@/lib/launch/curve").CurveState | undefined;
   if (dbcEnabled()) {
-    const pool = await waitForDbcPool(b.mint);
+    const pool = await (await dbcApi()).waitForDbcPool(b.mint);
     if (!pool) return fail("curve_missing");
   } else {
     const ready = await waitForPadCurve(b.mint, b.sigs?.[0] || b.sig);
@@ -310,7 +315,7 @@ export async function POST(req: NextRequest) {
     const book = bookOf(s);
     const coin = book.coins.find((c) => c.id === b.id || (b.mint && c.mint === b.mint));
     const mint = coin?.mint || b.mint || "";
-    const dbc = mint && isSolanaAddress(mint) ? await quoteDbcTrade({ mint, side: b.tokens ? "sell" : "buy", sol: b.sol, tokens: b.tokens }) : { ok: false as const, error: "curve_missing" };
+    const dbc = mint && isSolanaAddress(mint) ? await (await dbcApi()).quoteDbcTrade({ mint, side: b.tokens ? "sell" : "buy", sol: b.sol, tokens: b.tokens }) : { ok: false as const, error: "curve_missing" };
     if (dbc.ok) {
       return NextResponse.json({
         quote: dbc,
@@ -342,7 +347,7 @@ export async function POST(req: NextRequest) {
     const coin = bookOf(snap).coins.find((c) => c.id === b.id || (b.mint && c.mint === b.mint));
     const mint = coin?.mint || b.mint || "";
     if (mint && isSolanaAddress(mint) && dbcEnabled()) {
-      const built = await buildDbcTradeTx({
+      const built = await (await dbcApi()).buildDbcTradeTx({
         mint,
         owner: b.pubkey,
         side: b.action,

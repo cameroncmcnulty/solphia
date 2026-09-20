@@ -355,6 +355,19 @@ describe("launch create validation", () => {
     const e = validateLaunchCreate({ creator: A, name: "Test Coin", symbol: "TEST" });
     assert.deepEqual(e, {});
   });
+
+  it("accepts 2-character name and ticker HI — that is the minimum, not 3", () => {
+    const e = validateLaunchCreate({ creator: A, name: "HI", symbol: "HI" });
+    assert.deepEqual(e, {});
+    const three = validateLaunchCreate({ creator: A, name: "HII", symbol: "HIII" });
+    assert.deepEqual(three, {});
+  });
+
+  it("rejects a 1-character name or ticker with an explicit too-short message", () => {
+    const e = validateLaunchCreate({ creator: A, name: "H", symbol: "H" });
+    assert.match(e.name || "", /at least 2/);
+    assert.match(e.symbol || "", /at least 2/);
+  });
 });
 
 describe("yours list", () => {

@@ -33,13 +33,18 @@ export type LaunchCreateInput = {
   launchBuySol?: number;
 };
 
+export const NAME_MIN = 2;
+export const NAME_MAX = 24;
+export const TICKER_MIN = 2;
+export const TICKER_MAX = 10;
+
 export function tickerOk(s: string): boolean {
-  return /^[A-Z0-9]{2,10}$/.test(s.trim().toUpperCase());
+  return new RegExp(`^[A-Z0-9]{${TICKER_MIN},${TICKER_MAX}}$`).test(s.trim().toUpperCase());
 }
 
 export function nameOk(s: string): boolean {
   const t = s.trim();
-  return t.length >= 2 && t.length <= 24;
+  return t.length >= NAME_MIN && t.length <= NAME_MAX;
 }
 
 export function imageOk(raw?: string): string {
@@ -65,12 +70,16 @@ export function validateLaunchCreate(input: LaunchCreateInput): Partial<Record<L
     errors.wallet = "Connect your wallet to launch.";
   }
   const name = (input.name || "").trim();
-  if (!name) errors.name = "Add a name (2–24 characters).";
-  else if (!nameOk(name)) errors.name = "Name must be 2–24 characters.";
+  if (!name) errors.name = `Add a name (${NAME_MIN}–${NAME_MAX} characters).`;
+  else if (name.length < NAME_MIN) errors.name = `Name is too short. Use at least ${NAME_MIN} characters (you entered ${name.length}).`;
+  else if (name.length > NAME_MAX) errors.name = `Name is too long. Max ${NAME_MAX} characters (you entered ${name.length}).`;
+  else if (!nameOk(name)) errors.name = `Name must be ${NAME_MIN}–${NAME_MAX} characters.`;
 
   const symbol = (input.symbol || "").replace(/^\$+/, "").trim().toUpperCase();
-  if (!symbol) errors.symbol = "Add a ticker (2–10 letters or numbers).";
-  else if (!tickerOk(symbol)) errors.symbol = "Ticker must be 2–10 letters or numbers. No spaces or symbols.";
+  if (!symbol) errors.symbol = `Add a ticker (${TICKER_MIN}–${TICKER_MAX} letters or numbers).`;
+  else if (symbol.length < TICKER_MIN) errors.symbol = `Ticker is too short. Use at least ${TICKER_MIN} letters or numbers (you entered ${symbol.length}).`;
+  else if (symbol.length > TICKER_MAX) errors.symbol = `Ticker is too long. Max ${TICKER_MAX} letters or numbers.`;
+  else if (!tickerOk(symbol)) errors.symbol = `Ticker must be ${TICKER_MIN}–${TICKER_MAX} letters or numbers. No spaces or symbols.`;
 
   if ((input.blurb || "").length > 280) errors.blurb = "Keep the one-liner under 280 characters.";
 

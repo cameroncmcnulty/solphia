@@ -2,3 +2,7 @@
 export const DBC_PROGRAM_ID = "dbcij3LWUppWqq96dh6gJWwBifmcGfLSB5D4DuSMaqN";
 export const DBC_CONFIG =
   (process.env.NEXT_PUBLIC_SOLPHIA_DBC_CONFIG || "").trim() || "5G12fgecRgXNzGaYoaPUAMmNv5C8nprbNtHZznHx81kK";
+
+export function dbcEnabled(): boolean {
+  return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(DBC_CONFIG);
+}

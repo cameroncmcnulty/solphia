@@ -3,7 +3,6 @@
  * the bonding curve the same way they route Pump.fun pre-grad.
  */
 import BN from "bn.js";
-import { NATIVE_MINT } from "@solana/spl-token";
 import { PublicKey, Transaction } from "@solana/web3.js";
 import {
   ActivationType,
@@ -20,12 +19,10 @@ import {
 } from "@meteora-ag/dynamic-bonding-curve-sdk";
 import { connection } from "../solana/connection";
 import { encodeTx } from "../token/mint";
-import { DBC_CONFIG } from "./dbcIds";
+import { DBC_CONFIG, dbcEnabled } from "./dbcIds";
 import { MIN_TRADE_SOL } from "./curve";
 
-export function dbcEnabled(): boolean {
-  return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(DBC_CONFIG);
-}
+export { dbcEnabled };
 
 function client() {
   return DynamicBondingCurveClient.create(connection(), "confirmed");

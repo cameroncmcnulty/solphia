@@ -4,7 +4,7 @@ import { lookupMarketMint } from "@/lib/launch/market";
 import { emptyLaunchBook, publicCoin } from "@/lib/launch/engine";
 import { withLaunch } from "@/lib/store";
 import { padCurveReady } from "@/lib/launch/program";
-import { dbcPoolByMint } from "@/lib/launch/dbc";
+import { dbcEnabled } from "@/lib/launch/dbcIds";
 import { lastPairPrices } from "@/lib/tick";
 
 export const dynamic = "force-dynamic";
@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
     if (owned) {
       return NextResponse.json({ coin: publicCoin(owned, solUsd), solUsd });
     }
-    const dbc = await dbcPoolByMint(mint);
+    const dbc = dbcEnabled() ? await (await import("@/lib/launch/dbc")).dbcPoolByMint(mint) : null;
     if (dbc) {
       return NextResponse.json({
         coin: {

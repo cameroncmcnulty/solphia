@@ -24,6 +24,10 @@ import {
 import { launchError } from "@/lib/launch/errors";
 import {
   IMAGE_DATA_MAX,
+  NAME_MAX,
+  NAME_MIN,
+  TICKER_MAX,
+  TICKER_MIN,
   launchCodeToField,
   validateLaunchCreate,
   type LaunchField,
@@ -115,6 +119,50 @@ type Coin = {
     phase: "curve" | "graduated";
   };
 };
+
+function LengthHint({
+  n,
+  min,
+  max,
+  empty,
+  short,
+  error,
+}: {
+  n: number;
+  min: number;
+  max: number;
+  empty: string;
+  short: string;
+  error?: string;
+}) {
+  if (error) {
+    return (
+      <p role="alert" className="mt-1.5 font-mono text-[11px] leading-snug text-blood">
+        {error}
+      </p>
+    );
+  }
+  const bad = n > 0 && (n < min || n > max);
+  return (
+    <p className={`mt-1.5 font-mono text-[11px] leading-snug ${bad ? "text-blood" : "text-mute"}`}>
+      {n === 0 ? empty : n < min ? `${n}/${max} — ${short}` : `${n}/${max}`}
+    </p>
+  );
+}
+
+async function waitForPhantomRoute(mint: string): Promise<{ ok: boolean; via?: string }> {
+  for (let i = 0; i < 8; i++) {
+    try {
+      const r = await fetch(`/api/launch/jup?mint=${encodeURIComponent(mint)}`, { cache: "no-store" });
+      const j = await r.json();
+      if (j.ok) return { ok: true, via: typeof j.via === "string" ? j.via : undefined };
+    } catch {
+      /* keep polling */
+    }
+    await new Promise((res) => setTimeout(res, 2000));
+  }
+  return { ok: false };
+}
 
 function fmtAge(ms: number) {
   const s = Math.max(0, Math.floor(ms / 1000));
@@ -529,10 +577,17 @@ export default function LaunchPage() {
       setDiscord("");
       setDevBuy(0);
       setTab("mine");
+      setBusy(false);
       setMsg(
         devBuy > 0
-          ? `Live on the Solphia curve. CA ${mintPk}. Your first buy landed in this wallet.`
-          : `Live on the Solphia curve. CA ${mintPk}. Supply sits on the bonding curve.`,
+          ? `Live on Meteora DBC. CA ${mintPk}. First buy is in this wallet. Checking Phantom Swap…`
+          : `Live on Meteora DBC. CA ${mintPk}. Supply sits on the curve. Checking Phantom Swap…`,
+      );
+      const routed = await waitForPhantomRoute(mintPk);
+      setMsg(
+        routed.ok
+          ? `Live. Phantom Swap can buy ${symbol || "it"} now${routed.via ? ` via ${routed.via}` : ""}. CA ${mintPk}`
+          : `Live on the curve. CA ${mintPk}. Jupiter is still indexing — paste the CA into Phantom Swap in a minute.`,
       );
     } catch (e) {
       const timed = e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError");
@@ -670,7 +725,8 @@ export default function LaunchPage() {
         {!isSwap && (
           <p className="mt-3 max-w-2xl text-sm text-mute">
             1.00% on every buy and sell — under Pump.fun’s 1.25%. Creators take 0.50% of volume, not 0.30%. One Phantom
-            signature. Supply lives on the mainnet program, not in your wallet.
+            signature. The mint lives on Meteora’s bonding curve, so Phantom Swap can buy it the same way it buys
+            Pump.fun before graduation.
           </p>
         )}
         {!isSwap && (
@@ -732,48 +788,83 @@ export default function LaunchPage() {
                 </div>
                 <form
                   noValidate
+                  onInvalid={(e) => e.preventDefault()}
                   onSubmit={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
                     launchToken().catch(() => {});
                   }}
                 >
-                <input
-                  type="text"
-                  autoComplete="off"
-                  value={name}
-                  data-field="name"
-                  onChange={(e) => {
-                    setName(e.target.value);
-                    createErr.clear("name");
-                  }}
-                  placeholder="Name"
-                  aria-invalid={Boolean(createErr.errors.name)}
-                  className={`mt-4 w-full rounded-2xl border bg-void px-4 py-3 text-ghost ${fieldClass(createErr.errors.name)}`}
-                />
-                <FieldError error={createErr.errors.name} />
-                <label
-                  data-field="symbol"
-                  className={`mt-3 flex w-full items-center rounded-2xl border bg-void px-4 py-3 font-mono text-ghost ${fieldClass(createErr.errors.symbol)}`}
-                >
-                  <span className="pr-1 text-acid">$</span>
+                <label className="mt-4 block">
+                  <div className="mb-1.5 flex items-baseline justify-between gap-3">
+                    <span className={`text-xs ${createErr.errors.name ? "text-blood" : "text-mute"}`}>Name</span>
+                    <span className="font-mono text-[10px] text-mute">{NAME_MIN}–{NAME_MAX} characters</span>
+                  </div>
                   <input
                     type="text"
                     autoComplete="off"
-                    autoCapitalize="characters"
+                    autoCorrect="off"
                     spellCheck={false}
-                    value={symbol}
+                    value={name}
+                    data-field="name"
+                    minLength={NAME_MIN}
+                    maxLength={NAME_MAX}
+                    onInvalid={(e) => e.preventDefault()}
                     onChange={(e) => {
-                      setSymbol(e.target.value.replace(/^\$+/, "").toUpperCase());
-                      createErr.clear("symbol");
+                      setName(e.target.value.slice(0, NAME_MAX));
+                      createErr.clear("name");
                     }}
-                    placeholder="TICKER"
-                    maxLength={10}
-                    aria-invalid={Boolean(createErr.errors.symbol)}
-                    className="w-full bg-transparent outline-none"
+                    placeholder="Name"
+                    aria-invalid={Boolean(createErr.errors.name)}
+                    className={`w-full rounded-2xl border bg-void px-4 py-3 text-ghost ${fieldClass(createErr.errors.name)}`}
+                  />
+                  <LengthHint
+                    n={name.trim().length}
+                    min={NAME_MIN}
+                    max={NAME_MAX}
+                    empty={`${NAME_MIN}–${NAME_MAX} characters. “HI” is valid.`}
+                    short={`needs at least ${NAME_MIN} characters`}
+                    error={createErr.errors.name}
                   />
                 </label>
-                <FieldError error={createErr.errors.symbol} />
+                <label
+                  data-field="symbol"
+                  className="mt-3 block"
+                >
+                  <div className="mb-1.5 flex items-baseline justify-between gap-3">
+                    <span className={`text-xs ${createErr.errors.symbol ? "text-blood" : "text-mute"}`}>Ticker</span>
+                    <span className="font-mono text-[10px] text-mute">{TICKER_MIN}–{TICKER_MAX} letters or numbers</span>
+                  </div>
+                  <div className={`flex w-full items-center rounded-2xl border bg-void px-4 py-3 font-mono text-ghost ${fieldClass(createErr.errors.symbol)}`}>
+                    <span className="pr-1 text-acid">$</span>
+                    <input
+                      type="text"
+                      autoComplete="off"
+                      autoCapitalize="characters"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      value={symbol}
+                      minLength={TICKER_MIN}
+                      maxLength={TICKER_MAX}
+                      onInvalid={(e) => e.preventDefault()}
+                      onChange={(e) => {
+                        setSymbol(e.target.value.replace(/^\$+/, "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, TICKER_MAX));
+                        createErr.clear("symbol");
+                      }}
+                      placeholder="TICKER"
+                      aria-invalid={Boolean(createErr.errors.symbol)}
+                      className="w-full bg-transparent outline-none"
+                    />
+                  </div>
+                  <LengthHint
+                    n={symbol.trim().length}
+                    min={TICKER_MIN}
+                    max={TICKER_MAX}
+                    empty={`${TICKER_MIN}–${TICKER_MAX} letters or numbers. No spaces or symbols. “HI” is valid.`}
+                    short={`needs at least ${TICKER_MIN} letters or numbers`}
+                    error={createErr.errors.symbol}
+                  />
+                </label>
                 <input
                   value={blurb}
                   data-field="blurb"
@@ -870,9 +961,10 @@ export default function LaunchPage() {
                     <WalletConnect />
                   </div>
                   <button
-                    type="submit"
+                    type="button"
                     formNoValidate
                     disabled={busy}
+                    onClick={() => launchToken().catch(() => {})}
                     className="btn-acid min-h-[48px] rounded-full px-6 disabled:opacity-40"
                   >
                     {busy ? "Launching…" : "Launch on Solana"}

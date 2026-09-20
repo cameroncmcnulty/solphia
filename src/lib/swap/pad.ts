@@ -4,7 +4,7 @@ import { buildPadTradeTx, padCurveReady, quoteBuyRaw, quoteSellRaw } from "../la
 import { launchError } from "../launch/errors";
 import { SOL_MINT } from "../pair/mints";
 import { isDeskMint, resolveVenue } from "../tx/venue";
-import { buildDbcTradeTx, dbcEnabled, quoteDbcTrade } from "../launch/dbc";
+import { dbcEnabled } from "../launch/dbcIds";
 
 export const PAD_SWAP_FEE_BPS = SWAP_FEE_BPS;
 
@@ -44,6 +44,7 @@ export async function quotePadSwap(opts: {
   if (!(opts.amount > 0)) return { ok: false, reason: "Enter an amount." };
   if (isDeskMint(opts.mint)) return { ok: false, reason: launchError("desk_mint"), error: "desk_mint" };
   if (dbcEnabled()) {
+    const { quoteDbcTrade } = await import("../launch/dbc");
     const dbc = await quoteDbcTrade({ mint: opts.mint, side: opts.side, sol: opts.side === "buy" ? opts.amount : undefined, tokens: opts.side === "sell" ? opts.amount : undefined });
     if (dbc.ok) {
       return {
@@ -103,6 +104,7 @@ export async function buildPadSwapTx(opts: {
 }): Promise<{ ok: true; transaction: string } | { ok: false; reason: string }> {
   if (!isSolanaAddress(opts.owner)) return { ok: false, reason: "Connect Phantom first." };
   if (dbcEnabled()) {
+    const { buildDbcTradeTx } = await import("../launch/dbc");
     const dbc = await buildDbcTradeTx({
       mint: opts.mint,
       owner: opts.owner,
