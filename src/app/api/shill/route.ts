@@ -17,10 +17,14 @@ import {
   muteShill,
   nextPinFreeAt,
   pinSlotsLeft,
+  nextVoteAt,
   pinToken,
   postShill,
   reactShill,
   touchMember,
+  voteBoard,
+  voteShill,
+  votesOnMint,
 } from "@/lib/shill/engine";
 import { SHILL_HOUSE_PIN_MAX, SHILL_PIN_SOL, SHILL_REACTS, SHILL_STICKERS, type ShillToken } from "@/lib/shill/types";
 import { emptyLaunchBook } from "@/lib/launch/engine";
@@ -35,7 +39,7 @@ export const maxDuration = 30;
 const typingMem = new Map<string, number>();
 
 const Body = z.object({
-  action: z.enum(["chat", "react", "typing", "read", "delete", "pin", "mute", "ban"]),
+  action: z.enum(["chat", "react", "typing", "read", "delete", "pin", "mute", "ban", "vote"]),
   pubkey: z.string(),
   text: z.string().max(2000).optional(),
   sticker: z.string().max(16).optional(),
@@ -144,7 +148,12 @@ export async function GET(req: NextRequest) {
   for (const pk of people) {
     profiles[pk] = { ...publicCard(launch.accounts?.[pk], pk), role: staffRole(s, pk) };
   }
-  const pins = livePins(book, now).map((p) => ({ ...p, image: displayMedia(p.image) }));
+  const pins = livePins(book, now).map((p) => ({
+    ...p,
+    image: displayMedia(p.image),
+    votes: votesOnMint(book, p.mint, now),
+  }));
+  const boardVotes = voteBoard(book, now).map((row) => ({ ...row, image: displayMedia(row.image) }));
   return NextResponse.json({
     members: Object.keys(book.members).length,
     messages,
@@ -157,6 +166,8 @@ export async function GET(req: NextRequest) {
     typing,
     profiles,
     board: leaderboard(launch, 10),
+    voteBoard: boardVotes,
+    nextVoteAt: pubkey && isSolanaAddress(pubkey) ? nextVoteAt(book, pubkey) : 0,
     you:
       pubkey && isSolanaAddress(pubkey)
         ? {
@@ -183,6 +194,28 @@ export async function POST(req: NextRequest) {
   if (b.action === "typing") {
     typingMem.set(b.pubkey, Date.now() + 4000);
     return NextResponse.json({ ok: true });
+  }
+
+  if (b.action === "vote") {
+    const mint = (b.mint || "").trim();
+    if (!isSolanaAddress(mint)) return NextResponse.json({ error: "bad_mint", message: "Pick a token to upvote." }, { status: 400 });
+    const token = (await tokenOf(mint)) || { mint, symbol: mint.slice(0, 4), name: "token" };
+    const out = await withShill((st) => {
+      st.shill = ensureShill(st.shill);
+      return voteShill(st.shill, { owner: b.pubkey, mint, token });
+    }, true);
+    if (!out.ok) {
+      const wait = Math.max(1, Math.ceil(((out.nextAt || Date.now()) - Date.now()) / 60_000));
+      return NextResponse.json(
+        {
+          error: out.error,
+          nextAt: out.nextAt,
+          message: out.error === "cooldown" ? `One upvote per hour. Next in ${wait} min.` : "Could not vote.",
+        },
+        { status: 400 },
+      );
+    }
+    return NextResponse.json({ ok: true, votes: out.votes, nextAt: out.nextAt });
   }
 
   if (b.action === "pin") {

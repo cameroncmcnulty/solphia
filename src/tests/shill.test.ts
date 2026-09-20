@@ -1,15 +1,18 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { banShill, emptyShill, extractCas, fillHousePins, mergeShill, muteShill, pinToken, postShill, pruneShill } from "../lib/shill/engine";
+import { banShill, emptyShill, extractCas, fillHousePins, mergeShill, muteShill, pinToken, postShill, pruneShill, voteBoard, voteShill } from "../lib/shill/engine";
 import {
   SHILL_CA_COOLDOWN_MS,
   SHILL_HOUSE_PIN_MAX,
   SHILL_HOUSE_PIN_MIN,
   SHILL_HOUSE_REPLACE_MS,
   SHILL_HOUSE_STAGGER_MS,
+  SHILL_HOUSE_SPREAD_MS,
   SHILL_PIN_MS,
   SHILL_PIN_SOL,
   SHILL_PIN_SLOTS,
+  SHILL_VOTE_COOLDOWN_MS,
+  SHILL_VOTE_MS,
 } from "../lib/shill/types";
 
 const A = "CyaE1VxvBrahnPWkqm5VsdCvyS2QmNht2UFrKJHga54o";
@@ -141,5 +144,38 @@ describe("shill zone", () => {
     pruneShill(book, t0 + 1_000);
     assert.ok(book.pins[0].endsAt - book.pins[0].at <= SHILL_PIN_MS);
     assert.deepEqual(book.pins.map((p) => p.id), order);
+  });
+
+  it("staggers initial house pins so they expire hours apart", () => {
+    const book = emptyShill();
+    const coins = [
+      { mint: CA, symbol: "SOL", name: "Solana" },
+      { mint: A, symbol: "AAA", name: "Alpha" },
+      { mint: B, symbol: "BBB", name: "Beta" },
+    ];
+    const t0 = Date.now();
+    fillHousePins(book, coins, t0);
+    const house = book.pins.filter((p) => p.house).sort((a, b) => a.at - b.at);
+    assert.ok(house.length >= 2);
+    assert.ok(house[1].at - house[0].at >= SHILL_HOUSE_SPREAD_MS - 1);
+    assert.ok(house[1].endsAt - house[0].endsAt >= SHILL_HOUSE_SPREAD_MS - 1);
+  });
+
+  it("counts 24h votes and enforces one upvote per hour", () => {
+    const book = emptyShill();
+    const t0 = 1_000_000;
+    const a = voteShill(book, { owner: A, mint: CA, token: { mint: CA, symbol: "SOL", name: "Solana" }, now: t0 });
+    assert.equal(a.ok, true);
+    const again = voteShill(book, { owner: A, mint: CA, now: t0 + SHILL_VOTE_COOLDOWN_MS - 1 });
+    assert.equal(again.ok, false);
+    const later = voteShill(book, { owner: A, mint: CA, now: t0 + SHILL_VOTE_COOLDOWN_MS });
+    assert.equal(later.ok, true);
+    if (later.ok) assert.equal(later.votes, 2);
+    voteShill(book, { owner: B, mint: A, token: { mint: A, symbol: "AAA", name: "Alpha" }, now: t0 });
+    const board = voteBoard(book, t0);
+    assert.equal(board[0].mint, CA);
+    assert.equal(board[0].votes, 2);
+    pruneShill(book, t0 + SHILL_VOTE_COOLDOWN_MS + SHILL_VOTE_MS + 1);
+    assert.equal(voteBoard(book, t0 + SHILL_VOTE_COOLDOWN_MS + SHILL_VOTE_MS + 1).length, 0);
   });
 });

@@ -8,14 +8,19 @@ import {
   SHILL_HOUSE_STAGGER_MS,
   SHILL_KEEP_MS,
   SHILL_MSG_MAX,
+  SHILL_HOUSE_SPREAD_MS,
   SHILL_PIN_MS,
   SHILL_PIN_SLOTS,
   SHILL_PIN_SOL,
+  SHILL_VOTE_COOLDOWN_MS,
+  SHILL_VOTE_MAX,
+  SHILL_VOTE_MS,
   type ShillBook,
   type ShillMember,
   type ShillMessage,
   type ShillPin,
   type ShillToken,
+  type ShillVote,
 } from "./types";
 
 function pushMax<T>(arr: T[], item: T, max: number) {
@@ -24,7 +29,7 @@ function pushMax<T>(arr: T[], item: T, max: number) {
 }
 
 export function emptyShill(): ShillBook {
-  return { messages: [], pins: [], members: {}, typing: {}, lastHousePinAt: 0, nextHousePinAt: 0 };
+  return { messages: [], pins: [], members: {}, typing: {}, votes: [], lastVoteAt: {}, lastHousePinAt: 0, nextHousePinAt: 0 };
 }
 
 /** Union two books so a empty isolate cannot wipe Redis. Local wins on the same id. */
@@ -38,11 +43,17 @@ export function mergeShill(local: ShillBook, remote: ShillBook): ShillBook {
   for (const p of b.pins) pins.set(p.id, p);
   for (const p of a.pins) pins.set(p.id, p);
   const members = { ...b.members, ...a.members };
+  const votes = new Map<string, ShillVote>();
+  for (const v of b.votes || []) votes.set(v.id, v);
+  for (const v of a.votes || []) votes.set(v.id, v);
+  const lastVoteAt = { ...(b.lastVoteAt || {}), ...(a.lastVoteAt || {}) };
   const out: ShillBook = {
     messages: [...msgs.values()].sort((x, y) => x.at - y.at),
     pins: [...pins.values()].sort((x, y) => x.at - y.at),
     members,
     typing: {},
+    votes: [...votes.values()],
+    lastVoteAt,
     lastHousePinAt: Math.max(a.lastHousePinAt || 0, b.lastHousePinAt || 0),
     nextHousePinAt: Math.max(a.nextHousePinAt || 0, b.nextHousePinAt || 0),
   };
@@ -57,6 +68,8 @@ export function slimShill(book?: ShillBook | null): ShillBook {
     pins: b.pins.slice(-16),
     members: b.members,
     typing: {},
+    votes: (b.votes || []).slice(-SHILL_VOTE_MAX),
+    lastVoteAt: b.lastVoteAt || {},
     lastHousePinAt: b.lastHousePinAt,
     nextHousePinAt: b.nextHousePinAt,
   };
@@ -68,6 +81,8 @@ export function ensureShill(book?: ShillBook | null): ShillBook {
   if (!b.pins) b.pins = [];
   if (!b.members) b.members = {};
   if (!b.typing) b.typing = {};
+  if (!b.votes) b.votes = [];
+  if (!b.lastVoteAt) b.lastVoteAt = {};
   b.typing = {};
   pruneShill(b);
   return b;
@@ -83,6 +98,8 @@ export function pruneShill(book: ShillBook, now = Date.now()) {
     if (!(p.at > 0)) p.at = Math.max(0, (p.endsAt || now) - cap);
     if (p.endsAt > p.at + cap) p.endsAt = p.at + cap;
   }
+  book.votes = (book.votes || []).filter((v) => v.endsAt > now);
+  if ((book.votes || []).length > SHILL_VOTE_MAX) book.votes = book.votes.slice(-SHILL_VOTE_MAX);
   const expiredHouse = pins.filter((p) => p.house && p.endsAt <= now).length;
   book.pins = pins.filter((p) => p.endsAt > now);
   if (expiredHouse > 0) {
@@ -270,7 +287,9 @@ export function pinToken(
 export type HousePinCoin = { mint: string; symbol?: string; name?: string; image?: string; priceUsd?: number; mcUsd?: number };
 
 function plantHousePins(book: ShillBook, picks: HousePinCoin[], now: number) {
+  const batch = picks.length > 1;
   picks.forEach((c, i) => {
+    const at = batch ? now - (picks.length - 1 - i) * SHILL_HOUSE_SPREAD_MS : now;
     book.pins.push({
       id: `hpin${now.toString(36)}${i}${Math.random().toString(36).slice(2, 5)}`,
       mint: c.mint,
@@ -282,8 +301,8 @@ function plantHousePins(book: ShillBook, picks: HousePinCoin[], now: number) {
       owner: SHILL_HOUSE_OWNER,
       sig: `house_pin_${c.mint}_${now}_${i}`.padEnd(40, "x"),
       paidSol: 0,
-      at: now + i,
-      endsAt: now + i + SHILL_PIN_MS,
+      at,
+      endsAt: at + SHILL_PIN_MS,
       house: true,
     });
   });
@@ -318,4 +337,78 @@ export function fillHousePins(book: ShillBook, candidates: HousePinCoin[], now =
   }
   plantHousePins(book, pool.slice(0, 1), now);
   return true;
+}
+
+export function nextVoteAt(book: ShillBook, owner: string): number {
+  const last = book.lastVoteAt?.[owner] || 0;
+  return last > 0 ? last + SHILL_VOTE_COOLDOWN_MS : 0;
+}
+
+export function voteShill(
+  book: ShillBook,
+  opts: { owner: string; mint: string; token?: ShillToken; now?: number },
+): { ok: true; votes: number; nextAt: number } | { ok: false; error: string; nextAt?: number } {
+  if (!isSolanaAddress(opts.owner) || !isSolanaAddress(opts.mint)) return { ok: false, error: "bad_mint" };
+  const now = opts.now || Date.now();
+  pruneShill(book, now);
+  const next = nextVoteAt(book, opts.owner);
+  if (now < next) return { ok: false, error: "cooldown", nextAt: next };
+  const vote: ShillVote = {
+    id: `vt${now.toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+    mint: opts.mint,
+    owner: opts.owner,
+    at: now,
+    endsAt: now + SHILL_VOTE_MS,
+    symbol: opts.token?.symbol,
+    name: opts.token?.name,
+    image: opts.token?.image,
+  };
+  book.votes = book.votes || [];
+  book.votes.push(vote);
+  if (!book.lastVoteAt) book.lastVoteAt = {};
+  book.lastVoteAt[opts.owner] = now;
+  const votes = book.votes.filter((v) => v.mint === opts.mint && v.endsAt > now).length;
+  return { ok: true, votes, nextAt: now + SHILL_VOTE_COOLDOWN_MS };
+}
+
+export type VoteBoardRow = {
+  mint: string;
+  symbol: string;
+  name: string;
+  image?: string;
+  votes: number;
+  lastAt: number;
+};
+
+export function voteBoard(book: ShillBook, now = Date.now()): VoteBoardRow[] {
+  pruneShill(book, now);
+  const meta = new Map<string, { symbol: string; name: string; image?: string }>();
+  for (const p of book.pins) meta.set(p.mint, { symbol: p.symbol, name: p.name, image: p.image });
+  for (const m of book.messages) {
+    if (m.token?.mint) meta.set(m.token.mint, { symbol: m.token.symbol, name: m.token.name, image: m.token.image });
+  }
+  const tally = new Map<string, VoteBoardRow>();
+  for (const v of book.votes || []) {
+    if (v.endsAt <= now) continue;
+    const prev = tally.get(v.mint);
+    const info = meta.get(v.mint);
+    if (prev) {
+      prev.votes += 1;
+      if (v.at > prev.lastAt) prev.lastAt = v.at;
+      continue;
+    }
+    tally.set(v.mint, {
+      mint: v.mint,
+      symbol: v.symbol || info?.symbol || v.mint.slice(0, 4),
+      name: v.name || info?.name || "token",
+      image: v.image || info?.image,
+      votes: 1,
+      lastAt: v.at,
+    });
+  }
+  return [...tally.values()].sort((a, b) => b.votes - a.votes || b.lastAt - a.lastAt).slice(0, 20);
+}
+
+export function votesOnMint(book: ShillBook, mint: string, now = Date.now()): number {
+  return (book.votes || []).filter((v) => v.mint === mint && v.endsAt > now).length;
 }

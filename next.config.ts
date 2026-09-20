@@ -30,6 +30,7 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   outputFileTracingRoot: path.join(__dirname),
   poweredByHeader: false,
+  serverExternalPackages: ["@meteora-ag/dynamic-bonding-curve-sdk", "@coral-xyz/anchor", "bn.js"],
   async redirects() {
     return [
       { source: "/subscribe", destination: "/pricing", permanent: false },

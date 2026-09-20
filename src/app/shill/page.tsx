@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowDownUp, ArrowLeft, Check, CheckCheck, Reply, Rocket, Send, Smile, Trophy, X } from "lucide-react";
+import { ArrowDownUp, ArrowLeft, Check, CheckCheck, ChevronUp, Reply, Rocket, Send, Smile, Trophy, X } from "lucide-react";
 import { BurstSticker } from "@/components/BurstSticker";
-import { fmtLeft } from "@/components/BoostBuy";
+
 import { CartoonPfp } from "@/components/CartoonPfp";
 import { SwapWidget } from "@/components/SwapWidget";
 import { WalletConnect } from "@/components/WalletConnect";
@@ -35,6 +35,15 @@ type PinRow = {
   priceUsd?: number;
   mcUsd?: number;
   endsAt: number;
+  votes?: number;
+};
+
+type VoteRow = {
+  mint: string;
+  symbol: string;
+  name: string;
+  image?: string;
+  votes: number;
 };
 
 type RankCard = {
@@ -61,6 +70,8 @@ type Pack = {
   board?: RankCard[];
   you?: RankCard | null;
   treasury?: string;
+  voteBoard?: VoteRow[];
+  nextVoteAt?: number;
 };
 
 function when(at: number) {
@@ -82,6 +93,14 @@ function rankOf(pk: string, profiles?: Pack["profiles"]) {
   return profiles?.[pk]?.rank || 1;
 }
 
+function fmtPinLeft(ms: number) {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  if (s < 3600) return `${m}m ${String(s % 60).padStart(2, "0")}s`;
+  return `${Math.floor(m / 60)}h ${m % 60}m`;
+}
+
 function fmtMc(n?: number) {
   if (!(n && n > 0)) return "";
   if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
@@ -89,10 +108,22 @@ function fmtMc(n?: number) {
   return `$${n.toFixed(0)}`;
 }
 
-function TokenBubble({ token, onCopy }: { token: ShillToken; onCopy: (mint: string) => void }) {
+function TokenBubble({
+  token,
+  onCopy,
+  votes,
+  onVote,
+  canVote,
+}: {
+  token: ShillToken;
+  onCopy: (mint: string) => void;
+  votes?: number;
+  onVote?: () => void;
+  canVote?: boolean;
+}) {
   const [copied, setCopied] = useState(false);
   return (
-    <div className="mt-1 grid w-full grid-cols-[2.25rem_minmax(0,1fr)_3.4rem] items-center gap-2 rounded-xl bg-black/20 px-2 py-1.5">
+    <div className="mt-1 grid w-full grid-cols-[2.25rem_minmax(0,1fr)_auto_3.4rem] items-center gap-2 rounded-xl bg-black/20 px-2 py-1.5">
       {token.image ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={token.image} alt="" className="h-9 w-9 rounded-lg object-cover" />
@@ -108,6 +139,19 @@ function TokenBubble({ token, onCopy }: { token: ShillToken; onCopy: (mint: stri
           {token.mcUsd ? ` · ${fmtMc(token.mcUsd)}` : ""}
         </div>
       </div>
+      <button
+        type="button"
+        disabled={!canVote}
+        onClick={(e) => {
+          e.stopPropagation();
+          onVote?.();
+        }}
+        className="flex h-8 min-w-[2.6rem] flex-col items-center justify-center rounded-full bg-acid/15 text-acid disabled:opacity-40"
+        aria-label="Upvote"
+      >
+        <ChevronUp className="h-4 w-4" />
+        <span className="font-mono text-[9px] leading-none">{votes || 0}</span>
+      </button>
       <button
         type="button"
         className="h-8 w-full rounded-full bg-white/10 font-mono text-[10px] text-[#6ab3f3]"
@@ -154,6 +198,92 @@ function Sheet({
   );
 }
 
+function VoteBoard({
+  rows,
+  canVote,
+  onVote,
+  nextVote,
+  now,
+}: {
+  rows: VoteRow[];
+  canVote: boolean;
+  onVote: (mint: string) => void;
+  nextVote: number;
+  now: number;
+}) {
+  const wait = Math.max(0, nextVote - now);
+  const top = rows.slice(0, 3);
+  const rest = rows.slice(3);
+  return (
+    <div>
+      <div className="flex items-end justify-between gap-2">
+        <div>
+          <p className="font-mono text-[10px] tracking-[0.22em] text-acid">TROPHY</p>
+          <h3 className="font-display text-2xl text-white">24h board</h3>
+        </div>
+        <p className="font-mono text-[10px] text-white/50">{canVote ? "vote ready" : `next ${fmtPinLeft(wait)}`}</p>
+      </div>
+      <p className="mt-1 text-[12px] leading-snug text-[#8e9ba8]">One upvote an hour. Each vote lasts 24 hours, then drops. Keep voting to hold rank.</p>
+      {rows.length === 0 && <p className="mt-6 text-[14px] text-[#8e9ba8]">No votes yet. Upvote a CA in chat or a pinned token.</p>}
+      {top.length > 0 && (
+        <div className="mt-5 grid grid-cols-3 items-end gap-2">
+          {[top[1], top[0], top[2]].map((row, place) => {
+            if (!row) return <div key={place} />;
+            const rank = place === 1 ? 1 : place === 0 ? 2 : 3;
+            const tall = rank === 1 ? "pb-8 pt-4" : rank === 2 ? "pb-5 pt-3" : "pb-3 pt-3";
+            const ring = rank === 1 ? "border-[#ffd24a] bg-[#ffd24a]/10" : rank === 2 ? "border-white/30 bg-white/5" : "border-[#c47a4a] bg-[#c47a4a]/10";
+            return (
+              <button
+                key={row.mint}
+                type="button"
+                onClick={() => onVote(row.mint)}
+                className={`rounded-2xl border px-2 ${tall} ${ring}`}
+              >
+                <div className="mx-auto flex h-12 w-12 items-center justify-center overflow-hidden rounded-full bg-void font-display text-acid">
+                  {row.image ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={row.image} alt="" className="h-full w-full object-cover" />
+                  ) : (
+                    (row.symbol || "?").slice(0, 2)
+                  )}
+                </div>
+                <div className="mt-2 truncate text-center font-display text-sm text-white">${(row.symbol || "").replace(/^\$/, "")}</div>
+                <div className="stat-num text-center text-[13px] text-acid">{row.votes}</div>
+                <div className="text-center font-mono text-[9px] text-white/40">#{rank}</div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+      <div className="mt-4 space-y-1">
+        {rest.map((row, i) => (
+          <button
+            key={row.mint}
+            type="button"
+            onClick={() => onVote(row.mint)}
+            className="flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left hover:bg-white/5"
+          >
+            <span className="w-6 font-mono text-[12px] text-[#8e9ba8]">{i + 4}</span>
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-void font-display text-xs text-acid">
+              {row.image ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={row.image} alt="" className="h-full w-full object-cover" />
+              ) : (
+                (row.symbol || "?").slice(0, 2)
+              )}
+            </div>
+            <span className="min-w-0 flex-1 truncate text-[15px] text-white">${(row.symbol || "").replace(/^\$/, "")}</span>
+            <span className="inline-flex items-center gap-0.5 font-mono text-[12px] text-acid">
+              <ChevronUp className="h-4 w-4" />
+              {row.votes}
+            </span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function windowsBottomLift() {
   if (typeof window === "undefined") return 0;
   if (!/Windows/i.test(navigator.userAgent || "")) return 0;
@@ -186,6 +316,7 @@ export default function ShillPage() {
   const lastAt = useRef(0);
   const [peek, setPeek] = useState<string | null>(null);
   const [toast, setToast] = useState("");
+  const [now, setNow] = useState(() => Date.now());
   const stickToBottom = useRef(true);
 
   const load = useCallback(async (full = false) => {
@@ -215,6 +346,11 @@ export default function ShillPage() {
     const t = setInterval(() => load(false).catch(() => {}), 1800);
     return () => clearInterval(t);
   }, [load]);
+
+  useEffect(() => {
+    const t = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(t);
+  }, []);
 
   useEffect(() => {
     const el = frame.current;
@@ -318,6 +454,20 @@ export default function ShillPage() {
     window.setTimeout(() => setToast(""), 1800);
   }
 
+  async function upvote(mint: string) {
+    if (!owner) {
+      setErr("Connect Phantom to vote.");
+      return;
+    }
+    try {
+      const j = await act({ action: "vote", mint });
+      flash(`${j.votes || 1} votes · next in 1h`);
+      await load(true);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "vote failed");
+    }
+  }
+
   async function copyMint(mint: string) {
     try {
       await navigator.clipboard.writeText(mint);
@@ -341,12 +491,16 @@ export default function ShillPage() {
   const waitMin = Math.max(1, Math.ceil((nextFree - Date.now()) / 60_000));
   const you = pack?.you;
   const board = pack?.board || [];
+  const voteRows = pack?.voteBoard || [];
+  const nextVote = pack?.nextVoteAt || 0;
+  const canVote = Boolean(owner) && now >= nextVote;
+  const voteByMint = useMemo(() => Object.fromEntries(voteRows.map((r) => [r.mint, r.votes])), [voteRows]);
   const online = Math.max(board.length, Object.keys(pack?.profiles || {}).length, owner ? 1 : 0);
 
   return (
-    <main ref={frame} className="fixed inset-x-0 top-0 z-40 bg-[#0b141a]">
-      <div className="relative mx-auto grid h-full min-h-0 w-full max-w-[42rem] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden bg-[#0e1621] sm:max-w-[46rem] lg:border-x lg:border-white/5">
-      <div>
+    <main ref={frame} className="fixed inset-0 z-40 bg-[#0b141a]">
+      <div className="relative mx-auto grid h-full min-h-0 w-full grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden bg-[#0e1621] lg:grid-cols-[minmax(0,1fr)_26rem] lg:grid-rows-[auto_auto_minmax(0,1fr)]">
+      <div className="lg:col-span-2">
       <header className="flex items-center gap-1 border-b border-acid/25 bg-gradient-to-r from-[#10261c] via-[#17212b] to-[#1a1630] px-1 pb-2 pt-[max(0.4rem,env(safe-area-inset-top))] shadow-[0_8px_24px_rgba(0,0,0,0.35)]">
         <Link href="/" className="flex h-11 w-11 items-center justify-center rounded-full text-white hover:bg-white/5" aria-label="Back to home">
           <ArrowLeft className="h-6 w-6" />
@@ -371,6 +525,7 @@ export default function ShillPage() {
           <div className="boost-rail">
             {pins.map((p) => {
               const ticker = (p.symbol || "").replace(/^\$/, "");
+              const left = Math.max(0, p.endsAt - now);
               return (
                 <button
                   key={p.id}
@@ -389,7 +544,11 @@ export default function ShillPage() {
                   <span className="mt-1 block w-full truncate text-center text-[12px] font-semibold text-white">
                     ${ticker || "TOKEN"}
                   </span>
-                  <span className="stat-num block text-center text-[11px] text-[#ffd24a]">{fmtLeft(Math.min(3 * 3600_000, Math.max(0, p.endsAt - Date.now())))}</span>
+                  <span className="stat-num block text-center text-[11px] text-[#ffd24a]">{fmtPinLeft(left)}</span>
+                  <span className="mt-0.5 flex items-center justify-center gap-0.5 font-mono text-[10px] text-acid">
+                    <ChevronUp className="h-3 w-3" />
+                    {p.votes || voteByMint[p.mint] || 0}
+                  </span>
                 </button>
               );
             })}
@@ -400,7 +559,7 @@ export default function ShillPage() {
 
       <div
         ref={scroller}
-        className="shill-wallpaper min-h-0 overflow-y-auto px-2 py-3"
+        className="shill-wallpaper min-h-0 overflow-y-auto px-2 py-3 lg:col-start-1"
         onClick={() => setPicker(null)}
         onScroll={(e) => {
           const el = e.currentTarget;
@@ -452,7 +611,15 @@ export default function ShillPage() {
                       </div>
                     )}
                     {m.text && <div className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{m.text}</div>}
-                    {m.token && <TokenBubble token={m.token} onCopy={copyMint} />}
+                    {m.token && (
+                      <TokenBubble
+                        token={m.token}
+                        onCopy={copyMint}
+                        votes={voteByMint[m.token.mint] || 0}
+                        canVote={canVote}
+                        onVote={() => upvote(m.token!.mint)}
+                      />
+                    )}
                     <div className="mt-0.5 flex items-center justify-end gap-1">
                       <span className="font-mono text-[11px] text-white/45">{when(m.at)}</span>
                       {mine && (seen ? <CheckCheck className="h-3.5 w-3.5 text-[#6ab3f3]" /> : <Check className="h-3.5 w-3.5 text-white/45" />)}
@@ -507,7 +674,7 @@ export default function ShillPage() {
         )}
       </div>
 
-      <div className="relative z-20 bg-[#17212b] pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+      <div className="relative z-20 bg-[#17212b] pb-[max(0.5rem,env(safe-area-inset-bottom))] lg:col-start-1">
         {!owner ? (
           <div className="flex items-center justify-between gap-3 px-4 py-3">
             <p className="text-[14px] text-[#8e9ba8]">Connect to chat.</p>
@@ -572,6 +739,16 @@ export default function ShillPage() {
         )}
       </div>
 
+      <aside className="hidden min-h-0 overflow-y-auto border-l border-white/10 bg-[#101820] p-4 lg:col-start-2 lg:row-start-2 lg:row-span-2 lg:block">
+        <VoteBoard
+          rows={voteRows}
+          canVote={canVote}
+          onVote={upvote}
+          nextVote={nextVote}
+          now={now}
+        />
+      </aside>
+
       {peek && (
         <ProfileOverlay
           pubkey={peek}
@@ -608,7 +785,15 @@ export default function ShillPage() {
               </button>
             </div>
             <p className="mt-3 break-all font-mono text-[11px] text-white/50">{openPin.mint}</p>
-            <div className="mt-4 grid grid-cols-2 gap-2">
+            <div className="mt-4 grid grid-cols-3 gap-2">
+              <button
+                type="button"
+                disabled={!canVote}
+                className="rounded-full border border-acid/40 py-2.5 text-[14px] text-acid disabled:opacity-40"
+                onClick={() => upvote(openPin.mint)}
+              >
+                Up
+              </button>
               <button
                 type="button"
                 className="rounded-full border border-white/15 py-2.5 text-[14px] text-white"
@@ -656,43 +841,25 @@ export default function ShillPage() {
         )}
       </Sheet>
 
-      <Sheet open={sheet === "ranks"} title="Top shillers" onClose={() => setSheet(null)}>
+      <Sheet open={sheet === "ranks"} title="Live board" onClose={() => setSheet(null)}>
+        <VoteBoard
+          rows={voteRows}
+          canVote={canVote}
+          onVote={(mint) => {
+            upvote(mint);
+          }}
+          nextVote={nextVote}
+          now={now}
+        />
         {you && (
-          <button type="button" onClick={() => owner && setPeek(owner)} className="mb-4 flex w-full items-center gap-3 rounded-2xl bg-[#0e1621] p-3 text-left">
-            <RankBadge rank={you.rank} size={48} />
+          <button type="button" onClick={() => owner && setPeek(owner)} className="mt-5 flex w-full items-center gap-3 rounded-2xl bg-[#0e1621] p-3 text-left">
+            <RankBadge rank={you.rank} size={40} />
             <div className="min-w-0">
-              <div className="text-[15px] font-semibold text-white">{you.rank} · {you.title}</div>
+              <div className="text-[14px] font-semibold text-white">Your shill rank · {you.title}</div>
               <div className="font-mono text-[11px] text-[#8e9ba8]">{you.need === 0 ? "Maxed" : `${you.need} XP to next`}</div>
             </div>
           </button>
         )}
-        <div className="space-y-1">
-          {board.length === 0 && <p className="text-[14px] text-[#8e9ba8]">Be first on the board. Drop a CA.</p>}
-          {board.map((row, i) => (
-            <button
-              key={row.pubkey}
-              type="button"
-              onClick={() => {
-                setSheet(null);
-                setPeek(row.pubkey);
-              }}
-              className="flex w-full items-center gap-2 rounded-xl px-1 py-1.5 text-left"
-            >
-              <span className="w-5 font-mono text-[12px] text-[#8e9ba8]">{i + 1}</span>
-              <RankBadge rank={row.rank} size={28} />
-              <span className="min-w-0 flex-1 truncate text-[15px] text-white">{row.username ? `@${row.username}` : `${row.pubkey.slice(0, 4)}…`}</span>
-              <span className="font-mono text-[11px] text-[#6ab3f3]">{row.rank}</span>
-            </button>
-          ))}
-        </div>
-        <button
-          type="button"
-          onClick={() => setSheet("pin")}
-          className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-full bg-[#14f195] py-2.5 text-[15px] font-semibold text-[#04000a]"
-        >
-          <Rocket className="h-4 w-4" />
-          Pin a token
-        </button>
       </Sheet>
 
       <Sheet open={sheet === "swap"} title="Swap" onClose={() => setSheet(null)}>
