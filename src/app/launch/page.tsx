@@ -35,7 +35,7 @@ import {
 import { FieldError, FormAlert, fieldClass, useConfirmErrors } from "@/components/form/confirm";
 import { loadOwner, signPhantomAndSend } from "@/lib/wallet/trading";
 import { mintPda, newMintNonce, nonceToB64 } from "@/lib/launch/pda";
-import { DBC_CONFIG } from "@/lib/launch/dbcIds";
+import { dbcEnabled } from "@/lib/launch/dbcIds";
 
 import { auditLaunchCoin, rankTape, scoreTape, type LaunchAudit } from "@/lib/launch/audit";
 import { BoostBuy, BoostRail, fmtLeft } from "@/components/BoostBuy";
@@ -484,7 +484,7 @@ export default function LaunchPage() {
     setMsg("");
     setErr("");
     try {
-      const useDbc = Boolean(DBC_CONFIG);
+      const useDbc = dbcEnabled();
       const mintKp = useDbc ? (await import("@solana/web3.js")).Keypair.generate() : null;
       const nonce = useDbc ? null : newMintNonce();
       const mintPk = mintKp ? mintKp.publicKey.toBase58() : mintPda(owner, nonce!).toBase58();
@@ -580,8 +580,8 @@ export default function LaunchPage() {
       setBusy(false);
       setMsg(
         devBuy > 0
-          ? `Live on Meteora DBC. CA ${mintPk}. First buy is in this wallet. Checking Phantom Swap…`
-          : `Live on Meteora DBC. CA ${mintPk}. Supply sits on the curve. Checking Phantom Swap…`,
+          ? `Live on the Solphia curve. CA ${mintPk}. First buy is in this wallet. Buy more on this page — Phantom Swap will not quote this mint yet.`
+          : `Live on the Solphia curve. CA ${mintPk}. Supply sits on the curve. Buy on this page — Phantom Swap will not quote this mint yet.`,
       );
       const routed = await waitForPhantomRoute(mintPk);
       setMsg(
@@ -725,8 +725,7 @@ export default function LaunchPage() {
         {!isSwap && (
           <p className="mt-3 max-w-2xl text-sm text-mute">
             1.00% on every buy and sell — under Pump.fun’s 1.25%. Creators take 0.50% of volume, not 0.30%. One Phantom
-            signature. The mint lives on Meteora’s bonding curve, so Phantom Swap can buy it the same way it buys
-            Pump.fun before graduation.
+            signature. Buy and sell on this page. Phantom Swap will not quote this curve until the Meteora deploy is live.
           </p>
         )}
         {!isSwap && (
@@ -991,8 +990,7 @@ export default function LaunchPage() {
             <h2 className="font-display text-2xl text-ghost">{isSwap ? "Market" : "Yours"}</h2>
             {!isSwap && (
               <p className="mt-1 text-sm text-mute">
-                Coins you launched. Buy here, or paste the CA into Phantom Swap — Jupiter routes Meteora DBC the same
-                way it routes Pump.fun before graduation.
+                Coins you launched. Buy and sell on this page. Phantom Swap will not see a pair until the Meteora curve is live.
               </p>
             )}
             <div className="mt-3 space-y-2">
@@ -1621,7 +1619,7 @@ function CoinDesk({
 
         <SwapShell
           title={`Trade ${tick(open.symbol)}`}
-          subtitle="Bonding curve on Meteora DBC. Jupiter and Phantom Swap can route it like Pump.fun pre-grad."
+          subtitle="Bonding curve on Solphia. Buy and sell here. Phantom Swap will not quote this mint until Meteora is live."
         >
           {!padTrade ? (
             <MarketSwap open={open} owner={owner} sol={sol} setSol={setSol} solUsd={solUsd} />

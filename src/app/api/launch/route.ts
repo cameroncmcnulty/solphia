@@ -36,12 +36,7 @@ import { mintPda, nonceFromB64 } from "@/lib/launch/pda";
 import { dbcEnabled } from "@/lib/launch/dbcIds";
 
 export const dynamic = "force-dynamic";
-export const runtime = "nodejs";
 export const maxDuration = 30;
-
-async function dbcApi() {
-  return import("@/lib/launch/dbc");
-}
 
 const Body = z.object({
   action: z.enum([
@@ -137,14 +132,10 @@ async function prepareMint(b: LaunchBody) {
   const useDbc = dbcEnabled();
   let mint = "";
   let nonce = nonceFromB64(b.nonce || "");
-  if (useDbc) {
-    if (!b.mint || !isSolanaAddress(b.mint)) return fail("bad_mint");
-    mint = b.mint;
-  } else {
-    if (!nonce) return fail("bad_mint");
-    mint = mintPda(b.pubkey, nonce).toBase58();
-    if (b.mint && b.mint !== mint) return fail("bad_mint");
-  }
+  if (useDbc) return fail("chain_failed");
+  if (!nonce) return fail("bad_mint");
+  mint = mintPda(b.pubkey, nonce).toBase58();
+  if (b.mint && b.mint !== mint) return fail("bad_mint");
   const s = await withLaunch((st) => st, false);
   const book = bookOf(s);
   if (book.coins.some((c) => c.symbol === symbol && c.status === "curve")) return fail("ticker_taken");
@@ -156,16 +147,7 @@ async function prepareMint(b: LaunchBody) {
     return fail("chain_failed");
   }
   try {
-    const built = useDbc
-      ? await (await dbcApi()).buildDbcLaunchTx({
-          payer: b.pubkey,
-          mint,
-          name,
-          symbol,
-          uri: art.uri,
-          buySol: Number(b.launchBuySol) || 0,
-        })
-      : await buildPadLaunchTx({
+    const built = await buildPadLaunchTx({
           payer: b.pubkey,
           nonce: nonce!,
           name,
@@ -194,10 +176,7 @@ async function confirmMint(b: LaunchBody, solUsd: number) {
   const symbol = sanitizeText(b.symbol || "", 10).toUpperCase();
   if (!b.mint || !isSolanaAddress(b.mint)) return fail("bad_mint");
   let liveCurve: import("@/lib/launch/curve").CurveState | undefined;
-  if (dbcEnabled()) {
-    const pool = await (await dbcApi()).waitForDbcPool(b.mint);
-    if (!pool) return fail("curve_missing");
-  } else {
+  {
     const ready = await waitForPadCurve(b.mint, b.sigs?.[0] || b.sig);
     if (!ready.ok) return fail(ready.error);
     liveCurve = ready.curve;
@@ -315,13 +294,6 @@ export async function POST(req: NextRequest) {
     const book = bookOf(s);
     const coin = book.coins.find((c) => c.id === b.id || (b.mint && c.mint === b.mint));
     const mint = coin?.mint || b.mint || "";
-    const dbc = mint && isSolanaAddress(mint) ? await (await dbcApi()).quoteDbcTrade({ mint, side: b.tokens ? "sell" : "buy", sol: b.sol, tokens: b.tokens }) : { ok: false as const, error: "curve_missing" };
-    if (dbc.ok) {
-      return NextResponse.json({
-        quote: dbc,
-        coin: coin ? publicCoin(coin, solUsd, b.pubkey, book) : undefined,
-      });
-    }
     const live = mint && isSolanaAddress(mint) ? await padCurveReady(mint) : { ok: false as const, error: "curve_missing" };
     if (coin?.venue === "solphia" || coin?.venue === "pump" || live.ok) {
       const q = await quotePadTrade({
@@ -346,28 +318,6 @@ export async function POST(req: NextRequest) {
     const snap = await withLaunch((st) => st, false);
     const coin = bookOf(snap).coins.find((c) => c.id === b.id || (b.mint && c.mint === b.mint));
     const mint = coin?.mint || b.mint || "";
-    if (mint && isSolanaAddress(mint) && dbcEnabled()) {
-      const built = await (await dbcApi()).buildDbcTradeTx({
-        mint,
-        owner: b.pubkey,
-        side: b.action,
-        sol: b.sol,
-        tokens: b.tokens,
-      });
-      if (built.ok) {
-        return NextResponse.json({
-          ok: true,
-          needsSign: true,
-          transaction: built.transaction,
-          tokensOut: built.tokensOut,
-          solOut: built.solOut,
-          sol: b.sol,
-          tokens: b.tokens,
-          feeSol: built.feeSol,
-          coin: coin ? publicCoin(coin, solUsd, b.pubkey, bookOf(snap)) : undefined,
-        });
-      }
-    }
     const live = mint && isSolanaAddress(mint) ? await padCurveReady(mint) : { ok: false as const, error: "curve_missing" };
     if (coin?.venue === "solphia" || coin?.venue === "pump" || live.ok) {
       const built = await buildPadTradeTx({
