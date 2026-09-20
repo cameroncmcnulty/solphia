@@ -4,6 +4,7 @@ import { buildPadTradeTx, padCurveReady, quoteBuyRaw, quoteSellRaw } from "../la
 import { launchError } from "../launch/errors";
 import { SOL_MINT } from "../pair/mints";
 import { isDeskMint, resolveVenue } from "../tx/venue";
+import { buildDbcTradeTx, dbcEnabled, quoteDbcTrade } from "../launch/dbc";
 
 export const PAD_SWAP_FEE_BPS = SWAP_FEE_BPS;
 
@@ -42,6 +43,22 @@ export async function quotePadSwap(opts: {
   if (!isSolanaAddress(opts.mint) || opts.mint === SOL_MINT) return { ok: false, reason: launchError("bad_mint"), error: "bad_mint" };
   if (!(opts.amount > 0)) return { ok: false, reason: "Enter an amount." };
   if (isDeskMint(opts.mint)) return { ok: false, reason: launchError("desk_mint"), error: "desk_mint" };
+  if (dbcEnabled()) {
+    const dbc = await quoteDbcTrade({ mint: opts.mint, side: opts.side, sol: opts.side === "buy" ? opts.amount : undefined, tokens: opts.side === "sell" ? opts.amount : undefined });
+    if (dbc.ok) {
+      return {
+        ok: true,
+        via: "curve",
+        impactPct: 0,
+        outAmount: opts.side === "buy" ? dbc.tokensOut || 0 : dbc.solOut || 0,
+        feeSol: dbc.feeSol,
+        spendSol: opts.amount,
+        inMint: opts.side === "buy" ? SOL_MINT : opts.mint,
+        outMint: opts.side === "buy" ? opts.mint : SOL_MINT,
+        creator: "",
+      };
+    }
+  }
   const venue = await resolveVenue(opts.mint);
   if (venue.venue !== "pad") return { ok: false, reason: launchError("not_on_curve"), error: "not_on_curve" };
   const vs = BigInt(Math.round(venue.curve.virtualSol * 1e9));
@@ -85,6 +102,16 @@ export async function buildPadSwapTx(opts: {
   creator?: string;
 }): Promise<{ ok: true; transaction: string } | { ok: false; reason: string }> {
   if (!isSolanaAddress(opts.owner)) return { ok: false, reason: "Connect Phantom first." };
+  if (dbcEnabled()) {
+    const dbc = await buildDbcTradeTx({
+      mint: opts.mint,
+      owner: opts.owner,
+      side: opts.side,
+      sol: opts.side === "buy" ? opts.amount : undefined,
+      tokens: opts.side === "sell" ? opts.amount : undefined,
+    });
+    if (dbc.ok) return { ok: true, transaction: dbc.transaction };
+  }
   const live = await padCurveReady(opts.mint);
   const creator = opts.creator || (live.ok ? live.creator : opts.owner);
   const built = await buildPadTradeTx({

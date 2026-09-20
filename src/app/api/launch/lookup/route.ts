@@ -4,6 +4,7 @@ import { lookupMarketMint } from "@/lib/launch/market";
 import { emptyLaunchBook, publicCoin } from "@/lib/launch/engine";
 import { withLaunch } from "@/lib/store";
 import { padCurveReady } from "@/lib/launch/program";
+import { dbcPoolByMint } from "@/lib/launch/dbc";
 import { lastPairPrices } from "@/lib/tick";
 
 export const dynamic = "force-dynamic";
@@ -22,6 +23,32 @@ export async function GET(req: NextRequest) {
     const owned = book.coins.find((c) => c.mint === mint || c.id === mint);
     if (owned) {
       return NextResponse.json({ coin: publicCoin(owned, solUsd), solUsd });
+    }
+    const dbc = await dbcPoolByMint(mint);
+    if (dbc) {
+      return NextResponse.json({
+        coin: {
+          id: mint,
+          mint,
+          born: true,
+          venue: "solphia",
+          name: "Solphia curve",
+          symbol: mint.slice(0, 4).toUpperCase(),
+          blurb: "",
+          creator: String((dbc.account as any).poolState?.creator || (dbc.account as any).creator || ""),
+          createdAt: Date.now(),
+          status: "curve",
+          priceSol: 0,
+          marketCapSol: 0,
+          marketCapUsd: 0,
+          progress: 0,
+          realSol: 0,
+          holders: 0,
+          fills: [],
+          devRewardsSol: 0,
+        },
+        solUsd,
+      });
     }
     const live = await padCurveReady(mint);
     if (live.ok) {

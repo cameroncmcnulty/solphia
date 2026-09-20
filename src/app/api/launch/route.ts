@@ -33,6 +33,7 @@ import {
   quotePadTrade,
 } from "@/lib/launch/program";
 import { mintPda, nonceFromB64 } from "@/lib/launch/pda";
+import { buildDbcLaunchTx, buildDbcTradeTx, dbcEnabled, quoteDbcTrade, waitForDbcPool } from "@/lib/launch/dbc";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -128,10 +129,17 @@ async function prepareMint(b: LaunchBody) {
   if (issues.image) return fail("bad_image");
   if (issues.launchBuySol) return fail("dev_buy_cap");
   if (issues.website || issues.x || issues.telegram || issues.discord) return fail("bad_link");
-  const nonce = nonceFromB64(b.nonce || "");
-  if (!nonce) return fail("bad_mint");
-  const mint = mintPda(b.pubkey, nonce).toBase58();
-  if (b.mint && b.mint !== mint) return fail("bad_mint");
+  const useDbc = dbcEnabled();
+  let mint = "";
+  let nonce = nonceFromB64(b.nonce || "");
+  if (useDbc) {
+    if (!b.mint || !isSolanaAddress(b.mint)) return fail("bad_mint");
+    mint = b.mint;
+  } else {
+    if (!nonce) return fail("bad_mint");
+    mint = mintPda(b.pubkey, nonce).toBase58();
+    if (b.mint && b.mint !== mint) return fail("bad_mint");
+  }
   const s = await withLaunch((st) => st, false);
   const book = bookOf(s);
   if (book.coins.some((c) => c.symbol === symbol && c.status === "curve")) return fail("ticker_taken");
@@ -143,15 +151,24 @@ async function prepareMint(b: LaunchBody) {
     return fail("chain_failed");
   }
   try {
-    const built = await buildPadLaunchTx({
-      payer: b.pubkey,
-      nonce,
-      name,
-      symbol,
-      uri: art.uri,
-      buySol: Number(b.launchBuySol) || 0,
-      referrer: book.accounts?.[b.pubkey]?.referrer,
-    });
+    const built = useDbc
+      ? await buildDbcLaunchTx({
+          payer: b.pubkey,
+          mint,
+          name,
+          symbol,
+          uri: art.uri,
+          buySol: Number(b.launchBuySol) || 0,
+        })
+      : await buildPadLaunchTx({
+          payer: b.pubkey,
+          nonce: nonce!,
+          name,
+          symbol,
+          uri: art.uri,
+          buySol: Number(b.launchBuySol) || 0,
+          referrer: book.accounts?.[b.pubkey]?.referrer,
+        });
     return NextResponse.json({
       ok: true,
       mint: built.mint,
@@ -171,9 +188,15 @@ async function confirmMint(b: LaunchBody, solUsd: number) {
   const name = sanitizeText(b.name || "", 24);
   const symbol = sanitizeText(b.symbol || "", 10).toUpperCase();
   if (!b.mint || !isSolanaAddress(b.mint)) return fail("bad_mint");
-  const ready = await waitForPadCurve(b.mint, b.sigs?.[0] || b.sig);
-  if (!ready.ok) return fail(ready.error);
-  const liveCurve = ready.curve;
+  let liveCurve: import("@/lib/launch/curve").CurveState | undefined;
+  if (dbcEnabled()) {
+    const pool = await waitForDbcPool(b.mint);
+    if (!pool) return fail("curve_missing");
+  } else {
+    const ready = await waitForPadCurve(b.mint, b.sigs?.[0] || b.sig);
+    if (!ready.ok) return fail(ready.error);
+    liveCurve = ready.curve;
+  }
   let image = storedImage(b.image);
   if (b.image?.startsWith("data:")) {
     const pinned = await pinDataUrl(b.image, symbol);
@@ -198,7 +221,7 @@ async function confirmMint(b: LaunchBody, solUsd: number) {
       venue: "solphia",
     });
     if (made.ok) {
-      applyCurveState(made.coin, liveCurve);
+      if (liveCurve) applyCurveState(made.coin, liveCurve);
       const buySol = Number(b.launchBuySol) || 0;
       const tokensOut = Number(b.tokens) || 0;
       if (buySol > 0 && tokensOut > 0) {
@@ -287,6 +310,13 @@ export async function POST(req: NextRequest) {
     const book = bookOf(s);
     const coin = book.coins.find((c) => c.id === b.id || (b.mint && c.mint === b.mint));
     const mint = coin?.mint || b.mint || "";
+    const dbc = mint && isSolanaAddress(mint) ? await quoteDbcTrade({ mint, side: b.tokens ? "sell" : "buy", sol: b.sol, tokens: b.tokens }) : { ok: false as const, error: "curve_missing" };
+    if (dbc.ok) {
+      return NextResponse.json({
+        quote: dbc,
+        coin: coin ? publicCoin(coin, solUsd, b.pubkey, book) : undefined,
+      });
+    }
     const live = mint && isSolanaAddress(mint) ? await padCurveReady(mint) : { ok: false as const, error: "curve_missing" };
     if (coin?.venue === "solphia" || coin?.venue === "pump" || live.ok) {
       const q = await quotePadTrade({
@@ -311,6 +341,28 @@ export async function POST(req: NextRequest) {
     const snap = await withLaunch((st) => st, false);
     const coin = bookOf(snap).coins.find((c) => c.id === b.id || (b.mint && c.mint === b.mint));
     const mint = coin?.mint || b.mint || "";
+    if (mint && isSolanaAddress(mint) && dbcEnabled()) {
+      const built = await buildDbcTradeTx({
+        mint,
+        owner: b.pubkey,
+        side: b.action,
+        sol: b.sol,
+        tokens: b.tokens,
+      });
+      if (built.ok) {
+        return NextResponse.json({
+          ok: true,
+          needsSign: true,
+          transaction: built.transaction,
+          tokensOut: built.tokensOut,
+          solOut: built.solOut,
+          sol: b.sol,
+          tokens: b.tokens,
+          feeSol: built.feeSol,
+          coin: coin ? publicCoin(coin, solUsd, b.pubkey, bookOf(snap)) : undefined,
+        });
+      }
+    }
     const live = mint && isSolanaAddress(mint) ? await padCurveReady(mint) : { ok: false as const, error: "curve_missing" };
     if (coin?.venue === "solphia" || coin?.venue === "pump" || live.ok) {
       const built = await buildPadTradeTx({

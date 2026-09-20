@@ -31,6 +31,7 @@ import {
 import { FieldError, FormAlert, fieldClass, useConfirmErrors } from "@/components/form/confirm";
 import { loadOwner, signPhantomAndSend } from "@/lib/wallet/trading";
 import { mintPda, newMintNonce, nonceToB64 } from "@/lib/launch/pda";
+import { DBC_CONFIG } from "@/lib/launch/dbcIds";
 
 import { auditLaunchCoin, rankTape, scoreTape, type LaunchAudit } from "@/lib/launch/audit";
 import { BoostBuy, BoostRail, fmtLeft } from "@/components/BoostBuy";
@@ -435,8 +436,10 @@ export default function LaunchPage() {
     setMsg("");
     setErr("");
     try {
-      const nonce = newMintNonce();
-      const mintPk = mintPda(owner, nonce).toBase58();
+      const useDbc = Boolean(DBC_CONFIG);
+      const mintKp = useDbc ? (await import("@solana/web3.js")).Keypair.generate() : null;
+      const nonce = useDbc ? null : newMintNonce();
+      const mintPk = mintKp ? mintKp.publicKey.toBase58() : mintPda(owner, nonce!).toBase58();
       setMsg("Building the Solphia curve…");
       const prep = await fetch("/api/launch", {
         method: "POST",
@@ -445,7 +448,7 @@ export default function LaunchPage() {
           action: "prepare",
           pubkey: owner,
           mint: mintPk,
-          nonce: nonceToB64(nonce),
+          nonce: nonce ? nonceToB64(nonce) : undefined,
           name,
           symbol,
           blurb,
@@ -469,7 +472,7 @@ export default function LaunchPage() {
         throw new Error(message);
       }
       setMsg("Sign once in Phantom…");
-      const sig = await signPhantomAndSend(packed);
+      const sig = await signPhantomAndSend(packed, mintKp || undefined);
       setMsg("Waiting for the curve on Solana…");
       const confirmBody = {
         action: "confirm",
@@ -896,8 +899,8 @@ export default function LaunchPage() {
             <h2 className="font-display text-2xl text-ghost">{isSwap ? "Market" : "Yours"}</h2>
             {!isSwap && (
               <p className="mt-1 text-sm text-mute">
-                Coins you launched. Buy and sell on the Solphia curve here — Phantom&apos;s Swap tab uses Jupiter and
-                will say no pairs.
+                Coins you launched. Buy here, or paste the CA into Phantom Swap — Jupiter routes Meteora DBC the same
+                way it routes Pump.fun before graduation.
               </p>
             )}
             <div className="mt-3 space-y-2">
@@ -1526,7 +1529,7 @@ function CoinDesk({
 
         <SwapShell
           title={`Trade ${tick(open.symbol)}`}
-          subtitle="Solphia curve. Phantom Swap will say no pairs — that tab is Jupiter, not this program."
+          subtitle="Bonding curve on Meteora DBC. Jupiter and Phantom Swap can route it like Pump.fun pre-grad."
         >
           {!padTrade ? (
             <MarketSwap open={open} owner={owner} sol={sol} setSol={setSol} solUsd={solUsd} />
