@@ -28,7 +28,7 @@ const securityHeaders = [
 ];
 
 const dbcTraceInclude = [
-  "./node_modules/@meteora-ag/dynamic-bonding-curve-sdk/**",
+  "./src/vendor/meteora-dbc.cjs",
   "./node_modules/@coral-xyz/anchor/**",
   "./node_modules/bn.js/**",
   "./node_modules/decimal.js/**",
@@ -37,7 +37,6 @@ const dbcTraceInclude = [
 const nextConfig: NextConfig = {
   outputFileTracingRoot: path.join(__dirname),
   poweredByHeader: false,
-  serverExternalPackages: ["@meteora-ag/dynamic-bonding-curve-sdk"],
   outputFileTracingIncludes: {
     "/api/launch": dbcTraceInclude,
     "/api/launch/lookup": dbcTraceInclude,

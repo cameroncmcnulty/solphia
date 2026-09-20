@@ -14,8 +14,10 @@ import { MIN_TRADE_SOL } from "./curve";
 
 export { dbcEnabled };
 
-async function sdk() {
-  return import(/* webpackIgnore: true */ "@meteora-ag/dynamic-bonding-curve-sdk");
+async function sdk(): Promise<any> {
+  // @ts-expect-error vendored CJS has no types
+  const loaded = await import(/* webpackIgnore: true */ "../vendor/meteora-dbc.cjs");
+  return loaded.default ?? loaded;
 }
 
 async function client() {

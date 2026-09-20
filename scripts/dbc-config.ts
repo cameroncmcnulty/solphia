@@ -6,7 +6,6 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { Keypair, Transaction } from "@solana/web3.js";
 import { NATIVE_MINT } from "@solana/spl-token";
-import { DynamicBondingCurveClient } from "@meteora-ag/dynamic-bonding-curve-sdk";
 import { DEFAULT_TREASURY } from "../src/lib/protocolWallets";
 import { solphiaCurveConfig } from "../src/lib/launch/dbc";
 
@@ -30,6 +29,9 @@ async function main() {
   const path = resolve("programs/solphia-pad/keys/dbc-config.json");
   writeFileSync(path, JSON.stringify([...config.secretKey]));
   const conn = connection();
+  // @ts-expect-error vendored CJS
+  const dbcMod = await import("../src/vendor/meteora-dbc.cjs");
+  const DynamicBondingCurveClient = dbcMod.DynamicBondingCurveClient || dbcMod.default?.DynamicBondingCurveClient;
   const client = DynamicBondingCurveClient.create(conn, "confirmed");
   const treasury = new (await import("@solana/web3.js")).PublicKey(DEFAULT_TREASURY);
   const tx = await client.partner.createConfig({
