@@ -14,7 +14,6 @@ import {
   ANTI_SNIPE_MS,
   ANTI_SNIPE_SOL,
   MIN_TRADE_SOL,
-  TOKEN_IMAGE_PX,
   buySupplyPct,
   emptyCurve,
   launchDevBuyCap,
@@ -23,7 +22,6 @@ import {
 } from "@/lib/launch/curve";
 import { launchError } from "@/lib/launch/errors";
 import {
-  IMAGE_DATA_MAX,
   NAME_MAX,
   NAME_MIN,
   TICKER_MAX,
@@ -40,6 +38,7 @@ import { dbcEnabled } from "@/lib/launch/dbcIds";
 import { auditLaunchCoin, rankTape, scoreTape, type LaunchAudit } from "@/lib/launch/audit";
 import { BoostBuy, BoostRail, fmtLeft } from "@/components/BoostBuy";
 import { PadPitch } from "@/components/PadPitch";
+import { TokenImageCrop, readLaunchImage, type CropSource } from "@/components/TokenImageCrop";
 import { yourLaunches } from "@/lib/launch/yours";
 
 import { SwapBox, SwapShell, SwapTabs, SwapWidget } from "@/components/SwapWidget";
@@ -48,8 +47,6 @@ import { filterTape, sortTape, volumeIn, type AgeFilter, type VolWindow } from "
 import { isSolanaAddress } from "@/lib/wallet/addr";
 
 
-const TOKEN_PX = TOKEN_IMAGE_PX;
-const STORE_PX = 512;
 const PRESETS = [0.1, 0.25, 0.5, 1];
 const DEV_CAP = launchDevBuyCap();
 
@@ -199,72 +196,6 @@ function tick(symbol?: string) {
   return s ? `$${s}` : "";
 }
 
-async function decodeLaunchImage(file: File): Promise<{ w: number; h: number; draw: CanvasImageSource }> {
-  const heic = /heic|heif/i.test(file.type) || /\.hei[cf]$/i.test(file.name);
-  let blob: Blob = file;
-  if (heic) {
-    try {
-      const { default: heic2any } = await import("heic2any");
-      const out = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.82 });
-      blob = Array.isArray(out) ? out[0] : out;
-    } catch {
-      /* Safari can often decode HEIC without this */
-    }
-  }
-  try {
-    const bmp = await createImageBitmap(blob, { imageOrientation: "from-image" } as ImageBitmapOptions);
-    return { w: bmp.width, h: bmp.height, draw: bmp };
-  } catch {
-    /* fall through */
-  }
-  const url = URL.createObjectURL(blob);
-  try {
-    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
-      const el = new Image();
-      el.onload = () => resolve(el);
-      el.onerror = () => reject(new Error("Could not read that image. Try another photo from your camera roll."));
-      el.src = url;
-    });
-    return { w: img.naturalWidth, h: img.naturalHeight, draw: img };
-  } finally {
-    URL.revokeObjectURL(url);
-  }
-}
-
-async function squareTokenImage(file: File): Promise<string> {
-  if (file.size > 25_000_000) throw new Error("Image must be under 25 MB.");
-  const img = await decodeLaunchImage(file);
-  const side = Math.min(img.w, img.h);
-  if (side < 64) throw new Error("That image is too small.");
-  const full = document.createElement("canvas");
-  full.width = TOKEN_PX;
-  full.height = TOKEN_PX;
-  const fctx = full.getContext("2d");
-  if (!fctx) throw new Error("Could not crop image.");
-  fctx.drawImage(img.draw, (img.w - side) / 2, (img.h - side) / 2, side, side, 0, 0, TOKEN_PX, TOKEN_PX);
-  const store = document.createElement("canvas");
-  store.width = STORE_PX;
-  store.height = STORE_PX;
-  store.getContext("2d")?.drawImage(full, 0, 0, STORE_PX, STORE_PX);
-  return jpegFit(store);
-}
-
-function jpegFit(canvas: HTMLCanvasElement, max = IMAGE_DATA_MAX): string {
-  for (const q of [0.72, 0.6, 0.48, 0.36, 0.24]) {
-    const data = canvas.toDataURL("image/jpeg", q);
-    if (data.length <= max) return data;
-  }
-  const small = document.createElement("canvas");
-  small.width = 384;
-  small.height = 384;
-  small.getContext("2d")?.drawImage(canvas, 0, 0, 384, 384);
-  for (const q of [0.55, 0.4, 0.28]) {
-    const data = small.toDataURL("image/jpeg", q);
-    if (data.length <= max) return data;
-  }
-  throw new Error("Image is too heavy. Use a simpler square PNG or JPEG.");
-}
-
 function mergeCoins(remote: Coin[], prev: Coin[]): Coin[] {
   const seen = new Set(remote.map((c) => c.id));
   const keepBorn = prev.filter((c) => c.born && !seen.has(c.id));
@@ -302,6 +233,8 @@ export default function LaunchPage() {
   const [symbol, setSymbol] = useState("");
   const [blurb, setBlurb] = useState("");
   const [image, setImage] = useState("");
+  const [cropSrc, setCropSrc] = useState<CropSource | null>(null);
+  const [cropOpen, setCropOpen] = useState(false);
   const [website, setWebsite] = useState("");
   const [x, setX] = useState("");
   const [telegram, setTelegram] = useState("");
@@ -331,7 +264,14 @@ export default function LaunchPage() {
   const [lookedMint, setLookedMint] = useState<string | null>(null);
   const bootMint = useRef(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const cropUrlRef = useRef<string>("");
   const devPct = buySupplyPct(emptyCurve(), devBuy);
+
+  useEffect(() => {
+    return () => {
+      if (cropUrlRef.current) URL.revokeObjectURL(cropUrlRef.current);
+    };
+  }, []);
 
   async function refreshPad() {
     const q = owner ? `pubkey=${encodeURIComponent(owner)}` : "";
@@ -571,6 +511,10 @@ export default function LaunchPage() {
       setSymbol("");
       setBlurb("");
       setImage("");
+      if (cropUrlRef.current) URL.revokeObjectURL(cropUrlRef.current);
+      cropUrlRef.current = "";
+      setCropSrc(null);
+      setCropOpen(false);
       setWebsite("");
       setX("");
       setTelegram("");
@@ -658,6 +602,10 @@ export default function LaunchPage() {
         setSymbol("");
         setBlurb("");
         setImage("");
+        if (cropUrlRef.current) URL.revokeObjectURL(cropUrlRef.current);
+        cropUrlRef.current = "";
+        setCropSrc(null);
+        setCropOpen(false);
         setWebsite("");
         setX("");
         setTelegram("");
@@ -751,7 +699,7 @@ export default function LaunchPage() {
                   <button
                     type="button"
                     data-field="image"
-                    onClick={() => fileRef.current?.click()}
+                    onClick={() => (cropSrc ? setCropOpen(true) : fileRef.current?.click())}
                     className={`relative h-20 w-20 shrink-0 overflow-hidden rounded-2xl border bg-void ${fieldClass(createErr.errors.image, "border-violet/40")}`}
                   >
                     {image ? (
@@ -762,7 +710,33 @@ export default function LaunchPage() {
                     )}
                   </button>
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm text-mute">Any photo. We crop a square. Optional.</p>
+                    <p className="text-sm text-ghost">Token art</p>
+                    <p className="mt-0.5 text-sm text-mute">Any photo. You frame a square. We save a JPEG wallets can show.</p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <button type="button" onClick={() => fileRef.current?.click()} className="font-mono text-[11px] text-acid">
+                        {image ? "Replace" : "Choose photo"}
+                      </button>
+                      {cropSrc ? (
+                        <button type="button" onClick={() => setCropOpen(true)} className="font-mono text-[11px] text-mute">
+                          Recrop
+                        </button>
+                      ) : null}
+                      {image ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setImage("");
+                            if (cropUrlRef.current) URL.revokeObjectURL(cropUrlRef.current);
+                            cropUrlRef.current = "";
+                            setCropSrc(null);
+                            createErr.clear("image");
+                          }}
+                          className="font-mono text-[11px] text-mute"
+                        >
+                          Remove
+                        </button>
+                      ) : null}
+                    </div>
                     <FieldError error={createErr.errors.image} />
                   </div>
                   <input
@@ -775,7 +749,11 @@ export default function LaunchPage() {
                       e.target.value = "";
                       if (!f) return;
                       try {
-                        setImage(await squareTokenImage(f));
+                        const src = await readLaunchImage(f);
+                        if (cropUrlRef.current) URL.revokeObjectURL(cropUrlRef.current);
+                        cropUrlRef.current = src.url;
+                        setCropSrc(src);
+                        setCropOpen(true);
                         createErr.clear("image");
                         setErr("");
                       } catch (er) {
@@ -786,6 +764,17 @@ export default function LaunchPage() {
                     }}
                   />
                 </div>
+                {cropOpen && cropSrc ? (
+                  <TokenImageCrop
+                    source={cropSrc}
+                    onCancel={() => setCropOpen(false)}
+                    onDone={(dataUrl) => {
+                      setImage(dataUrl);
+                      setCropOpen(false);
+                      createErr.clear("image");
+                    }}
+                  />
+                ) : null}
                 <form
                   noValidate
                   onInvalid={(e) => e.preventDefault()}
