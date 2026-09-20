@@ -1,9 +1,6 @@
 /**
  * Solphia launches on Meteora DBC so Jupiter (and Phantom Swap) can route
  * the bonding curve the same way they route Pump.fun pre-grad.
- *
- * The SDK is loaded at runtime (webpackIgnore) so Vercel never webpacks its
- * native .node addons — that is what killed the last three deploys.
  */
 import BN from "bn.js";
 import { PublicKey, Transaction } from "@solana/web3.js";
@@ -11,13 +8,12 @@ import { connection } from "../solana/connection";
 import { encodeTx } from "../token/mint";
 import { DBC_CONFIG, dbcEnabled } from "./dbcIds";
 import { MIN_TRADE_SOL } from "./curve";
+import { dbcSdk } from "./dbcSdk";
 
 export { dbcEnabled };
 
 async function sdk(): Promise<any> {
-  // @ts-expect-error vendored CJS has no types
-  const loaded = await import(/* webpackIgnore: true */ "../vendor/meteora-dbc.cjs");
-  return loaded.default ?? loaded;
+  return dbcSdk();
 }
 
 async function client() {

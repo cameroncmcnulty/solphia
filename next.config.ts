@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import fs from "fs";
 import path from "path";
 
 const securityHeaders = [
@@ -29,6 +30,7 @@ const securityHeaders = [
 
 const dbcTraceInclude = [
   "./src/vendor/meteora-dbc.cjs",
+  "./node_modules/@meteora-ag/dynamic-bonding-curve-sdk/**",
   "./node_modules/@coral-xyz/anchor/**",
   "./node_modules/bn.js/**",
   "./node_modules/decimal.js/**",
@@ -37,18 +39,33 @@ const dbcTraceInclude = [
 const nextConfig: NextConfig = {
   outputFileTracingRoot: path.join(__dirname),
   poweredByHeader: false,
+  serverExternalPackages: ["@meteora-ag/dynamic-bonding-curve-sdk", "@coral-xyz/anchor"],
   outputFileTracingIncludes: {
     "/api/launch": dbcTraceInclude,
     "/api/launch/lookup": dbcTraceInclude,
     "/api/swap/quote": dbcTraceInclude,
     "/api/swap/build": dbcTraceInclude,
+    "/*": ["./src/vendor/meteora-dbc.cjs"],
   },
-  webpack: (config) => {
+  webpack: (config, { isServer }) => {
     config.resolve.alias = {
       ...config.resolve.alias,
       bufferutil: false,
       "utf-8-validate": false,
     };
+    if (isServer) {
+      config.plugins.push({
+        apply(compiler: { hooks: { afterEmit: { tap: (name: string, fn: () => void) => void } }; options: { output: { path: string } } }) {
+          compiler.hooks.afterEmit.tap("CopyMeteoraDbc", () => {
+            const from = path.join(__dirname, "src/vendor/meteora-dbc.cjs");
+            if (!fs.existsSync(from)) return;
+            const destDir = path.join(compiler.options.output.path, "vendor");
+            fs.mkdirSync(destDir, { recursive: true });
+            fs.copyFileSync(from, path.join(destDir, "meteora-dbc.cjs"));
+          });
+        },
+      });
+    }
     return config;
   },
   async redirects() {
