@@ -13,7 +13,7 @@ import { dbcSdk } from "./dbcSdk";
 export { dbcEnabled };
 
 async function sdk(): Promise<any> {
-  return dbcSdk();
+  return await dbcSdk();
 }
 
 async function client() {

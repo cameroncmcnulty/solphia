@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type PointerEvent, type TouchEvent, type WheelEvent } from "react";
+import { createPortal } from "react-dom";
 import { IMAGE_DATA_MAX } from "@/lib/launch/validate";
 import {
   TOKEN_ART_MAX_ZOOM,
@@ -121,21 +122,49 @@ export function TokenImageCrop({
   const imgRef = useRef<HTMLImageElement>(null);
   const drag = useRef<{ x: number; y: number; rect: CropRect } | null>(null);
   const pinch = useRef<{ dist: number; zoom: number } | null>(null);
-  const view = 300;
+  const [view, setView] = useState(240);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     setRect(coverCrop(source.w, source.h));
   }, [source.w, source.h, source.url]);
 
   useEffect(() => {
-    const prev = document.body.style.overflow;
+    const measure = () => setView(Math.min(300, Math.max(200, window.innerWidth - 48)));
+    measure();
+    window.addEventListener("resize", measure);
+    window.visualViewport?.addEventListener("resize", measure);
+    return () => {
+      window.removeEventListener("resize", measure);
+      window.visualViewport?.removeEventListener("resize", measure);
+    };
+  }, []);
+
+  useEffect(() => {
+    const prevOverflow = document.body.style.overflow;
+    const prevPos = document.body.style.position;
+    const prevTop = document.body.style.top;
+    const y = window.scrollY;
     document.body.style.overflow = "hidden";
+    document.body.style.position = "fixed";
+    document.body.style.top = `-${y}px`;
+    document.body.style.left = "0";
+    document.body.style.right = "0";
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onCancel();
     };
     window.addEventListener("keydown", onKey);
     return () => {
-      document.body.style.overflow = prev;
+      document.body.style.overflow = prevOverflow;
+      document.body.style.position = prevPos;
+      document.body.style.top = prevTop;
+      document.body.style.left = "";
+      document.body.style.right = "";
+      window.scrollTo(0, y);
       window.removeEventListener("keydown", onKey);
     };
   }, [onCancel]);
@@ -215,17 +244,24 @@ export function TokenImageCrop({
     }
   }, [onDone, rect]);
 
-  return (
-    <div className="fixed inset-0 z-[80] flex items-end justify-center bg-black/80 p-4 sm:items-center" role="dialog" aria-modal="true" aria-label="Crop token art">
-      <div className="w-full max-w-md rounded-3xl border border-white/10 bg-[#0a0614] p-5 shadow-2xl">
+  const dialog = (
+    <div
+      className="fixed inset-0 z-[200] overflow-y-auto overscroll-contain bg-black/85"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Crop token art"
+      style={{ paddingTop: "max(12px, env(safe-area-inset-top))", paddingBottom: "max(12px, env(safe-area-inset-bottom))" }}
+    >
+      <div className="flex min-h-[100dvh] items-center justify-center px-3 py-4">
+      <div className="w-full max-w-md rounded-3xl border border-white/10 bg-[#0a0614] p-4 shadow-2xl sm:p-5">
         <p className="font-mono text-[11px] tracking-[0.28em] text-acid">TOKEN ART · 1:1 JPEG</p>
         <h3 className="mt-1 font-display text-2xl text-ghost">Frame the square</h3>
-        <p className="mt-1 text-sm text-mute">Drag to pan. Scroll or pinch to zoom. We save a 512×512 JPEG wallets can show.</p>
+        <p className="mt-1 text-sm text-mute">Drag to pan. Pinch or use the slider to zoom. We save a JPEG wallets can show.</p>
 
-        <div className="mt-4 flex items-center gap-4">
+        <div className="mt-4 flex items-center justify-center gap-4">
           <div
             ref={stageRef}
-            className="relative h-[300px] w-[300px] max-w-full shrink-0 overflow-hidden rounded-2xl border border-white/15 bg-void touch-none"
+            className="relative max-w-full shrink-0 overflow-hidden rounded-2xl border border-white/15 bg-void touch-none"
             style={{ width: view, height: view }}
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
@@ -291,6 +327,10 @@ export function TokenImageCrop({
           </button>
         </div>
       </div>
+      </div>
     </div>
   );
+
+  if (!mounted || typeof document === "undefined") return null;
+  return createPortal(dialog, document.body);
 }
