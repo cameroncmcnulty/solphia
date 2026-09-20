@@ -3,9 +3,10 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import { CopyCa } from "@/components/CopyCa";
-import { SolphiaConstellation } from "@/components/SolphiaConstellation";
-import { MiniSpark } from "@/components/SparkCandles";
+
+
 import { TokenArt } from "@/components/TokenArt";
+import { PumpCoinRow } from "@/components/PumpCoinRow";
 import { TokenChart } from "@/components/TokenChart";
 import { SocialInput, TokenSocials } from "@/components/TokenSocials";
 import { WalletConnect } from "@/components/WalletConnect";
@@ -37,7 +38,7 @@ import { dbcEnabled } from "@/lib/launch/dbcIds";
 
 import { auditLaunchCoin, rankTape, scoreTape, type LaunchAudit } from "@/lib/launch/audit";
 import { BoostBuy, BoostRail, fmtLeft } from "@/components/BoostBuy";
-import { PadPitch } from "@/components/PadPitch";
+
 import { TokenImageCrop, readLaunchImage, type CropSource } from "@/components/TokenImageCrop";
 import { yourLaunches } from "@/lib/launch/yours";
 
@@ -246,7 +247,8 @@ export default function LaunchPage() {
   const createErr = useConfirmErrors<LaunchField>();
   const [busy, setBusy] = useState(false);
   const [solUsd, setSolUsd] = useState(0);
-  const [tab, setTab] = useState<"tape" | "mine">(isSwap ? "tape" : "mine");
+  const [tab, setTab] = useState<"tape" | "mine">("tape");
+  const [createOpen, setCreateOpen] = useState(false);
   const [age, setAge] = useState<AgeFilter>("newest");
   const [vol, setVol] = useState<VolWindow | null>(null);
   const [ranked, setRanked] = useState(false);
@@ -521,6 +523,7 @@ export default function LaunchPage() {
       setDiscord("");
       setDevBuy(0);
       setTab("mine");
+      setCreateOpen(false);
       setBusy(false);
       setMsg(
         devBuy > 0
@@ -666,28 +669,35 @@ export default function LaunchPage() {
 
   return (
     <main className="relative min-h-[calc(100vh-4rem)] overflow-x-hidden pb-24">
-      <SolphiaConstellation />
-      <div className="relative z-10 mx-auto max-w-6xl px-4 pt-6 md:px-8 md:pt-10">
-        <p className="font-mono text-[11px] tracking-[0.28em] text-acid">{isSwap ? "SWAP" : "LAUNCHPAD"}</p>
-        <h1 className="mt-2 font-display text-4xl text-ghost sm:text-5xl">{isSwap ? "Discover. Swap." : "Cheaper curve. Fatter dev cut."}</h1>
-        {!isSwap && (
-          <p className="mt-3 max-w-2xl text-sm text-mute">
-            1.00% on every buy and sell — under Pump.fun’s 1.25%. Creators take 0.50% of volume, not 0.30%. One Phantom
-            signature. The mint lives on Meteora’s bonding curve, so Phantom Swap can buy it the same way it buys
-            Pump.fun before graduation.
-          </p>
-        )}
-        {!isSwap && (
-          <div className="mt-6">
-            <PadPitch />
-          </div>
-        )}
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(120%_80%_at_50%_-10%,rgba(20,80,40,0.35),transparent_55%)]" />
+      <div className="relative z-10 mx-auto max-w-lg px-4 pt-5 md:max-w-2xl md:pt-8">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-[32px] font-semibold tracking-tight text-white">{isSwap ? "Swap" : "Coins"}</p>
+          {!isSwap ? (
+            <button
+              type="button"
+              onClick={() => {
+                setCreateOpen((v) => !v);
+                setOpen(null);
+              }}
+              className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3.5 py-2 text-[15px] font-medium text-white"
+            >
+              Create
+              <span className="flex h-6 w-6 items-center justify-center rounded-full border border-white/20 text-[13px]">○</span>
+            </button>
+          ) : null}
+        </div>
 
-        <div className={`mt-8 grid gap-5 ${isSwap ? "" : "lg:grid-cols-[minmax(280px,0.72fr)_minmax(0,1.28fr)]"}`}>
-          {!isSwap && (
+        <div className={`mt-6 ${isSwap ? "" : ""}`}>
+          {!isSwap && createOpen && (
           <div className="space-y-5">
-          <section className="panel-bubble overflow-hidden rounded-3xl p-5">
-            <h2 className="font-display text-2xl text-ghost">Create</h2>
+          <section className="overflow-hidden rounded-3xl border border-white/10 bg-black/30 p-5">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-[22px] font-semibold text-white">Create a coin</h2>
+              <button type="button" onClick={() => setCreateOpen(false)} className="text-[15px] text-white/50">
+                Close
+              </button>
+            </div>
             {!owner ? (
               <div className="mt-6 space-y-3">
                 <p className="text-sm text-mute">Connect your wallet to launch.</p>
@@ -971,19 +981,29 @@ export default function LaunchPage() {
           </div>
           )}
 
-          <section className="panel-bubble overflow-hidden rounded-3xl p-4 sm:p-5">
+          {(!createOpen || isSwap) && (
+          <section className="mt-2">
             {isSwap && (
               <div className="mb-4">
                 <SwapWidget owner={owner} title="Swap" />
               </div>
             )}
-            <h2 className="font-display text-2xl text-ghost">{isSwap ? "Market" : "Yours"}</h2>
-            {!isSwap && (
-              <p className="mt-1 text-sm text-mute">
-                Coins you launched. Buy here, or paste the CA into Phantom Swap — Jupiter routes Meteora DBC the same
-                way it routes Pump.fun before graduation.
-              </p>
-            )}
+            <div className="flex gap-5 border-b border-white/10 text-[16px]">
+              <button
+                type="button"
+                onClick={() => setTab("tape")}
+                className={`pb-2 ${tab === "tape" ? "border-b-2 border-white font-medium text-white" : "text-white/40"}`}
+              >
+                Open
+              </button>
+              <button
+                type="button"
+                onClick={() => setTab("mine")}
+                className={`pb-2 ${tab === "mine" ? "border-b-2 border-white font-medium text-white" : "text-white/40"}`}
+              >
+                {isSwap ? "Closed" : "Yours"}
+              </button>
+            </div>
             <div className="mt-3 space-y-2">
               {isSwap && (
                 <BoostRail
@@ -1123,47 +1143,40 @@ export default function LaunchPage() {
               </>
               )}
             </div>
-            <div className="mt-3 max-h-[44rem] space-y-1.5 overflow-y-auto overflow-x-hidden">
-              {rows.length > 0 && isSwap && <TapeHead />}
-              {rows.length === 0 && tapeLoading && isSwap && (
-                <div className="space-y-2">
+            <div className="mt-1 divide-y divide-white/[0.06]">
+              {rows.length === 0 && tapeLoading && (
+                <div className="space-y-2 py-3">
                   {Array.from({ length: 8 }).map((_, i) => (
-                    <div key={i} className="h-[88px] animate-pulse rounded-2xl bg-violet/10" />
+                    <div key={i} className="h-[72px] animate-pulse rounded-2xl bg-white/5" />
                   ))}
                 </div>
               )}
               {rows.length === 0 && !tapeLoading && (
-                <p className="text-sm text-mute">
-                  {!isSwap
-                    ? owner
-                      ? "Nothing launched from this wallet yet."
-                      : "Connect Phantom to manage coins you launched."
-                    : ranked
-                      ? "Nothing in this window ranks yet."
-                      : "No coins in this window passed the gate."}
-                </p>
+                <div className="py-10">
+                  <p className="text-[22px] font-semibold text-white">Get your first coin today!</p>
+                  <p className="mt-2 text-[15px] text-white/45">
+                    {!isSwap
+                      ? owner
+                        ? "Nothing launched from this wallet yet. Hit Create."
+                        : "Connect Phantom, then hit Create."
+                      : "No coins in this window."}
+                  </p>
+                </div>
               )}
               {board.map((row) => (
-                <div key={row.coin.id} className="space-y-2">
-                  {isSwap ? (
-                  <CoinCard
-                    c={row.coin}
-                    solUsd={solUsd}
+                <div key={row.coin.id}>
+                  <PumpCoinRow
+                    name={row.coin.name}
+                    symbol={row.coin.symbol}
+                    image={row.coin.image}
+                    mint={row.coin.mint}
+                    marketCapUsd={row.coin.marketCapUsd}
+                    marketCapSol={row.coin.marketCapSol}
+                    change={row.coin.change24h ?? row.coin.change1h}
                     active={open?.id === row.coin.id}
-                    onOpen={() => setOpen((cur) => (cur?.id === row.coin.id ? null : row.coin))}
-                    rank={ranked ? row.rank : 0}
-                    audit={row.audit ?? null}
-                    vol={ranked ? null : vol}
-                    rockets={row.boost?.rockets}
-                    boostLeft={row.boost?.leftMs}
-                  />
-                  ) : (
-                  <YoursCard
-                    c={row.coin}
-                    active={open?.id === row.coin.id}
+                    badge={row.coin.born ? "✓" : undefined}
                     onOpen={() => setOpen((cur) => (cur?.id === row.coin.id ? null : row.coin))}
                   />
-                  )}
                   {open?.id === row.coin.id && (
                     <CoinDesk
                       open={open}
@@ -1180,6 +1193,7 @@ export default function LaunchPage() {
               ))}
             </div>
           </section>
+          )}
         </div>
 
         {err && (
@@ -1190,239 +1204,6 @@ export default function LaunchPage() {
         {msg && !err && <p className="relative z-10 mt-4 font-mono text-sm text-acid">{msg}</p>}
       </div>
     </main>
-  );
-}
-
-function RankMark({ n }: { n: number }) {
-  if (n === 1) {
-    return (
-      <span className="relative z-[1] inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-acid font-display text-sm text-void shadow-[inset_0_0_10px_rgba(255,255,255,0.35)]">
-        1
-        <span className="pointer-events-none absolute inset-x-0 -top-px text-center text-[8px] leading-none text-void/70">▴</span>
-      </span>
-    );
-  }
-  if (n === 2) {
-    return (
-      <span className="relative z-[1] inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-cyan font-display text-sm text-void shadow-[inset_0_0_10px_rgba(255,255,255,0.28)]">
-        2
-      </span>
-    );
-  }
-  if (n === 3) {
-    return (
-      <span className="relative z-[1] inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-warn font-display text-sm text-void shadow-[inset_0_0_10px_rgba(255,255,255,0.22)]">
-        3
-      </span>
-    );
-  }
-  return (
-    <span className="relative z-[1] inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-violet/40 font-mono text-[11px] text-mute">
-      {n}
-    </span>
-  );
-}
-
-function eliteClass(rank: number, active: boolean) {
-  if (rank === 1) return "border-acid/65 bg-acid/[0.07]";
-  if (rank === 2) return "border-cyan/55 bg-cyan/[0.07]";
-  if (rank === 3) return "border-warn/55 bg-warn/[0.07]";
-  if (active) return "border-acid/40 bg-void/45";
-  return "border-violet/20 bg-void/20 hover:border-acid/35 hover:bg-void/35";
-}
-
-function eliteGlow(rank: number) {
-  if (rank === 1) return "inset 0 0 28px rgba(20,241,149,0.28), inset 0 0 0 1px rgba(20,241,149,0.4)";
-  if (rank === 2) return "inset 0 0 24px rgba(128,234,255,0.22), inset 0 0 0 1px rgba(128,234,255,0.35)";
-  if (rank === 3) return "inset 0 0 24px rgba(255,176,32,0.2), inset 0 0 0 1px rgba(255,176,32,0.32)";
-  return undefined;
-}
-
-function TapeHead() {
-  return (
-    <div className="sticky top-0 z-[2] hidden grid-cols-[minmax(0,1.5fr)_repeat(8,minmax(3.4rem,1fr))] gap-2 border-b border-violet/20 bg-void/90 px-3 py-2 font-mono text-[9px] tracking-[0.14em] text-mute backdrop-blur xl:grid">
-      <span>TOKEN</span>
-      <span>AGE</span>
-      <span>MC</span>
-      <span>LIQ</span>
-      <span>VOL</span>
-      <span>5M</span>
-      <span>1H</span>
-      <span>6H</span>
-      <span>24H</span>
-    </div>
-  );
-}
-
-function Chg({ n }: { n?: number }) {
-  const up = (n || 0) >= 0;
-  return <span className={up ? "text-acid" : "text-blood"}>{fmtPct(n)}</span>;
-}
-
-function StatCell({ k, v, tone }: { k: string; v: ReactNode; tone?: string }) {
-  return (
-    <div className="min-w-0">
-      <div className="font-mono text-[9px] tracking-[0.14em] text-mute">{k}</div>
-      <div className={`stat-num truncate text-[13px] ${tone || "text-ghost"}`}>{v}</div>
-    </div>
-  );
-}
-
-function YoursCard({
-  c,
-  active,
-  onOpen,
-}: {
-  c: Coin;
-  active: boolean;
-  onOpen: () => void;
-}) {
-  const mc = c.marketCapUsd ? fmtUsd(c.marketCapUsd) : `${fmtSol(c.marketCapSol, 1)} SOL`;
-  const progress = Math.max(0, Math.min(100, Math.round((c.progress || 0) * 100)));
-  return (
-    <div
-      className={`rounded-2xl border px-3 py-3 ${active ? "border-acid/50 bg-acid/10" : "border-violet/25 bg-void/40"}`}
-    >
-      <button type="button" onClick={onOpen} className="flex w-full min-w-0 items-center gap-3 text-left">
-        <TokenArt src={c.image} mint={c.mint} label={c.symbol} className="h-12 w-12 shrink-0 rounded-xl" />
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <span className="truncate font-display text-lg text-ghost">{tick(c.symbol) || c.name}</span>
-            <span className="rounded-full bg-acid/15 px-1.5 py-0.5 font-mono text-[9px] text-acid">CURVE</span>
-          </div>
-          <p className="mt-0.5 truncate text-[13px] text-mute">{c.name}</p>
-        </div>
-        <div className="shrink-0 text-right">
-          <div className="stat-num text-sm text-ghost">{mc}</div>
-          <div className="font-mono text-[10px] text-mute">{progress}% to 85 SOL</div>
-        </div>
-      </button>
-      {c.mint ? (
-        <div className="mt-2 flex items-center justify-between gap-2" onClick={(e) => e.stopPropagation()}>
-          <CopyCa ca={c.mint} compact />
-          <button type="button" onClick={onOpen} className="rounded-full bg-acid/15 px-3 py-1 font-mono text-[11px] text-acid">
-            {active ? "Close" : "Buy / sell"}
-          </button>
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function CoinCard({
-  c,
-  solUsd,
-  active,
-  onOpen,
-  rank,
-  audit,
-  vol,
-  rockets,
-  boostLeft,
-}: {
-  c: Coin;
-  solUsd: number;
-  active: boolean;
-  onOpen: () => void;
-  rank: number;
-  audit: LaunchAudit | null;
-  vol: VolWindow | null;
-  rockets?: number;
-  boostLeft?: number;
-}) {
-  const elite = rank > 0 && rank <= 3;
-  const score = audit?.score ?? c.score;
-  const grade = audit?.grade ?? c.grade;
-  const spark = c.spark || [];
-  const up = spark.length >= 2 ? spark[spark.length - 1].c >= spark[0].c : (c.change24h || 0) >= 0;
-  const px = fmtPx((c.priceSol || 0) * (solUsd || 0));
-  const mc = c.marketCapUsd ? fmtUsd(c.marketCapUsd) : `${fmtSol(c.marketCapSol, 1)} SOL`;
-  const liq = c.liqUsd ? fmtUsd(c.liqUsd) : `${fmtSol(c.liqSol || c.realSol, 2)} SOL`;
-  const volN = vol ? volumeIn(c, vol) : c.vol24h || c.vol1h || c.volSol || 0;
-  const volShown = solUsd && volN ? fmtUsd(volN * solUsd) : `${fmtSol(volN, 2)} SOL`;
-  return (
-    <div
-      role="button"
-      tabIndex={0}
-      onClick={onOpen}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          onOpen();
-        }
-      }}
-      className={`relative isolate w-full min-w-0 cursor-pointer overflow-hidden rounded-2xl border px-3 py-2.5 text-left ${eliteClass(rank, active)}`}
-    >
-      {elite && <span aria-hidden className="pointer-events-none absolute inset-0 rounded-2xl" style={{ boxShadow: eliteGlow(rank) }} />}
-      <div className="relative z-[1] grid items-center gap-2 xl:grid-cols-[minmax(0,1.5fr)_repeat(8,minmax(3.4rem,1fr))]">
-        <div className="flex min-w-0 items-center gap-2.5">
-          {rank > 0 && <RankMark n={rank} />}
-          <TokenArt src={c.image} mint={c.mint} label={c.symbol} className="h-11 w-11 shrink-0 rounded-xl" />
-          <div className="min-w-0 flex-1">
-            <div className="flex min-w-0 items-center gap-1.5">
-              <span className="truncate font-display text-base text-ghost">{tick(c.symbol) || c.name}</span>
-              <span className={`shrink-0 rounded-full px-1.5 py-0.5 font-mono text-[9px] ${c.born ? "bg-acid/15 text-acid" : "bg-white/10 text-mute"}`}>
-                {venueLabel(c)}
-              </span>
-              {rockets ? (
-                <span className="shrink-0 rounded-full bg-acid/20 px-1.5 py-0.5 font-mono text-[9px] text-acid">
-                  {rockets >= 500 ? "⚡" : "🚀"} {rockets}
-                  {boostLeft ? ` · ${fmtLeft(boostLeft)}` : ""}
-                </span>
-              ) : null}
-            </div>
-            <div className="mt-0.5 flex items-center gap-2 text-[13px]">
-              <span className="stat-num text-ghost">{px}</span>
-              {c.name && c.name.replace(/^\$+/, "").toUpperCase() !== (c.symbol || "").replace(/^\$+/, "").toUpperCase() ? (
-                <span className="truncate text-mute">{c.name}</span>
-              ) : null}
-            </div>
-          </div>
-        </div>
-        <div className="stat-num hidden text-[13px] text-mute xl:block">{fmtAge(Date.now() - c.createdAt)}</div>
-        <div className="stat-num hidden text-[13px] text-ghost xl:block">{mc}</div>
-        <div className="stat-num hidden text-[13px] text-ghost xl:block">{liq}</div>
-        <div className="stat-num hidden text-[13px] text-ghost xl:block">{volShown}</div>
-        <div className="stat-num hidden text-[13px] xl:block">
-          <Chg n={c.change5m} />
-        </div>
-        <div className="stat-num hidden text-[13px] xl:block">
-          <Chg n={c.change1h} />
-        </div>
-        <div className="stat-num hidden text-[13px] xl:block">
-          <Chg n={c.change6h} />
-        </div>
-        <div className="stat-num hidden text-[13px] xl:block">
-          <Chg n={c.change24h} />
-        </div>
-      </div>
-      <div className="relative z-[1] mt-2 grid grid-cols-4 gap-2 xl:hidden">
-        <StatCell k="AGE" v={fmtAge(Date.now() - c.createdAt)} />
-        <StatCell k="MC" v={mc} />
-        <StatCell k="LIQ" v={liq} />
-        <StatCell k="VOL" v={volShown} />
-        <StatCell k="5M" v={<Chg n={c.change5m} />} />
-        <StatCell k="1H" v={<Chg n={c.change1h} />} />
-        <StatCell k="6H" v={<Chg n={c.change6h} />} />
-        <StatCell k="24H" v={<Chg n={c.change24h} />} />
-      </div>
-      <div className="relative z-[1] mt-2 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 text-[11px] text-mute">
-          <span>{c.txns1h || c.txns || 0} txns</span>
-          {c.unique1h ? <span>{c.unique1h} makers</span> : null}
-          {grade ? (
-            <span
-              className={`rounded-full px-1.5 py-0.5 font-mono ${
-                grade === "S" || grade === "A" ? "bg-acid/20 text-acid" : grade === "B" ? "bg-cyan/20 text-cyan" : "bg-white/10 text-mute"
-              }`}
-            >
-              {grade} {score ?? ""}
-            </span>
-          ) : null}
-        </div>
-        <MiniSpark candles={spark} up={up} />
-      </div>
-    </div>
   );
 }
 

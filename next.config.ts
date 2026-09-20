@@ -32,6 +32,8 @@ const dbcTraceInclude = [
   "./src/vendor/meteora-dbc.cjs",
   "./node_modules/@meteora-ag/dynamic-bonding-curve-sdk/**",
   "./node_modules/@coral-xyz/anchor/**",
+  "./node_modules/@solana/web3.js/**",
+  "./node_modules/@solana/spl-token/**",
   "./node_modules/bn.js/**",
   "./node_modules/decimal.js/**",
 ];
@@ -39,13 +41,20 @@ const dbcTraceInclude = [
 const nextConfig: NextConfig = {
   outputFileTracingRoot: path.join(__dirname),
   poweredByHeader: false,
-  serverExternalPackages: ["@meteora-ag/dynamic-bonding-curve-sdk", "@coral-xyz/anchor"],
+  serverExternalPackages: [
+    "@meteora-ag/dynamic-bonding-curve-sdk",
+    "@coral-xyz/anchor",
+    "@solana/web3.js",
+    "@solana/spl-token",
+    "bn.js",
+    "decimal.js",
+  ],
   outputFileTracingIncludes: {
     "/api/launch": dbcTraceInclude,
     "/api/launch/lookup": dbcTraceInclude,
     "/api/swap/quote": dbcTraceInclude,
     "/api/swap/build": dbcTraceInclude,
-    "/*": ["./src/vendor/meteora-dbc.cjs"],
+    "/*": ["./src/vendor/meteora-dbc.cjs", "./node_modules/@solana/web3.js/**", "./node_modules/@solana/spl-token/**"],
   },
   webpack: (config, { isServer }) => {
     config.resolve.alias = {
