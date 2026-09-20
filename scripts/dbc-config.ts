@@ -33,7 +33,7 @@ async function main() {
   const client = DynamicBondingCurveClient.create(conn, "confirmed");
   const treasury = new (await import("@solana/web3.js")).PublicKey(DEFAULT_TREASURY);
   const tx = await client.partner.createConfig({
-    ...solphiaCurveConfig(),
+    ...(await solphiaCurveConfig()),
     config: config.publicKey,
     feeClaimer: treasury,
     leftoverReceiver: treasury,

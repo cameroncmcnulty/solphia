@@ -1,22 +1,12 @@
 /**
  * Solphia launches on Meteora DBC so Jupiter (and Phantom Swap) can route
  * the bonding curve the same way they route Pump.fun pre-grad.
+ *
+ * The SDK is loaded at runtime (webpackIgnore) so Vercel never webpacks its
+ * native .node addons — that is what killed the last three deploys.
  */
 import BN from "bn.js";
 import { PublicKey, Transaction } from "@solana/web3.js";
-import {
-  ActivationType,
-  BaseFeeMode,
-  CollectFeeMode,
-  DynamicBondingCurveClient,
-  MigrationFeeOption,
-  MigrationOption,
-  SwapMode,
-  TokenAuthorityOption,
-  TokenDecimal,
-  TokenType,
-  buildCurveWithMarketCap,
-} from "@meteora-ag/dynamic-bonding-curve-sdk";
 import { connection } from "../solana/connection";
 import { encodeTx } from "../token/mint";
 import { DBC_CONFIG, dbcEnabled } from "./dbcIds";
@@ -24,23 +14,29 @@ import { MIN_TRADE_SOL } from "./curve";
 
 export { dbcEnabled };
 
-function client() {
+async function sdk() {
+  return import(/* webpackIgnore: true */ "@meteora-ag/dynamic-bonding-curve-sdk");
+}
+
+async function client() {
+  const { DynamicBondingCurveClient } = await sdk();
   return DynamicBondingCurveClient.create(connection(), "confirmed");
 }
 
-export function solphiaCurveConfig() {
-  return buildCurveWithMarketCap({
+export async function solphiaCurveConfig() {
+  const m = await sdk();
+  return m.buildCurveWithMarketCap({
     token: {
-      tokenType: TokenType.SPLToken,
-      tokenBaseDecimal: TokenDecimal.SIX,
-      tokenQuoteDecimal: TokenDecimal.NINE,
-      tokenAuthorityOption: TokenAuthorityOption.Immutable,
+      tokenType: m.TokenType.SPLToken,
+      tokenBaseDecimal: m.TokenDecimal.SIX,
+      tokenQuoteDecimal: m.TokenDecimal.NINE,
+      tokenAuthorityOption: m.TokenAuthorityOption.Immutable,
       totalTokenSupply: 1_000_000_000,
       leftover: 0,
     },
     fee: {
       baseFeeParams: {
-        baseFeeMode: BaseFeeMode.FeeSchedulerLinear,
+        baseFeeMode: m.BaseFeeMode.FeeSchedulerLinear,
         feeSchedulerParam: {
           startingFeeBps: 100,
           endingFeeBps: 100,
@@ -49,14 +45,14 @@ export function solphiaCurveConfig() {
         },
       },
       dynamicFeeEnabled: false,
-      collectFeeMode: CollectFeeMode.QuoteToken,
+      collectFeeMode: m.CollectFeeMode.QuoteToken,
       creatorTradingFeePercentage: 50,
       poolCreationFee: 0,
       enableFirstSwapWithMinFee: false,
     },
     migration: {
-      migrationOption: MigrationOption.MET_DAMM_V2,
-      migrationFeeOption: MigrationFeeOption.FixedBps100,
+      migrationOption: m.MigrationOption.MET_DAMM_V2,
+      migrationFeeOption: m.MigrationFeeOption.FixedBps100,
       migrationFee: { feePercentage: 0, creatorFeePercentage: 0 },
     },
     liquidityDistribution: {
@@ -72,7 +68,7 @@ export function solphiaCurveConfig() {
       totalVestingDuration: 0,
       cliffDurationFromMigrationTime: 0,
     },
-    activationType: ActivationType.Timestamp,
+    activationType: m.ActivationType.Timestamp,
     initialMarketCap: 4_000,
     migrationMarketCap: 69_000,
   });
@@ -88,7 +84,7 @@ async function readyTx(tx: Transaction, payer: PublicKey): Promise<Transaction> 
 export async function dbcPoolByMint(mint: string) {
   if (!dbcEnabled()) return null;
   try {
-    return await client().state.getPoolByBaseMint(mint);
+    return await (await client()).state.getPoolByBaseMint(mint);
   } catch {
     return null;
   }
@@ -124,7 +120,7 @@ export async function buildDbcLaunchTx(opts: {
           referralTokenAccount: null,
         }
       : undefined;
-  const raw = await client().creator.createPoolWithFirstBuy({
+  const raw = await (await client()).creator.createPoolWithFirstBuy({
     createPoolParam: {
       name: opts.name.slice(0, 32),
       symbol: opts.symbol.slice(0, 10),
@@ -152,7 +148,8 @@ export async function quoteDbcTrade(opts: {
   sol?: number;
   tokens?: number;
 }): Promise<{ ok: true; tokensOut?: number; solOut?: number; feeSol: number } | { ok: false; error: string }> {
-  const dbc = client();
+  const { SwapMode } = await sdk();
+  const dbc = await client();
   const row = await dbc.state.getPoolByBaseMint(opts.mint);
   if (!row) return { ok: false, error: "curve_missing" };
   const vp = asPool(row);
@@ -188,7 +185,9 @@ export async function buildDbcTradeTx(opts: {
   sol?: number;
   tokens?: number;
 }): Promise<{ ok: true; transaction: string; tokensOut?: number; solOut?: number; feeSol: number } | { ok: false; error: string }> {
-  const row = await client().state.getPoolByBaseMint(opts.mint);
+  const { SwapMode } = await sdk();
+  const dbc = await client();
+  const row = await dbc.state.getPoolByBaseMint(opts.mint);
   if (!row) return { ok: false, error: "curve_missing" };
   const quoted = await quoteDbcTrade(opts);
   if (!quoted.ok) return quoted;
@@ -200,7 +199,7 @@ export async function buildDbcTradeTx(opts: {
   const minOut = buy
     ? new BN(Math.floor((quoted.tokensOut || 0) * 1e6 * 0.99))
     : new BN(Math.floor((quoted.solOut || 0) * 1e9 * 0.99));
-  const raw = await client().pool.swap2({
+  const raw = await dbc.pool.swap2({
     owner,
     pool: row.publicKey,
     swapBaseForQuote: !buy,
