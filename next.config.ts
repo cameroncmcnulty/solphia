@@ -27,9 +27,30 @@ const securityHeaders = [
   },
 ];
 
+const dbcTraceInclude = [
+  "./src/vendor/meteora-dbc.cjs",
+  "./node_modules/@coral-xyz/anchor/**",
+  "./node_modules/bn.js/**",
+  "./node_modules/decimal.js/**",
+];
+
 const nextConfig: NextConfig = {
   outputFileTracingRoot: path.join(__dirname),
   poweredByHeader: false,
+  outputFileTracingIncludes: {
+    "/api/launch": dbcTraceInclude,
+    "/api/launch/lookup": dbcTraceInclude,
+    "/api/swap/quote": dbcTraceInclude,
+    "/api/swap/build": dbcTraceInclude,
+  },
+  webpack: (config) => {
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      bufferutil: false,
+      "utf-8-validate": false,
+    };
+    return config;
+  },
   async redirects() {
     return [
       { source: "/subscribe", destination: "/pricing", permanent: false },

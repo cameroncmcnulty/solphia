@@ -17,5 +17,5 @@
     "paths": { "@/*": ["./src/*"] }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules", "scripts", "src/lib/launch/dbc.ts", "src/vendor"]
+  "exclude": ["node_modules", "scripts", "src/vendor"]
 }

@@ -580,8 +580,8 @@ export default function LaunchPage() {
       setBusy(false);
       setMsg(
         devBuy > 0
-          ? `Live on the Solphia curve. CA ${mintPk}. First buy is in this wallet. Buy more on this page — Phantom Swap will not quote this mint yet.`
-          : `Live on the Solphia curve. CA ${mintPk}. Supply sits on the curve. Buy on this page — Phantom Swap will not quote this mint yet.`,
+          ? `Live on Meteora DBC. CA ${mintPk}. First buy is in this wallet. Checking Phantom Swap…`
+          : `Live on Meteora DBC. CA ${mintPk}. Supply sits on the curve. Checking Phantom Swap…`,
       );
       const routed = await waitForPhantomRoute(mintPk);
       setMsg(
@@ -725,7 +725,8 @@ export default function LaunchPage() {
         {!isSwap && (
           <p className="mt-3 max-w-2xl text-sm text-mute">
             1.00% on every buy and sell — under Pump.fun’s 1.25%. Creators take 0.50% of volume, not 0.30%. One Phantom
-            signature. Buy and sell on this page. Phantom Swap will not quote this curve until the Meteora deploy is live.
+            signature. The mint lives on Meteora’s bonding curve, so Phantom Swap can buy it the same way it buys
+            Pump.fun before graduation.
           </p>
         )}
         {!isSwap && (
@@ -990,7 +991,8 @@ export default function LaunchPage() {
             <h2 className="font-display text-2xl text-ghost">{isSwap ? "Market" : "Yours"}</h2>
             {!isSwap && (
               <p className="mt-1 text-sm text-mute">
-                Coins you launched. Buy and sell on this page. Phantom Swap will not see a pair until the Meteora curve is live.
+                Coins you launched. Buy here, or paste the CA into Phantom Swap — Jupiter routes Meteora DBC the same
+                way it routes Pump.fun before graduation.
               </p>
             )}
             <div className="mt-3 space-y-2">
@@ -1619,7 +1621,7 @@ function CoinDesk({
 
         <SwapShell
           title={`Trade ${tick(open.symbol)}`}
-          subtitle="Bonding curve on Solphia. Buy and sell here. Phantom Swap will not quote this mint until Meteora is live."
+          subtitle="Bonding curve on Meteora DBC. Jupiter and Phantom Swap can route it like Pump.fun pre-grad."
         >
           {!padTrade ? (
             <MarketSwap open={open} owner={owner} sol={sol} setSol={setSol} solUsd={solUsd} />
