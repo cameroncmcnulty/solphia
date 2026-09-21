@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Rocket } from "lucide-react";
+import { Keypair } from "@solana/web3.js";
 import { usePathname } from "next/navigation";
 import { CopyCa } from "@/components/CopyCa";
 
@@ -486,7 +487,7 @@ export default function LaunchPage() {
     setErr("");
     try {
       const useDbc = dbcEnabled();
-      const mintKp = useDbc ? (await import("@solana/web3.js")).Keypair.generate() : null;
+      const mintKp = useDbc ? Keypair.generate() : null;
       const nonce = useDbc ? null : newMintNonce();
       const mintPk = mintKp ? mintKp.publicKey.toBase58() : mintPda(owner, nonce!).toBase58();
       setMsg("Building the Solphia curve…");
@@ -612,10 +613,7 @@ export default function LaunchPage() {
       const timed = e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError");
       if (!createErr.banner) {
         const raw = e instanceof Error ? e.message : "launch failed";
-        const mapped = /expected pattern|not correctly encoded|atob|Invalid character|Failed to execute/i.test(raw)
-          ? "Could not read the launch transaction. Try again."
-          : raw;
-        setErr(timed ? "Launch timed out building the curve. Try again." : mapped);
+        setErr(timed ? "Launch timed out building the curve. Try again." : raw);
       }
     } finally {
       setBusy(false);

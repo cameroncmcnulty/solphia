@@ -136,23 +136,39 @@ export async function signLegacyTx(tx: Transaction, extra?: Keypair): Promise<st
   return signPhantomAndSend(toB64(unsigned), extra);
 }
 
+function toBytes(ser: Uint8Array | number[]): Uint8Array {
+  return ser instanceof Uint8Array ? ser : Uint8Array.from(ser);
+}
+
+function attachExtraAndSerialize(signed: unknown, extra?: Keypair): Uint8Array {
+  if (!signed || typeof signed !== "object") {
+    throw new Error("Phantom did not return a transaction.");
+  }
+  const s = signed as Transaction & VersionedTransaction;
+  if (typeof s.partialSign === "function" && Array.isArray((s as Transaction).instructions)) {
+    if (extra) s.partialSign(extra);
+    return toBytes((s as Transaction).serialize());
+  }
+  if (extra && typeof s.sign === "function") {
+    s.sign([extra]);
+  }
+  if (typeof s.serialize !== "function") {
+    throw new Error("Phantom returned an unusable transaction.");
+  }
+  return toBytes(s.serialize());
+}
+
 export async function signPhantomAndSend(transactionB64: string, extra?: Keypair): Promise<string> {
   const provider = phantomProvider();
   if (!provider) throw new Error("Open this page in Phantom (browser or in-app).");
   const raw = b64ToBytes(asTxB64(transactionB64));
-  if (raw.length > 0 && (raw[0] & 0x80) !== 0) {
-    const vtx = VersionedTransaction.deserialize(raw);
-    const signed = (await provider.signTransaction(vtx)) as VersionedTransaction;
-    if (extra) signed.sign([extra]);
-    return sendSignedB64(toB64(signed.serialize()));
-  }
-  const tx = Transaction.from(raw);
-  const signed = (await provider.signTransaction(tx)) as Transaction;
-  if (typeof signed.partialSign !== "function") {
-    throw new Error("Phantom did not return a signable transaction.");
-  }
-  if (extra) signed.partialSign(extra);
-  return sendSignedB64(toB64(signed.serialize()));
+  const unsigned =
+    raw.length > 0 && (raw[0] & 0x80) !== 0
+      ? VersionedTransaction.deserialize(raw)
+      : Transaction.from(raw);
+  const signed = await provider.signTransaction(unsigned as Transaction);
+  const bytes = attachExtraAndSerialize(signed, extra);
+  return sendSignedB64(toB64(bytes));
 }
 
 async function sendSignedB64(b64: string): Promise<string> {
@@ -161,9 +177,16 @@ async function sendSignedB64(b64: string): Promise<string> {
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ transaction: b64 }),
   });
-  const j = await r.json();
-  if (!r.ok) throw new Error(j.error || "send failed");
-  return j.signature as string;
+  const text = await r.text();
+  let j: { error?: string; signature?: string } = {};
+  try {
+    j = JSON.parse(text) as { error?: string; signature?: string };
+  } catch {
+    throw new Error("Broadcast failed (" + r.status + "). Try again.");
+  }
+  if (!r.ok) throw new Error(typeof j.error === "string" ? j.error : "send failed");
+  if (typeof j.signature !== "string" || !j.signature) throw new Error("Broadcast did not return a signature.");
+  return j.signature;
 }
 
 /** @deprecated pad launches are one-signer PDAs. Extra mint signer only for admin $SPHA. */
