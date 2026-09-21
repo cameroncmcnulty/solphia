@@ -510,7 +510,13 @@ export default function LaunchPage() {
         }),
         signal: AbortSignal.timeout(28_000),
       });
-      const pj = await prep.json();
+      const prepText = await prep.text();
+      let pj: Record<string, unknown> = {};
+      try {
+        pj = JSON.parse(prepText) as Record<string, unknown>;
+      } catch {
+        throw new Error("Launch API is down (" + prep.status + "). Wait a few seconds and try again.");
+      }
       let packed = "";
       try {
         packed = asTxB64(pj.tx ?? (Array.isArray(pj.txs) ? pj.txs[0] : ""));
@@ -519,7 +525,10 @@ export default function LaunchPage() {
       }
       if (!prep.ok || !packed) {
         const code = typeof pj.error === "string" ? pj.error : "";
-        const message = pj.message || launchError(code) || "Could not build the launch.";
+        const message =
+          (typeof pj.message === "string" && pj.message) ||
+          launchError(code) ||
+          "Could not build the launch.";
         const field = launchCodeToField(code);
         if (field !== "form") createErr.fail({ [field]: message } as Partial<Record<LaunchField, string>>, message);
         else createErr.fail({}, message);

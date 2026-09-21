@@ -55,14 +55,7 @@ const dbcTraceInclude = [
 const nextConfig: NextConfig = {
   outputFileTracingRoot: path.join(__dirname),
   poweredByHeader: false,
-  serverExternalPackages: [
-    "@meteora-ag/dynamic-bonding-curve-sdk",
-    "@coral-xyz/anchor",
-    "@solana/web3.js",
-    "@solana/spl-token",
-    "bn.js",
-    "decimal.js",
-  ],
+  serverExternalPackages: ["@meteora-ag/dynamic-bonding-curve-sdk", "@coral-xyz/anchor"],
   outputFileTracingIncludes: {
     "/api/launch": dbcTraceInclude,
     "/api/launch/lookup": dbcTraceInclude,

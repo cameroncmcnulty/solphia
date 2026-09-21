@@ -260,6 +260,15 @@ async function confirmMint(b: LaunchBody, solUsd: number) {
 }
 
 export async function GET(req: NextRequest) {
+  try {
+    return await getLaunch(req);
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "launch get failed";
+    return NextResponse.json({ error: "failed", message }, { status: 500 });
+  }
+}
+
+async function getLaunch(req: NextRequest) {
   const id = req.nextUrl.searchParams.get("id") || "";
   const viewer = req.nextUrl.searchParams.get("pubkey") || "";
   const s = await withLaunch((st) => st, false);
@@ -285,6 +294,15 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  try {
+    return await postLaunch(req);
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "launch post failed";
+    return NextResponse.json({ error: "failed", message }, { status: 500 });
+  }
+}
+
+async function postLaunch(req: NextRequest) {
   if (!rateLimit(clientIp(req) + ":launch", 20, 60_000)) {
     return fail("rate_limited", 429);
   }
