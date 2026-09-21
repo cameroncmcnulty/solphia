@@ -50,6 +50,7 @@ const dbcTraceInclude = [
   "./node_modules/node-fetch/**",
   "./node_modules/agentkeepalive/**",
   "./node_modules/fast-stable-stringify/**",
+  "./node_modules/uuid/**",
 ];
 
 const nextConfig: NextConfig = {
@@ -61,7 +62,10 @@ const nextConfig: NextConfig = {
     "/api/launch/lookup": dbcTraceInclude,
     "/api/swap/quote": dbcTraceInclude,
     "/api/swap/build": dbcTraceInclude,
-    "/*": ["./src/vendor/meteora-dbc.cjs", "./node_modules/@solana/web3.js/**", "./node_modules/@solana/spl-token/**"],
+    "/*": ["./src/vendor/meteora-dbc.cjs", "./node_modules/@solana/web3.js/**", "./node_modules/@solana/spl-token/**", "./node_modules/uuid/**"],
+  },
+  outputFileTracingExcludes: {
+    "*": ["./node_modules/rpc-websockets/node_modules/uuid/**"],
   },
   webpack: (config, { isServer }) => {
     config.resolve.alias = {
