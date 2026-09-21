@@ -1,28 +1,30 @@
 /**
- * Solphia launches on Meteora DBC so Jupiter (and Phantom Swap) can route
- * the bonding curve the same way they route Pump.fun pre-grad.
+ * Option B: launch on Meteora Dynamic Bonding Curve.
+ * Jupiter Instant Routing indexes this program, so Phantom Swap can buy pre-grad.
+ * Static import + serverExternalPackages so Vercel traces the real node_modules tree
+ * (webpack Function-import hid those requires and Phantom never saw a pair).
  */
+import * as DbcMod from "@meteora-ag/dynamic-bonding-curve-sdk";
 import BN from "bn.js";
 import { PublicKey, Transaction } from "@solana/web3.js";
 import { connection } from "../solana/connection";
 import { encodeTx } from "../token/mint";
 import { DBC_CONFIG, dbcEnabled } from "./dbcIds";
 import { MIN_TRADE_SOL } from "./curve";
-import { dbcSdk } from "./dbcSdk";
 
 export { dbcEnabled };
 
-async function sdk(): Promise<any> {
-  return await dbcSdk();
+function sdk(): any {
+  const m = DbcMod as any;
+  return m.DynamicBondingCurveClient ? m : m.default;
 }
 
-async function client() {
-  const { DynamicBondingCurveClient } = await sdk();
-  return DynamicBondingCurveClient.create(connection(), "confirmed");
+function client() {
+  return sdk().DynamicBondingCurveClient.create(connection(), "confirmed");
 }
 
 export async function solphiaCurveConfig() {
-  const m = await sdk();
+  const m = sdk();
   return m.buildCurveWithMarketCap({
     token: {
       tokenType: m.TokenType.SPLToken,
@@ -82,7 +84,7 @@ async function readyTx(tx: Transaction, payer: PublicKey): Promise<Transaction> 
 export async function dbcPoolByMint(mint: string) {
   if (!dbcEnabled()) return null;
   try {
-    return await (await client()).state.getPoolByBaseMint(mint);
+    return await client().state.getPoolByBaseMint(mint);
   } catch {
     return null;
   }
@@ -118,7 +120,7 @@ export async function buildDbcLaunchTx(opts: {
           referralTokenAccount: null,
         }
       : undefined;
-  const raw = await (await client()).creator.createPoolWithFirstBuy({
+  const raw = await client().creator.createPoolWithFirstBuy({
     createPoolParam: {
       name: opts.name.slice(0, 32),
       symbol: opts.symbol.slice(0, 10),
@@ -146,8 +148,8 @@ export async function quoteDbcTrade(opts: {
   sol?: number;
   tokens?: number;
 }): Promise<{ ok: true; tokensOut?: number; solOut?: number; feeSol: number } | { ok: false; error: string }> {
-  const { SwapMode } = await sdk();
-  const dbc = await client();
+  const { SwapMode } = sdk();
+  const dbc = client();
   const row = await dbc.state.getPoolByBaseMint(opts.mint);
   if (!row) return { ok: false, error: "curve_missing" };
   const vp = asPool(row);
@@ -183,8 +185,8 @@ export async function buildDbcTradeTx(opts: {
   sol?: number;
   tokens?: number;
 }): Promise<{ ok: true; transaction: string; tokensOut?: number; solOut?: number; feeSol: number } | { ok: false; error: string }> {
-  const { SwapMode } = await sdk();
-  const dbc = await client();
+  const { SwapMode } = sdk();
+  const dbc = client();
   const row = await dbc.state.getPoolByBaseMint(opts.mint);
   if (!row) return { ok: false, error: "curve_missing" };
   const quoted = await quoteDbcTrade(opts);

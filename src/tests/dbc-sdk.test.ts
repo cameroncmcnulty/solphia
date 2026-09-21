@@ -3,7 +3,9 @@ import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { dbcClientFiles, loadDbcSdk } from "../lib/launch/dbcSdk";
+import { dbcEnabled } from "../lib/launch/dbcIds";
+import { loadDbcSdk } from "../lib/launch/dbcSdk";
+import * as DbcMod from "@meteora-ag/dynamic-bonding-curve-sdk";
 
 describe("meteora dbc client", () => {
   it("keeps the vendored CJS and the npm dist on disk", () => {
@@ -11,11 +13,10 @@ describe("meteora dbc client", () => {
     assert.ok(existsSync(path.join(process.cwd(), "node_modules/@meteora-ag/dynamic-bonding-curve-sdk/dist/index.cjs")));
   });
 
-  it("lists real files first so Vercel tracing has something to copy", () => {
-    const files = dbcClientFiles();
-    assert.ok(files.some((f) => /dist[\\/]index\.cjs$/.test(f)));
-    assert.ok(files.some((f) => /meteora-dbc\.cjs$/.test(f)));
-    assert.ok(files.every((f) => path.isAbsolute(f)));
+  it("uses the Meteora SDK as a real package (Option B)", () => {
+    const m = (DbcMod as any).DynamicBondingCurveClient ? DbcMod : (DbcMod as any).default;
+    assert.equal(typeof m.DynamicBondingCurveClient.create, "function");
+    assert.equal(dbcEnabled(), true);
   });
 
   it("loads DynamicBondingCurveClient via native import of the CJS file", async () => {
@@ -36,6 +37,15 @@ describe("meteora dbc client", () => {
     const mod = await new Function("u", "return import(u)")(pathToFileURL(file).href);
     const m = mod.default ?? mod;
     assert.equal(typeof m.DynamicBondingCurveClient.create, "function");
+  });
+
+  it("resolves @solana/web3.js from the SDK CJS the way Vercel require() will", () => {
+    const { createRequire } = require("node:module") as typeof import("node:module");
+    const req = createRequire(
+      path.join(process.cwd(), "node_modules/@meteora-ag/dynamic-bonding-curve-sdk/dist/index.cjs"),
+    );
+    const resolved = req.resolve("@solana/web3.js");
+    assert.ok(resolved.includes("web3.js"));
   });
 
   it("can construct a DBC client (the call launch actually makes)", async () => {

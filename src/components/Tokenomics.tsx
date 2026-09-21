@@ -34,7 +34,7 @@ export function Tokenomics({ compact = false }: { compact?: boolean }) {
         {SPHA_SLICES.map((s) => (
           <div key={s.id} className="rounded-2xl border border-violet/15 px-4 py-3">
             <div className="flex items-baseline justify-between gap-2">
-              <div className="text-[17px] font-semibold tracking-tight text-white">{s.label}</div>
+              <div className="font-display text-xl text-ghost">{s.label}</div>
               <div className="font-mono text-sm text-acid">{s.pct}</div>
             </div>
             <div className="mt-1 font-mono text-[11px] text-mute">{tok(sphaTokensFor(s.bps, SPHA_SUPPLY))} tokens</div>

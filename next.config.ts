@@ -34,8 +34,22 @@ const dbcTraceInclude = [
   "./node_modules/@coral-xyz/anchor/**",
   "./node_modules/@solana/web3.js/**",
   "./node_modules/@solana/spl-token/**",
+  "./node_modules/@solana/buffer-layout/**",
+  "./node_modules/@solana/codecs-numbers/**",
+  "./node_modules/@noble/curves/**",
+  "./node_modules/@noble/hashes/**",
+  "./node_modules/@babel/runtime/**",
   "./node_modules/bn.js/**",
   "./node_modules/decimal.js/**",
+  "./node_modules/bs58/**",
+  "./node_modules/borsh/**",
+  "./node_modules/buffer/**",
+  "./node_modules/rpc-websockets/**",
+  "./node_modules/superstruct/**",
+  "./node_modules/jayson/**",
+  "./node_modules/node-fetch/**",
+  "./node_modules/agentkeepalive/**",
+  "./node_modules/fast-stable-stringify/**",
 ];
 
 const nextConfig: NextConfig = {
