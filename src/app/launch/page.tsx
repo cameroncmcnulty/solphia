@@ -265,6 +265,7 @@ export default function LaunchPage() {
   const [caErr, setCaErr] = useState("");
   const [lookedMint, setLookedMint] = useState<string | null>(null);
   const bootMint = useRef(false);
+  const [snapAt, setSnapAt] = useState(0);
   const fileRef = useRef<HTMLInputElement>(null);
   const cropUrlRef = useRef<string>("");
   const devPct = buySupplyPct(emptyCurve(), devBuy);
@@ -274,6 +275,21 @@ export default function LaunchPage() {
       if (cropUrlRef.current) URL.revokeObjectURL(cropUrlRef.current);
     };
   }, []);
+
+  useEffect(() => {
+    if (!open || !snapAt) return;
+    const id = `desk-${open.id}`;
+    let n = 0;
+    const go = () => {
+      const el = document.getElementById(id);
+      if (el) {
+        el.scrollIntoView({ behavior: "auto", block: "start" });
+        return;
+      }
+      if (n++ < 16) requestAnimationFrame(go);
+    };
+    requestAnimationFrame(go);
+  }, [open?.id, snapAt]);
 
   async function refreshPad() {
     const q = owner ? `pubkey=${encodeURIComponent(owner)}` : "";
@@ -1021,6 +1037,7 @@ export default function LaunchPage() {
                     if (hit) {
                       setOpen(hit);
                       setLookedMint(hit.mint || hit.id);
+                      setSnapAt(Date.now());
                     }
                   }}
                 />
@@ -1175,19 +1192,27 @@ export default function LaunchPage() {
                     change={row.coin.change24h ?? row.coin.change1h}
                     active={open?.id === row.coin.id}
                     badge={row.coin.born ? "✓" : undefined}
-                    onOpen={() => setOpen((cur) => (cur?.id === row.coin.id ? null : row.coin))}
+                    onOpen={() => {
+                      setOpen((cur) => {
+                        if (cur?.id === row.coin.id) return null;
+                        setSnapAt(Date.now());
+                        return row.coin;
+                      });
+                    }}
                   />
                   {open?.id === row.coin.id && (
-                    <CoinDesk
-                      open={open}
-                      owner={owner}
-                      sol={sol}
-                      setSol={setSol}
-                      solUsd={solUsd}
-                      busy={busy}
-                      onClose={() => setOpen(null)}
-                      onAct={act}
-                    />
+                    <div id={`desk-${open.id}`} className="scroll-mt-[4.75rem]">
+                      <CoinDesk
+                        open={open}
+                        owner={owner}
+                        sol={sol}
+                        setSol={setSol}
+                        solUsd={solUsd}
+                        busy={busy}
+                        onClose={() => setOpen(null)}
+                        onAct={act}
+                      />
+                    </div>
                   )}
                 </div>
               ))}
@@ -1301,7 +1326,7 @@ function CoinDesk({
           : "";
 
   return (
-    <section className="panel-bubble flex min-w-0 flex-col gap-5 overflow-x-hidden rounded-3xl p-3 sm:p-5">
+    <section className="pump-card mt-2 flex min-w-0 flex-col gap-5 overflow-x-hidden">
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
           <TokenArt src={open.image} mint={open.mint} label={open.symbol} eager className="h-14 w-14 rounded-2xl" />

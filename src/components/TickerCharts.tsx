@@ -43,7 +43,7 @@ export function TickerCharts() {
       <div className="mb-4 flex items-center justify-between gap-3">
         <div>
           <p className="text-base text-acid">Live tape</p>
-          <h2 className="mt-1 font-display text-3xl text-ghost sm:text-4xl">SOL · S&P · Nasdaq · Gold</h2>
+          <h2 className="mt-1 text-[28px] font-semibold tracking-tight text-white sm:text-4xl">SOL · S&P · Nasdaq · Gold</h2>
         </div>
         <div className="flex shrink-0 items-center gap-2 font-mono text-[11px] tracking-[0.18em] text-violet">
           <span className={`h-2 w-2 rounded-full ${live ? "bg-acid shadow-[0_0_10px_#14F195]" : "bg-mute"}`} />
@@ -58,7 +58,7 @@ export function TickerCharts() {
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="font-mono text-[11px] tracking-[0.18em] text-mute">{t.symbol}</div>
-                  <div className="truncate font-display text-xl text-ghost">{t.name}</div>
+                  <div className="truncate text-[17px] font-semibold tracking-tight text-white">{t.name}</div>
                 </div>
                 <div className="shrink-0 text-right">
                   <div className={`stat-num text-xl ${up ? "text-acid" : "text-blood"}`}>

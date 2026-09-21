@@ -59,9 +59,9 @@ export function SphaRoadmap() {
   return (
     <section className="relative">
       <Reveal>
-        <p className="font-mono text-[11px] tracking-[0.28em] text-acid">CHAIN · ROADMAP</p>
-        <h2 className="mt-2 font-display text-4xl text-ghost sm:text-5xl">The next blocks.</h2>
-        <p className="mt-3 max-w-2xl text-base text-mute sm:text-lg">
+        <p className="text-[13px] font-medium text-[#14f195]">Roadmap</p>
+        <h2 className="pump-h1 mt-2">The next blocks.</h2>
+        <p className="pump-p mt-3 max-w-2xl">
           Each quarter is a block. We ship, then we mint the next one.
         </p>
       </Reveal>

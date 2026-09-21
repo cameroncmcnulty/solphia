@@ -2,9 +2,10 @@ import Link from "next/link";
 
 export default function LegalPage() {
   return (
-    <main className="mx-auto max-w-2xl px-4 pb-24">
-      <h1 className="font-display text-4xl text-ghost">Legal</h1>
-      <p className="mt-3 text-sm text-mute">Last updated 16 September 2026. Solphia is a non-custodial Solana interface. It is not a bank, broker, or exchange.</p>
+    <main className="pump-shell">
+      <div className="pump-wrap">
+      <h1 className="pump-h1">Legal</h1>
+      <p className="pump-p mt-3">Last updated 16 September 2026. Solphia is a non-custodial Solana interface. It is not a bank, broker, or exchange.</p>
 
       <h2 id="terms" className="mt-12 scroll-mt-24 font-display text-2xl text-ghost">
         Terms of Service
@@ -64,6 +65,7 @@ export default function LegalPage() {
             Back to pricing
           </Link>
         </p>
+      </div>
       </div>
     </main>
   );

@@ -46,7 +46,7 @@ export function CircleHangout({
           <CartoonPfp seed={seed} src={pfpSrc} className="h-12 w-12" />
           <div>
             <div className="font-mono text-[10px] tracking-[0.22em] text-acid">FOUNDERS CIRCLE</div>
-            <h1 className="font-display text-3xl text-ghost">You&apos;re in</h1>
+            <h1 className="pump-h1">You&apos;re in</h1>
           </div>
         </div>
         <p className="mt-2 text-sm text-mute">
@@ -100,7 +100,7 @@ function JobsBoard({ jobs }: { jobs: HangoutJob[] }) {
   return (
     <section className="rounded-3xl border border-violet/20 bg-void/30 p-5">
       <div className="font-mono text-[10px] tracking-[0.22em] text-mute">JOB LISTINGS</div>
-      <h2 className="mt-1 font-display text-2xl text-ghost">Work with Solphia</h2>
+      <h2 className="pump-h2 mt-1">Work with Solphia</h2>
       {jobs.length === 0 ? (
         <p className="mt-2 max-w-xl text-sm leading-relaxed text-mute">
           This is where we&apos;ll list any opportunities that come up to work with Solphia — roles, contracts, and

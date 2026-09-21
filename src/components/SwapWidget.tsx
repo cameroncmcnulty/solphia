@@ -18,11 +18,11 @@ export function SwapShell({
   children: ReactNode;
 }) {
   return (
-    <div className="overflow-hidden rounded-[1.7rem] border border-acid/25 bg-gradient-to-b from-acid/[0.14] via-[#12081c] to-violet/[0.16] p-4 shadow-[0_18px_50px_rgba(20,241,149,0.12)]">
+    <div className="pump-card">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="font-display text-xl text-ghost sm:text-2xl">{title}</div>
-          <p className="mt-1 text-[13px] leading-snug text-mute">{subtitle}</p>
+          <div className="text-[22px] font-semibold tracking-tight text-white">{title}</div>
+          <p className="mt-1 text-[15px] leading-snug text-white/45">{subtitle}</p>
         </div>
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-acid/15 text-acid">
           <ArrowDownUp className="h-5 w-5" />

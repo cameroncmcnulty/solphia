@@ -35,20 +35,19 @@ export default function TokenPage() {
   }, []);
 
   return (
-    <main className="relative min-h-screen overflow-x-hidden pb-24">
-      <SolphiaConstellation />
-      <div className="relative z-10 mx-auto max-w-6xl px-4 pt-8 md:px-8 md:pt-14">
-        <p className="font-mono text-[11px] tracking-[0.28em] text-acid">PROTOCOL TOKEN</p>
+    <main className="pump-shell">
+      <div className="pump-wrap md:!max-w-3xl">
+        <p className="text-[13px] font-medium text-[#14f195]">Protocol token</p>
         <div className="mt-3 flex items-center gap-4">
           {art ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={art} alt="" className="h-14 w-14 rounded-2xl object-cover sm:h-16 sm:w-16" />
+            <img src={art} alt="" className="h-14 w-14 rounded-[18px] object-cover sm:h-16 sm:w-16" />
           ) : (
             <SphaMark className="h-14 w-14 sm:h-16 sm:w-16" />
           )}
-          <h1 className="font-display text-5xl text-ghost sm:text-7xl">{tick(t.symbol)}</h1>
+          <h1 className="pump-h1 text-[40px] sm:text-6xl">{tick(t.symbol)}</h1>
         </div>
-        <p className="mt-5 max-w-2xl text-lg text-mute sm:text-xl">
+        <p className="pump-p mt-4 max-w-2xl sm:text-[17px]">
           {blurb || `Swaps fund listings, buybacks, and ${tick(t.symbol)} burns.`}
         </p>
 
@@ -108,18 +107,18 @@ export default function TokenPage() {
 
 function Story({ t, d }: { t: string; d: string }) {
   return (
-    <div className="card-lift panel-bubble rounded-3xl p-6">
-      <div className="font-display text-2xl text-ghost">{t}</div>
-      <p className="mt-3 text-sm leading-relaxed text-mute sm:text-base">{d}</p>
+    <div className="border-b border-white/[0.06] py-4 sm:rounded-[22px] sm:border sm:border-white/10 sm:bg-black/30 sm:p-6">
+      <div className="text-[17px] font-semibold tracking-tight text-white">{t}</div>
+      <p className="mt-1 text-[15px] leading-relaxed text-white/45">{d}</p>
     </div>
   );
 }
 
 function Bubble({ k, v, hint }: { k: string; v: string; hint?: string }) {
   return (
-    <div className="panel-bubble rounded-3xl px-4 py-4">
-      <div className="font-mono text-[10px] tracking-[0.16em] text-mute">{k}</div>
-      <div className="stat-num mt-1 text-2xl text-ghost sm:text-3xl">{v}</div>
+    <div className="rounded-[22px] border border-white/10 bg-black/30 px-4 py-4">
+      <div className="text-[12px] font-medium text-white/40">{k}</div>
+      <div className="mt-1 text-[22px] font-semibold tabular-nums tracking-tight text-white sm:text-3xl">{v}</div>
       {hint && <div className="mt-1 font-mono text-[10px] text-mute">{hint}</div>}
     </div>
   );

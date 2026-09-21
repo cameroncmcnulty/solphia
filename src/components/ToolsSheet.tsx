@@ -42,11 +42,11 @@ export function ToolsSheet({ open, onClose }: { open: boolean; onClose: () => vo
       onClick={onClose}
     >
       <div
-        className="flex max-h-[min(82dvh,34rem)] w-full max-w-[22rem] flex-col overflow-hidden rounded-3xl border border-violet/30 bg-[#17212b] shadow-2xl sm:max-w-sm"
+        className="flex max-h-[min(82dvh,34rem)] w-full max-w-[22rem] flex-col overflow-hidden rounded-3xl border border-white/10 bg-[#0c0c0c] shadow-2xl sm:max-w-sm"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex shrink-0 items-center justify-between gap-3 px-4 pb-1 pt-3">
-          <div className="font-display text-xl text-ghost">Tools</div>
+          <div className="text-[22px] font-semibold tracking-tight text-white">Tools</div>
           <button
             type="button"
             onClick={onClose}

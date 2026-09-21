@@ -93,11 +93,11 @@ export default function PricingPage() {
   const until = seat?.subscribedUntil ? new Date(seat.subscribedUntil).toLocaleDateString() : null;
 
   return (
-    <main className="pb-24">
-      <div className="mx-auto max-w-6xl px-4 pt-6 md:px-8 md:pt-10">
-        <p className="text-base text-acid">Pricing</p>
-        <h1 className="mt-2 font-display text-4xl leading-tight text-ghost sm:text-6xl">Backtests are free. Live is 0.1. SOL 2×/3× is 0.15.</h1>
-        <p className="mt-4 max-w-xl text-lg text-mute">
+    <main className="pump-shell">
+      <div className="pump-wrap md:!max-w-5xl">
+        <p className="text-[13px] font-medium text-[#14f195]">Pricing</p>
+        <h1 className="pump-h1 mt-2 sm:text-5xl">Backtests are free. Live is 0.1. SOL 2×/3× is 0.15.</h1>
+        <p className="pump-p mt-4 max-w-xl">
           Spot live 0.1 SOL / 30d. Optional SOL-PERP 2× or 3× is 0.15 SOL / 30d (Jupiter Perps fees, liquidation).
           Plus 0.1% per clip.
         </p>
@@ -108,7 +108,7 @@ export default function PricingPage() {
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/icons/plan-paper.jpg" alt="" className="h-14 w-14 shrink-0 rounded-2xl" />
           <div className="min-w-0 flex-1">
-            <div className="font-display text-2xl text-ghost">Paper</div>
+            <div className="text-[22px] font-semibold tracking-tight text-white">Paper</div>
             <p className="text-sm text-mute">Live oracles. Fake fills. Skip tape. No SOL at risk.</p>
           </div>
           <span className="btn-acid min-h-[44px] shrink-0 rounded-full px-5 text-sm">Try free</span>
@@ -126,8 +126,8 @@ export default function PricingPage() {
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={p.icon} alt="" className="h-16 w-16 rounded-2xl" />
-              <div className="mt-4 font-display text-2xl text-ghost">{p.name}</div>
-              <div className="mt-1 font-display text-3xl text-acid">
+              <div className="mt-4 text-[22px] font-semibold tracking-tight text-white">{p.name}</div>
+              <div className="mt-1 text-[28px] font-semibold tracking-tight text-[#14f195]">
                 {p.sol} <span className="text-lg text-mute">SOL / 30d</span>
               </div>
               <p className="mt-2 text-sm text-mute">{p.tagline}</p>
@@ -224,14 +224,14 @@ export default function PricingPage() {
         </div>
 
         <div className="mt-12">
-          <h2 className="font-display text-3xl text-ghost">Compare</h2>
+          <h2 className="pump-h2">Compare</h2>
           <div className="mt-6">
             <PlanCompare />
           </div>
         </div>
 
         <div className="mt-12 max-w-3xl">
-          <h2 className="font-display text-3xl text-ghost">FAQ</h2>
+          <h2 className="pump-h2">FAQ</h2>
           <div className="mt-6">
             <FaqList limit={4} />
           </div>

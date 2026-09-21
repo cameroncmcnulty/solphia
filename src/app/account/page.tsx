@@ -176,25 +176,28 @@ export default function AccountPage() {
 
   if (!owner) {
     return (
-      <main className="mx-auto max-w-md px-5 py-20">
-        <h1 className="font-display text-4xl text-ghost">Account</h1>
-        <p className="mt-2 text-sm text-mute">Connect Phantom to manage wallets, PFP, launches, and referrals.</p>
+      <main className="pump-shell">
+        <div className="pump-wrap py-16">
+        <h1 className="pump-h1">Account</h1>
+        <p className="pump-p mt-2">Connect Phantom to manage wallets, PFP, launches, and referrals.</p>
         <div className="mt-6">
           <WalletConnect />
+        </div>
         </div>
       </main>
     );
   }
 
   return (
-    <main className="mx-auto max-w-3xl px-4 pb-24 pt-6 md:px-8">
+    <main className="pump-shell">
+      <div className="pump-wrap">
       <div className="flex items-center gap-3">
         <button type="button" onClick={() => setPeek(true)} className="relative">
           <CartoonPfp seed={owner} src={desk?.pfp} className="h-14 w-14" />
         </button>
         <div className="min-w-0 flex-1">
-          <p className="font-mono text-[11px] tracking-[0.22em] text-violet">ACCOUNT</p>
-          <h1 className="font-display text-3xl text-ghost">{desk?.username ? `@${desk.username}` : "You"}</h1>
+          <p className="text-[13px] font-medium text-[#14f195]">Account</p>
+          <h1 className="text-[28px] font-semibold tracking-tight text-white">{desk?.username ? `@${desk.username}` : "You"}</h1>
           <p className="font-mono text-[11px] text-mute">
             {owner.slice(0, 6)}…{owner.slice(-6)}
             {desk?.title ? ` · Rank ${desk.rank || 1} ${desk.title}` : ""}
@@ -231,7 +234,7 @@ export default function AccountPage() {
       {tab === "overview" && (
         <div className="mt-6 space-y-4">
           <section className="panel-bubble overflow-hidden rounded-3xl p-5">
-            <h2 className="font-display text-2xl text-ghost">Username</h2>
+            <h2 className="text-[22px] font-semibold tracking-tight text-white">Username</h2>
             <p className="mt-1 text-sm text-mute">Unique on Solphia. 3–20 characters, start with a letter. Letters, numbers, underscore.</p>
             <form
               className="mt-3"
@@ -284,7 +287,7 @@ export default function AccountPage() {
 
       {tab === "wallets" && (
         <section className="panel-bubble mt-6 space-y-4 overflow-hidden rounded-3xl p-5">
-          <h2 className="font-display text-2xl text-ghost">Trading wallets</h2>
+          <h2 className="text-[22px] font-semibold tracking-tight text-white">Trading wallets</h2>
           <p className="text-sm text-mute">Phantom is login. The trading wallet lives on this device and signs her clips.</p>
           <WalletRow k="Phantom" pk={owner} bal={ownerBal} />
           <WalletRow k="Trading" pk={tradePk} bal={tradeBal} />
@@ -363,7 +366,7 @@ export default function AccountPage() {
       {tab === "overview" && (
         <div className="mt-6 space-y-4">
           <section className="panel-bubble overflow-hidden rounded-3xl p-5">
-            <h2 className="font-display text-2xl text-ghost">Profile picture</h2>
+            <h2 className="text-[22px] font-semibold tracking-tight text-white">Profile picture</h2>
             <p className="mt-2 text-sm text-mute">Until you pick one, we draw a cartoon from your wallet.</p>
             <div data-field="pfp" className={`mt-4 flex items-center gap-4 ${fieldErr.errors.pfp ? "rounded-2xl p-1 ring-1 ring-blood/60" : ""}`}>
               <CartoonPfp seed={owner} src={desk?.pfp} className="h-24 w-24" />
@@ -403,7 +406,7 @@ export default function AccountPage() {
             />
           </section>
           <section className="panel-bubble overflow-hidden rounded-3xl p-5">
-            <h2 className="font-display text-2xl text-ghost">Banner</h2>
+            <h2 className="text-[22px] font-semibold tracking-tight text-white">Banner</h2>
             <p className="mt-1 text-sm text-mute">Wide image for your card. Shows when someone taps your PFP in Shill Zone.</p>
             <div className="mt-3 overflow-hidden rounded-2xl border border-violet/25 bg-void">
               <div className="relative h-28 bg-gradient-to-r from-violet/30 via-acid/15 to-cyan/25">
@@ -469,7 +472,7 @@ export default function AccountPage() {
             />
           </section>
           <section className="panel-bubble overflow-hidden rounded-3xl p-5">
-            <h2 className="font-display text-2xl text-ghost">Intro</h2>
+            <h2 className="text-[22px] font-semibold tracking-tight text-white">Intro</h2>
             <p className="mt-1 text-sm text-mute">One short line. People see it on your card.</p>
             <form
               className="mt-3"
@@ -510,7 +513,7 @@ export default function AccountPage() {
             </form>
           </section>
           <section className="panel-bubble overflow-hidden rounded-3xl p-5">
-            <h2 className="font-display text-2xl text-ghost">Favourite project</h2>
+            <h2 className="text-[22px] font-semibold tracking-tight text-white">Favourite project</h2>
             <p className="mt-1 text-sm text-mute">A CA on your card. One tap copy so people can buy it.</p>
             <form
               className="mt-3"
@@ -568,7 +571,7 @@ export default function AccountPage() {
 
       {tab === "launches" && (
         <section className="panel-bubble mt-6 overflow-hidden rounded-3xl p-5">
-          <h2 className="font-display text-2xl text-ghost">Launched coins</h2>
+          <h2 className="text-[22px] font-semibold tracking-tight text-white">Launched coins</h2>
           {(boosts.live.length > 0 || boosts.queued.length > 0) && (
             <div className="mt-3 space-y-1 rounded-2xl border border-acid/25 bg-acid/[0.04] px-3 py-2 font-mono text-[12px]">
               {boosts.live.map((b) => (
@@ -613,7 +616,7 @@ export default function AccountPage() {
 
       {tab === "referrals" && (
         <section className="panel-bubble mt-6 overflow-hidden rounded-3xl p-5">
-          <h2 className="font-display text-2xl text-ghost">Referrals</h2>
+          <h2 className="text-[22px] font-semibold tracking-tight text-white">Referrals</h2>
           <p className="mt-2 text-sm text-mute">
             Share your link. When they join, they are yours. You earn a cut of their launch fees. Withdraw anytime.
           </p>
@@ -656,6 +659,7 @@ export default function AccountPage() {
           </div>
         </section>
       )}
+      </div>
     </main>
   );
 }

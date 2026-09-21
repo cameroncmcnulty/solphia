@@ -4,12 +4,12 @@ import { LiveStats } from "@/components/LiveStats";
 
 export default function FaqPage() {
   return (
-    <main className="pb-12">
+    <main className="pump-shell">
       <LiveStats compact />
-      <div className="mx-auto max-w-3xl px-4 pt-8 md:px-8">
-        <p className="text-base text-acid">FAQ</p>
-        <h1 className="mt-2 font-display text-4xl text-ghost sm:text-5xl">Plain answers.</h1>
-        <p className="mt-4 text-lg text-mute">Short questions. Short answers.</p>
+      <div className="pump-wrap">
+        <p className="text-[13px] font-medium text-[#14f195]">FAQ</p>
+        <h1 className="pump-h1 mt-2">Plain answers.</h1>
+        <p className="pump-p mt-3">Short questions. Short answers.</p>
         <div className="mt-8">
           <FaqList />
         </div>

@@ -22,13 +22,13 @@ export default function Home() {
               <SphaMark className="h-5 w-5" />
               THE SOLPHIA ECOSYSTEM · $SPHA
             </p>
-            <h1 className="solphia-flow mt-3 font-display text-[clamp(2.6rem,11vw,5.8rem)] font-bold leading-[0.9] tracking-[-0.04em]">
+            <h1 className="mt-3 text-[clamp(2.6rem,11vw,5.2rem)] font-semibold leading-[0.95] tracking-tight text-white">
               SOLPHIA
             </h1>
-            <p className="mt-6 max-w-xl text-xl leading-snug text-ghost sm:text-3xl sm:leading-tight">
+            <p className="mt-6 max-w-xl text-[22px] font-semibold leading-snug tracking-tight text-white sm:text-[28px]">
               She auto-trades tokenized S&amp;P 500, Nasdaq, and gold — for profit.
             </p>
-            <p className="mt-4 max-w-lg text-base leading-relaxed text-mute sm:text-lg">
+            <p className="mt-4 max-w-lg text-[15px] leading-relaxed text-white/45 sm:text-[17px]">
               Connect your wallet. She trades tokenized S&P 500, Nasdaq, and gold. Launch and $SPHA sit around that desk.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
@@ -47,10 +47,10 @@ export default function Home() {
       <section className="px-4 py-16 md:px-12 md:py-24">
         <Reveal>
         <p className="text-sm tracking-[0.2em] text-acid">ECOSYSTEM</p>
-        <h2 className="mt-3 max-w-3xl font-display text-4xl leading-tight text-ghost sm:text-5xl md:text-6xl">
+        <h2 className="mt-3 max-w-3xl text-[32px] font-semibold leading-tight tracking-tight text-white sm:text-5xl">
           Products that actually run.
         </h2>
-        <p className="mt-4 max-w-2xl text-lg text-mute">
+        <p className="mt-4 max-w-2xl text-[15px] text-white/45 sm:text-[17px]">
           Trading desk, launch pad, and $SPHA. She trades. The rest feeds the token.
         </p>
         <div className="mt-12 grid gap-4 lg:grid-cols-3">
@@ -85,10 +85,10 @@ export default function Home() {
           <SphaMark className="h-5 w-5" />
           $SPHA
         </p>
-        <h2 className="mt-3 max-w-3xl font-display text-4xl leading-tight text-ghost sm:text-5xl md:text-6xl">
+        <h2 className="mt-3 max-w-3xl text-[32px] font-semibold leading-tight tracking-tight text-white sm:text-5xl">
           Every swap has a job after the fill.
         </h2>
-        <p className="mt-4 max-w-2xl text-lg text-mute">
+        <p className="mt-4 max-w-2xl text-[15px] text-white/45 sm:text-[17px]">
           A cut of every swap goes to listings, buybacks, and burns.
         </p>
         <div className="mt-12 grid gap-4 sm:grid-cols-3">
@@ -106,8 +106,8 @@ export default function Home() {
         <div className="rounded-3xl border border-acid/25 bg-acid/[0.06] px-6 py-8 md:flex md:items-center md:justify-between md:px-10">
           <div className="max-w-xl">
             <p className="font-mono text-[11px] tracking-[0.22em] text-acid">REFERRALS</p>
-            <h2 className="mt-2 font-display text-2xl text-ghost sm:text-3xl">Invite once. Get paid when they launch.</h2>
-            <p className="mt-2 text-sm leading-relaxed text-mute sm:text-base">
+            <h2 className="mt-2 text-[22px] font-semibold tracking-tight text-white sm:text-[28px]">Invite once. Get paid when they launch.</h2>
+            <p className="mt-2 text-[15px] leading-relaxed text-white/45">
               Share your link. Withdraw from your account.
             </p>
           </div>
@@ -124,7 +124,7 @@ export default function Home() {
       <section className="px-4 py-16 md:px-12 md:py-24">
         <Reveal>
         <p className="text-sm tracking-[0.2em] text-acid">HOW IT WORKS</p>
-        <h2 className="mt-3 font-display text-4xl text-ghost sm:text-5xl">Three steps.</h2>
+        <h2 className="mt-3 text-[32px] font-semibold tracking-tight text-white sm:text-5xl">Three steps.</h2>
         <div className="mt-12 grid gap-4 md:grid-cols-3">
           <Reveal delay={40} from="left"><Chip t="01 · Connect" d="Connect your wallet. We never hold a key." /></Reveal>
           <Reveal delay={120}><Chip t="02 · She trades" d="Tokenized S&P, Nasdaq, and gold. Launch sits next to the desk." /></Reveal>
@@ -141,8 +141,8 @@ export default function Home() {
               <SphaMark className="h-5 w-5" />
               $SPHA
             </p>
-            <h2 className="mt-3 font-display text-4xl text-ghost sm:text-5xl md:text-6xl">Turn her on.</h2>
-            <p className="mt-4 max-w-lg text-lg text-mute">
+            <h2 className="mt-3 text-[32px] font-semibold tracking-tight text-white sm:text-5xl">Turn her on.</h2>
+            <p className="mt-4 max-w-lg text-[15px] text-white/45 sm:text-[17px]">
               She trades. Keys stay in your wallet.
             </p>
           </div>
@@ -163,29 +163,32 @@ export default function Home() {
 
 function Eco({ n, t, d, href, c }: { n: string; t: string; d: string; href: string; c: string }) {
   return (
-    <Link href={href} className="card-lift group flex flex-col rounded-3xl border border-violet/20 bg-void/35 p-8 hover:border-acid/40">
-      <div className="font-mono text-sm text-acid">{n}</div>
-      <div className="mt-6 font-display text-3xl text-ghost">{t}</div>
-      <p className="mt-4 flex-1 text-base leading-relaxed text-mute">{d}</p>
-      <div className="mt-8 text-base text-acid group-hover:underline">{c} →</div>
+    <Link href={href} className="flex items-center justify-between gap-3 border-b border-white/[0.06] py-4 text-left lg:block lg:rounded-[22px] lg:border lg:border-white/10 lg:bg-black/30 lg:p-6">
+      <div className="min-w-0">
+        <p className="text-[12px] font-medium text-[#14f195]">{n}</p>
+        <p className="mt-1 text-[17px] font-semibold tracking-tight text-white lg:text-[22px]">{t}</p>
+        <p className="mt-1 text-[15px] leading-relaxed text-white/45">{d}</p>
+        <p className="mt-2 hidden text-[15px] text-[#14f195] lg:block">{c} →</p>
+      </div>
+      <span className="text-white/30 lg:hidden">›</span>
     </Link>
   );
 }
 
 function Note({ t, d }: { t: string; d: string }) {
   return (
-    <div className="card-lift rounded-3xl border border-violet/20 bg-void/30 p-7">
-      <div className="font-display text-2xl text-ghost">{t}</div>
-      <p className="mt-3 text-base leading-relaxed text-mute">{d}</p>
+    <div className="border-b border-white/[0.06] py-4 lg:rounded-[22px] lg:border lg:border-white/10 lg:bg-black/30 lg:p-6">
+      <p className="text-[17px] font-semibold tracking-tight text-white">{t}</p>
+      <p className="mt-1 text-[15px] leading-relaxed text-white/45">{d}</p>
     </div>
   );
 }
 
 function Chip({ t, d }: { t: string; d: string }) {
   return (
-    <div className="card-lift rounded-3xl border border-violet/15 p-6">
-      <div className="font-display text-xl text-ghost">{t}</div>
-      <p className="mt-2 text-sm leading-relaxed text-mute sm:text-base">{d}</p>
+    <div className="border-b border-white/[0.06] py-4 lg:rounded-[22px] lg:border lg:border-white/10 lg:p-6">
+      <p className="text-[17px] font-semibold tracking-tight text-white">{t}</p>
+      <p className="mt-1 text-[15px] leading-relaxed text-white/45">{d}</p>
     </div>
   );
 }

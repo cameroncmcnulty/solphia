@@ -14,13 +14,13 @@ export function FaqList({ limit }: { limit?: number }) {
           <button
             key={f.q}
             onClick={() => setOpen(on ? null : i)}
-            className="panel w-full rounded-2xl p-4 text-left"
+            className="w-full border-b border-white/[0.06] py-4 text-left"
           >
             <div className="flex items-center justify-between gap-3">
-              <span className="min-w-0 pr-2 font-display text-base leading-snug text-ghost">{f.q}</span>
-              <span className="shrink-0 font-mono text-acid">{on ? "−" : "+"}</span>
+              <span className="min-w-0 pr-2 text-[17px] font-semibold leading-snug tracking-tight text-white">{f.q}</span>
+              <span className="shrink-0 text-[18px] text-white/40">{on ? "−" : "+"}</span>
             </div>
-            {on && <p className="mt-3 text-sm leading-relaxed text-mute">{f.a}</p>}
+            {on && <p className="mt-2 text-[15px] leading-relaxed text-white/45">{f.a}</p>}
           </button>
         );
       })}

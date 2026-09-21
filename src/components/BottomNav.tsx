@@ -19,7 +19,7 @@ export function BottomNav() {
   ] as const;
   return (
     <>
-      <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-violet/30 bg-[#17212b]/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl md:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-white/10 bg-[#0a0a0a]/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl md:hidden">
         <div className="grid grid-cols-5">
           {tabs.map(({ href, label, Icon }) => {
             const active = href === "tools" ? toolsOn : href === "/" ? path === "/" : path === href || path.startsWith(href + "/");
@@ -30,7 +30,7 @@ export function BottomNav() {
                   type="button"
                   onClick={() => setTools(true)}
                   className={`relative flex min-h-[58px] touch-manipulation flex-col items-center justify-center gap-0.5 pt-1 ${
-                    active ? "text-acid" : "text-mute"
+                    active ? "text-[#14f195]" : "text-white/40"
                   }`}
                 >
                   {active && <span className="absolute top-0 h-[3px] w-8 rounded-full bg-acid shadow-[0_0_10px_rgba(20,241,149,0.7)]" />}
@@ -45,7 +45,7 @@ export function BottomNav() {
                 href={href}
                 aria-current={active ? "page" : undefined}
                 className={`relative flex min-h-[58px] touch-manipulation flex-col items-center justify-center gap-0.5 pt-1 ${
-                  active ? "text-acid" : "text-mute"
+                  active ? "text-[#14f195]" : "text-white/40"
                 }`}
               >
                 {active && <span className="absolute top-0 h-[3px] w-8 rounded-full bg-acid shadow-[0_0_10px_rgba(20,241,149,0.7)]" />}

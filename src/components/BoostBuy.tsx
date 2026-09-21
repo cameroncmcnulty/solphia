@@ -100,23 +100,21 @@ export function BoostRail({
       : [...rows].sort((a, b) => b.rockets - a.rockets || a.leftMs - b.leftMs);
   return (
     <div className="py-1">
-      <div className="mb-2 flex justify-center">
-        <div className="flex gap-1 rounded-full border border-violet/30 bg-void/50 p-0.5 font-mono text-[10px]">
-          <button
-            type="button"
-            onClick={() => setSort("latest")}
-            className={`rounded-full px-3 py-1 ${sort === "latest" ? "bg-acid/20 text-acid" : "text-mute"}`}
-          >
-            Latest
-          </button>
-          <button
-            type="button"
-            onClick={() => setSort("top")}
-            className={`rounded-full px-3 py-1 ${sort === "top" ? "bg-acid/20 text-acid" : "text-mute"}`}
-          >
-            Top
-          </button>
-        </div>
+      <div className="mb-2 flex gap-5 border-b border-white/10 text-[15px]">
+        <button
+          type="button"
+          onClick={() => setSort("latest")}
+          className={`pb-2 ${sort === "latest" ? "border-b-2 border-white font-medium text-white" : "text-white/40"}`}
+        >
+          Latest
+        </button>
+        <button
+          type="button"
+          onClick={() => setSort("top")}
+          className={`pb-2 ${sort === "top" ? "border-b-2 border-white font-medium text-white" : "text-white/40"}`}
+        >
+          Top
+        </button>
       </div>
       <div className="boost-rail">
         {ordered.map((b, i) => {

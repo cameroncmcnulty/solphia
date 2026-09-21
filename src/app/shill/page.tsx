@@ -506,7 +506,7 @@ export default function ShillPage() {
           <ArrowLeft className="h-6 w-6" />
         </Link>
         <button type="button" className="min-w-0 flex-1 text-left" onClick={() => setSheet("ranks")}>
-          <div className="truncate font-display text-[18px] tracking-tight text-white">Shill Zone</div>
+          <div className="truncate text-[18px] font-semibold tracking-tight text-white">Shill Zone</div>
           <div className="truncate text-[12px] text-acid/80">{online ? `${online} online` : "live"}</div>
         </button>
         <button type="button" className="flex h-11 w-11 items-center justify-center rounded-full text-acid hover:bg-acid/10" onClick={() => setSheet("pin")} aria-label="Boost pin">

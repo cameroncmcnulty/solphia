@@ -264,12 +264,13 @@ export function TradingHub() {
   const gldxUsd = pair?.gldxUsd || 0;
 
   return (
-    <main className="mx-auto max-w-7xl px-4 pb-6 pt-2 md:px-8">
+    <main className="pump-shell">
+      <div className="pump-wrap md:!max-w-5xl">
       <header className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <p className="font-mono text-[11px] tracking-[0.28em] text-violet">USDC · S&P 500 · NASDAQ · GOLD</p>
-          <h1 className="mt-1 font-display text-3xl leading-none text-ghost sm:text-4xl md:text-6xl">Automate</h1>
-          <p className="mt-3 max-w-xl text-base text-mute sm:text-lg">
+          <p className="text-[13px] font-medium text-[#14f195]">USDC · S&P 500 · Nasdaq · Gold</p>
+          <h1 className="pump-h1 mt-1 md:text-5xl">Automate</h1>
+          <p className="pump-p mt-3 max-w-xl">
             She stays off until you pay the SOL seat, fund the trading wallet, and press Start. No paper book. The
             backtest on the home page is the proof.
           </p>
@@ -516,6 +517,7 @@ export function TradingHub() {
             )}
           </div>
         </div>
+      </div>
       </div>
     </main>
   );
