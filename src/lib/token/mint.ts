@@ -103,6 +103,12 @@ export async function buildSphaLaunchTxs(opts: {
   return { mint: mint.toBase58(), txs: [create, seed, lock], allocations };
 }
 
-export function encodeTx(tx: Transaction): string {
-  return Buffer.from(tx.serialize({ requireAllSignatures: false, verifySignatures: false })).toString("base64");
+export function encodeTx(tx: Transaction | { serialize: (opts?: any) => Uint8Array | Buffer }): string {
+  let bytes: Uint8Array;
+  try {
+    bytes = Uint8Array.from(tx.serialize({ requireAllSignatures: false, verifySignatures: false }) as Uint8Array);
+  } catch {
+    bytes = Uint8Array.from(tx.serialize() as Uint8Array);
+  }
+  return Buffer.from(bytes).toString("base64");
 }

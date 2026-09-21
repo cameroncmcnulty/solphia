@@ -174,6 +174,9 @@ async function prepareMint(b: LaunchBody) {
           buySol: Number(b.launchBuySol) || 0,
           referrer: book.accounts?.[b.pubkey]?.referrer,
         });
+    if (typeof built.transaction !== "string" || built.transaction.length < 32) {
+      return NextResponse.json({ error: "chain_failed", message: "Launch builder did not encode a transaction." }, { status: 500 });
+    }
     return NextResponse.json({
       ok: true,
       mint: built.mint,

@@ -34,6 +34,7 @@ import {
 } from "@/lib/launch/validate";
 import { FieldError, FormAlert, SafeField, fieldClass, useConfirmErrors } from "@/components/form/confirm";
 import { loadOwner, signPhantomAndSend } from "@/lib/wallet/trading";
+import { asTxB64 } from "@/lib/solana/wire";
 import { mintPda, newMintNonce, nonceToB64 } from "@/lib/launch/pda";
 import { dbcEnabled } from "@/lib/launch/dbcIds";
 
@@ -510,7 +511,12 @@ export default function LaunchPage() {
         signal: AbortSignal.timeout(28_000),
       });
       const pj = await prep.json();
-      const packed = typeof pj.tx === "string" ? pj.tx : Array.isArray(pj.txs) ? pj.txs[0] : "";
+      let packed = "";
+      try {
+        packed = asTxB64(pj.tx ?? (Array.isArray(pj.txs) ? pj.txs[0] : ""));
+      } catch {
+        packed = "";
+      }
       if (!prep.ok || !packed) {
         const code = typeof pj.error === "string" ? pj.error : "";
         const message = pj.message || launchError(code) || "Could not build the launch.";
@@ -596,7 +602,11 @@ export default function LaunchPage() {
     } catch (e) {
       const timed = e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError");
       if (!createErr.banner) {
-        setErr(timed ? "Launch timed out building the curve. Try again." : e instanceof Error ? e.message : "launch failed");
+        const raw = e instanceof Error ? e.message : "launch failed";
+        const mapped = /expected pattern|not correctly encoded|atob|Invalid character|Failed to execute/i.test(raw)
+          ? "Could not read the launch transaction. Try again."
+          : raw;
+        setErr(timed ? "Launch timed out building the curve. Try again." : mapped);
       }
     } finally {
       setBusy(false);

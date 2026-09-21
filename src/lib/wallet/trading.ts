@@ -3,6 +3,7 @@
 import { Keypair, PublicKey, SystemProgram, Transaction, VersionedTransaction, LAMPORTS_PER_SOL } from "@solana/web3.js";
 
 import { loadOwner as readOwner, persistOwner } from "./owner";
+import { asTxB64, b64ToBytes, bytesToB64 } from "../solana/wire";
 
 const SECRET = "solphia_trading_secret";
 
@@ -27,11 +28,7 @@ export function tradingPubkey(): string {
 }
 
 function toB64(bytes: Uint8Array): string {
-  let s = "";
-  bytes.forEach((b) => {
-    s += String.fromCharCode(b);
-  });
-  return btoa(s);
+  return bytesToB64(bytes);
 }
 
 export function exportSecret(): string {
@@ -54,10 +51,9 @@ export async function buildTransfer(from: string, to: string, sol: number): Prom
 
 export async function signAndSendSwap(transactionB64: string): Promise<string> {
   const kp = tradingKeypair();
-  const raw = Uint8Array.from(atob(transactionB64), (c) => c.charCodeAt(0));
+  const raw = b64ToBytes(transactionB64);
   let signed: Uint8Array;
   try {
-    const { VersionedTransaction } = await import("@solana/web3.js");
     const tx = VersionedTransaction.deserialize(raw);
     tx.sign([kp]);
     signed = tx.serialize();
@@ -143,15 +139,20 @@ export async function signLegacyTx(tx: Transaction, extra?: Keypair): Promise<st
 export async function signPhantomAndSend(transactionB64: string, extra?: Keypair): Promise<string> {
   const provider = phantomProvider();
   if (!provider) throw new Error("Open this page in Phantom (browser or in-app).");
-  const raw = Uint8Array.from(atob(transactionB64), (c) => c.charCodeAt(0));
+  const raw = b64ToBytes(asTxB64(transactionB64));
+  if (raw.length > 0 && (raw[0] & 0x80) !== 0) {
+    const vtx = VersionedTransaction.deserialize(raw);
+    const signed = (await provider.signTransaction(vtx)) as VersionedTransaction;
+    if (extra) signed.sign([extra]);
+    return sendSignedB64(toB64(signed.serialize()));
+  }
   const tx = Transaction.from(raw);
-  const signed = await provider.signTransaction(tx);
-  if (typeof (signed as Transaction).partialSign !== "function") {
+  const signed = (await provider.signTransaction(tx)) as Transaction;
+  if (typeof signed.partialSign !== "function") {
     throw new Error("Phantom did not return a signable transaction.");
   }
-  const legacy = signed as Transaction;
-  if (extra) legacy.partialSign(extra);
-  return sendSignedB64(toB64(legacy.serialize()));
+  if (extra) signed.partialSign(extra);
+  return sendSignedB64(toB64(signed.serialize()));
 }
 
 async function sendSignedB64(b64: string): Promise<string> {
@@ -182,7 +183,7 @@ export async function paySeatFromTrading(treasury: string, sol: number): Promise
 
 export function importSecret(b64: string): string {
   const cleaned = b64.trim();
-  const bytes = Uint8Array.from(atob(cleaned), (c) => c.charCodeAt(0));
+  const bytes = b64ToBytes(cleaned);
   if (bytes.length !== 64) throw new Error("Backup is not a 64-byte trading key.");
   const kp = Keypair.fromSecretKey(bytes);
   localStorage.setItem(SECRET, JSON.stringify(Array.from(kp.secretKey)));
