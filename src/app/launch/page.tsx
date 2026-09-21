@@ -43,6 +43,7 @@ import { BoostBuy, BoostRail, fmtLeft } from "@/components/BoostBuy";
 import { TokenImageCrop, readLaunchImage, type CropSource } from "@/components/TokenImageCrop";
 import { yourLaunches } from "@/lib/launch/yours";
 import { PadPitch } from "@/components/PadPitch";
+import { killNativeValidity } from "@/lib/killNativeValidity";
 
 import { SwapBox, SwapShell, SwapTabs, SwapWidget } from "@/components/SwapWidget";
 import type { BoostRank } from "@/lib/launch/boost";
@@ -336,30 +337,7 @@ export default function LaunchPage() {
     setTab("tape");
   }, [isSwap]);
 
-  useEffect(() => {
-    const kill = (e: Event) => {
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      const el = e.target as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement | null;
-      if (el && "setCustomValidity" in el) {
-        try {
-          el.setCustomValidity("");
-        } catch {
-          /* ignore */
-        }
-      }
-    };
-    const blockSubmit = (e: Event) => {
-      const t = e.target as HTMLElement | null;
-      if (t && t.closest("#solphia-launch")) e.preventDefault();
-    };
-    document.addEventListener("invalid", kill, true);
-    document.addEventListener("submit", blockSubmit, true);
-    return () => {
-      document.removeEventListener("invalid", kill, true);
-      document.removeEventListener("submit", blockSubmit, true);
-    };
-  }, []);
+  useEffect(() => killNativeValidity(), []);
 
   async function pickArtFile() {
     const file = await new Promise<File | null>((resolve) => {
@@ -1088,14 +1066,14 @@ export default function LaunchPage() {
               {isSwap && (
               <>
               <div className="flex gap-2">
-                <input
+                <SafeField
                   value={caQuery}
-                  onChange={(e) => {
-                    setCaQuery(e.target.value);
-                    setCaErr("");
-                  }}
                   placeholder="Search mint (CA)"
                   className="min-h-[40px] min-w-0 flex-1 rounded-full border border-violet/30 bg-void px-4 font-mono text-[11px] text-ghost"
+                  onChange={(v) => {
+                    setCaQuery(v);
+                    setCaErr("");
+                  }}
                 />
                 <button type="button" disabled={caBusy} onClick={() => searchMint().catch(() => {})} className="btn-ghost min-h-[40px] rounded-full px-4 font-mono text-[11px] disabled:opacity-40">
                   {caBusy ? "…" : "Search"}

@@ -376,6 +376,7 @@ describe("launch create validation", () => {
     assert.equal(/<form/.test(src), false);
     assert.equal(/type=["']range["']/.test(src), false);
     assert.match(src, /SafeField/);
+    assert.match(src, /killNativeValidity/);
     assert.match(src, /PadPitch/);
     assert.match(src, /setTab\("tape"\)/);
   });
