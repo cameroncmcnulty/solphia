@@ -44,6 +44,7 @@ import { BoostBuy, BoostRail, fmtLeft } from "@/components/BoostBuy";
 
 import { TokenImageCrop, readLaunchImage, type CropSource } from "@/components/TokenImageCrop";
 import { yourLaunches } from "@/lib/launch/yours";
+import { clearPending, loadPending, savePending, type PendingLaunch } from "@/lib/launch/pending";
 import { PadPitch } from "@/components/PadPitch";
 import { killNativeValidity } from "@/lib/killNativeValidity";
 
@@ -270,10 +271,13 @@ export default function LaunchPage() {
   const [lookedMint, setLookedMint] = useState<string | null>(null);
   const bootMint = useRef(false);
   const [snapAt, setSnapAt] = useState(0);
+  const [pending, setPending] = useState<PendingLaunch[]>([]);
+  const lastMintRef = useRef("");
   const cropUrlRef = useRef<string>("");
   const devPct = buySupplyPct(emptyCurve(), devBuy);
 
   useEffect(() => {
+    setPending(loadPending());
     return () => {
       if (cropUrlRef.current) URL.revokeObjectURL(cropUrlRef.current);
     };
@@ -490,7 +494,10 @@ export default function LaunchPage() {
       const mintKp = useDbc ? Keypair.generate() : null;
       const nonce = useDbc ? null : newMintNonce();
       const mintPk = mintKp ? mintKp.publicKey.toBase58() : mintPda(owner, nonce!).toBase58();
-      setMsg("Building the Solphia curve…");
+      lastMintRef.current = mintPk;
+      savePending({ mint: mintPk, name: name.trim(), symbol: symbol.trim().toUpperCase(), image, at: Date.now() });
+      setPending(loadPending());
+      setMsg("Building the Solphia curve… CA " + mintPk);
       const prep = await fetch("/api/launch", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -535,9 +542,11 @@ export default function LaunchPage() {
         else createErr.fail({}, message);
         throw new Error(message);
       }
-      setMsg("Sign once in Phantom…");
+      setMsg("Sign once in Phantom… CA " + mintPk);
       const sig = await signPhantomAndSend(packed, mintKp || undefined);
-      setMsg("Waiting for the curve on Solana…");
+      savePending({ mint: mintPk, name: name.trim(), symbol: symbol.trim().toUpperCase(), image, at: Date.now(), sig });
+      setPending(loadPending());
+      setMsg("Waiting for the curve on Solana… CA " + mintPk);
       const confirmBody = {
         action: "confirm",
         pubkey: owner,
@@ -596,6 +605,8 @@ export default function LaunchPage() {
       setTelegram("");
       setDiscord("");
       setDevBuy(0);
+      clearPending(mintPk);
+      setPending(loadPending());
       setTab("mine");
       setBusy(false);
       setMsg(
@@ -613,7 +624,9 @@ export default function LaunchPage() {
       const timed = e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError");
       if (!createErr.banner) {
         const raw = e instanceof Error ? e.message : "launch failed";
-        setErr(timed ? "Launch timed out building the curve. Try again." : raw);
+        const ca = lastMintRef.current;
+        const extra = ca ? ` CA ${ca}` : "";
+        setErr((timed ? "Launch timed out building the curve. Try again." : raw) + extra);
       }
     } finally {
       setBusy(false);
@@ -982,6 +995,18 @@ export default function LaunchPage() {
                       {devBuy.toFixed(2)} SOL · {(devPct * 100).toFixed(2)}% of supply
                     </span>
                   </div>
+                  <input
+                    type="range"
+                    min={0}
+                    max={DEV_CAP}
+                    step={0.05}
+                    value={Math.min(devBuy, DEV_CAP)}
+                    onChange={(e) => {
+                      setDevBuy(Number(e.target.value));
+                      createErr.clear("launchBuySol");
+                    }}
+                    className="mt-2 w-full accent-[#14f195]"
+                  />
                   <div className="mt-2 flex flex-wrap gap-2">
                     {[0, ...PRESETS.filter((n) => n <= DEV_CAP), Number(DEV_CAP.toFixed(2))].filter((n, i, a) => a.indexOf(n) === i).map((n) => (
                       <button
@@ -1193,14 +1218,32 @@ export default function LaunchPage() {
               )}
             </div>
             <div className="mt-1 divide-y divide-white/[0.06]">
-              {rows.length === 0 && tapeLoading && (
+              {!isSwap &&
+                pending
+                  .filter((p) => !mine.some((c) => c.mint === p.mint))
+                  .map((p) => (
+                    <div key={p.mint} className="py-3">
+                      <PumpCoinRow
+                        name={p.name || "Pending"}
+                        symbol={p.symbol || "…"}
+                        image={p.image}
+                        mint={p.mint}
+                        onOpen={() => window.open("https://solscan.io/token/" + p.mint, "_blank", "noopener,noreferrer")}
+                      />
+                      <div className="flex flex-wrap items-center gap-2 px-1 pb-2">
+                        <CopyCa ca={p.mint} compact />
+                        <p className="text-[13px] text-white/45">Pending on-chain. Copy CA → solscan. If it landed, it will appear here after confirm.</p>
+                      </div>
+                    </div>
+                  ))}
+              {rows.length === 0 && tapeLoading && pending.length === 0 && (
                 <div className="space-y-2 py-3">
                   {Array.from({ length: 8 }).map((_, i) => (
                     <div key={i} className="h-[72px] animate-pulse rounded-2xl bg-white/5" />
                   ))}
                 </div>
               )}
-              {rows.length === 0 && !tapeLoading && (
+              {rows.length === 0 && !tapeLoading && pending.filter((p) => !mine.some((c) => c.mint === p.mint)).length === 0 && (
                 <div className="py-10">
                   <p className="text-[22px] font-semibold text-white">{!isSwap ? "No tokens yet" : "Get your first coin today!"}</p>
                   <p className="mt-2 text-[15px] text-white/45">
@@ -1269,9 +1312,15 @@ export default function LaunchPage() {
         </div>
 
         {err && (
-          <p className="relative z-10 mt-4 rounded-2xl border border-blood/50 bg-blood/10 px-4 py-3 font-mono text-sm text-blood">
-            {err}
-          </p>
+          <div className="relative z-10 mt-4 rounded-2xl border border-blood/50 bg-blood/10 px-4 py-3 text-sm text-blood">
+            <p className="font-mono">{err}</p>
+            {pending[0]?.mint ? (
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-ghost">
+                <span className="text-[13px] text-white/70">Mint CA</span>
+                <CopyCa ca={pending[0].mint} compact />
+              </div>
+            ) : null}
+          </div>
         )}
         {msg && !err && <p className="relative z-10 mt-4 font-mono text-sm text-acid">{msg}</p>}
       </div>

@@ -171,26 +171,36 @@ export async function signPhantomAndSend(transactionB64: string, extra?: Keypair
   return sendSignedB64(toB64(bytes));
 }
 
-async function sendSignedB64(b64: string): Promise<string> {
+async function sendViaApi(b64: string): Promise<string> {
   const r = await fetch("/api/sol/send", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ transaction: b64 }),
+    signal: AbortSignal.timeout(12_000),
   });
   const text = await r.text();
   let j: { error?: string; signature?: string } = {};
   try {
     j = JSON.parse(text) as { error?: string; signature?: string };
   } catch {
-    throw new Error(
-      r.status === 504
-        ? "Network timed out after you signed. Check Phantom / solscan — the coin may already be live. Do not spam Launch."
-        : "Broadcast failed (" + r.status + "). Try again.",
-    );
+    throw new Error("api_" + r.status);
   }
   if (!r.ok) throw new Error(typeof j.error === "string" ? j.error : "send failed");
   if (typeof j.signature !== "string" || !j.signature) throw new Error("Broadcast did not return a signature.");
   return j.signature;
+}
+
+async function sendViaRpc(bytes: Uint8Array): Promise<string> {
+  const conn = new (await import("@solana/web3.js")).Connection("https://api.mainnet-beta.solana.com", "confirmed");
+  return conn.sendRawTransaction(bytes, { skipPreflight: true, maxRetries: 4 });
+}
+
+async function sendSignedB64(b64: string): Promise<string> {
+  try {
+    return await sendViaApi(b64);
+  } catch {
+    return sendViaRpc(b64ToBytes(b64));
+  }
 }
 
 /** @deprecated pad launches are one-signer PDAs. Extra mint signer only for admin $SPHA. */
