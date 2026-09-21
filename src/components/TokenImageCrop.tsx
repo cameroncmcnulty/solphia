@@ -302,7 +302,6 @@ export function TokenImageCrop({
         <div className="mt-3">
           <input
             type="range"
-            form="solphia-nv"
             min={1}
             max={TOKEN_ART_MAX_ZOOM}
             step={0.05}

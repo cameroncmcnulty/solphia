@@ -267,7 +267,6 @@ export default function LaunchPage() {
   const [lookedMint, setLookedMint] = useState<string | null>(null);
   const bootMint = useRef(false);
   const [snapAt, setSnapAt] = useState(0);
-  const fileRef = useRef<HTMLInputElement>(null);
   const cropUrlRef = useRef<string>("");
   const devPct = buySupplyPct(emptyCurve(), devBuy);
 
@@ -340,7 +339,7 @@ export default function LaunchPage() {
   useEffect(() => {
     const kill = (e: Event) => {
       e.preventDefault();
-      e.stopPropagation();
+      e.stopImmediatePropagation();
       const el = e.target as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement | null;
       if (el && "setCustomValidity" in el) {
         try {
@@ -350,9 +349,53 @@ export default function LaunchPage() {
         }
       }
     };
+    const blockSubmit = (e: Event) => {
+      const t = e.target as HTMLElement | null;
+      if (t && t.closest("#solphia-launch")) e.preventDefault();
+    };
     document.addEventListener("invalid", kill, true);
-    return () => document.removeEventListener("invalid", kill, true);
+    document.addEventListener("submit", blockSubmit, true);
+    return () => {
+      document.removeEventListener("invalid", kill, true);
+      document.removeEventListener("submit", blockSubmit, true);
+    };
   }, []);
+
+  async function pickArtFile() {
+    const file = await new Promise<File | null>((resolve) => {
+      const i = document.createElement("input");
+      i.type = "file";
+      i.style.position = "fixed";
+      i.style.left = "-9999px";
+      const done = (f: File | null) => {
+        i.onchange = null;
+        i.remove();
+        resolve(f);
+      };
+      i.onchange = () => done(i.files?.[0] || null);
+      document.body.appendChild(i);
+      i.click();
+      window.setTimeout(() => {
+        if (document.body.contains(i) && !i.files?.length) {
+          /* leave until user picks or cancels; cancel does not always fire on iOS */
+        }
+      }, 0);
+    });
+    if (!file) return;
+    try {
+      const src = await readLaunchImage(file);
+      if (cropUrlRef.current) URL.revokeObjectURL(cropUrlRef.current);
+      cropUrlRef.current = src.url;
+      setCropSrc(src);
+      setCropOpen(true);
+      createErr.clear("image");
+      setErr("");
+    } catch (er) {
+      const message = er instanceof Error ? er.message : "image failed";
+      setImage("");
+      createErr.fail({ image: message }, message);
+    }
+  }
 
   useEffect(() => {
     refreshPad().catch(() => {});
@@ -740,7 +783,7 @@ export default function LaunchPage() {
           {!isSwap && tab === "tape" && (
           <div className="space-y-5">
           <PadPitch />
-          <section className="overflow-hidden rounded-3xl border border-white/10 bg-black/30 p-5">
+          <section id="solphia-launch" className="overflow-hidden rounded-3xl border border-white/10 bg-black/30 p-5">
             <h2 className="mb-1 text-[22px] font-semibold text-white">Create a coin</h2>
             <p className="mb-4 text-[15px] text-white/45">Name, ticker, art. One Phantom signature. Lives on Meteora so Phantom Swap can buy it.</p>
             {!owner ? (
@@ -754,7 +797,7 @@ export default function LaunchPage() {
                   <button
                     type="button"
                     data-field="image"
-                    onClick={() => (cropSrc ? setCropOpen(true) : fileRef.current?.click())}
+                    onClick={() => (cropSrc ? setCropOpen(true) : pickArtFile().catch(() => {}))}
                     className={`relative h-20 w-20 shrink-0 overflow-hidden rounded-2xl border bg-void ${fieldClass(createErr.errors.image, "border-violet/40")}`}
                   >
                     {image ? (
@@ -768,7 +811,7 @@ export default function LaunchPage() {
                     <p className="text-sm text-ghost">Token art</p>
                     <p className="mt-0.5 text-sm text-mute">Any photo. You frame a square. We save a JPEG wallets can show.</p>
                     <div className="mt-2 flex flex-wrap gap-2">
-                      <button type="button" onClick={() => fileRef.current?.click()} className="font-mono text-[11px] text-acid">
+                      <button type="button" onClick={() => pickArtFile().catch(() => {})} className="font-mono text-[11px] text-acid">
                         {image ? "Replace" : "Choose photo"}
                       </button>
                       {cropSrc ? (
@@ -794,32 +837,6 @@ export default function LaunchPage() {
                     </div>
                     <FieldError error={createErr.errors.image} />
                   </div>
-                  <form id="solphia-nv" noValidate onSubmit={(e) => e.preventDefault()} className="hidden" />
-                  <input
-                    ref={fileRef}
-                    type="file"
-                    form="solphia-nv"
-                    tabIndex={-1}
-                    className="sr-only"
-                    onChange={async (e) => {
-                      const f = e.target.files?.[0];
-                      e.target.value = "";
-                      if (!f) return;
-                      try {
-                        const src = await readLaunchImage(f);
-                        if (cropUrlRef.current) URL.revokeObjectURL(cropUrlRef.current);
-                        cropUrlRef.current = src.url;
-                        setCropSrc(src);
-                        setCropOpen(true);
-                        createErr.clear("image");
-                        setErr("");
-                      } catch (er) {
-                        const message = er instanceof Error ? er.message : "image failed";
-                        setImage("");
-                        createErr.fail({ image: message }, message);
-                      }
-                    }}
-                  />
                 </div>
                 {cropOpen && cropSrc ? (
                   <TokenImageCrop
@@ -843,7 +860,6 @@ export default function LaunchPage() {
                     autoComplete="off"
                     autoCorrect="off"
                     spellCheck={false}
-                    form="solphia-nv"
                     value={name}
                     data-field="name"
                     maxLength={NAME_MAX}
@@ -879,7 +895,6 @@ export default function LaunchPage() {
                       autoComplete="off"
                       autoCorrect="off"
                       spellCheck={false}
-                      form="solphia-nv"
                       value={symbol}
                       maxLength={TICKER_MAX}
                       onChange={(e) => {
@@ -902,7 +917,6 @@ export default function LaunchPage() {
                 </label>
                 <input
                   value={blurb}
-                  form="solphia-nv"
                   data-field="blurb"
                   onChange={(e) => {
                     setBlurb(e.target.value);
@@ -917,7 +931,6 @@ export default function LaunchPage() {
                   <div>
                     <SocialInput
                       kind="website"
-                      form="solphia-nv"
                       value={website}
                       onChange={(v) => {
                         setWebsite(v);
@@ -931,7 +944,6 @@ export default function LaunchPage() {
                   <div>
                     <SocialInput
                       kind="x"
-                      form="solphia-nv"
                       value={x}
                       onChange={(v) => {
                         setX(v);
@@ -945,7 +957,6 @@ export default function LaunchPage() {
                   <div>
                     <SocialInput
                       kind="telegram"
-                      form="solphia-nv"
                       value={telegram}
                       onChange={(v) => {
                         setTelegram(v);
@@ -959,7 +970,6 @@ export default function LaunchPage() {
                   <div>
                     <SocialInput
                       kind="discord"
-                      form="solphia-nv"
                       value={discord}
                       onChange={(v) => {
                         setDiscord(v);
@@ -980,7 +990,6 @@ export default function LaunchPage() {
                   </div>
                   <input
                     type="range"
-                    form="solphia-nv"
                     min={0}
                     max={DEV_CAP}
                     step={0.05}
@@ -1077,7 +1086,6 @@ export default function LaunchPage() {
               <div className="flex gap-2">
                 <input
                   value={caQuery}
-                  form="solphia-nv"
                   onChange={(e) => {
                     setCaQuery(e.target.value);
                     setCaErr("");
