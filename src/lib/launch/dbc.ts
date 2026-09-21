@@ -75,9 +75,10 @@ export async function solphiaCurveConfig() {
 }
 
 async function readyTx(tx: Transaction, payer: PublicKey): Promise<Transaction> {
-  const { blockhash } = await connection().getLatestBlockhash("confirmed");
+  const latest = await connection().getLatestBlockhash("confirmed");
   tx.feePayer = payer;
-  tx.recentBlockhash = blockhash;
+  tx.recentBlockhash = latest.blockhash;
+  if ("lastValidBlockHeight" in tx) (tx as Transaction).lastValidBlockHeight = latest.lastValidBlockHeight;
   return tx;
 }
 

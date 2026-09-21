@@ -12,7 +12,8 @@ describe("tx wire encoding", () => {
   it("rejects objects that used to become atob('[object Object]')", () => {
     assert.throws(() => asTxB64({ foo: 1 }), /did not return a launch transaction/);
     assert.throws(() => b64ToBytes("[object Object]"), /corrupted/);
-    assert.throws(() => b64ToBytes("undefined"), /corrupted|missing/);
+    assert.throws(() => b64ToBytes(""), /missing/);
+    assert.throws(() => b64ToBytes("%%%"), /corrupted/);
   });
 
   it("accepts url-safe and padded base64", () => {
