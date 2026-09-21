@@ -182,7 +182,11 @@ async function sendSignedB64(b64: string): Promise<string> {
   try {
     j = JSON.parse(text) as { error?: string; signature?: string };
   } catch {
-    throw new Error("Broadcast failed (" + r.status + "). Try again.");
+    throw new Error(
+      r.status === 504
+        ? "Network timed out after you signed. Check Phantom / solscan — the coin may already be live. Do not spam Launch."
+        : "Broadcast failed (" + r.status + "). Try again.",
+    );
   }
   if (!r.ok) throw new Error(typeof j.error === "string" ? j.error : "send failed");
   if (typeof j.signature !== "string" || !j.signature) throw new Error("Broadcast did not return a signature.");

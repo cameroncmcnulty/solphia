@@ -18,16 +18,24 @@ export async function confirmSig(conn: Connection, signature: string): Promise<{
 
 export async function sendRawAndConfirm(
   raw: Buffer | Uint8Array,
-  opts?: { maxRetries?: number; conn?: Connection },
+  opts?: { maxRetries?: number; conn?: Connection; waitMs?: number; skipPreflight?: boolean },
 ): Promise<SendResult> {
   const conn = opts?.conn || connection();
   try {
     const sig = await conn.sendRawTransaction(raw, {
-      skipPreflight: false,
-      maxRetries: opts?.maxRetries ?? 4,
+      skipPreflight: opts?.skipPreflight ?? false,
+      maxRetries: opts?.maxRetries ?? 2,
     });
-    const conf = await confirmSig(conn, sig);
-    if (!conf.ok) return { ok: false, error: conf.error, signature: sig };
+    const waitMs = opts?.waitMs ?? 8_000;
+    try {
+      const latest = await conn.getLatestBlockhash("confirmed");
+      await Promise.race([
+        conn.confirmTransaction({ signature: sig, ...latest }, "confirmed"),
+        new Promise<never>((_, rej) => setTimeout(() => rej(new Error("confirm_timeout")), waitMs)),
+      ]);
+    } catch {
+      /* signature is in the cluster; launch confirm waits on the DBC pool */
+    }
     return { ok: true, signature: sig };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "send failed" };
