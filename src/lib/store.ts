@@ -639,12 +639,36 @@ export async function withCircle<T>(fn: (state: AppState) => T | Promise<T>, wri
   return result;
 }
 
+let shillPullAt = 0;
+const SHILL_PULL_MS = 400;
+
+async function saveShillOnly(next: AppState): Promise<void> {
+  mem = next;
+  writing = writing.then(async () => {
+    writeFs(next);
+    if (durableConfigured()) {
+      try {
+        await persistShill(next);
+      } catch {
+        /* local write still counts */
+      }
+    }
+  });
+  await writing;
+}
+
 export async function withShill<T>(fn: (state: AppState) => T | Promise<T>, write = false): Promise<T> {
   const state = await readyState();
-  await overlayShill(state);
+  if (write || Date.now() - shillPullAt >= SHILL_PULL_MS) {
+    await overlayShill(state);
+    shillPullAt = Date.now();
+  }
   state.shill = ensureShill(state.shill);
   const result = await fn(state);
-  if (write) await saveState(state);
+  if (write) {
+    await saveShillOnly(state);
+    shillPullAt = Date.now();
+  }
   return result;
 }
 

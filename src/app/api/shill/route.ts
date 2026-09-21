@@ -25,11 +25,13 @@ import {
   voteBoard,
   voteShill,
   votesOnMint,
+  type VoteBoardRow,
 } from "@/lib/shill/engine";
-import { SHILL_HOUSE_PIN_MAX, SHILL_PIN_SOL, SHILL_REACTS, SHILL_STICKERS, type ShillToken } from "@/lib/shill/types";
+import { SHILL_HOUSE_PIN_MAX, SHILL_PIN_SOL, SHILL_REACTS, SHILL_STICKERS, type ShillMessage, type ShillPin, type ShillToken } from "@/lib/shill/types";
 import { emptyLaunchBook } from "@/lib/launch/engine";
 import { creditRank, leaderboard, publicCard } from "@/lib/rank/engine";
 import { canModerateChat, staffRole } from "@/lib/access";
+import type { AppState } from "@/lib/types";
 import { GLDX_MINT_OFFICIAL, QQQX_MINT_OFFICIAL, SOL_MINT, SPYX_MINT_OFFICIAL, USDC_MINT, USDT_MINT } from "@/lib/pair/mints";
 import { loadMarketTape } from "@/lib/launch/market";
 
@@ -37,6 +39,33 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
 const typingMem = new Map<string, number>();
+
+type LightSnap = {
+  at: number;
+  messages: ReturnType<typeof paintMsg>[];
+  pins: ReturnType<typeof paintPin>[];
+  voteBoard: ReturnType<typeof paintVote>[];
+  members: number;
+};
+let lightSnap: LightSnap | null = null;
+const LIGHT_MS = 280;
+
+function paintMsg(m: ShillMessage) {
+  return {
+    ...m,
+    media: m.media ? displayMedia(m.media) : m.media,
+    token: m.token ? { ...m.token, image: displayMedia(m.token.image) } : m.token,
+  };
+}
+function paintPin(p: ShillPin & { votes: number }) {
+  return { ...p, image: displayMedia(p.image) };
+}
+function paintVote(row: VoteBoardRow) {
+  return { ...row, image: displayMedia(row.image) };
+}
+function bustShillSnap() {
+  lightSnap = null;
+}
 
 const Body = z.object({
   action: z.enum(["chat", "react", "typing", "read", "delete", "pin", "mute", "ban", "vote"]),
@@ -112,17 +141,50 @@ async function tapePinCoins() {
   }
 }
 
+async function shillSnap(force = false): Promise<LightSnap> {
+  const now = Date.now();
+  if (!force && lightSnap && now - lightSnap.at < LIGHT_MS) return lightSnap;
+  const s = await withShill((st) => st, false);
+  const book = ensureShill(s.shill);
+  const pins = livePins(book, now).map((p) => paintPin({ ...p, votes: votesOnMint(book, p.mint, now) }));
+  lightSnap = {
+    at: now,
+    messages: book.messages.slice(-120).map(paintMsg),
+    pins,
+    voteBoard: voteBoard(book, now).map(paintVote),
+    members: Object.keys(book.members).length,
+  };
+  return lightSnap;
+}
+
+function youCard(s: AppState, pubkey: string) {
+  if (!pubkey || !isSolanaAddress(pubkey)) return null;
+  const book = ensureShill(s.shill);
+  const launch = s.launch || emptyLaunchBook();
+  return {
+    ...publicCard(launch.accounts?.[pubkey], pubkey),
+    role: staffRole(s, pubkey),
+    staff: canModerateChat(s, pubkey),
+    banned: Boolean(book.members[pubkey]?.banned),
+    mutedUntil: book.members[pubkey]?.mutedUntil || 0,
+  };
+}
+
 export async function GET(req: NextRequest) {
+  if (!rateLimit(clientIp(req) + ":shill-get", 120, 60_000)) {
+    return NextResponse.json({ error: "rate_limited" }, { status: 429 });
+  }
   const pubkey = req.nextUrl.searchParams.get("pubkey") || "";
   const since = Number(req.nextUrl.searchParams.get("since") || 0);
-  const needHouse = await withShill((st) => {
+  const light = since > 0;
+  const needHouse = !light && (await withShill((st) => {
     st.shill = ensureShill(st.shill);
     const house = st.shill.pins.filter((p) => p.house).length;
     if (house >= SHILL_HOUSE_PIN_MAX) return false;
     if (house === 0 && !st.shill.lastHousePinAt) return true;
     const due = st.shill.nextHousePinAt || 0;
     return due > 0 && Date.now() >= due;
-  }, false);
+  }, false));
   if (needHouse) {
     const tapeCoins = await tapePinCoins();
     await withShill((st) => {
@@ -130,34 +192,39 @@ export async function GET(req: NextRequest) {
       st.shill.pins = st.shill.pins.filter((p) => !p.house || !PIN_BLOCK.has(p.mint));
       fillHousePins(st.shill, tapeCoins);
     }, true);
+    bustShillSnap();
   }
-  const s = await withShill((st) => st, false);
-  const book = ensureShill(s.shill);
+  const snap = await shillSnap(needHouse);
   const now = Date.now();
   const typing = [...typingMem.entries()]
     .filter(([pk, until]) => pk !== pubkey && until > now)
     .map(([pk]) => pk);
-  const messages = book.messages.filter((m) => m.at > since).slice(-120).map((m) => ({
-    ...m,
-    media: m.media ? displayMedia(m.media) : m.media,
-    token: m.token ? { ...m.token, image: displayMedia(m.token.image) } : m.token,
-  }));
-  const people = [...new Set(messages.map((m) => m.owner).concat(typing, pubkey ? [pubkey] : []))];
-  const profiles: Record<string, ReturnType<typeof publicCard> & { role: "admin" | "mod" | null }> = {};
+  const messages = snap.messages.filter((m) => Number(m.at) > since);
+  const s = await withShill((st) => st, false);
+  const book = ensureShill(s.shill);
+  const you = youCard(s, pubkey);
+  const nextAt = pubkey && isSolanaAddress(pubkey) ? nextVoteAt(book, pubkey) : 0;
+  if (light) {
+    const quiet = messages.length === 0;
+    return NextResponse.json({
+      messages,
+      typing,
+      members: snap.members,
+      nextVoteAt: nextAt,
+      you,
+      ...(quiet ? {} : { pins: snap.pins, voteBoard: snap.voteBoard }),
+    });
+  }
   const launch = s.launch || emptyLaunchBook();
+  const people = [...new Set(messages.map((m) => String(m.owner)).concat(typing, pubkey ? [pubkey] : []))];
+  const profiles: Record<string, ReturnType<typeof publicCard> & { role: "admin" | "mod" | null }> = {};
   for (const pk of people) {
     profiles[pk] = { ...publicCard(launch.accounts?.[pk], pk), role: staffRole(s, pk) };
   }
-  const pins = livePins(book, now).map((p) => ({
-    ...p,
-    image: displayMedia(p.image),
-    votes: votesOnMint(book, p.mint, now),
-  }));
-  const boardVotes = voteBoard(book, now).map((row) => ({ ...row, image: displayMedia(row.image) }));
   return NextResponse.json({
-    members: Object.keys(book.members).length,
+    members: snap.members,
     messages,
-    pins,
+    pins: snap.pins,
     pinSlots: pinSlotsLeft(book, now),
     nextFreeAt: nextPinFreeAt(book, now),
     pinSol: SHILL_PIN_SOL,
@@ -166,34 +233,27 @@ export async function GET(req: NextRequest) {
     typing,
     profiles,
     board: leaderboard(launch, 10),
-    voteBoard: boardVotes,
-    nextVoteAt: pubkey && isSolanaAddress(pubkey) ? nextVoteAt(book, pubkey) : 0,
-    you:
-      pubkey && isSolanaAddress(pubkey)
-        ? {
-            ...publicCard(launch.accounts?.[pubkey], pubkey),
-            role: staffRole(s, pubkey),
-            staff: canModerateChat(s, pubkey),
-            banned: Boolean(book.members[pubkey]?.banned),
-            mutedUntil: book.members[pubkey]?.mutedUntil || 0,
-          }
-        : null,
+    voteBoard: snap.voteBoard,
+    nextVoteAt: nextAt,
+    you,
     treasury: treasuryAddress(),
   });
 }
 
 export async function POST(req: NextRequest) {
-  if (!rateLimit(clientIp(req) + ":shill", 40, 60_000)) {
-    return NextResponse.json({ error: "rate_limited", message: "Slow down." }, { status: 429 });
-  }
+  const ip = clientIp(req);
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success || !isSolanaAddress(parsed.data.pubkey)) {
     return NextResponse.json({ error: "bad_request", message: "Connect your wallet." }, { status: 400 });
   }
   const b = parsed.data;
   if (b.action === "typing") {
+    if (!rateLimit(ip + ":shill-type", 80, 60_000)) return NextResponse.json({ ok: true });
     typingMem.set(b.pubkey, Date.now() + 4000);
     return NextResponse.json({ ok: true });
+  }
+  if (!rateLimit(ip + ":shill", 40, 60_000)) {
+    return NextResponse.json({ error: "rate_limited", message: "Slow down." }, { status: 429 });
   }
 
   if (b.action === "vote") {
@@ -215,6 +275,7 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       );
     }
+    bustShillSnap();
     return NextResponse.json({ ok: true, votes: out.votes, nextAt: out.nextAt });
   }
 
@@ -263,6 +324,7 @@ export async function POST(req: NextRequest) {
             : "Could not pin.";
       return NextResponse.json({ error: out.error, message, nextFreeAt: out.nextFreeAt }, { status: 400 });
     }
+    bustShillSnap();
     return NextResponse.json({ ok: true, pin: out.pin });
   }
 
@@ -310,6 +372,7 @@ export async function POST(req: NextRequest) {
     } catch {
       /* chat still sent */
     }
+    bustShillSnap();
     return NextResponse.json({ ok: true, message: posted.message, leveled, rank });
   }
 
@@ -342,5 +405,6 @@ export async function POST(req: NextRequest) {
     return { ok: false as const, error: "bad_action" };
   }, true);
   if (!posted.ok) return NextResponse.json({ error: posted.error }, { status: 400 });
+  bustShillSnap();
   return NextResponse.json({ ok: true });
 }

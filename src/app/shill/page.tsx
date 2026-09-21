@@ -2,9 +2,24 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowDownUp, ArrowLeft, Check, CheckCheck, ChevronUp, Reply, Rocket, Send, Smile, Trophy, X } from "lucide-react";
+import {
+  ArrowDownUp,
+  ArrowLeft,
+  Check,
+  CheckCheck,
+  ChevronDown,
+  ChevronUp,
+  MessageCircle,
+  Pin,
+  Reply,
+  Rocket,
+  Send,
+  Smile,
+  Trophy,
+  X,
+} from "lucide-react";
+import { SolphiaConstellation } from "@/components/SolphiaConstellation";
 import { BurstSticker } from "@/components/BurstSticker";
-
 import { CartoonPfp } from "@/components/CartoonPfp";
 import { SwapWidget } from "@/components/SwapWidget";
 import { WalletConnect } from "@/components/WalletConnect";
@@ -12,7 +27,7 @@ import { RankBadge } from "@/components/RankBadge";
 import { ProfileOverlay } from "@/components/ProfileOverlay";
 import { useOwner } from "@/lib/hooks";
 import { paySeatFromPhantom } from "@/lib/wallet/trading";
-import { SHILL_REACTS, SHILL_STICKERS, type ShillToken } from "@/lib/shill/types";
+import { SHILL_PIN_MS, SHILL_PIN_SOL, SHILL_REACTS, SHILL_STICKERS, type ShillToken } from "@/lib/shill/types";
 
 type Msg = {
   id: string;
@@ -24,6 +39,7 @@ type Msg = {
   replyTo?: string;
   reactions: Record<string, string[]>;
   token?: ShillToken;
+  pending?: boolean;
 };
 
 type PinRow = {
@@ -72,10 +88,20 @@ type Pack = {
   treasury?: string;
   voteBoard?: VoteRow[];
   nextVoteAt?: number;
+  members?: number;
 };
 
 function when(at: number) {
   return new Date(at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
+
+function dayLabel(at: number, now: number) {
+  const d = new Date(at);
+  const today = new Date(now);
+  if (d.toDateString() === today.toDateString()) return "Today";
+  const yest = new Date(now - 86_400_000);
+  if (d.toDateString() === yest.toDateString()) return "Yesterday";
+  return d.toLocaleDateString([], { month: "short", day: "numeric" });
 }
 
 function nameOf(pk: string, profiles?: Pack["profiles"]) {
@@ -108,6 +134,10 @@ function fmtMc(n?: number) {
   return `$${n.toFixed(0)}`;
 }
 
+function tick(symbol?: string) {
+  return `$${(symbol || "").replace(/^\$/, "") || "TOKEN"}`;
+}
+
 function TokenBubble({
   token,
   onCopy,
@@ -123,18 +153,18 @@ function TokenBubble({
 }) {
   const [copied, setCopied] = useState(false);
   return (
-    <div className="mt-1 grid w-full grid-cols-[2.25rem_minmax(0,1fr)_auto_3.4rem] items-center gap-2 rounded-xl bg-black/20 px-2 py-1.5">
+    <div className="mt-2 grid w-full grid-cols-[2.4rem_minmax(0,1fr)_auto_auto] items-center gap-2 rounded-2xl border border-white/10 bg-black/25 px-2 py-1.5">
       {token.image ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={token.image} alt="" className="h-9 w-9 rounded-lg object-cover" />
+        <img src={token.image} alt="" className="h-9 w-9 rounded-xl object-cover" />
       ) : (
-        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-void font-display text-xs text-acid">
+        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-void font-display text-xs text-acid">
           {(token.symbol || "?").slice(0, 2)}
         </div>
       )}
       <div className="min-w-0 overflow-hidden">
-        <div className="truncate text-[14px] font-semibold text-white">${(token.symbol || "").replace(/^\$/, "")}</div>
-        <div className="truncate font-mono text-[10px] text-white/60">
+        <div className="truncate text-[14px] font-semibold text-white">{tick(token.symbol)}</div>
+        <div className="truncate font-mono text-[10px] text-white/55">
           {token.name}
           {token.mcUsd ? ` · ${fmtMc(token.mcUsd)}` : ""}
         </div>
@@ -154,7 +184,7 @@ function TokenBubble({
       </button>
       <button
         type="button"
-        className="h-8 w-full rounded-full bg-white/10 font-mono text-[10px] text-[#6ab3f3]"
+        className="h-8 rounded-full bg-white/10 px-3 font-mono text-[10px] text-cyan"
         onClick={(e) => {
           e.stopPropagation();
           onCopy(token.mint);
@@ -181,13 +211,13 @@ function Sheet({
 }) {
   if (!open) return null;
   return (
-    <div className="absolute inset-0 z-30 col-span-full row-span-full flex items-end justify-center bg-black/55 sm:items-center sm:p-6" onClick={onClose}>
+    <div className="absolute inset-0 z-30 flex items-end justify-center bg-black/55 backdrop-blur-sm sm:items-center sm:p-6" onClick={onClose}>
       <div
-        className="max-h-[min(78%,36rem)] w-full overflow-y-auto rounded-t-3xl bg-[#17212b] pb-[env(safe-area-inset-bottom)] sm:max-w-lg sm:rounded-3xl sm:pb-4"
+        className="panel-bubble max-h-[min(78%,36rem)] w-full overflow-y-auto rounded-t-3xl pb-[env(safe-area-inset-bottom)] sm:max-w-lg sm:rounded-3xl sm:pb-4"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-4 py-3">
-          <div className="text-[17px] font-semibold text-white">{title}</div>
+          <div className="font-display text-[20px] text-ghost">{title}</div>
           <button type="button" onClick={onClose} className="flex h-9 w-9 items-center justify-center rounded-full text-white/70" aria-label="Close">
             <X className="h-5 w-5" />
           </button>
@@ -216,29 +246,27 @@ function VoteBoard({
   const rest = rows.slice(3);
   return (
     <div>
-      <div className="flex items-end justify-between gap-2">
-        <div>
-          <p className="font-mono text-[10px] tracking-[0.22em] text-acid">TROPHY</p>
-          <h3 className="font-display text-2xl text-white">24h board</h3>
-        </div>
+      <p className="font-mono text-[11px] tracking-[0.28em] text-acid">24H TROPHY</p>
+      <div className="mt-1 flex items-end justify-between gap-2">
+        <h3 className="font-display text-[26px] tracking-tight text-ghost">Board</h3>
         <p className="font-mono text-[10px] text-white/50">{canVote ? "vote ready" : `next ${fmtPinLeft(wait)}`}</p>
       </div>
-      <p className="mt-1 text-[12px] leading-snug text-[#8e9ba8]">One upvote an hour. Each vote lasts 24 hours, then drops. Keep voting to hold rank.</p>
-      {rows.length === 0 && <p className="mt-6 text-[14px] text-[#8e9ba8]">No votes yet. Upvote a CA in chat or a pinned token.</p>}
+      <p className="mt-1 text-[13px] leading-snug text-mute">One upvote an hour. Each vote lasts 24 hours. Keep voting to hold rank.</p>
+      {rows.length === 0 && <p className="mt-6 text-[14px] text-white/45">No votes yet. Upvote a CA in chat or a pinned token.</p>}
       {top.length > 0 && (
         <div className="mt-5 grid grid-cols-3 items-end gap-2">
           {[top[1], top[0], top[2]].map((row, place) => {
             if (!row) return <div key={place} />;
             const rank = place === 1 ? 1 : place === 0 ? 2 : 3;
             const tall = rank === 1 ? "pb-8 pt-4" : rank === 2 ? "pb-5 pt-3" : "pb-3 pt-3";
-            const ring = rank === 1 ? "border-[#ffd24a] bg-[#ffd24a]/10" : rank === 2 ? "border-white/30 bg-white/5" : "border-[#c47a4a] bg-[#c47a4a]/10";
+            const ring =
+              rank === 1
+                ? "border-[#ffd24a]/70 bg-[#ffd24a]/10 shadow-[0_0_24px_rgba(255,210,74,0.18)]"
+                : rank === 2
+                  ? "border-white/25 bg-white/5"
+                  : "border-[#c47a4a]/60 bg-[#c47a4a]/10";
             return (
-              <button
-                key={row.mint}
-                type="button"
-                onClick={() => onVote(row.mint)}
-                className={`rounded-2xl border px-2 ${tall} ${ring}`}
-              >
+              <button key={row.mint} type="button" onClick={() => onVote(row.mint)} className={`rounded-2xl border px-2 ${tall} ${ring}`}>
                 <div className="mx-auto flex h-12 w-12 items-center justify-center overflow-hidden rounded-full bg-void font-display text-acid">
                   {row.image ? (
                     // eslint-disable-next-line @next/next/no-img-element
@@ -247,7 +275,7 @@ function VoteBoard({
                     (row.symbol || "?").slice(0, 2)
                   )}
                 </div>
-                <div className="mt-2 truncate text-center font-display text-sm text-white">${(row.symbol || "").replace(/^\$/, "")}</div>
+                <div className="mt-2 truncate text-center font-display text-sm text-white">{tick(row.symbol)}</div>
                 <div className="stat-num text-center text-[13px] text-acid">{row.votes}</div>
                 <div className="text-center font-mono text-[9px] text-white/40">#{rank}</div>
               </button>
@@ -261,10 +289,10 @@ function VoteBoard({
             key={row.mint}
             type="button"
             onClick={() => onVote(row.mint)}
-            className="flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left hover:bg-white/5"
+            className="flex w-full items-center gap-3 rounded-2xl px-2 py-2 text-left hover:bg-white/5"
           >
-            <span className="w-6 font-mono text-[12px] text-[#8e9ba8]">{i + 4}</span>
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-void font-display text-xs text-acid">
+            <span className="w-6 font-mono text-[12px] text-white/40">{i + 4}</span>
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-void font-display text-xs text-acid">
               {row.image ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={row.image} alt="" className="h-full w-full object-cover" />
@@ -272,7 +300,7 @@ function VoteBoard({
                 (row.symbol || "?").slice(0, 2)
               )}
             </div>
-            <span className="min-w-0 flex-1 truncate text-[15px] text-white">${(row.symbol || "").replace(/^\$/, "")}</span>
+            <span className="min-w-0 flex-1 truncate text-[15px] text-white">{tick(row.symbol)}</span>
             <span className="inline-flex items-center gap-0.5 font-mono text-[12px] text-acid">
               <ChevronUp className="h-4 w-4" />
               {row.votes}
@@ -309,31 +337,51 @@ export default function ShillPage() {
   const [pinMint, setPinMint] = useState("");
   const [pinBusy, setPinBusy] = useState(false);
   const [sheet, setSheet] = useState<"pin" | "ranks" | "swap" | null>(null);
+  const [tab, setTab] = useState<"chat" | "pins" | "board">("chat");
+  const lastType = useRef(0);
   const [swapMint, setSwapMint] = useState("");
   const [openPin, setOpenPin] = useState<PinRow | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const hold = useRef<number>(0);
   const lastAt = useRef(0);
+  const abortRef = useRef<AbortController | null>(null);
   const [peek, setPeek] = useState<string | null>(null);
   const [toast, setToast] = useState("");
   const [now, setNow] = useState(() => Date.now());
   const stickToBottom = useRef(true);
+  const [atBottom, setAtBottom] = useState(true);
 
   const load = useCallback(async (full = false) => {
+    abortRef.current?.abort();
+    const ac = new AbortController();
+    abortRef.current = ac;
     const since = !full && lastAt.current ? lastAt.current : 0;
     const q = new URLSearchParams();
     if (owner) q.set("pubkey", owner);
     if (since) q.set("since", String(since));
-    const r = await fetch(`/api/shill?${q}`, { cache: "no-store" });
-    const j = await r.json();
+    const r = await fetch(`/api/shill?${q}`, { cache: "no-store", signal: ac.signal });
+    const j = (await r.json()) as Pack;
     setPack((prev) => {
       if (!since || !prev) return j;
-      const seen = new Set((prev.messages || []).map((m) => m.id));
-      const extra = (j.messages || []).filter((m: Msg) => !seen.has(m.id));
+      const seen = new Map((prev.messages || []).map((m) => [m.id, m]));
+      for (const m of j.messages || []) seen.set(m.id, m);
+      for (const loc of [...seen.values()].filter((m) => String(m.id).startsWith("local-"))) {
+        const hit = (j.messages || []).find(
+          (m) => m.owner === loc.owner && (m.text || "") === (loc.text || "") && Math.abs(m.at - loc.at) < 12_000,
+        );
+        if (hit) seen.delete(loc.id);
+      }
+      const messages = [...seen.values()].sort((a, b) => a.at - b.at).slice(-200);
       return {
         ...prev,
         ...j,
-        messages: extra.length ? [...(prev.messages || []), ...extra] : prev.messages,
+        messages,
+        board: j.board || prev.board,
+        profiles: j.profiles ? { ...prev.profiles, ...j.profiles } : prev.profiles,
+        voteBoard: j.voteBoard || prev.voteBoard,
+        you: j.you ?? prev.you,
+        pins: j.pins || prev.pins,
+        members: j.members ?? prev.members,
       };
     });
     const latest = (j.messages || []) as Msg[];
@@ -342,9 +390,31 @@ export default function ShillPage() {
 
   useEffect(() => {
     lastAt.current = 0;
+    let timer = 0;
+    let stop = false;
+    let n = 0;
+    const tick = () => {
+      if (stop) return;
+      n += 1;
+      load(n % 16 === 0)
+        .catch(() => {})
+        .finally(() => {
+          if (stop) return;
+          timer = window.setTimeout(tick, document.hidden ? 8000 : 700);
+        });
+    };
     load(true).catch(() => {});
-    const t = setInterval(() => load(false).catch(() => {}), 1800);
-    return () => clearInterval(t);
+    timer = window.setTimeout(tick, 700);
+    const vis = () => {
+      if (!document.hidden) load(false).catch(() => {});
+    };
+    document.addEventListener("visibilitychange", vis);
+    return () => {
+      stop = true;
+      window.clearTimeout(timer);
+      abortRef.current?.abort();
+      document.removeEventListener("visibilitychange", vis);
+    };
   }, [load]);
 
   useEffect(() => {
@@ -398,20 +468,49 @@ export default function ShillPage() {
   }
 
   async function send(extra?: Record<string, unknown>) {
-    setBusy(true);
+    if (!owner) {
+      setErr("Connect Phantom to chat.");
+      return;
+    }
+    const bodyText = extra?.sticker ? "" : text.trim();
+    if (!bodyText && !extra?.sticker) return;
     setErr("");
     stickToBottom.current = true;
+    setAtBottom(true);
+    const localId = "local-" + Date.now();
+    const optimistic: Msg = {
+      id: localId,
+      at: Date.now(),
+      owner,
+      kind: extra?.sticker ? "sticker" : "text",
+      text: bodyText || undefined,
+      sticker: typeof extra?.sticker === "string" ? extra.sticker : undefined,
+      replyTo: reply?.id,
+      reactions: {},
+      pending: true,
+    };
+    setPack((prev) => (prev ? { ...prev, messages: [...(prev.messages || []), optimistic] } : prev));
+    setText("");
+    setReply(null);
+    setStickers(false);
+    setBusy(true);
     try {
-      const sent = await act({ action: "chat", text, replyTo: reply?.id, ...extra });
-      setText("");
-      setReply(null);
-      setStickers(false);
+      const sent = await act({ action: "chat", text: bodyText, replyTo: optimistic.replyTo, ...extra });
       if (sent?.leveled) {
         setToast(`Rank up. You are ${sent.rank}.`);
         window.setTimeout(() => setToast(""), 3200);
       }
-      await load();
+      const real = sent?.message as Msg | undefined;
+      if (real?.id) {
+        setPack((prev) => {
+          if (!prev) return prev;
+          const rest = (prev.messages || []).filter((m) => m.id !== localId);
+          return { ...prev, messages: [...rest, { ...real, pending: false }] };
+        });
+        lastAt.current = Math.max(lastAt.current, real.at);
+      }
     } catch (e) {
+      setPack((prev) => (prev ? { ...prev, messages: (prev.messages || []).filter((m) => m.id !== localId) } : prev));
       setErr(e instanceof Error ? e.message : "send failed");
     } finally {
       setBusy(false);
@@ -419,12 +518,25 @@ export default function ShillPage() {
   }
 
   async function react(id: string, emoji: string) {
+    if (!owner) return;
+    setPack((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        messages: (prev.messages || []).map((m) => {
+          if (m.id !== id) return m;
+          const reactions = { ...m.reactions };
+          const list = reactions[emoji] || [];
+          reactions[emoji] = list.includes(owner) ? list.filter((pk) => pk !== owner) : [...list, owner];
+          return { ...m, reactions };
+        }),
+      };
+    });
     try {
       await act({ action: "react", id, emoji });
       setPicker(null);
-      await load();
     } catch {
-      /* ignore */
+      /* poll will repair */
     }
   }
 
@@ -441,7 +553,7 @@ export default function ShillPage() {
       setPinMint("");
       setSheet(null);
       flash("Pinned");
-      await load();
+      await load(true);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "pin failed");
     } finally {
@@ -483,6 +595,13 @@ export default function ShillPage() {
     setSheet("swap");
   }
 
+  function jumpLatest() {
+    stickToBottom.current = true;
+    setAtBottom(true);
+    const el = scroller.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }
+
   const msgs = pack?.messages || [];
   const byId = useMemo(() => Object.fromEntries(msgs.map((m) => [m.id, m])), [msgs]);
   const pins = pack?.pins || [];
@@ -490,381 +609,466 @@ export default function ShillPage() {
   const nextFree = pack?.nextFreeAt || 0;
   const waitMin = Math.max(1, Math.ceil((nextFree - Date.now()) / 60_000));
   const you = pack?.you;
-  const board = pack?.board || [];
   const voteRows = pack?.voteBoard || [];
   const nextVote = pack?.nextVoteAt || 0;
   const canVote = Boolean(owner) && now >= nextVote;
   const voteByMint = useMemo(() => Object.fromEntries(voteRows.map((r) => [r.mint, r.votes])), [voteRows]);
-  const online = Math.max(board.length, Object.keys(pack?.profiles || {}).length, owner ? 1 : 0);
+  const live = Math.max(pack?.members || 0, (pack?.typing || []).length + (owner ? 1 : 0), msgs.length ? 1 : 0);
 
   return (
-    <main ref={frame} className="fixed inset-0 z-40 bg-[#0b141a]">
-      <div className="relative mx-auto grid h-full min-h-0 w-full grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden bg-[#0e1621] lg:grid-cols-[minmax(0,1fr)_26rem] lg:grid-rows-[auto_auto_minmax(0,1fr)]">
-      <div className="lg:col-span-2">
-      <header className="flex items-center gap-1 border-b border-acid/25 bg-gradient-to-r from-[#10261c] via-[#17212b] to-[#1a1630] px-1 pb-2 pt-[max(0.4rem,env(safe-area-inset-top))] shadow-[0_8px_24px_rgba(0,0,0,0.35)]">
-        <Link href="/" className="flex h-11 w-11 items-center justify-center rounded-full text-white hover:bg-white/5" aria-label="Back to home">
-          <ArrowLeft className="h-6 w-6" />
-        </Link>
-        <button type="button" className="min-w-0 flex-1 text-left" onClick={() => setSheet("ranks")}>
-          <div className="truncate text-[18px] font-semibold tracking-tight text-white">Shill Zone</div>
-          <div className="truncate text-[12px] text-acid/80">{online ? `${online} online` : "live"}</div>
-        </button>
-        <button type="button" className="flex h-11 w-11 items-center justify-center rounded-full text-acid hover:bg-acid/10" onClick={() => setSheet("pin")} aria-label="Boost pin">
-          <Rocket className="h-5 w-5" />
-        </button>
-        <button type="button" className="flex h-11 w-11 items-center justify-center rounded-full text-[#8e9ba8] hover:bg-white/5" onClick={() => openSwap()} aria-label="Swap">
-          <ArrowDownUp className="h-5 w-5" />
-        </button>
-        <button type="button" className="flex h-11 w-11 items-center justify-center rounded-full text-[#8e9ba8] hover:bg-white/5" onClick={() => setSheet("ranks")} aria-label="Ranks">
-          <Trophy className="h-5 w-5" />
-        </button>
-      </header>
+    <main ref={frame} className="fixed inset-0 z-40 overflow-hidden bg-void">
+      <SolphiaConstellation />
+      <div className="shill-veil" />
+      <div className="relative z-10 mx-auto grid h-full min-h-0 w-full grid-rows-[auto_auto_minmax(0,1fr)_auto] overflow-hidden lg:max-w-6xl lg:grid-cols-[minmax(0,1fr)_22rem] lg:grid-rows-[auto_auto_minmax(0,1fr)]">
+        <div className="lg:col-span-2">
+          <header className="flex items-center gap-1 border-b border-white/10 bg-[#04000a]/55 px-1 pb-2 pt-[max(0.4rem,env(safe-area-inset-top))] backdrop-blur-xl">
+            <Link href="/" className="flex h-11 w-11 items-center justify-center rounded-full text-white/80 hover:bg-white/5" aria-label="Back to home">
+              <ArrowLeft className="h-6 w-6" />
+            </Link>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <span className="shill-live" />
+                <p className="font-mono text-[10px] tracking-[0.28em] text-acid">LIVE ROOM</p>
+              </div>
+              <div className="truncate font-display text-[20px] leading-tight text-ghost">Shill</div>
+              <div className="truncate text-[12px] text-acid/80">{live ? `${live} in the room` : "waiting"}</div>
+            </div>
+            <button type="button" className="flex h-11 w-11 items-center justify-center rounded-full text-acid hover:bg-acid/10" onClick={() => setSheet("pin")} aria-label="Pin a token">
+              <Rocket className="h-5 w-5" />
+            </button>
+            <button type="button" className="flex h-11 w-11 items-center justify-center rounded-full text-white/55 hover:bg-white/5" onClick={() => openSwap()} aria-label="Swap">
+              <ArrowDownUp className="h-5 w-5" />
+            </button>
+          </header>
+          <nav className="flex gap-6 border-b border-white/10 bg-[#04000a]/40 px-4 backdrop-blur-md">
+            {(
+              [
+                ["chat", "Chat", MessageCircle],
+                ["pins", "Pins", Pin],
+                ["board", "Board", Trophy],
+              ] as const
+            ).map(([id, label, Icon]) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setTab(id)}
+                className={`shill-tab ${tab === id ? "shill-tab-on" : ""} ${id === "board" ? "lg:hidden" : ""}`}
+              >
+                <Icon className="h-4 w-4" />
+                {label}
+                {id === "pins" && pins.length > 0 ? <span className="font-mono text-[10px] text-acid">{pins.length}</span> : null}
+              </button>
+            ))}
+          </nav>
 
-      {pins.length > 0 && (
-        <div className="shrink-0 border-b border-white/5 bg-[#17212b] px-2 py-1.5">
-          <div className="boost-rail">
-            {pins.map((p) => {
-              const ticker = (p.symbol || "").replace(/^\$/, "");
-              const left = Math.max(0, p.endsAt - now);
-              return (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => setOpenPin(p)}
-                  className="boost-tile gold"
-                >
-                  {p.image ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={p.image} alt="" className="boost-tile-art" />
-                  ) : (
-                    <div className="boost-tile-art flex items-center justify-center font-display text-xs text-acid">
-                      {(ticker || "?").slice(0, 2)}
-                    </div>
-                  )}
-                  <span className="mt-1 block w-full truncate text-center text-[12px] font-semibold text-white">
-                    ${ticker || "TOKEN"}
-                  </span>
-                  <span className="stat-num block text-center text-[11px] text-[#ffd24a]">{fmtPinLeft(left)}</span>
-                  <span className="mt-0.5 flex items-center justify-center gap-0.5 font-mono text-[10px] text-acid">
-                    <ChevronUp className="h-3 w-3" />
-                    {p.votes || voteByMint[p.mint] || 0}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+          {pins.length > 0 && tab === "chat" && (
+            <div className="shrink-0 border-b border-white/10 bg-black/15 px-2 py-2 backdrop-blur-sm">
+              <div className="boost-rail">
+                {pins.map((p) => {
+                  const left = Math.max(0, p.endsAt - now);
+                  const pct = Math.max(4, Math.min(100, (left / SHILL_PIN_MS) * 100));
+                  return (
+                    <button key={p.id} type="button" onClick={() => setOpenPin(p)} className="shill-pin-tile">
+                      {p.image ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={p.image} alt="" className="shill-pin-art" />
+                      ) : (
+                        <div className="shill-pin-art flex items-center justify-center font-display text-xs text-acid">
+                          {(p.symbol || "?").slice(0, 2)}
+                        </div>
+                      )}
+                      <span className="block w-full truncate text-center text-[12px] font-semibold text-white">{tick(p.symbol)}</span>
+                      <span className="shill-bar">
+                        <i style={{ width: `${pct}%` }} />
+                      </span>
+                      <span className="flex items-center gap-0.5 font-mono text-[10px] text-acid">
+                        <ChevronUp className="h-3 w-3" />
+                        {p.votes || voteByMint[p.mint] || 0}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
-      )}
-      </div>
 
-      <div
-        ref={scroller}
-        className="shill-wallpaper min-h-0 overflow-y-auto px-2 py-3 lg:col-start-1"
-        onClick={() => setPicker(null)}
-        onScroll={(e) => {
-          const el = e.currentTarget;
-          stickToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
-        }}
-      >
-        {msgs.map((m) => {
-          const mine = m.owner === owner;
-          const quoted = m.replyTo ? byId[m.replyTo] : null;
-          const reacts = Object.entries(m.reactions || {}).filter(([, pks]) => pks.length);
-          const seen = mine && Date.now() - m.at > 1600;
-          const sticker = m.kind === "sticker" && m.sticker;
-          return (
-            <div key={m.id} className={`mb-1.5 flex items-end gap-1.5 ${mine ? "flex-row-reverse" : ""}`}>
-              {!mine && (
-                <CartoonPfp seed={m.owner} src={pfpSrc(m.owner, pack?.profiles)} className="h-8 w-8 shrink-0" onClick={() => setPeek(m.owner)} />
-              )}
-              <div className={`flex min-w-0 max-w-[min(78%,calc(100%-2.5rem))] flex-col ${mine ? "items-end" : "items-start"}`}>
-                {!mine && (
-                  <button type="button" className="mb-0.5 px-1 text-[13px] font-medium text-[#6ab3f3]" onClick={() => setPeek(m.owner)}>
-                    {nameOf(m.owner, pack?.profiles)}
-                    <span className="ml-1.5 font-mono text-[10px] text-white/40">{rankOf(m.owner, pack?.profiles)}</span>
-                  </button>
+        <div
+          ref={scroller}
+          className={`relative min-h-0 overflow-y-auto px-2 py-3 lg:col-start-1 ${tab === "chat" ? "" : "hidden"}`}
+          onClick={() => setPicker(null)}
+          onScroll={(e) => {
+            const el = e.currentTarget;
+            const stuck = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+            stickToBottom.current = stuck;
+            setAtBottom(stuck);
+          }}
+        >
+          {msgs.length === 0 && (
+            <div className="flex h-full min-h-[18rem] flex-col items-center justify-center px-6 text-center">
+              <p className="font-mono text-[11px] tracking-[0.28em] text-acid">SHILL ZONE</p>
+              <h2 className="mt-2 font-display text-4xl text-ghost">Drop a CA.</h2>
+              <p className="mt-3 max-w-sm text-[15px] leading-relaxed text-mute">Chat like Telegram. Pin the rail. Vote the board. Phantom signs. Nothing is custodial.</p>
+            </div>
+          )}
+          {msgs.map((m, i) => {
+            const mine = m.owner === owner;
+            const quoted = m.replyTo ? byId[m.replyTo] : null;
+            const reacts = Object.entries(m.reactions || {}).filter(([, pks]) => pks.length);
+            const seen = mine && !m.pending && Date.now() - m.at > 900;
+            const sticker = m.kind === "sticker" && m.sticker;
+            const prev = msgs[i - 1];
+            const newDay = !prev || new Date(prev.at).toDateString() !== new Date(m.at).toDateString();
+            const grouped = Boolean(prev && !newDay && prev.owner === m.owner && m.at - prev.at < 8 * 60_000);
+            return (
+              <div key={m.id}>
+                {newDay && (
+                  <div className="shill-date">
+                    <span>{dayLabel(m.at, now)}</span>
+                  </div>
                 )}
-                {sticker ? (
-                  <button type="button" onClick={() => setPicker(m.id)} className="px-1">
-                    <BurstSticker emoji={m.sticker!} size={88} />
-                  </button>
-                ) : (
-                  <div
-                    className={`relative max-w-full min-w-0 overflow-hidden rounded-2xl px-2.5 py-1.5 text-[15px] leading-[1.35] text-white ${
-                      m.token ? "w-full" : ""
-                    } ${mine ? "rounded-br-md bg-[#2b5278]" : "rounded-bl-md bg-[#182533]"}`}
-                    onContextMenu={(e) => {
-                      e.preventDefault();
-                      setPicker(m.id);
-                    }}
-                    onDoubleClick={() => react(m.id, "❤️")}
-                    onTouchStart={() => {
-                      window.clearTimeout(hold.current);
-                      hold.current = window.setTimeout(() => setPicker(m.id), 450);
-                    }}
-                    onTouchEnd={() => window.clearTimeout(hold.current)}
-                    onTouchMove={() => window.clearTimeout(hold.current)}
-                  >
-                    {quoted && (
-                      <div className="mb-1 rounded-lg border-l-2 border-[#6ab3f3] bg-black/20 px-2 py-1 text-[12px] text-white/70">
-                        {quoted.sticker || quoted.text || "message"}
+                <div className={`mb-1.5 flex items-end gap-1.5 ${mine ? "flex-row-reverse" : ""} ${grouped ? "mt-0" : "mt-2"}`}>
+                  {!mine &&
+                    (grouped ? (
+                      <div className="h-8 w-8 shrink-0" />
+                    ) : (
+                      <CartoonPfp seed={m.owner} src={pfpSrc(m.owner, pack?.profiles)} className="h-8 w-8 shrink-0" onClick={() => setPeek(m.owner)} />
+                    ))}
+                  <div className={`flex min-w-0 max-w-[min(78%,calc(100%-2.5rem))] flex-col ${mine ? "items-end" : "items-start"}`}>
+                    {!mine && !grouped && (
+                      <button type="button" className="mb-0.5 px-1 text-[13px] font-medium text-acid" onClick={() => setPeek(m.owner)}>
+                        {nameOf(m.owner, pack?.profiles)}
+                        <span className="ml-1.5 font-mono text-[10px] text-white/40">{rankOf(m.owner, pack?.profiles)}</span>
+                      </button>
+                    )}
+                    {sticker ? (
+                      <button type="button" onClick={() => setPicker(m.id)} className="px-1">
+                        <BurstSticker emoji={m.sticker!} size={88} />
+                      </button>
+                    ) : (
+                      <div
+                        className={`relative max-w-full min-w-0 overflow-hidden rounded-[18px] px-3 py-2 text-[15px] leading-[1.4] text-white ${
+                          m.token ? "w-full" : ""
+                        } ${mine ? "shill-bubble-me rounded-br-md" : "shill-bubble-them rounded-bl-md"} ${m.pending ? "opacity-70" : ""}`}
+                        onContextMenu={(e) => {
+                          e.preventDefault();
+                          setPicker(m.id);
+                        }}
+                        onDoubleClick={() => react(m.id, "❤️")}
+                        onTouchStart={() => {
+                          window.clearTimeout(hold.current);
+                          hold.current = window.setTimeout(() => setPicker(m.id), 450);
+                        }}
+                        onTouchEnd={() => window.clearTimeout(hold.current)}
+                        onTouchMove={() => window.clearTimeout(hold.current)}
+                      >
+                        {quoted && (
+                          <div className="mb-1 rounded-lg border-l-2 border-cyan bg-black/25 px-2 py-1 text-[12px] text-white/70">
+                            {quoted.sticker || quoted.text || "message"}
+                          </div>
+                        )}
+                        {m.text && <div className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{m.text}</div>}
+                        {m.token && (
+                          <TokenBubble
+                            token={m.token}
+                            onCopy={copyMint}
+                            votes={voteByMint[m.token.mint] || 0}
+                            canVote={canVote}
+                            onVote={() => upvote(m.token!.mint)}
+                          />
+                        )}
+                        <div className="mt-0.5 flex items-center justify-end gap-1">
+                          <span className="font-mono text-[11px] text-white/45">{when(m.at)}</span>
+                          {mine && (seen ? <CheckCheck className="h-3.5 w-3.5 text-cyan" /> : <Check className="h-3.5 w-3.5 text-white/45" />)}
+                        </div>
                       </div>
                     )}
-                    {m.text && <div className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{m.text}</div>}
-                    {m.token && (
-                      <TokenBubble
-                        token={m.token}
-                        onCopy={copyMint}
-                        votes={voteByMint[m.token.mint] || 0}
-                        canVote={canVote}
-                        onVote={() => upvote(m.token!.mint)}
-                      />
+                    {reacts.length > 0 && (
+                      <div className={`mt-1 flex flex-wrap gap-1 ${mine ? "justify-end" : "justify-start"}`}>
+                        {reacts.map(([emoji, pks]) => (
+                          <button
+                            key={emoji}
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              react(m.id, emoji);
+                            }}
+                            className={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-[2px] text-[15px] ${
+                              owner && pks.includes(owner) ? "bg-acid/20" : "bg-white/10"
+                            }`}
+                          >
+                            <BurstSticker emoji={emoji} size={18} />
+                            {pks.length > 1 ? <span className="font-mono text-[10px] text-white/70">{pks.length}</span> : null}
+                          </button>
+                        ))}
+                      </div>
                     )}
-                    <div className="mt-0.5 flex items-center justify-end gap-1">
-                      <span className="font-mono text-[11px] text-white/45">{when(m.at)}</span>
-                      {mine && (seen ? <CheckCheck className="h-3.5 w-3.5 text-[#6ab3f3]" /> : <Check className="h-3.5 w-3.5 text-white/45" />)}
-                    </div>
-                  </div>
-                )}
-                {reacts.length > 0 && (
-                  <div className={`mt-1 flex flex-wrap gap-1 ${mine ? "justify-end" : "justify-start"}`}>
-                    {reacts.map(([emoji, pks]) => (
-                      <button
-                        key={emoji}
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          react(m.id, emoji);
-                        }}
-                        className={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-[2px] text-[15px] ${
-                          owner && pks.includes(owner) ? "bg-[#2b5278]" : "bg-[#182533]"
-                        }`}
-                      >
-                        <BurstSticker emoji={emoji} size={18} />
-                        {pks.length > 1 ? <span className="font-mono text-[10px] text-white/70">{pks.length}</span> : null}
-                      </button>
-                    ))}
-                  </div>
-                )}
-                {picker === m.id && (
-                  <div className="z-20 mt-1 flex gap-1 rounded-full bg-[#17212b] px-2 py-1 shadow-lg">
-                    {SHILL_REACTS.map((emoji) => (
-                      <button key={emoji} type="button" className="px-0.5" onClick={() => react(m.id, emoji)}>
-                        <BurstSticker emoji={emoji} size={28} />
-                      </button>
-                    ))}
-                    <button type="button" className="px-1 text-white/50" onClick={() => setReply(m)} title="Reply">
-                      <Reply className="h-4 w-4" />
-                    </button>
-                    {pack?.you?.staff && (
-                      <button type="button" className="px-1 text-white/50" onClick={() => act({ action: "delete", id: m.id }).then(() => load())}>
-                        <X className="h-4 w-4" />
-                      </button>
+                    {picker === m.id && (
+                      <div className="z-20 mt-1 flex gap-1 rounded-full border border-white/10 bg-[#0b0614]/90 px-2 py-1 shadow-lg backdrop-blur-md">
+                        {SHILL_REACTS.map((emoji) => (
+                          <button key={emoji} type="button" className="px-0.5" onClick={() => react(m.id, emoji)}>
+                            <BurstSticker emoji={emoji} size={28} />
+                          </button>
+                        ))}
+                        <button type="button" className="px-1 text-white/50" onClick={() => setReply(m)} title="Reply">
+                          <Reply className="h-4 w-4" />
+                        </button>
+                        {pack?.you?.staff && (
+                          <button type="button" className="px-1 text-white/50" onClick={() => act({ action: "delete", id: m.id }).then(() => load(true))}>
+                            <X className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
                     )}
                   </div>
-                )}
-              </div>
-            </div>
-          );
-        })}
-        {(pack?.typing || []).length > 0 && (
-          <div className="px-2 font-mono text-[12px] text-[#8e9ba8]">
-            {(pack?.typing || []).map((pk) => nameOf(pk, pack?.profiles)).join(", ")} typing…
-          </div>
-        )}
-      </div>
-
-      <div className="relative z-20 bg-[#17212b] pb-[max(0.5rem,env(safe-area-inset-bottom))] lg:col-start-1">
-        {!owner ? (
-          <div className="flex items-center justify-between gap-3 px-4 py-3">
-            <p className="text-[14px] text-[#8e9ba8]">Connect to chat.</p>
-            <WalletConnect />
-          </div>
-        ) : (
-          <>
-            {reply && (
-              <div className="flex items-center justify-between border-b border-white/5 px-3 py-1.5 text-[13px] text-[#8e9ba8]">
-                <span className="truncate">
-                  Reply to {nameOf(reply.owner, pack?.profiles)}: {reply.text || reply.sticker || "message"}
-                </span>
-                <button type="button" onClick={() => setReply(null)} className="ml-2 text-white/60">
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-            )}
-            <form
-              className="flex items-center gap-2 px-3 py-2"
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (text.trim()) send();
-              }}
-            >
-              <button type="button" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[#8e9ba8] hover:bg-white/5" onClick={() => setStickers((v) => !v)} aria-label="Stickers">
-                <Smile className="h-6 w-6" />
-              </button>
-              <input
-                value={text}
-                onChange={(e) => {
-                  setText(e.target.value);
-                  act({ action: "typing" }).catch(() => {});
-                }}
-                onFocus={() => {
-                  stickToBottom.current = true;
-                  window.scrollTo(0, 0);
-                  requestAnimationFrame(() => {
-                    window.scrollTo(0, 0);
-                    const box = scroller.current;
-                    if (box) box.scrollTop = box.scrollHeight;
-                  });
-                }}
-                placeholder="Message"
-                enterKeyHint="send"
-                className="h-11 min-w-0 flex-1 rounded-2xl bg-[#242f3d] px-4 text-[16px] text-white outline-none"
-              />
-              <button type="submit" disabled={busy || !text.trim()} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#2b5278] text-white disabled:opacity-35" aria-label="Send">
-                <Send className="h-5 w-5" />
-              </button>
-            </form>
-            {stickers && (
-              <div className="grid max-h-40 grid-cols-6 gap-1 overflow-y-auto border-t border-white/5 px-3 py-2 sm:grid-cols-8">
-                {SHILL_STICKERS.map((s) => (
-                  <button key={s} type="button" className="flex h-12 items-center justify-center" onClick={() => send({ sticker: s, kind: "sticker" })}>
-                    <BurstSticker emoji={s} size={40} />
-                  </button>
-                ))}
-              </div>
-            )}
-            {err && <p className="px-4 pb-2 text-sm text-[#ff6b6b]">{err}</p>}
-          </>
-        )}
-      </div>
-
-      <aside className="hidden min-h-0 overflow-y-auto border-l border-white/10 bg-[#101820] p-4 lg:col-start-2 lg:row-start-2 lg:row-span-2 lg:block">
-        <VoteBoard
-          rows={voteRows}
-          canVote={canVote}
-          onVote={upvote}
-          nextVote={nextVote}
-          now={now}
-        />
-      </aside>
-
-      {peek && (
-        <ProfileOverlay
-          pubkey={peek}
-          viewer={owner}
-          onClose={() => setPeek(null)}
-          onModerated={() => load().catch(() => {})}
-        />
-      )}
-      {toast && (
-        <div className="pointer-events-none absolute inset-x-0 top-4 z-[60] flex justify-center">
-          <div className="rounded-full bg-[#14f195] px-5 py-2 font-display text-base text-[#04000a]">{toast}</div>
-        </div>
-      )}
-
-      {openPin && (
-        <div className="absolute inset-0 z-40 col-span-full row-span-full flex items-center justify-center bg-black/55 p-3" onClick={() => setOpenPin(null)}>
-          <div className="w-full max-w-sm rounded-3xl border border-acid/30 bg-[#17212b] p-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center gap-3">
-              {openPin.image ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={openPin.image} alt="" className="h-14 w-14 rounded-2xl object-cover" />
-              ) : (
-                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-void font-display text-acid">
-                  {(openPin.symbol || "?").slice(0, 2)}
                 </div>
-              )}
-              <div className="min-w-0 flex-1">
-                <div className="truncate font-display text-xl text-white">${(openPin.symbol || "").replace(/^\$/, "")}</div>
-                <div className="truncate text-[13px] text-[#8e9ba8]">{openPin.name}</div>
-                {openPin.mcUsd ? <div className="stat-num text-[12px] text-acid">{fmtMc(openPin.mcUsd)}</div> : null}
               </div>
-              <button type="button" onClick={() => setOpenPin(null)} className="text-white/50" aria-label="Close">
-                <X className="h-5 w-5" />
-              </button>
+            );
+          })}
+          {(pack?.typing || []).length > 0 && (
+            <div className="px-2 font-mono text-[12px] text-mute">
+              {(pack?.typing || []).map((pk) => nameOf(pk, pack?.profiles)).join(", ")} typing…
             </div>
-            <p className="mt-3 break-all font-mono text-[11px] text-white/50">{openPin.mint}</p>
-            <div className="mt-4 grid grid-cols-3 gap-2">
-              <button
-                type="button"
-                disabled={!canVote}
-                className="rounded-full border border-acid/40 py-2.5 text-[14px] text-acid disabled:opacity-40"
-                onClick={() => upvote(openPin.mint)}
-              >
-                Up
-              </button>
-              <button
-                type="button"
-                className="rounded-full border border-white/15 py-2.5 text-[14px] text-white"
-                onClick={() => copyMint(openPin.mint)}
-              >
-                Copy CA
-              </button>
-              <button
-                type="button"
-                className="rounded-full bg-[#14f195] py-2.5 text-[14px] font-semibold text-[#04000a]"
-                onClick={() => openSwap(openPin.mint)}
-              >
-                Buy
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <Sheet open={sheet === "pin"} title="Pin to the top" onClose={() => setSheet(null)}>
-        <p className="text-[14px] text-[#8e9ba8]">👀 Pin your project to the top of the chat. 0.2 SOL · 3 hours.</p>
-        <p className="mt-1 font-mono text-[12px] text-white/70">{slots > 0 ? `${slots} paid spots open` : `No paid spots · next in ${waitMin}m`}</p>
-        {owner ? (
-          <>
-            <input
-              value={pinMint}
-              onChange={(e) => setPinMint(e.target.value.trim())}
-              placeholder="Token CA"
-              className="mt-3 w-full rounded-xl bg-[#242f3d] px-3 py-2.5 font-mono text-[13px] text-white outline-none"
-            />
+          )}
+          {!atBottom && tab === "chat" && (
             <button
               type="button"
-              disabled={pinBusy || !pinMint}
-              onClick={pin}
-              className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-full bg-[#14f195] py-2.5 text-[15px] font-semibold text-[#04000a] disabled:opacity-40"
+              onClick={jumpLatest}
+              className="shill-jump sticky bottom-3 ml-auto mr-1 flex h-10 w-10 items-center justify-center rounded-full bg-acid text-void"
+              aria-label="Jump to latest"
             >
-              <Rocket className="h-4 w-4" />
-              {pinBusy ? "Paying…" : "Pin · 0.2 SOL"}
+              <ChevronDown className="h-5 w-5" />
             </button>
-          </>
-        ) : (
-          <div className="mt-3">
-            <WalletConnect />
+          )}
+        </div>
+
+        {tab === "pins" && (
+          <div className="min-h-0 overflow-y-auto px-4 py-5 lg:col-start-1">
+            <p className="font-mono text-[11px] tracking-[0.28em] text-acid">PINNED</p>
+            <h2 className="mt-1 font-display text-[26px] tracking-tight text-ghost">On the rail</h2>
+            <p className="mt-1 text-[15px] text-white/45">Paid pins sit at the top of chat for 3 hours. {SHILL_PIN_SOL} SOL.</p>
+            <div className="mt-3 flex gap-1.5">
+              {Array.from({ length: 5 }, (_, i) => (
+                <i key={i} className={`h-1.5 flex-1 rounded-full ${i < pins.length ? "bg-[#ffd24a] shadow-[0_0_10px_rgba(255,210,74,0.6)]" : "bg-white/10"}`} />
+              ))}
+            </div>
+            <button type="button" onClick={() => setSheet("pin")} className="btn-acid mt-5 inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-[15px]">
+              <Rocket className="h-4 w-4" /> Pin a token
+            </button>
+            <div className="mt-4 divide-y divide-white/[0.06]">
+              {pins.length === 0 && <p className="py-8 text-[15px] text-white/45">No pins live. Be first.</p>}
+              {pins.map((p) => (
+                <button key={p.id} type="button" onClick={() => setOpenPin(p)} className="flex w-full items-center gap-3 py-3 text-left">
+                  {p.image ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={p.image} alt="" className="h-14 w-14 rounded-[18px] object-cover" />
+                  ) : (
+                    <div className="flex h-14 w-14 items-center justify-center rounded-[18px] bg-white/10 text-sm text-acid">{(p.symbol || "?").slice(0, 2)}</div>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[17px] font-semibold text-white">{tick(p.symbol)}</p>
+                    <p className="truncate text-[14px] text-white/45">
+                      {p.name} · {fmtPinLeft(p.endsAt - now)} left
+                    </p>
+                  </div>
+                  <span className="text-[15px] text-acid">{p.votes || voteByMint[p.mint] || 0}</span>
+                </button>
+              ))}
+            </div>
           </div>
         )}
-      </Sheet>
-
-      <Sheet open={sheet === "ranks"} title="Live board" onClose={() => setSheet(null)}>
-        <VoteBoard
-          rows={voteRows}
-          canVote={canVote}
-          onVote={(mint) => {
-            upvote(mint);
-          }}
-          nextVote={nextVote}
-          now={now}
-        />
-        {you && (
-          <button type="button" onClick={() => owner && setPeek(owner)} className="mt-5 flex w-full items-center gap-3 rounded-2xl bg-[#0e1621] p-3 text-left">
-            <RankBadge rank={you.rank} size={40} />
-            <div className="min-w-0">
-              <div className="text-[14px] font-semibold text-white">Your shill rank · {you.title}</div>
-              <div className="font-mono text-[11px] text-[#8e9ba8]">{you.need === 0 ? "Maxed" : `${you.need} XP to next`}</div>
-            </div>
-          </button>
+        {tab === "board" && (
+          <div className="min-h-0 overflow-y-auto px-4 py-5 lg:col-start-1 lg:hidden">
+            <VoteBoard rows={voteRows} canVote={canVote} onVote={upvote} nextVote={nextVote} now={now} />
+            {you && (
+              <button type="button" onClick={() => owner && setPeek(owner)} className="shill-glass mt-5 flex w-full items-center gap-3 rounded-2xl p-3 text-left">
+                <RankBadge rank={you.rank} size={40} />
+                <div className="min-w-0">
+                  <div className="text-[14px] font-semibold text-white">Your rank · {you.title}</div>
+                  <div className="font-mono text-[11px] text-mute">{you.need === 0 ? "Maxed" : `${you.need} XP to next`}</div>
+                </div>
+              </button>
+            )}
+          </div>
         )}
-      </Sheet>
 
-      <Sheet open={sheet === "swap"} title="Swap" onClose={() => setSheet(null)}>
-        <SwapWidget key={swapMint || "swap"} owner={owner} defaultMint={swapMint} />
-      </Sheet>
+        <div className={`relative z-20 border-t border-white/10 bg-[#04000a]/70 pb-[max(0.5rem,env(safe-area-inset-bottom))] backdrop-blur-xl lg:col-start-1 ${tab === "chat" ? "" : "hidden lg:block"}`}>
+          {!owner ? (
+            <div className="flex items-center justify-between gap-3 px-4 py-3">
+              <p className="text-[14px] text-mute">Connect Phantom to chat.</p>
+              <WalletConnect />
+            </div>
+          ) : (
+            <>
+              {reply && (
+                <div className="flex items-center justify-between border-b border-white/5 px-3 py-1.5 text-[13px] text-mute">
+                  <span className="truncate">
+                    Reply to {nameOf(reply.owner, pack?.profiles)}: {reply.text || reply.sticker || "message"}
+                  </span>
+                  <button type="button" onClick={() => setReply(null)} className="ml-2 text-white/60">
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              )}
+              <form
+                noValidate
+                className="flex items-center gap-2 px-3 py-2"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (text.trim()) send();
+                }}
+              >
+                <button type="button" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-mute hover:bg-white/5" onClick={() => setStickers((v) => !v)} aria-label="Stickers">
+                  <Smile className="h-6 w-6" />
+                </button>
+                <input
+                  value={text}
+                  onChange={(e) => {
+                    setText(e.target.value);
+                    const t = Date.now();
+                    if (t - lastType.current > 1800) {
+                      lastType.current = t;
+                      act({ action: "typing" }).catch(() => {});
+                    }
+                  }}
+                  onFocus={() => {
+                    stickToBottom.current = true;
+                    window.scrollTo(0, 0);
+                    requestAnimationFrame(() => {
+                      window.scrollTo(0, 0);
+                      const box = scroller.current;
+                      if (box) box.scrollTop = box.scrollHeight;
+                    });
+                  }}
+                  placeholder="Message"
+                  enterKeyHint="send"
+                  className="h-11 min-w-0 flex-1 rounded-full border border-white/10 bg-white/[0.06] px-4 text-[16px] text-white outline-none backdrop-blur-md placeholder:text-white/30"
+                />
+                <button type="submit" disabled={busy || !text.trim()} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-acid text-void shadow-[0_0_22px_rgba(20,241,149,0.35)] disabled:opacity-35" aria-label="Send">
+                  <Send className="h-5 w-5" />
+                </button>
+              </form>
+              {stickers && (
+                <div className="grid max-h-40 grid-cols-6 gap-1 overflow-y-auto border-t border-white/5 px-3 py-2 sm:grid-cols-8">
+                  {SHILL_STICKERS.map((s) => (
+                    <button key={s} type="button" className="flex h-12 items-center justify-center" onClick={() => send({ sticker: s, kind: "sticker" })}>
+                      <BurstSticker emoji={s} size={40} />
+                    </button>
+                  ))}
+                </div>
+              )}
+              {err && <p className="px-4 pb-2 text-sm text-blood">{err}</p>}
+            </>
+          )}
+        </div>
+
+        <aside className="hidden min-h-0 overflow-y-auto border-l border-white/10 bg-black/15 p-5 backdrop-blur-md lg:col-start-2 lg:row-start-2 lg:row-span-2 lg:block">
+          <VoteBoard rows={voteRows} canVote={canVote} onVote={upvote} nextVote={nextVote} now={now} />
+          {you && (
+            <button type="button" onClick={() => owner && setPeek(owner)} className="shill-glass mt-6 flex w-full items-center gap-3 rounded-2xl p-3 text-left">
+              <RankBadge rank={you.rank} size={40} />
+              <div className="min-w-0">
+                <div className="text-[14px] font-semibold text-white">Your rank · {you.title}</div>
+                <div className="font-mono text-[11px] text-mute">{you.need === 0 ? "Maxed" : `${you.need} XP to next`}</div>
+              </div>
+            </button>
+          )}
+        </aside>
+
+        {peek && (
+          <ProfileOverlay
+            pubkey={peek}
+            viewer={owner}
+            onClose={() => setPeek(null)}
+            onModerated={() => load(true).catch(() => {})}
+          />
+        )}
+        {toast && (
+          <div className="pointer-events-none absolute inset-x-0 top-4 z-[60] flex justify-center">
+            <div className="rounded-full bg-acid px-5 py-2 font-display text-base text-void">{toast}</div>
+          </div>
+        )}
+
+        {openPin && (
+          <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/55 p-3 backdrop-blur-sm" onClick={() => setOpenPin(null)}>
+            <div className="panel-bubble w-full max-w-sm rounded-3xl p-4" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center gap-3">
+                {openPin.image ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={openPin.image} alt="" className="h-14 w-14 rounded-2xl object-cover" />
+                ) : (
+                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-void font-display text-acid">
+                    {(openPin.symbol || "?").slice(0, 2)}
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <div className="truncate font-display text-xl text-white">{tick(openPin.symbol)}</div>
+                  <div className="truncate text-[13px] text-mute">{openPin.name}</div>
+                  {openPin.mcUsd ? <div className="stat-num text-[12px] text-acid">{fmtMc(openPin.mcUsd)}</div> : null}
+                </div>
+                <button type="button" onClick={() => setOpenPin(null)} className="text-white/50" aria-label="Close">
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              <p className="mt-3 break-all font-mono text-[11px] text-white/50">{openPin.mint}</p>
+              <div className="mt-4 grid grid-cols-3 gap-2">
+                <button type="button" disabled={!canVote} className="rounded-full border border-acid/40 py-2.5 text-[14px] text-acid disabled:opacity-40" onClick={() => upvote(openPin.mint)}>
+                  Up
+                </button>
+                <button type="button" className="rounded-full border border-white/15 py-2.5 text-[14px] text-white" onClick={() => copyMint(openPin.mint)}>
+                  Copy CA
+                </button>
+                <button type="button" className="rounded-full bg-acid py-2.5 text-[14px] font-semibold text-void" onClick={() => openSwap(openPin.mint)}>
+                  Buy
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <Sheet open={sheet === "pin"} title="Pin to the rail" onClose={() => setSheet(null)}>
+          <p className="text-[14px] text-mute">Pin your project to the top of chat. {SHILL_PIN_SOL} SOL · 3 hours.</p>
+          <p className="mt-1 font-mono text-[12px] text-white/70">{slots > 0 ? `${slots} paid spots open` : `No paid spots · next in ${waitMin}m`}</p>
+          {owner ? (
+            <>
+              <input
+                value={pinMint}
+                onChange={(e) => setPinMint(e.target.value.trim())}
+                placeholder="Token CA"
+                className="mt-3 w-full rounded-xl border border-white/10 bg-white/[0.06] px-3 py-2.5 font-mono text-[13px] text-white outline-none"
+              />
+              <button
+                type="button"
+                disabled={pinBusy || !pinMint}
+                onClick={pin}
+                className="btn-acid mt-3 inline-flex w-full items-center justify-center gap-2 rounded-full py-2.5 text-[15px] disabled:opacity-40"
+              >
+                <Rocket className="h-4 w-4" />
+                {pinBusy ? "Paying…" : `Pin · ${SHILL_PIN_SOL} SOL`}
+              </button>
+            </>
+          ) : (
+            <div className="mt-3">
+              <WalletConnect />
+            </div>
+          )}
+        </Sheet>
+
+        <Sheet open={sheet === "ranks"} title="Live board" onClose={() => setSheet(null)}>
+          <VoteBoard
+            rows={voteRows}
+            canVote={canVote}
+            onVote={(mint) => {
+              upvote(mint);
+            }}
+            nextVote={nextVote}
+            now={now}
+          />
+        </Sheet>
+
+        <Sheet open={sheet === "swap"} title="Swap" onClose={() => setSheet(null)}>
+          <SwapWidget key={swapMint || "swap"} owner={owner} defaultMint={swapMint} />
+        </Sheet>
       </div>
     </main>
   );
