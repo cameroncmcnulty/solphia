@@ -345,6 +345,43 @@ export default function LaunchPage() {
 
   useEffect(() => killNativeValidity(), []);
 
+  async function recoverPending(p: PendingLaunch) {
+    if (!owner) return;
+    setBusy(true);
+    setErr("");
+    setMsg("Checking " + p.mint + " on Solana…");
+    try {
+      const r = await fetch("/api/launch", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          action: "confirm",
+          pubkey: owner,
+          mint: p.mint,
+          sigs: p.sig ? [p.sig] : ["1111111111111111111111111111111111111111111111111111111111111111"],
+          name: p.name,
+          symbol: p.symbol,
+          image: p.image,
+        }),
+      });
+      const j = await r.json();
+      if (r.ok && j.coin) {
+        clearPending(p.mint);
+        setPending(loadPending());
+        setCoins((prev) => [j.coin, ...prev.filter((c) => c.id !== j.coin.id)]);
+        setOpen(j.coin);
+        setTab("mine");
+        setMsg("Recovered " + (p.symbol || p.mint));
+        return;
+      }
+      setErr((j.message || "This mint is not on-chain. You can launch again.") + " CA " + p.mint);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "recover failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function pickArtFile() {
     const file = await new Promise<File | null>((resolve) => {
       const i = document.createElement("input");
@@ -1232,7 +1269,15 @@ export default function LaunchPage() {
                       />
                       <div className="flex flex-wrap items-center gap-2 px-1 pb-2">
                         <CopyCa ca={p.mint} compact />
-                        <p className="text-[13px] text-white/45">Pending on-chain. Copy CA → solscan. If it landed, it will appear here after confirm.</p>
+                        <p className="text-[13px] text-white/45">Saved mint. Check solscan or tap Recover if it landed.</p>
+                        <button
+                          type="button"
+                          disabled={busy || !owner}
+                          className="rounded-full bg-white/10 px-3 py-1 text-[13px] text-white disabled:opacity-40"
+                          onClick={() => recoverPending(p).catch(() => {})}
+                        >
+                          Recover
+                        </button>
                       </div>
                     </div>
                   ))}

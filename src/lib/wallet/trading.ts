@@ -176,31 +176,32 @@ async function sendViaApi(b64: string): Promise<string> {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ transaction: b64 }),
-    signal: AbortSignal.timeout(12_000),
+    signal: AbortSignal.timeout(10_000),
   });
   const text = await r.text();
   let j: { error?: string; signature?: string } = {};
   try {
     j = JSON.parse(text) as { error?: string; signature?: string };
   } catch {
-    throw new Error("api_" + r.status);
+    throw new Error("Broadcast failed (" + r.status + ").");
   }
   if (!r.ok) throw new Error(typeof j.error === "string" ? j.error : "send failed");
   if (typeof j.signature !== "string" || !j.signature) throw new Error("Broadcast did not return a signature.");
   return j.signature;
 }
 
-async function sendViaRpc(bytes: Uint8Array): Promise<string> {
-  const conn = new (await import("@solana/web3.js")).Connection("https://api.mainnet-beta.solana.com", "confirmed");
-  return conn.sendRawTransaction(bytes, { skipPreflight: true, maxRetries: 4 });
-}
-
 async function sendSignedB64(b64: string): Promise<string> {
-  try {
-    return await sendViaApi(b64);
-  } catch {
-    return sendViaRpc(b64ToBytes(b64));
+  let last = "send failed";
+  for (let i = 0; i < 3; i++) {
+    try {
+      return await sendViaApi(b64);
+    } catch (e) {
+      last = e instanceof Error ? e.message : "send failed";
+      if (/Access forbidden|403/.test(last)) break;
+      await new Promise((r) => setTimeout(r, 400 * (i + 1)));
+    }
   }
+  throw new Error(last);
 }
 
 /** @deprecated pad launches are one-signer PDAs. Extra mint signer only for admin $SPHA. */
