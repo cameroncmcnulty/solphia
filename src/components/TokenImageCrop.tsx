@@ -299,20 +299,18 @@ export function TokenImageCrop({
           </div>
         </div>
 
-        <div className="mt-3">
-          <input
-            type="range"
-            min={1}
-            max={TOKEN_ART_MAX_ZOOM}
-            step={0.05}
-            value={zoom}
-            onChange={(e) => setRect(zoomCrop(rect, source.w, source.h, Number(e.target.value)))}
-            className="w-full accent-[#14f195]"
-            aria-label="Zoom"
-          />
-          <div className="mt-1 flex justify-between font-mono text-[10px] text-mute">
-            <span>Fit</span>
-            <span>{zoom.toFixed(1)}×</span>
+        <div className="mt-3 flex items-center justify-between gap-2">
+          <button type="button" className="rounded-full bg-white/10 px-3 py-1.5 text-[13px] text-white" onClick={() => setRect(zoomCrop(rect, source.w, source.h, 1))}>
+            Fit
+          </button>
+          <div className="flex items-center gap-2">
+            <button type="button" className="h-9 w-9 rounded-full bg-white/10 text-lg text-white" onClick={() => setRect(zoomCrop(rect, source.w, source.h, zoom / 1.15))}>
+              −
+            </button>
+            <span className="font-mono text-[12px] text-mute">{zoom.toFixed(1)}×</span>
+            <button type="button" className="h-9 w-9 rounded-full bg-white/10 text-lg text-white" onClick={() => setRect(zoomCrop(rect, source.w, source.h, zoom * 1.15))}>
+              +
+            </button>
           </div>
         </div>
 

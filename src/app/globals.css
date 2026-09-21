@@ -70,6 +70,17 @@
   font-weight: 500;
   color: #fff;
 }
+.safe-field {
+  outline: none;
+  min-height: 1.25em;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.safe-field:empty:before {
+  content: attr(data-placeholder);
+  color: rgba(255, 255, 255, 0.35);
+  pointer-events: none;
+}
 .pump-row {
   display: flex;
   align-items: center;

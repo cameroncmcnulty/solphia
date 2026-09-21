@@ -374,6 +374,8 @@ describe("launch create validation", () => {
     assert.equal(/type=["']email["']/.test(src), false);
     assert.equal(/type=["']file["']/.test(src), false);
     assert.equal(/<form/.test(src), false);
+    assert.equal(/type=["']range["']/.test(src), false);
+    assert.match(src, /SafeField/);
     assert.match(src, /PadPitch/);
     assert.match(src, /setTab\("tape"\)/);
   });

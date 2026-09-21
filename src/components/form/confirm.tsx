@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { firstError, firstErrorKey } from "@/lib/launch/validate";
 
 export function fieldClass(error?: string, ok = "border-violet/30") {
@@ -73,6 +73,64 @@ export function useConfirmErrors<K extends string>() {
   }
 
   return { errors, banner, fail, clear, ok, setBanner };
+}
+
+/** contenteditable so WebKit/Chrome cannot run HTML pattern checks on launch fields */
+export function SafeField({
+  value,
+  onChange,
+  placeholder,
+  className,
+  max,
+  filter,
+  field,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  className?: string;
+  max?: number;
+  filter?: (s: string) => string;
+  field?: string;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    if (document.activeElement === el) return;
+    if ((el.textContent || "") !== value) el.textContent = value;
+  }, [value]);
+  return (
+    <div
+      ref={ref}
+      role="textbox"
+      aria-multiline="false"
+      contentEditable
+      suppressContentEditableWarning
+      data-field={field}
+      data-placeholder={placeholder || ""}
+      className={`safe-field ${className || ""}`}
+      onInput={() => {
+        let v = ref.current?.textContent || "";
+        v = v.replace(/\n/g, "");
+        if (filter) v = filter(v);
+        if (max) v = v.slice(0, max);
+        onChange(v);
+        if (ref.current && ref.current.textContent !== v && document.activeElement === ref.current) {
+          ref.current.textContent = v;
+          const sel = window.getSelection();
+          const range = document.createRange();
+          range.selectNodeContents(ref.current);
+          range.collapse(false);
+          sel?.removeAllRanges();
+          sel?.addRange(range);
+        }
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") e.preventDefault();
+      }}
+    />
+  );
 }
 
 export function ErrorRing({ error, children, field }: { error?: string; children: ReactNode; field?: string }) {

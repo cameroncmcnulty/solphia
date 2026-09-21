@@ -9,7 +9,7 @@ import { CopyCa } from "@/components/CopyCa";
 import { TokenArt } from "@/components/TokenArt";
 import { PumpCoinRow } from "@/components/PumpCoinRow";
 import { TokenChart } from "@/components/TokenChart";
-import { SocialInput, TokenSocials } from "@/components/TokenSocials";
+import { TokenSocials } from "@/components/TokenSocials";
 import { WalletConnect } from "@/components/WalletConnect";
 import { useOwner } from "@/lib/hooks";
 import {
@@ -32,7 +32,7 @@ import {
   validateLaunchCreate,
   type LaunchField,
 } from "@/lib/launch/validate";
-import { FieldError, FormAlert, fieldClass, useConfirmErrors } from "@/components/form/confirm";
+import { FieldError, FormAlert, SafeField, fieldClass, useConfirmErrors } from "@/components/form/confirm";
 import { loadOwner, signPhantomAndSend } from "@/lib/wallet/trading";
 import { mintPda, newMintNonce, nonceToB64 } from "@/lib/launch/pda";
 import { dbcEnabled } from "@/lib/launch/dbcIds";
@@ -365,21 +365,24 @@ export default function LaunchPage() {
     const file = await new Promise<File | null>((resolve) => {
       const i = document.createElement("input");
       i.type = "file";
-      i.style.position = "fixed";
-      i.style.left = "-9999px";
+      i.addEventListener(
+        "invalid",
+        (e) => {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+        },
+        true,
+      );
       const done = (f: File | null) => {
         i.onchange = null;
+        window.removeEventListener("focus", onFocus);
         i.remove();
         resolve(f);
       };
+      const onFocus = () => window.setTimeout(() => done(i.files?.[0] || null), 400);
       i.onchange = () => done(i.files?.[0] || null);
-      document.body.appendChild(i);
+      window.addEventListener("focus", onFocus);
       i.click();
-      window.setTimeout(() => {
-        if (document.body.contains(i) && !i.files?.length) {
-          /* leave until user picks or cancels; cancel does not always fire on iOS */
-        }
-      }, 0);
     });
     if (!file) return;
     try {
@@ -855,21 +858,16 @@ export default function LaunchPage() {
                     <span className={`text-xs ${createErr.errors.name ? "text-blood" : "text-mute"}`}>Name</span>
                     <span className="font-mono text-[10px] text-mute">{NAME_MIN}–{NAME_MAX} characters</span>
                   </div>
-                  <input
-                    type="text"
-                    autoComplete="off"
-                    autoCorrect="off"
-                    spellCheck={false}
+                  <SafeField
+                    field="name"
                     value={name}
-                    data-field="name"
-                    maxLength={NAME_MAX}
-                    onChange={(e) => {
-                      setName(e.target.value.slice(0, NAME_MAX));
+                    max={NAME_MAX}
+                    placeholder="Name"
+                    className={`w-full rounded-2xl border bg-void px-4 py-3 text-ghost ${fieldClass(createErr.errors.name)}`}
+                    onChange={(v) => {
+                      setName(v);
                       createErr.clear("name");
                     }}
-                    placeholder="Name"
-                    aria-invalid={Boolean(createErr.errors.name)}
-                    className={`w-full rounded-2xl border bg-void px-4 py-3 text-ghost ${fieldClass(createErr.errors.name)}`}
                   />
                   <LengthHint
                     n={name.trim().length}
@@ -890,20 +888,17 @@ export default function LaunchPage() {
                   </div>
                   <div className={`flex w-full items-center rounded-2xl border bg-void px-4 py-3 font-mono text-ghost ${fieldClass(createErr.errors.symbol)}`}>
                     <span className="pr-1 text-acid">$</span>
-                    <input
-                      type="text"
-                      autoComplete="off"
-                      autoCorrect="off"
-                      spellCheck={false}
+                    <SafeField
+                      field="symbol"
                       value={symbol}
-                      maxLength={TICKER_MAX}
-                      onChange={(e) => {
-                        setSymbol(e.target.value.replace(/^\$+/, "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, TICKER_MAX));
+                      max={TICKER_MAX}
+                      placeholder="TICKER"
+                      className="w-full bg-transparent outline-none"
+                      filter={(v) => v.replace(/^\$+/, "").toUpperCase().replace(/[^A-Z0-9]/g, "")}
+                      onChange={(v) => {
+                        setSymbol(v);
                         createErr.clear("symbol");
                       }}
-                      placeholder="TICKER"
-                      aria-invalid={Boolean(createErr.errors.symbol)}
-                      className="w-full bg-transparent outline-none"
                     />
                   </div>
                   <LengthHint
@@ -915,68 +910,72 @@ export default function LaunchPage() {
                     error={createErr.errors.symbol}
                   />
                 </label>
-                <input
+                <SafeField
+                  field="blurb"
                   value={blurb}
-                  data-field="blurb"
-                  onChange={(e) => {
-                    setBlurb(e.target.value);
+                  max={280}
+                  placeholder="One line (optional)"
+                  className={`mt-3 w-full rounded-2xl border bg-void px-4 py-3 text-ghost ${fieldClass(createErr.errors.blurb)}`}
+                  onChange={(v) => {
+                    setBlurb(v);
                     createErr.clear("blurb");
                   }}
-                  placeholder="One line (optional)"
-                  aria-invalid={Boolean(createErr.errors.blurb)}
-                  className={`mt-3 w-full rounded-2xl border bg-void px-4 py-3 text-ghost ${fieldClass(createErr.errors.blurb)}`}
                 />
                 <FieldError error={createErr.errors.blurb} />
                 <div className="mt-3 grid gap-2 sm:grid-cols-2">
                   <div>
-                    <SocialInput
-                      kind="website"
+                    <SafeField
+                      field="website"
                       value={website}
+                      max={160}
+                      placeholder="website.com"
+                      className={`rounded-2xl border bg-void px-3 py-2 text-sm text-ghost ${fieldClass(createErr.errors.website)}`}
                       onChange={(v) => {
                         setWebsite(v);
                         createErr.clear("website");
                       }}
-                      placeholder="website.com"
-                      error={createErr.errors.website}
                     />
                     <FieldError error={createErr.errors.website} />
                   </div>
                   <div>
-                    <SocialInput
-                      kind="x"
+                    <SafeField
+                      field="x"
                       value={x}
+                      max={80}
+                      placeholder="@handle or x.com/…"
+                      className={`rounded-2xl border bg-void px-3 py-2 text-sm text-ghost ${fieldClass(createErr.errors.x)}`}
                       onChange={(v) => {
                         setX(v);
                         createErr.clear("x");
                       }}
-                      placeholder="@handle or x.com/…"
-                      error={createErr.errors.x}
                     />
                     <FieldError error={createErr.errors.x} />
                   </div>
                   <div>
-                    <SocialInput
-                      kind="telegram"
+                    <SafeField
+                      field="telegram"
                       value={telegram}
+                      max={80}
+                      placeholder="t.me/…"
+                      className={`rounded-2xl border bg-void px-3 py-2 text-sm text-ghost ${fieldClass(createErr.errors.telegram)}`}
                       onChange={(v) => {
                         setTelegram(v);
                         createErr.clear("telegram");
                       }}
-                      placeholder="t.me/…"
-                      error={createErr.errors.telegram}
                     />
                     <FieldError error={createErr.errors.telegram} />
                   </div>
                   <div>
-                    <SocialInput
-                      kind="discord"
+                    <SafeField
+                      field="discord"
                       value={discord}
+                      max={120}
+                      placeholder="discord.gg/…"
+                      className={`rounded-2xl border bg-void px-3 py-2 text-sm text-ghost ${fieldClass(createErr.errors.discord)}`}
                       onChange={(v) => {
                         setDiscord(v);
                         createErr.clear("discord");
                       }}
-                      placeholder="discord.gg/…"
-                      error={createErr.errors.discord}
                     />
                     <FieldError error={createErr.errors.discord} />
                   </div>
@@ -988,18 +987,23 @@ export default function LaunchPage() {
                       {devBuy.toFixed(2)} SOL · {(devPct * 100).toFixed(2)}% of supply
                     </span>
                   </div>
-                  <input
-                    type="range"
-                    min={0}
-                    max={DEV_CAP}
-                    step={0.05}
-                    value={Math.min(devBuy, DEV_CAP)}
-                    onChange={(e) => {
-                      setDevBuy(Number(e.target.value));
-                      createErr.clear("launchBuySol");
-                    }}
-                    className="mt-2 w-full accent-[#14f195]"
-                  />
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {[0, ...PRESETS.filter((n) => n <= DEV_CAP), Number(DEV_CAP.toFixed(2))].filter((n, i, a) => a.indexOf(n) === i).map((n) => (
+                      <button
+                        key={n}
+                        type="button"
+                        onClick={() => {
+                          setDevBuy(n);
+                          createErr.clear("launchBuySol");
+                        }}
+                        className={`rounded-full px-3 py-1.5 text-[13px] font-medium ${
+                          Math.abs(devBuy - n) < 0.001 ? "bg-[#14f195] text-black" : "bg-white/10 text-white"
+                        }`}
+                      >
+                        {n === 0 ? "0" : `${n} SOL`}
+                      </button>
+                    ))}
+                  </div>
                   <FieldError error={createErr.errors.launchBuySol} />
                   <p className="mt-1 text-xs text-mute">
                     Optional first buy into this wallet, bundled in the same signature. Leave at 0 to put the whole
