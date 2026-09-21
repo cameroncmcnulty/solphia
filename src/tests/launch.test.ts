@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import {
   CURVE_SALE,
   DEV_BUY_MAX_SOL,
@@ -361,6 +363,15 @@ describe("launch create validation", () => {
     assert.deepEqual(e, {});
     const three = validateLaunchCreate({ creator: A, name: "HII", symbol: "HIII" });
     assert.deepEqual(three, {});
+  });
+
+  it("does not use HTML pattern/minLength/accept that Safari reports as pattern mismatch", () => {
+    const src = readFileSync(path.join(process.cwd(), "src/app/launch/page.tsx"), "utf8");
+    assert.equal(src.includes("minLength"), false);
+    assert.equal(/accept=/.test(src), false);
+    assert.equal(/pattern=/.test(src), false);
+    assert.equal(/type=["']url["']/.test(src), false);
+    assert.equal(/type=["']email["']/.test(src), false);
   });
 
   it("rejects a 1-character name or ticker with an explicit too-short message", () => {

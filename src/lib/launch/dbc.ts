@@ -111,6 +111,15 @@ export async function buildDbcLaunchTx(opts: {
   const payer = new PublicKey(opts.payer);
   const mint = new PublicKey(opts.mint);
   const buySol = Math.max(0, Number(opts.buySol) || 0);
+  const createPoolParam = {
+    name: opts.name.slice(0, 32),
+    symbol: opts.symbol.slice(0, 10),
+    uri: opts.uri.slice(0, 255),
+    payer,
+    poolCreator: payer,
+    config: new PublicKey(DBC_CONFIG),
+    baseMint: mint,
+  };
   const firstBuy =
     buySol >= MIN_TRADE_SOL
       ? {
@@ -120,20 +129,35 @@ export async function buildDbcLaunchTx(opts: {
           referralTokenAccount: null,
         }
       : undefined;
-  const raw = await client().creator.createPoolWithFirstBuy({
-    createPoolParam: {
-      name: opts.name.slice(0, 32),
-      symbol: opts.symbol.slice(0, 10),
-      uri: opts.uri.slice(0, 200),
-      payer,
-      poolCreator: payer,
-      config: new PublicKey(DBC_CONFIG),
-      baseMint: mint,
-    },
-    firstBuyParam: firstBuy,
-  });
-  const tx = await readyTx(raw, payer);
+  const raw = firstBuy
+    ? await client().creator.createPoolWithFirstBuy({ createPoolParam, firstBuyParam: firstBuy })
+    : await client().creator.createPool(createPoolParam);
+  const tx = await readyTx(raw as Transaction, payer);
   return { transaction: encodeTx(tx), mint: mint.toBase58(), tokensOut: 0, feeSol: buySol * 0.01 };
+}
+
+export async function buildDbcClaimCreatorTx(opts: {
+  mint: string;
+  owner: string;
+}): Promise<{ ok: true; transaction: string } | { ok: false; error: string }> {
+  const dbc = client();
+  const row = await dbc.state.getPoolByBaseMint(opts.mint);
+  if (!row) return { ok: false, error: "curve_missing" };
+  const creator = new PublicKey(opts.owner);
+  const max = new BN("1000000000000000");
+  try {
+    const raw = await dbc.creator.claimCreatorTradingFee({
+      creator,
+      payer: creator,
+      pool: row.publicKey,
+      maxBaseAmount: max,
+      maxQuoteAmount: max,
+    });
+    const tx = await readyTx(raw as Transaction, creator);
+    return { ok: true, transaction: encodeTx(tx) };
+  } catch {
+    return { ok: false, error: "empty" };
+  }
 }
 
 function asPool(row: { publicKey: PublicKey; account: any }) {

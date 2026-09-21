@@ -395,6 +395,24 @@ export async function POST(req: NextRequest) {
     if (!coin) return fail("not_found", 404);
   }
 
+  if (b.action === "withdraw_dev") {
+    const snap = await withLaunch((st) => st, false);
+    const coin = bookOf(snap).coins.find((c) => c.id === b.id || (b.mint && c.mint === b.mint));
+    if (!coin) return fail("not_found", 404);
+    if (coin.creator !== b.pubkey) return fail("not_creator");
+    if (dbcEnabled() && coin.mint && isSolanaAddress(coin.mint)) {
+      const built = await (await dbcApi()).buildDbcClaimCreatorTx({ mint: coin.mint, owner: b.pubkey });
+      if (!built.ok) return fail(built.error);
+      return NextResponse.json({
+        ok: true,
+        needsSign: true,
+        claim: true,
+        transaction: built.transaction,
+        coin: publicCoin(coin, solUsd, b.pubkey, bookOf(snap)),
+      });
+    }
+  }
+
   if (b.action === "trade_confirm") {
     const mint = b.mint || "";
     const out = await withLaunch(async (s) => {

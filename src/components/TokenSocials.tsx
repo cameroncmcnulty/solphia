@@ -106,6 +106,7 @@ export function SocialInput({
         autoComplete="off"
         autoCorrect="off"
         spellCheck={false}
+        onInvalid={(e) => e.preventDefault()}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}

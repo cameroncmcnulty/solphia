@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Rocket } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { CopyCa } from "@/components/CopyCa";
 
@@ -248,7 +249,6 @@ export default function LaunchPage() {
   const [busy, setBusy] = useState(false);
   const [solUsd, setSolUsd] = useState(0);
   const [tab, setTab] = useState<"tape" | "mine">("tape");
-  const [createOpen, setCreateOpen] = useState(false);
   const [age, setAge] = useState<AgeFilter>("newest");
   const [vol, setVol] = useState<VolWindow | null>(null);
   const [ranked, setRanked] = useState(false);
@@ -539,7 +539,6 @@ export default function LaunchPage() {
       setDiscord("");
       setDevBuy(0);
       setTab("mine");
-      setCreateOpen(false);
       setBusy(false);
       setMsg(
         devBuy > 0
@@ -590,8 +589,13 @@ export default function LaunchPage() {
       }
       let listed = j;
       if (j.needsSign && j.transaction) {
-        setMsg("Sign the swap in Phantom…");
+        setMsg(j.claim ? "Sign the claim in Phantom…" : "Sign the swap in Phantom…");
         const sig = await signPhantomAndSend(j.transaction);
+        if (j.claim) {
+          setMsg("Creator fees claimed into this wallet.");
+          await Promise.all([refreshPad(), refreshTape()]);
+          return;
+        }
         const conf = await fetch("/api/launch", {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -631,7 +635,7 @@ export default function LaunchPage() {
         setDiscord("");
         setDevBuy(0);
         setTab("mine");
-        setMsg("Live on the Solphia curve.");
+        setMsg("Live on Meteora DBC.");
       } else if (body.action === "withdraw_dev") setMsg("Dev rewards booked.");
       else setMsg("Filled. Tokens are in your wallet.");
     } catch (e) {
@@ -688,32 +692,38 @@ export default function LaunchPage() {
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(120%_80%_at_50%_-10%,rgba(20,80,40,0.35),transparent_55%)]" />
       <div className="relative z-10 mx-auto max-w-lg px-4 pt-5 md:max-w-2xl md:pt-8">
         <div className="flex items-center justify-between gap-3">
-          <p className="text-[32px] font-semibold tracking-tight text-white">{isSwap ? "Swap" : "Coins"}</p>
-          {!isSwap ? (
+          <p className="text-[32px] font-semibold tracking-tight text-white">{isSwap ? "Swap" : "Launch"}</p>
+        </div>
+
+        {!isSwap && (
+          <div className="mt-5 flex gap-5 border-b border-white/10 text-[16px]">
             <button
               type="button"
               onClick={() => {
-                setCreateOpen((v) => !v);
+                setTab("tape");
                 setOpen(null);
               }}
-              className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3.5 py-2 text-[15px] font-medium text-white"
+              className={`inline-flex items-center gap-1.5 pb-2 ${tab === "tape" ? "border-b-2 border-white font-medium text-white" : "text-white/40"}`}
             >
-              Create
-              <span className="flex h-6 w-6 items-center justify-center rounded-full border border-white/20 text-[13px]">○</span>
+              <Rocket className="h-4 w-4" />
+              Launch
             </button>
-          ) : null}
-        </div>
+            <button
+              type="button"
+              onClick={() => setTab("mine")}
+              className={`pb-2 ${tab === "mine" ? "border-b-2 border-white font-medium text-white" : "text-white/40"}`}
+            >
+              Your tokens
+            </button>
+          </div>
+        )}
 
-        <div className={`mt-6 ${isSwap ? "" : ""}`}>
-          {!isSwap && createOpen && (
+        <div className="mt-6">
+          {!isSwap && tab === "tape" && (
           <div className="space-y-5">
           <section className="overflow-hidden rounded-3xl border border-white/10 bg-black/30 p-5">
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-[22px] font-semibold text-white">Create a coin</h2>
-              <button type="button" onClick={() => setCreateOpen(false)} className="text-[15px] text-white/50">
-                Close
-              </button>
-            </div>
+            <h2 className="mb-1 text-[22px] font-semibold text-white">Create a coin</h2>
+            <p className="mb-4 text-[15px] text-white/45">Name, ticker, art. One Phantom signature. Lives on Meteora so Phantom Swap can buy it.</p>
             {!owner ? (
               <div className="mt-6 space-y-3">
                 <p className="text-sm text-mute">Connect your wallet to launch.</p>
@@ -768,7 +778,6 @@ export default function LaunchPage() {
                   <input
                     ref={fileRef}
                     type="file"
-                    accept="image/*"
                     className="hidden"
                     onChange={async (e) => {
                       const f = e.target.files?.[0];
@@ -801,15 +810,7 @@ export default function LaunchPage() {
                     }}
                   />
                 ) : null}
-                <form
-                  noValidate
-                  onInvalid={(e) => e.preventDefault()}
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    launchToken().catch(() => {});
-                  }}
-                >
+                <div>
                 <label className="mt-4 block">
                   <div className="mb-1.5 flex items-baseline justify-between gap-3">
                     <span className={`text-xs ${createErr.errors.name ? "text-blood" : "text-mute"}`}>Name</span>
@@ -822,9 +823,7 @@ export default function LaunchPage() {
                     spellCheck={false}
                     value={name}
                     data-field="name"
-                    minLength={NAME_MIN}
                     maxLength={NAME_MAX}
-                    onInvalid={(e) => e.preventDefault()}
                     onChange={(e) => {
                       setName(e.target.value.slice(0, NAME_MAX));
                       createErr.clear("name");
@@ -859,9 +858,7 @@ export default function LaunchPage() {
                       autoCorrect="off"
                       spellCheck={false}
                       value={symbol}
-                      minLength={TICKER_MIN}
                       maxLength={TICKER_MAX}
-                      onInvalid={(e) => e.preventDefault()}
                       onChange={(e) => {
                         setSymbol(e.target.value.replace(/^\$+/, "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, TICKER_MAX));
                         createErr.clear("symbol");
@@ -977,7 +974,6 @@ export default function LaunchPage() {
                   </div>
                   <button
                     type="button"
-                    formNoValidate
                     disabled={busy}
                     onClick={() => launchToken().catch(() => {})}
                     className="btn-acid min-h-[48px] rounded-full px-6 disabled:opacity-40"
@@ -990,20 +986,21 @@ export default function LaunchPage() {
                 <div className="mt-3">
                   <FormAlert error={createErr.banner} />
                 </div>
-                </form>
+                </div>
               </>
             )}
           </section>
           </div>
           )}
 
-          {(!createOpen || isSwap) && (
+          {((!isSwap && tab === "mine") || isSwap) && (
           <section className="mt-2">
             {isSwap && (
               <div className="mb-4">
                 <SwapWidget owner={owner} title="Swap" />
               </div>
             )}
+            {isSwap && (
             <div className="flex gap-5 border-b border-white/10 text-[16px]">
               <button
                 type="button"
@@ -1017,9 +1014,13 @@ export default function LaunchPage() {
                 onClick={() => setTab("mine")}
                 className={`pb-2 ${tab === "mine" ? "border-b-2 border-white font-medium text-white" : "text-white/40"}`}
               >
-                {isSwap ? "Closed" : "Yours"}
+                Closed
               </button>
             </div>
+            )}
+            {!isSwap && (
+              <p className="mb-2 text-[15px] text-white/45">Coins you launched. Manage them and claim creator fees here.</p>
+            )}
             <div className="mt-3 space-y-2">
               {isSwap && (
                 <BoostRail
@@ -1045,6 +1046,7 @@ export default function LaunchPage() {
               {isSwap && (
               <>
               <form
+                noValidate
                 className="flex gap-2"
                 onSubmit={(e) => {
                   e.preventDefault();
@@ -1170,12 +1172,12 @@ export default function LaunchPage() {
               )}
               {rows.length === 0 && !tapeLoading && (
                 <div className="py-10">
-                  <p className="text-[22px] font-semibold text-white">Get your first coin today!</p>
+                  <p className="text-[22px] font-semibold text-white">{!isSwap ? "No tokens yet" : "Get your first coin today!"}</p>
                   <p className="mt-2 text-[15px] text-white/45">
                     {!isSwap
                       ? owner
-                        ? "Nothing launched from this wallet yet. Hit Create."
-                        : "Connect Phantom, then hit Create."
+                        ? "Launch a coin on the Launch tab. It will show up here to manage and claim rewards."
+                        : "Connect Phantom, then launch a coin."
                       : "No coins in this window."}
                   </p>
                 </div>
@@ -1200,6 +1202,21 @@ export default function LaunchPage() {
                       });
                     }}
                   />
+                  {!isSwap && owner && row.coin.creator === owner ? (
+                    <div className="mb-2 flex items-center justify-between gap-2 px-1 pb-2">
+                      <p className="text-[13px] text-white/45">
+                        Creator fees {row.coin.devRewardsSol > 0 ? `· ${fmtSol(row.coin.devRewardsSol, 4)} SOL booked` : "on Meteora"}
+                      </p>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => act({ action: "withdraw_dev", id: row.coin.id, mint: row.coin.mint })}
+                        className="rounded-full bg-[#14f195]/15 px-3 py-1.5 text-[13px] font-medium text-[#14f195] disabled:opacity-40"
+                      >
+                        Claim rewards
+                      </button>
+                    </div>
+                  ) : null}
                   {open?.id === row.coin.id && (
                     <div id={`desk-${open.id}`} className="scroll-mt-[4.75rem]">
                       <CoinDesk
@@ -1521,7 +1538,7 @@ function CoinDesk({
                       onClick={() => onAct({ action: "withdraw_dev", id: open.id })}
                       className="mt-3 w-full rounded-full border border-acid/40 py-2 text-sm text-acid disabled:opacity-40"
                     >
-                      Withdraw {fmtSol(open.devRewardsSol, 4)} SOL rewards
+                      Claim creator rewards
                     </button>
                   )}
                 </>
