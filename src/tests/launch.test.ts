@@ -372,6 +372,8 @@ describe("launch create validation", () => {
     assert.equal(/pattern=/.test(src), false);
     assert.equal(/type=["']url["']/.test(src), false);
     assert.equal(/type=["']email["']/.test(src), false);
+    assert.match(src, /PadPitch/);
+    assert.match(src, /setTab\("tape"\)/);
   });
 
   it("rejects a 1-character name or ticker with an explicit too-short message", () => {

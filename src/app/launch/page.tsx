@@ -42,6 +42,7 @@ import { BoostBuy, BoostRail, fmtLeft } from "@/components/BoostBuy";
 
 import { TokenImageCrop, readLaunchImage, type CropSource } from "@/components/TokenImageCrop";
 import { yourLaunches } from "@/lib/launch/yours";
+import { PadPitch } from "@/components/PadPitch";
 
 import { SwapBox, SwapShell, SwapTabs, SwapWidget } from "@/components/SwapWidget";
 import type { BoostRank } from "@/lib/launch/boost";
@@ -333,8 +334,25 @@ export default function LaunchPage() {
   }
 
   useEffect(() => {
-    setTab(isSwap ? "tape" : "mine");
+    setTab("tape");
   }, [isSwap]);
+
+  useEffect(() => {
+    const kill = (e: Event) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const el = e.target as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement | null;
+      if (el && "setCustomValidity" in el) {
+        try {
+          el.setCustomValidity("");
+        } catch {
+          /* ignore */
+        }
+      }
+    };
+    document.addEventListener("invalid", kill, true);
+    return () => document.removeEventListener("invalid", kill, true);
+  }, []);
 
   useEffect(() => {
     refreshPad().catch(() => {});
@@ -721,6 +739,7 @@ export default function LaunchPage() {
         <div className="mt-6">
           {!isSwap && tab === "tape" && (
           <div className="space-y-5">
+          <PadPitch />
           <section className="overflow-hidden rounded-3xl border border-white/10 bg-black/30 p-5">
             <h2 className="mb-1 text-[22px] font-semibold text-white">Create a coin</h2>
             <p className="mb-4 text-[15px] text-white/45">Name, ticker, art. One Phantom signature. Lives on Meteora so Phantom Swap can buy it.</p>
@@ -775,10 +794,13 @@ export default function LaunchPage() {
                     </div>
                     <FieldError error={createErr.errors.image} />
                   </div>
+                  <form id="solphia-nv" noValidate onSubmit={(e) => e.preventDefault()} className="hidden" />
                   <input
                     ref={fileRef}
                     type="file"
-                    className="hidden"
+                    form="solphia-nv"
+                    tabIndex={-1}
+                    className="sr-only"
                     onChange={async (e) => {
                       const f = e.target.files?.[0];
                       e.target.value = "";
@@ -821,6 +843,7 @@ export default function LaunchPage() {
                     autoComplete="off"
                     autoCorrect="off"
                     spellCheck={false}
+                    form="solphia-nv"
                     value={name}
                     data-field="name"
                     maxLength={NAME_MAX}
@@ -854,9 +877,9 @@ export default function LaunchPage() {
                     <input
                       type="text"
                       autoComplete="off"
-                      autoCapitalize="characters"
                       autoCorrect="off"
                       spellCheck={false}
+                      form="solphia-nv"
                       value={symbol}
                       maxLength={TICKER_MAX}
                       onChange={(e) => {
@@ -879,6 +902,7 @@ export default function LaunchPage() {
                 </label>
                 <input
                   value={blurb}
+                  form="solphia-nv"
                   data-field="blurb"
                   onChange={(e) => {
                     setBlurb(e.target.value);
@@ -893,6 +917,7 @@ export default function LaunchPage() {
                   <div>
                     <SocialInput
                       kind="website"
+                      form="solphia-nv"
                       value={website}
                       onChange={(v) => {
                         setWebsite(v);
@@ -906,6 +931,7 @@ export default function LaunchPage() {
                   <div>
                     <SocialInput
                       kind="x"
+                      form="solphia-nv"
                       value={x}
                       onChange={(v) => {
                         setX(v);
@@ -919,6 +945,7 @@ export default function LaunchPage() {
                   <div>
                     <SocialInput
                       kind="telegram"
+                      form="solphia-nv"
                       value={telegram}
                       onChange={(v) => {
                         setTelegram(v);
@@ -932,6 +959,7 @@ export default function LaunchPage() {
                   <div>
                     <SocialInput
                       kind="discord"
+                      form="solphia-nv"
                       value={discord}
                       onChange={(v) => {
                         setDiscord(v);
@@ -952,6 +980,7 @@ export default function LaunchPage() {
                   </div>
                   <input
                     type="range"
+                    form="solphia-nv"
                     min={0}
                     max={DEV_CAP}
                     step={0.05}
@@ -1045,16 +1074,10 @@ export default function LaunchPage() {
               )}
               {isSwap && (
               <>
-              <form
-                noValidate
-                className="flex gap-2"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  searchMint().catch(() => {});
-                }}
-              >
+              <div className="flex gap-2">
                 <input
                   value={caQuery}
+                  form="solphia-nv"
                   onChange={(e) => {
                     setCaQuery(e.target.value);
                     setCaErr("");
@@ -1062,10 +1085,10 @@ export default function LaunchPage() {
                   placeholder="Search mint (CA)"
                   className="min-h-[40px] min-w-0 flex-1 rounded-full border border-violet/30 bg-void px-4 font-mono text-[11px] text-ghost"
                 />
-                <button type="submit" disabled={caBusy} className="btn-ghost min-h-[40px] rounded-full px-4 font-mono text-[11px] disabled:opacity-40">
+                <button type="button" disabled={caBusy} onClick={() => searchMint().catch(() => {})} className="btn-ghost min-h-[40px] rounded-full px-4 font-mono text-[11px] disabled:opacity-40">
                   {caBusy ? "…" : "Search"}
                 </button>
-              </form>
+              </div>
               {caErr && <p className="font-mono text-[11px] text-blood">{caErr}</p>}
               <div>
                 <div className="font-mono text-[10px] tracking-[0.22em] text-mute">SOURCE</div>

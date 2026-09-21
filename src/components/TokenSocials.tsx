@@ -82,12 +82,14 @@ export function SocialInput({
   onChange,
   placeholder,
   error,
+  form,
 }: {
   kind: "website" | "x" | "telegram" | "discord";
   value: string;
   onChange: (v: string) => void;
   placeholder: string;
   error?: string;
+  form?: string;
 }) {
   const Icon = kind === "website" ? Globe : kind === "x" ? XLogo : kind === "telegram" ? Telegram : Discord;
   return (
@@ -108,6 +110,7 @@ export function SocialInput({
         spellCheck={false}
         onInvalid={(e) => e.preventDefault()}
         value={value}
+        form={form}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         aria-invalid={Boolean(error)}
