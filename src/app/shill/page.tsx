@@ -701,7 +701,7 @@ export default function ShillPage() {
             const el = e.currentTarget;
             const stuck = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
             stickToBottom.current = stuck;
-            setAtBottom(stuck);
+            setAtBottom((was) => (was === stuck ? was : stuck));
           }}
         >
           {msgs.length === 0 && (
