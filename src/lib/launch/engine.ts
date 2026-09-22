@@ -128,6 +128,21 @@ export function ensureAccount(book: LaunchBook, pubkey: string): LaunchAccount {
   return book.accounts[pubkey];
 }
 
+export function resolveReferrer(book: LaunchBook, raw: string, except?: string): string {
+  const s = (raw || "").trim();
+  if (!s) return "";
+  if (isSolanaAddress(s) && s !== except) return s;
+  const key = s.replace(/^@+/, "").toLowerCase();
+  if (key.length < 3) return "";
+  for (const [pk, acc] of Object.entries(book.accounts || {})) {
+    if (!acc.username) continue;
+    if (acc.username.replace(/^@+/, "").toLowerCase() !== key) continue;
+    if (except && pk === except) continue;
+    return pk;
+  }
+  return "";
+}
+
 export function bindReferrer(
   book: LaunchBook,
   pubkey: string,
@@ -136,11 +151,10 @@ export function bindReferrer(
   if (!isSolanaAddress(pubkey)) return { ok: false, error: "bad_wallet" };
   const acc = ensureAccount(book, pubkey);
   if (acc.referrer) return { ok: true, account: acc, bound: false };
-  if (!referrer || !isSolanaAddress(referrer) || referrer === pubkey) {
-    return { ok: true, account: acc, bound: false };
-  }
-  ensureAccount(book, referrer);
-  acc.referrer = referrer;
+  const host = resolveReferrer(book, referrer, pubkey);
+  if (!host) return { ok: true, account: acc, bound: false };
+  ensureAccount(book, host);
+  acc.referrer = host;
   acc.referredAt = Date.now();
   return { ok: true, account: acc, bound: true };
 }
@@ -495,6 +509,7 @@ export function createCoin(
     now?: number;
     mint?: string;
     venue?: LaunchVenue;
+    referrer?: string;
   },
 ): { ok: true; coin: LaunchCoin } | { ok: false; error: string } {
   const issues = validateLaunchCreate(opts);
@@ -519,6 +534,7 @@ export function createCoin(
   if (book.coins.some((c) => c.symbol === symbol && c.status === "curve")) {
     return { ok: false, error: "ticker_taken" };
   }
+  if (opts.referrer) bindReferrer(book, opts.creator, opts.referrer);
   const creatorAcc = ensureAccount(book, opts.creator);
   const coin: LaunchCoin = {
     id: id("ln"),
@@ -597,7 +613,7 @@ export function recordOnchainFill(
   };
   coin.fills.push(fill);
   if (coin.fills.length > 200) coin.fills.splice(0, coin.fills.length - 200);
-  book.treasuryFeesSol += splitFee(feeSol, Boolean(coin.referrer)).treasury;
+  creditFees(book, coin, splitFee(feeSol, Boolean(coin.referrer)));
   return { ok: true, fill, coin };
 }
 

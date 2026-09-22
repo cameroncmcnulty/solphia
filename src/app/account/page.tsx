@@ -53,7 +53,6 @@ type Desk = {
 
 const TABS = [
   ["overview", "Account"],
-  ["wallets", "Wallets"],
   ["launches", "Launched"],
   ["referrals", "Referrals"],
 ] as const;
@@ -63,6 +62,7 @@ type Tab = (typeof TABS)[number][0];
 function tabOf(): Tab {
   if (typeof window === "undefined") return "overview";
   const h = window.location.hash.replace(/^#/, "");
+  if (h === "wallets") return "overview";
   return TABS.some((t) => t[0] === h) ? (h as Tab) : "overview";
 }
 
@@ -179,7 +179,7 @@ export default function AccountPage() {
       <main className="pump-shell">
         <div className="pump-wrap py-16">
         <h1 className="pump-h1">Account</h1>
-        <p className="pump-p mt-2">Connect Phantom to manage wallets, PFP, launches, and referrals.</p>
+        <p className="pump-p mt-2">Connect Phantom to manage PFP, launches, and referrals.</p>
         <div className="mt-6">
           <WalletConnect />
         </div>
@@ -283,84 +283,6 @@ export default function AccountPage() {
             </p>
           </div>
         </div>
-      )}
-
-      {tab === "wallets" && (
-        <section className="panel-bubble mt-6 space-y-4 overflow-hidden rounded-3xl p-5">
-          <h2 className="text-[22px] font-semibold tracking-tight text-white">Trading wallets</h2>
-          <p className="text-sm text-mute">Phantom is login. The trading wallet lives on this device and signs her clips.</p>
-          <WalletRow k="Phantom" pk={owner} bal={ownerBal} />
-          <WalletRow k="Trading" pk={tradePk} bal={tradeBal} />
-          {tradePk ? (
-            <WalletMove
-              owner={owner}
-              tradePk={tradePk}
-              tradeBal={tradeBal}
-              onDone={() => {
-                Promise.all([
-                  fetch(`/api/sol/balance?pubkey=${owner}`).then((r) => r.json()),
-                  fetch(`/api/sol/balance?pubkey=${tradePk}`).then((r) => r.json()),
-                ]).then(([a, b]) => {
-                  setOwnerBal(a.sol || 0);
-                  setTradeBal(b.sol || 0);
-                });
-              }}
-            />
-          ) : null}
-          <div className="flex flex-wrap gap-2">
-            <Link href="/trading" className="btn-ghost rounded-full px-5 py-2 text-sm">
-              Open the desk
-            </Link>
-            <button
-              type="button"
-              className="btn-ghost rounded-full px-5 py-2 text-sm"
-              onClick={async () => {
-                try {
-                  await navigator.clipboard.writeText(exportSecret());
-                  setNoteErr(false);
-                  setNote("Trading key copied. Store it offline.");
-                } catch {
-                  setNoteErr(true);
-                  setNote("Could not copy the trading key.");
-                }
-              }}
-            >
-              Backup trading key
-            </button>
-          </div>
-          <form
-            className="space-y-1"
-            onSubmit={(e) => {
-              e.preventDefault();
-              const box = e.currentTarget.elements.namedItem("restore") as HTMLInputElement;
-              try {
-                const pk = importSecret(box.value);
-                setTradePk(pk);
-                box.value = "";
-                fieldErr.clear("restore");
-                setNoteErr(false);
-                setNote(`Restored ${pk.slice(0, 4)}…${pk.slice(-4)}`);
-              } catch (err) {
-                fieldErr.fail({ restore: err instanceof Error ? err.message : "Could not restore that backup." });
-              }
-            }}
-          >
-            <div className="flex gap-2">
-              <input
-                name="restore"
-                data-field="restore"
-                placeholder="paste backup to restore"
-                aria-invalid={Boolean(fieldErr.errors.restore)}
-                onChange={() => fieldErr.clear("restore")}
-                className={`min-h-[40px] min-w-0 flex-1 rounded-full border bg-void px-4 font-mono text-[11px] text-ghost ${fieldClass(fieldErr.errors.restore)}`}
-              />
-              <button type="submit" className="btn-ghost rounded-full px-4 text-sm">
-                Restore
-              </button>
-            </div>
-            <FieldError error={fieldErr.errors.restore} />
-          </form>
-        </section>
       )}
 
       {tab === "overview" && (
@@ -618,7 +540,7 @@ export default function AccountPage() {
         <section className="panel-bubble mt-6 overflow-hidden rounded-3xl p-5">
           <h2 className="text-[22px] font-semibold tracking-tight text-white">Referrals</h2>
           <p className="mt-2 text-sm text-mute">
-            Share your link. When they join, they are yours. You earn a cut of their launch fees. Withdraw anytime.
+            Share your link. It bonds their wallet to yours. When they launch, you keep a cut of every swap on those coins for life. Withdraw anytime.
           </p>
           <div className="mt-4 flex flex-col gap-2 sm:flex-row">
             <input readOnly value={invite} className="min-h-[44px] flex-1 rounded-full border border-violet/30 bg-void px-4 font-mono text-[11px] text-ghost" />

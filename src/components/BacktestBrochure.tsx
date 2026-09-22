@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { EquityCurve } from "./EquityCurve";
 
 type LiveBook = {
@@ -170,20 +169,7 @@ export function BacktestBrochure() {
           {data?.note || "Same rules she trades with now. Fees are already in the line. Past days are not a promise."}
         </p>
 
-        <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-          <Link
-            href="/trading"
-            className="btn-acid inline-flex min-h-[48px] items-center justify-center rounded-full px-8 py-3 text-base sm:min-h-[56px] sm:text-lg"
-          >
-            Go live
-          </Link>
-          <Link
-            href="/pricing"
-            className="btn-ghost inline-flex min-h-[48px] items-center justify-center rounded-full px-8 py-3 text-base sm:min-h-[56px] sm:text-lg"
-          >
-            Seat from 0.1 SOL
-          </Link>
-        </div>
+        <p className="mt-8 font-mono text-[12px] tracking-[0.16em] text-acid">IN TESTING · NOT LIVE</p>
       </div>
     </section>
   );

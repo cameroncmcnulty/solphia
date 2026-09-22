@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { CircleUser, Gift, Rocket, Users, Wallet } from "lucide-react";
+import { CircleUser, Gift, Rocket, Users } from "lucide-react";
 import { useOwner } from "@/lib/hooks";
 import { CartoonPfp } from "./CartoonPfp";
 import { PhantomMark } from "./PhantomMark";
@@ -12,7 +12,6 @@ type Desk = { pfp?: string; username?: string };
 
 const LINKS = [
   { href: "/account", label: "Account", Icon: CircleUser },
-  { href: "/account#wallets", label: "Trading wallets", Icon: Wallet },
   { href: "/account#launches", label: "Launched coins", Icon: Rocket },
   { href: "/account#referrals", label: "Referrals", Icon: Users },
   { href: "/circle?welcome=1", label: "Founders Circle", Icon: Gift },

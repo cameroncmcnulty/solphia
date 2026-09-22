@@ -53,6 +53,7 @@ import { SwapBox, SwapShell, SwapTabs, SwapWidget } from "@/components/SwapWidge
 import type { BoostRank } from "@/lib/launch/boost";
 import { filterTape, sortTape, volumeIn, type AgeFilter, type VolWindow } from "@/lib/launch/tape";
 import { isSolanaAddress } from "@/lib/wallet/addr";
+import { peekRef } from "@/components/ReferralCapture";
 
 
 const PRESETS = [0.1, 0.25, 0.5, 1];
@@ -571,6 +572,7 @@ export default function LaunchPage() {
           telegram,
           discord,
           launchBuySol: devBuy,
+          referrer: peekRef() || undefined,
         }),
         signal: AbortSignal.timeout(28_000),
       });
@@ -619,6 +621,7 @@ export default function LaunchPage() {
         discord,
         launchBuySol: devBuy,
         uri: pj.uri,
+        referrer: peekRef() || undefined,
       };
       let r = await fetch("/api/launch", {
         method: "POST",

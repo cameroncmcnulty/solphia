@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { DEV_FEE_BPS, OWNER_FEE_BPS, REF_FEE_BPS, REFERRED_OWNER_BPS, REFERRED_TREAS_BPS, SWAP_FEE_BPS, TREAS_FEE_BPS, feeOn, splitFee } from "../lib/launch/curve";
-import { bindReferrer, buyCoin, createCoin, emptyLaunchBook, withdrawReferral } from "../lib/launch/engine";
+import { bindReferrer, buyCoin, createCoin, emptyLaunchBook, recordOnchainFill, withdrawReferral } from "../lib/launch/engine";
 
 const A = "CyaE1VxvBrahnPWkqm5VsdCvyS2QmNht2UFrKJHga54o";
 const B = "D4uCNcBKAbG9NAkmhQg7pBiztuejNzbWrZDcZmFGut81";
@@ -43,6 +43,19 @@ describe("referral book", () => {
     if (self.ok) assert.equal(self.bound, false);
   });
 
+  it("binds a username invite the same as a wallet invite", () => {
+    const book = emptyLaunchBook();
+    const named = createCoin(book, { creator: OWN, name: "Host", symbol: "HOST" });
+    assert.equal(named.ok, true);
+    book.accounts[OWN].username = "cam";
+    const r = bindReferrer(book, A, "cam");
+    assert.equal(r.ok, true);
+    if (r.ok) {
+      assert.equal(r.bound, true);
+      assert.equal(r.account.referrer, OWN);
+    }
+  });
+
   it("pays the inviter 25% of swap fees for life on top of 50% to the dev", () => {
     const book = emptyLaunchBook();
     bindReferrer(book, A, OWN);
@@ -73,5 +86,26 @@ describe("referral book", () => {
     if (!out.ok) return;
     assert.ok(out.sol > 0);
     assert.equal(book.accounts[OWN].referralRewardsSol, 0);
+  });
+
+  it("credits the inviter on an on-chain fill, not only paper curve buys", () => {
+    const book = emptyLaunchBook();
+    bindReferrer(book, A, OWN);
+    const made = createCoin(book, { creator: A, name: "Live", symbol: "LIVE", now: 1_700_000_000_000 });
+    assert.equal(made.ok, true);
+    if (!made.ok) return;
+    const rec = recordOnchainFill(book, {
+      id: made.coin.id,
+      owner: B,
+      side: "buy",
+      sol: 1,
+      tokens: 1000,
+      feeSol: 0.01,
+      now: made.coin.createdAt + 80_000,
+    });
+    assert.equal(rec.ok, true);
+    if (!rec.ok) return;
+    assert.ok(Math.abs((book.accounts[OWN]?.referralRewardsSol || 0) - 0.0025) < 1e-9);
+    assert.ok(Math.abs(rec.coin.devRewardsSol - 0.005) < 1e-9);
   });
 });

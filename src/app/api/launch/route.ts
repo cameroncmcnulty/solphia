@@ -79,6 +79,7 @@ const Body = z.object({
   uri: z.string().max(512).optional(),
   side: z.enum(["buy", "sell"]).optional(),
   feeSol: z.number().optional(),
+  referrer: z.string().max(64).optional(),
 });
 
 function bookOf(s: { launch?: ReturnType<typeof emptyLaunchBook>; ownerWallet?: string }) {
@@ -239,6 +240,7 @@ async function confirmMint(b: LaunchBody, solUsd: number) {
       launchBuySol: Number(b.launchBuySol) || 0,
       mint: b.mint,
       venue: "solphia",
+      referrer: b.referrer,
     });
     if (made.ok) {
       if (liveCurve) applyCurveState(made.coin, liveCurve);

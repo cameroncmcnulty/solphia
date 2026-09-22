@@ -1,10 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
 import {
   ArrowDownUp,
-  ArrowLeft,
   Check,
   CheckCheck,
   ChevronDown,
@@ -18,8 +16,8 @@ import {
   Trophy,
   X,
 } from "lucide-react";
-import { SolphiaConstellation } from "@/components/SolphiaConstellation";
 import { BurstSticker } from "@/components/BurstSticker";
+import { AccountMenu } from "@/components/AccountMenu";
 import { CartoonPfp } from "@/components/CartoonPfp";
 import { SwapWidget } from "@/components/SwapWidget";
 import { WalletConnect } from "@/components/WalletConnect";
@@ -616,16 +614,11 @@ export default function ShillPage() {
   const live = Math.max(pack?.members || 0, (pack?.typing || []).length + (owner ? 1 : 0), msgs.length ? 1 : 0);
 
   return (
-    <main ref={frame} className="fixed inset-0 z-40 overflow-hidden bg-void">
-      <SolphiaConstellation />
-      <div className="shill-veil" />
+    <main ref={frame} className="fixed inset-0 z-40 overflow-hidden bg-void pb-[calc(3.7rem+env(safe-area-inset-bottom))] md:pb-0">
       <div className="relative z-10 mx-auto grid h-full min-h-0 w-full grid-rows-[auto_auto_minmax(0,1fr)_auto] overflow-hidden lg:max-w-6xl lg:grid-cols-[minmax(0,1fr)_22rem] lg:grid-rows-[auto_auto_minmax(0,1fr)]">
         <div className="lg:col-span-2">
-          <header className="flex items-center gap-1 border-b border-white/10 bg-[#04000a]/55 px-1 pb-2 pt-[max(0.4rem,env(safe-area-inset-top))] backdrop-blur-xl">
-            <Link href="/" className="flex h-11 w-11 items-center justify-center rounded-full text-white/80 hover:bg-white/5" aria-label="Back to home">
-              <ArrowLeft className="h-6 w-6" />
-            </Link>
-            <div className="min-w-0 flex-1">
+          <header className="flex items-center gap-2 border-b border-white/10 bg-[#04000a]/55 px-2 pb-2 pt-[max(0.4rem,env(safe-area-inset-top))] backdrop-blur-xl">
+            <div className="min-w-0 flex-1 px-1">
               <div className="flex items-center gap-2">
                 <span className="shill-live" />
                 <p className="font-mono text-[10px] tracking-[0.28em] text-acid">LIVE ROOM</p>
@@ -639,6 +632,7 @@ export default function ShillPage() {
             <button type="button" className="flex h-11 w-11 items-center justify-center rounded-full text-white/55 hover:bg-white/5" onClick={() => openSwap()} aria-label="Swap">
               <ArrowDownUp className="h-5 w-5" />
             </button>
+            <AccountMenu />
           </header>
           <nav className="flex gap-6 border-b border-white/10 bg-[#04000a]/40 px-4 backdrop-blur-md">
             {(
@@ -693,6 +687,16 @@ export default function ShillPage() {
           )}
         </div>
 
+        {!owner && (
+          <div className="absolute inset-x-0 top-[7.5rem] z-30 flex justify-center px-4 lg:col-span-2">
+            <div className="shill-glass flex w-full max-w-md flex-col items-center gap-3 rounded-3xl px-5 py-4 text-center">
+              <p className="font-mono text-[11px] tracking-[0.22em] text-acid">PHANTOM</p>
+              <p className="font-display text-[22px] text-ghost">Connect to unlock chat</p>
+              <p className="text-[14px] text-mute">Read the room. Sign in to send, pin, vote, and reply.</p>
+              <WalletConnect />
+            </div>
+          </div>
+        )}
         <div
           ref={scroller}
           className={`relative min-h-0 overflow-y-auto px-2 py-3 lg:col-start-1 ${tab === "chat" ? "" : "hidden"}`}
@@ -895,7 +899,7 @@ export default function ShillPage() {
         <div className={`relative z-20 border-t border-white/10 bg-[#04000a]/70 pb-[max(0.5rem,env(safe-area-inset-bottom))] backdrop-blur-xl lg:col-start-1 ${tab === "chat" ? "" : "hidden lg:block"}`}>
           {!owner ? (
             <div className="flex items-center justify-between gap-3 px-4 py-3">
-              <p className="text-[14px] text-mute">Connect Phantom to chat.</p>
+              <p className="text-[14px] text-mute">Connect Phantom to unlock chat.</p>
               <WalletConnect />
             </div>
           ) : (

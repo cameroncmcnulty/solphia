@@ -43,7 +43,7 @@ export function ReferralCapture() {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ action: "hello", pubkey: owner, referrer: referrer || undefined }),
     }).catch(() => {});
-  }, [owner]);
+  }, [owner, params]);
 
   return null;
 }

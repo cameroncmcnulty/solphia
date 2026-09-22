@@ -26,14 +26,14 @@ export default function Home() {
               SOLPHIA
             </h1>
             <p className="mt-6 max-w-xl text-[22px] font-semibold leading-snug tracking-tight text-white sm:text-[28px]">
-              She auto-trades tokenized S&amp;P 500, Nasdaq, and gold — for profit.
+              Launch. Shill. Swap. $SPHA.
             </p>
             <p className="mt-4 max-w-lg text-[15px] leading-relaxed text-white/45 sm:text-[17px]">
-              Connect your wallet. She trades tokenized S&P 500, Nasdaq, and gold. Launch and $SPHA sit around that desk.
+              The autonomous desk is in testing. Backtest is live below. Launch pad and Shill Zone are open now.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <Link href="/trading" className="btn-acid inline-flex min-h-[52px] items-center justify-center rounded-full px-8 text-base">
-                Trading desk
+              <Link href="/launch" className="btn-acid inline-flex min-h-[52px] items-center justify-center rounded-full px-8 text-base">
+                Launch
               </Link>
               <Link href="/token" className="btn-ghost inline-flex min-h-[52px] items-center justify-center rounded-full px-8 text-base">
                 $SPHA
@@ -51,20 +51,20 @@ export default function Home() {
           Products that actually run.
         </h2>
         <p className="mt-4 max-w-2xl text-[15px] text-white/45 sm:text-[17px]">
-          Trading desk, launch pad, and $SPHA. She trades. The rest feeds the token.
+          Launch pad, Shill Zone, and $SPHA. The trading bot stays in testing until the backtest holds live.
         </p>
         <div className="mt-12 grid gap-4 lg:grid-cols-3">
           <Reveal delay={40} from="left"><Eco
             n="01"
-            t="Auto-trade"
-            d="She trades tokenized S&P 500, Nasdaq, and gold. Turn her on and close the tab."
-            href="/trading"
-            c="Tools"
+            t="Shill"
+            d="Live room. Drop a CA. Pin the rail. Vote the board."
+            href="/shill"
+            c="Shill"
           /></Reveal>
           <Reveal delay={120}><Eco
             n="02"
             t="Launch"
-            d="1.00% curve. Creators take half. Cheaper than Pump.fun, live on mainnet."
+            d="1.00% forever — curve and after graduate. Creators take half. Invites keep a cut for life."
             href="/launch"
             c="Launch"
           /></Reveal>
@@ -99,6 +99,18 @@ export default function Home() {
         </Reveal>
       </section>
 
+      <section className="px-4 pt-6 md:px-12">
+        <Reveal>
+          <p className="font-mono text-[11px] tracking-[0.22em] text-acid">AUTONOMOUS DESK · TESTING</p>
+          <h2 className="mt-2 max-w-3xl text-[28px] font-semibold tracking-tight text-white sm:text-4xl">
+            The bot stays in testing until it is profitable live.
+          </h2>
+          <p className="mt-3 max-w-2xl text-[15px] text-white/45 sm:text-[17px]">
+            Same rules she will trade with. Fees are already in the line. This is a replay, not a live book.
+          </p>
+        </Reveal>
+      </section>
+
       <BacktestBrochure />
 
       <section className="px-4 py-10 md:px-12">
@@ -106,9 +118,9 @@ export default function Home() {
         <div className="rounded-3xl border border-acid/25 bg-acid/[0.06] px-6 py-8 md:flex md:items-center md:justify-between md:px-10">
           <div className="max-w-xl">
             <p className="font-mono text-[11px] tracking-[0.22em] text-acid">REFERRALS</p>
-            <h2 className="mt-2 text-[22px] font-semibold tracking-tight text-white sm:text-[28px]">Invite once. Get paid when they launch.</h2>
+            <h2 className="mt-2 text-[22px] font-semibold tracking-tight text-white sm:text-[28px]">Invite once. Get paid on every swap they launch.</h2>
             <p className="mt-2 text-[15px] leading-relaxed text-white/45">
-              Share your link. Withdraw from your account.
+              Your link bonds their wallet. When they launch, you keep a cut of swap fees for life. Withdraw from your account.
             </p>
           </div>
           <Link
@@ -126,8 +138,8 @@ export default function Home() {
         <p className="text-sm tracking-[0.2em] text-acid">HOW IT WORKS</p>
         <h2 className="mt-3 text-[32px] font-semibold tracking-tight text-white sm:text-5xl">Three steps.</h2>
         <div className="mt-12 grid gap-4 md:grid-cols-3">
-          <Reveal delay={40} from="left"><Chip t="01 · Connect" d="Connect your wallet. We never hold a key." /></Reveal>
-          <Reveal delay={120}><Chip t="02 · She trades" d="Tokenized S&P, Nasdaq, and gold. Launch sits next to the desk." /></Reveal>
+          <Reveal delay={40} from="left"><Chip t="01 · Connect" d="Connect Phantom. We never hold a key." /></Reveal>
+          <Reveal delay={120}><Chip t="02 · Launch" d="Mint on Meteora. 1% forever. Invites keep a cut for life." /></Reveal>
           <Reveal delay={200} from="right"><Chip t="03 · $SPHA" d="Swaps fund listings, buybacks, and burns." /></Reveal>
         </div>
         </Reveal>
@@ -141,14 +153,14 @@ export default function Home() {
               <SphaMark className="h-5 w-5" />
               $SPHA
             </p>
-            <h2 className="mt-3 text-[32px] font-semibold tracking-tight text-white sm:text-5xl">Turn her on.</h2>
+            <h2 className="mt-3 text-[32px] font-semibold tracking-tight text-white sm:text-5xl">Launch on Solphia.</h2>
             <p className="mt-4 max-w-lg text-[15px] text-white/45 sm:text-[17px]">
-              She trades. Keys stay in your wallet.
+              Phantom signs. Keys stay in your wallet. The bot is still in testing.
             </p>
           </div>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row md:mt-0">
-            <Link href="/trading" className="btn-acid inline-flex min-h-[52px] items-center justify-center rounded-full px-8">
-              Trading desk
+            <Link href="/launch" className="btn-acid inline-flex min-h-[52px] items-center justify-center rounded-full px-8">
+              Launch
             </Link>
             <Link href="/token" className="btn-ghost inline-flex min-h-[52px] items-center justify-center rounded-full px-8">
               $SPHA

@@ -52,6 +52,7 @@ export async function solphiaCurveConfig() {
     },
     migration: {
       migrationOption: m.MigrationOption.MET_DAMM_V2,
+      /** 100 bps on DAMM v2 after graduate — same 1% forever, not bonding-only. */
       migrationFeeOption: m.MigrationFeeOption.FixedBps100,
       migrationFee: { feePercentage: 0, creatorFeePercentage: 0 },
     },
