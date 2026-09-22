@@ -11,6 +11,7 @@ import {
   ROCKET_PACKS,
   buyBoost,
   clampRockets,
+  fillHouseBoosts,
   liveBoosts,
   ownerBoosts,
   publicLiveBoost,
@@ -38,12 +39,38 @@ export async function GET(req: NextRequest) {
   const pubkey = req.nextUrl.searchParams.get("pubkey") || "";
   const first = await withLaunch((st) => {
     const book = bookOf(st);
-    const dirty = tickBoosts(book);
-    return { dirty, book };
+    const dirtyTick = tickBoosts(book);
+    const empty = rankedBoosts(book).length === 0;
+    if (empty) {
+      fillHouseBoosts(
+        book,
+        book.coins.slice(0, 10).map((c) => ({
+          id: c.id,
+          mint: c.mint,
+          symbol: c.symbol,
+          name: c.name,
+          image: c.image,
+        })),
+      );
+    }
+    return { dirty: dirtyTick || empty, book };
   }, false);
   if (first.dirty) {
     await withLaunch((st) => {
-      tickBoosts(bookOf(st));
+      const book = bookOf(st);
+      tickBoosts(book);
+      if (rankedBoosts(book).length === 0) {
+        fillHouseBoosts(
+          book,
+          book.coins.slice(0, 10).map((c) => ({
+            id: c.id,
+            mint: c.mint,
+            symbol: c.symbol,
+            name: c.name,
+            image: c.image,
+          })),
+        );
+      }
     }, true);
   }
   const book = first.book;

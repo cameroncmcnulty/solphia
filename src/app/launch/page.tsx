@@ -266,6 +266,7 @@ export default function LaunchPage() {
   const [phase, setPhase] = useState<"live" | "graduated">("live");
   const [tapeSort, setTapeSort] = useState<"newest" | "mcap" | "vol5m" | "vol1h" | "rank">("newest");
   const [boostOpen, setBoostOpen] = useState(false);
+  const [swapOpen, setSwapOpen] = useState(false);
   const [boostRank, setBoostRank] = useState<BoostRank[]>([]);
   const [boostMine, setBoostMine] = useState<{
     live: { symbol: string; leftMs: number; rockets: number }[];
@@ -337,6 +338,7 @@ export default function LaunchPage() {
     try {
       const tape = await fetch("/api/launch/tape", { cache: "no-store" }).then((r) => r.json());
       if (tape.solUsd) setSolUsd((s) => s || tape.solUsd);
+      if (Array.isArray(tape.ranked) && tape.ranked.length > 0) setBoostRank(tape.ranked);
       const market: Coin[] = Array.isArray(tape.coins) ? tape.coins : [];
       setCoins((prev) => {
         const padCoins = prev.filter((c) => c.born);
@@ -856,7 +858,23 @@ export default function LaunchPage() {
       <div className="relative z-10 mx-auto max-w-lg px-4 pt-5 md:max-w-2xl md:pt-8">
         <div className="flex items-center justify-between gap-3">
           <p className="text-[32px] font-semibold tracking-tight text-white">{isSwap ? "Swap" : "Launch"}</p>
+          {isSwap && (
+            <button
+              type="button"
+              onClick={() => setSwapOpen((v) => !v)}
+              className={`rounded-full px-4 py-2 text-[14px] font-semibold ${
+                swapOpen ? "bg-acid text-void" : "bg-white/10 text-white"
+              }`}
+            >
+              {swapOpen ? "Hide swap" : "Swap"}
+            </button>
+          )}
         </div>
+        {isSwap && swapOpen && (
+          <div className="mt-4">
+            <SwapWidget key={open?.mint || "swap"} owner={owner} defaultMint={open?.mint || ""} title="Swap" />
+          </div>
+        )}
         {isSwap && (
           <div className="mt-4">
             <div className="mb-2 flex items-center justify-between gap-3">
@@ -1507,7 +1525,6 @@ function CoinDesk({
   const tradeErr = useConfirmErrors<"wallet" | "amount">();
   const audit = useMemo(() => auditLaunchCoin(open, solUsd), [open, solUsd]);
   const creator = Boolean(owner && open.creator === owner);
-  const [tradeOpen, setTradeOpen] = useState(true);
   const padTrade = Boolean(open.born || open.venue === "solphia" || open.venue === "pumpfun");
   const snipeLeft = Math.max(0, ANTI_SNIPE_MS - (Date.now() - open.createdAt));
   const cap = open.maxBuySol ?? 0;
@@ -1662,15 +1679,6 @@ function CoinDesk({
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={() => setTradeOpen((v) => !v)}
-          className="flex w-full items-center justify-between rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-left"
-        >
-          <span className="text-[16px] font-semibold text-white">Swap {tick(open.symbol)}</span>
-          <span className="font-mono text-[12px] text-acid">{tradeOpen ? "hide" : "open"}</span>
-        </button>
-        {tradeOpen && (
         <SwapShell
           title={`Trade ${tick(open.symbol)}`}
           subtitle="On the curve until it graduates. Phantom Swap can route it."
@@ -1786,7 +1794,6 @@ function CoinDesk({
             </>
           )}
         </SwapShell>
-        )}
       </div>
     </section>
   );
