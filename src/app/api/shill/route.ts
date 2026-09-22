@@ -27,7 +27,7 @@ import {
   votesOnMint,
   type VoteBoardRow,
 } from "@/lib/shill/engine";
-import { SHILL_HOUSE_PIN_MAX, SHILL_PIN_SOL, SHILL_REACTS, SHILL_STICKERS, type ShillMessage, type ShillPin, type ShillToken } from "@/lib/shill/types";
+import { SHILL_HOUSE_PIN_MIN, SHILL_PIN_SOL, SHILL_REACTS, SHILL_STICKERS, type ShillMessage, type ShillPin, type ShillToken } from "@/lib/shill/types";
 import { emptyLaunchBook } from "@/lib/launch/engine";
 import { creditRank, leaderboard, publicCard } from "@/lib/rank/engine";
 import { canModerateChat, staffRole } from "@/lib/access";
@@ -179,11 +179,8 @@ export async function GET(req: NextRequest) {
   const light = since > 0;
   const needHouse = !light && (await withShill((st) => {
     st.shill = ensureShill(st.shill);
-    const house = st.shill.pins.filter((p) => p.house).length;
-    if (house >= SHILL_HOUSE_PIN_MAX) return false;
-    if (house === 0 && !st.shill.lastHousePinAt) return true;
-    const due = st.shill.nextHousePinAt || 0;
-    return due > 0 && Date.now() >= due;
+    const house = st.shill.pins.filter((p) => p.house && p.endsAt > Date.now()).length;
+    return house < SHILL_HOUSE_PIN_MIN;
   }, false));
   if (needHouse) {
     const tapeCoins = await tapePinCoins();

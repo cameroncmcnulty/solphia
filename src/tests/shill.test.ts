@@ -113,11 +113,10 @@ describe("shill zone", () => {
     assert.equal(fillHousePins(book, coins, 3_001 + SHILL_HOUSE_REPLACE_MS), true);
     assert.equal(book.pins.filter((p) => p.house).length, 2);
     assert.ok(book.pins.some((p) => p.id === keeper.id));
-
+    const restocked = book.pins.map((p) => p.id);
     assert.equal(fillHousePins(book, coins, 3_001 + SHILL_HOUSE_REPLACE_MS + 1), false);
-    assert.equal(fillHousePins(book, coins, 3_001 + SHILL_HOUSE_REPLACE_MS + SHILL_HOUSE_STAGGER_MS), true);
-    assert.equal(book.pins.filter((p) => p.house).length, SHILL_HOUSE_PIN_MAX);
-    assert.equal(fillHousePins(book, coins, 9e12), false);
+    assert.equal(fillHousePins(book, coins, 3_001 + SHILL_HOUSE_REPLACE_MS + SHILL_HOUSE_STAGGER_MS), false);
+    assert.deepEqual(book.pins.map((p) => p.id), restocked);
 
     const paid = pinToken(book, {
       owner: A,

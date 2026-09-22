@@ -137,6 +137,15 @@ function tick(symbol?: string) {
   return `$${(symbol || "").replace(/^\$/, "") || "TOKEN"}`;
 }
 
+function stablePins(next?: PinRow[], prev?: PinRow[]) {
+  if (!next) return prev;
+  if (!prev?.length) return next;
+  const byMint = new Map(next.map((p) => [p.mint, p]));
+  const same = prev.length === next.length && prev.every((p) => byMint.has(p.mint));
+  if (!same) return next;
+  return prev.map((p) => ({ ...p, ...(byMint.get(p.mint) || {}) }));
+}
+
 function TokenBubble({
   token,
   onCopy,
@@ -230,13 +239,13 @@ function Sheet({
 function VoteBoard({
   rows,
   canVote,
-  onVote,
+  onOpen,
   nextVote,
   now,
 }: {
   rows: VoteRow[];
   canVote: boolean;
-  onVote: (mint: string) => void;
+  onOpen: (row: VoteRow) => void;
   nextVote: number;
   now: number;
 }) {
@@ -265,7 +274,7 @@ function VoteBoard({
                   ? "border-white/25 bg-white/5"
                   : "border-[#c47a4a]/60 bg-[#c47a4a]/10";
             return (
-              <button key={row.mint} type="button" onClick={() => onVote(row.mint)} className={`rounded-2xl border px-2 ${tall} ${ring}`}>
+              <button key={row.mint} type="button" onClick={() => onOpen(row)} className={`rounded-2xl border px-2 ${tall} ${ring}`}>
                 <div className="mx-auto flex h-12 w-12 items-center justify-center overflow-hidden rounded-full bg-void font-display text-acid">
                   {row.image ? (
                     // eslint-disable-next-line @next/next/no-img-element
@@ -287,7 +296,7 @@ function VoteBoard({
           <button
             key={row.mint}
             type="button"
-            onClick={() => onVote(row.mint)}
+            onClick={() => onOpen(row)}
             className="flex w-full items-center gap-3 rounded-2xl px-2 py-2 text-left hover:bg-white/5"
           >
             <span className="w-6 font-mono text-[12px] text-white/40">{i + 4}</span>
@@ -329,6 +338,7 @@ export default function ShillPage() {
   const [swapMint, setSwapMint] = useState("");
   const [openPin, setOpenPin] = useState<PinRow | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
+  const endRef = useRef<HTMLDivElement>(null);
   const hold = useRef<number>(0);
   const lastAt = useRef(0);
   const loadGen = useRef(0);
@@ -372,9 +382,9 @@ export default function ShillPage() {
         messages,
         board: j.board || prev?.board,
         profiles: j.profiles ? { ...prev?.profiles, ...j.profiles } : prev?.profiles,
-        voteBoard: j.voteBoard || prev?.voteBoard,
+        voteBoard: j.voteBoard !== undefined ? j.voteBoard : prev?.voteBoard,
         you: j.you ?? prev?.you,
-        pins: j.pins || prev?.pins,
+        pins: stablePins(j.pins, prev?.pins),
         members: j.members ?? prev?.members,
       };
     });
@@ -448,8 +458,25 @@ export default function ShillPage() {
   }, []);
 
   useEffect(() => {
-    const el = scroller.current;
-    if (el && stickToBottom.current) el.scrollTop = el.scrollHeight;
+    if (!err) return;
+    const t = window.setTimeout(() => setErr(""), 4000);
+    return () => window.clearTimeout(t);
+  }, [err]);
+
+  function snapBottom() {
+    stickToBottom.current = true;
+    setAtBottom(true);
+    const go = () => {
+      const el = scroller.current;
+      if (el) el.scrollTop = el.scrollHeight;
+      endRef.current?.scrollIntoView({ block: "end" });
+    };
+    go();
+    requestAnimationFrame(() => requestAnimationFrame(go));
+  }
+
+  useEffect(() => {
+    if (stickToBottom.current) snapBottom();
   }, [pack?.messages?.length]);
 
   async function act(body: Record<string, unknown>) {
@@ -472,8 +499,7 @@ export default function ShillPage() {
     const bodyText = extra?.sticker ? "" : text.trim();
     if (!bodyText && !extra?.sticker) return;
     setErr("");
-    stickToBottom.current = true;
-    setAtBottom(true);
+    snapBottom();
     const localId = "local-" + Date.now();
     const optimistic: Msg = {
       id: localId,
@@ -506,6 +532,7 @@ export default function ShillPage() {
         });
         lastAt.current = Math.max(lastAt.current, real.at);
       }
+      snapBottom();
     } catch (e) {
       const msg = e instanceof Error ? e.message : "send failed";
       if (/abort/i.test(msg)) return;
@@ -577,7 +604,7 @@ export default function ShillPage() {
     } catch (e) {
       const msg = e instanceof Error ? e.message : "vote failed";
       if (/abort/i.test(msg)) return;
-      setErr(msg);
+      flash(msg);
     }
   }
 
@@ -597,10 +624,19 @@ export default function ShillPage() {
   }
 
   function jumpLatest() {
-    stickToBottom.current = true;
-    setAtBottom(true);
-    const el = scroller.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    snapBottom();
+  }
+
+  function openVoteRow(row: VoteRow) {
+    setOpenPin({
+      id: row.mint,
+      mint: row.mint,
+      symbol: row.symbol,
+      name: row.name,
+      image: row.image,
+      endsAt: 0,
+      votes: row.votes,
+    });
   }
 
   const msgs = pack?.messages || [];
@@ -666,7 +702,7 @@ export default function ShillPage() {
                   const left = Math.max(0, p.endsAt - now);
                   const pct = Math.max(4, Math.min(100, (left / SHILL_PIN_MS) * 100));
                   return (
-                    <button key={p.id} type="button" onClick={() => setOpenPin(p)} className="shill-pin-tile">
+                    <button key={p.mint} type="button" onClick={() => setOpenPin(p)} className="shill-pin-tile">
                       {p.image ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img src={p.image} alt="" className="shill-pin-art" />
@@ -830,6 +866,7 @@ export default function ShillPage() {
               {(pack?.typing || []).map((pk) => nameOf(pk, pack?.profiles)).join(", ")} typing…
             </div>
           )}
+          <div ref={endRef} className="h-px w-full" />
           {!atBottom && tab === "chat" && (
             <button
               type="button"
@@ -879,7 +916,7 @@ export default function ShillPage() {
         )}
         {tab === "board" && (
           <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 lg:hidden">
-            <VoteBoard rows={voteRows} canVote={canVote} onVote={upvote} nextVote={nextVote} now={now} />
+            <VoteBoard rows={voteRows} canVote={canVote} onOpen={openVoteRow} nextVote={nextVote} now={now} />
             {you && (
               <button type="button" onClick={() => owner && setPeek(owner)} className="shill-glass mt-5 flex w-full items-center gap-3 rounded-2xl p-3 text-left">
                 <RankBadge rank={you.rank} size={40} />
@@ -968,7 +1005,7 @@ export default function ShillPage() {
         </div>
 
         <aside className="hidden min-h-0 w-[22rem] shrink-0 overflow-y-auto border-l border-white/10 bg-black/15 p-5 backdrop-blur-md lg:block">
-          <VoteBoard rows={voteRows} canVote={canVote} onVote={upvote} nextVote={nextVote} now={now} />
+          <VoteBoard rows={voteRows} canVote={canVote} onOpen={openVoteRow} nextVote={nextVote} now={now} />
           {you && (
             <button type="button" onClick={() => owner && setPeek(owner)} className="shill-glass mt-6 flex w-full items-center gap-3 rounded-2xl p-3 text-left">
               <RankBadge rank={you.rank} size={40} />
@@ -1061,15 +1098,7 @@ export default function ShillPage() {
         </Sheet>
 
         <Sheet open={sheet === "ranks"} title="Live board" onClose={() => setSheet(null)}>
-          <VoteBoard
-            rows={voteRows}
-            canVote={canVote}
-            onVote={(mint) => {
-              upvote(mint);
-            }}
-            nextVote={nextVote}
-            now={now}
-          />
+          <VoteBoard rows={voteRows} canVote={canVote} onOpen={openVoteRow} nextVote={nextVote} now={now} />
         </Sheet>
 
         <Sheet open={sheet === "swap"} title="Swap" onClose={() => setSheet(null)}>

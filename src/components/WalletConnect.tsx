@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { PhantomMark } from "./PhantomMark";
 import { loadOwner, persistOwner, OWNER_EVENT } from "@/lib/wallet/owner";
+import { beginPhantomConnect, completePhantomConnect } from "@/lib/wallet/phantomConnect";
 
 type Provider = {
   isPhantom?: boolean;
@@ -74,9 +75,7 @@ function waitForPhantom(ms = 900): Promise<Provider | null> {
 }
 
 function openPhantomBrowse() {
-  const target = encodeURIComponent(window.location.href);
-  const url = `https://phantom.app/ul/browse/${target}?ref=https://solphia.io`;
-  window.location.assign(url);
+  beginPhantomConnect();
 }
 
 function silentTrusted(p: Provider | null) {
@@ -168,6 +167,8 @@ export function WalletKeepalive() {
     };
 
     restoreFromCookie();
+    const fromUl = completePhantomConnect();
+    if (fromUl) persistOwner(fromUl);
     wake({ server: true });
 
     let tries = 0;
@@ -216,7 +217,8 @@ export function WalletConnect({ compact: _compact = false }: { compact?: boolean
 
   useEffect(() => {
     mounted.current = true;
-    const saved = loadOwner();
+    const fromUl = completePhantomConnect();
+    const saved = fromUl || loadOwner();
     if (saved) setAddr(saved);
     const found = phantom();
     if (found?.publicKey) {
@@ -248,9 +250,9 @@ export function WalletConnect({ compact: _compact = false }: { compact?: boolean
   async function connect() {
     setBusy(true);
     try {
-      const found = phantom() || (await waitForPhantom());
+      const found = phantom() || (await waitForPhantom(400));
       if (!found) {
-        openPhantomBrowse();
+        beginPhantomConnect();
         return;
       }
       const res = await withTimeout(found.connect(), 20000, "connect");

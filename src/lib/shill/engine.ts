@@ -314,14 +314,10 @@ export function fillHousePins(book: ShillBook, candidates: HousePinCoin[], now =
   pruneShill(book, now);
   const house = book.pins.filter((p) => p.house);
   const n = house.length;
-  if (n >= SHILL_HOUSE_PIN_MAX) return false;
+  if (n >= SHILL_HOUSE_PIN_MIN) return false;
   const taken = new Set(book.pins.map((p) => p.mint));
-  const pool = candidates.filter((c) => c.mint && !taken.has(c.mint));
+  const pool = candidates.filter((c) => c.mint && !taken.has(c.mint)).sort((a, b) => a.mint.localeCompare(b.mint));
   if (!pool.length) return false;
-  for (let i = pool.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [pool[i], pool[j]] = [pool[j], pool[i]];
-  }
 
   if (n === 0 && !book.lastHousePinAt) {
     const count = Math.min(SHILL_HOUSE_PIN_MIN, pool.length);
@@ -332,7 +328,7 @@ export function fillHousePins(book: ShillBook, candidates: HousePinCoin[], now =
   const due = book.nextHousePinAt || 0;
   if (due && now < due) return false;
   if (!due) {
-    book.nextHousePinAt = now + (n < SHILL_HOUSE_PIN_MIN ? SHILL_HOUSE_REPLACE_MS : SHILL_HOUSE_STAGGER_MS);
+    book.nextHousePinAt = now + SHILL_HOUSE_REPLACE_MS;
     return false;
   }
   plantHousePins(book, pool.slice(0, 1), now);
