@@ -328,9 +328,7 @@ export default function LaunchPage() {
     const q = owner ? `?pubkey=${encodeURIComponent(owner)}` : "";
     const j = await fetch(`/api/launch/boost${q}`, { cache: "no-store" }).then((r) => r.json());
     const incoming = Array.isArray(j.ranked) ? j.ranked : Array.isArray(j.live) ? j.live : null;
-    if (incoming) {
-      setBoostRank((prev) => (incoming.length === 0 && prev.length > 0 ? prev : incoming));
-    }
+    if (incoming && incoming.length > 0) setBoostRank(incoming);
     if (j.mine) setBoostMine({ live: j.mine.live || [], queued: [] });
   }
 

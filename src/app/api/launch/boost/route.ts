@@ -6,6 +6,7 @@ import { treasuryAddress } from "@/lib/treasury";
 import { confirmedSolTransfer } from "@/lib/solana/connection";
 import { withLaunch } from "@/lib/store";
 import { emptyLaunchBook } from "@/lib/launch/engine";
+import { loadMarketTape } from "@/lib/launch/market";
 import {
   ROCKET_MAX,
   ROCKET_PACKS,
@@ -73,9 +74,31 @@ export async function GET(req: NextRequest) {
       }
     }, true);
   }
-  const book = first.book;
+  let book = first.book;
   const now = Date.now();
-  const ranked = rankedBoosts(book, now);
+  let ranked = rankedBoosts(book, now);
+  if (ranked.length === 0) {
+    try {
+      const pack = await loadMarketTape();
+      await withLaunch((st) => {
+        const b = bookOf(st);
+        fillHouseBoosts(
+          b,
+          pack.rows.slice(0, 10).map((r) => ({
+            id: r.coin.id || r.coin.mint,
+            mint: r.coin.mint,
+            symbol: r.coin.symbol,
+            name: r.coin.name,
+            image: r.coin.image,
+          })),
+        );
+      }, true);
+      book = await withLaunch((st) => bookOf(st), false);
+      ranked = rankedBoosts(book, Date.now());
+    } catch {
+      /* tape still useful on the client */
+    }
+  }
   const live = liveBoosts(book, now).map((b) => publicLiveBoost(b, now));
   const mine = isSolanaAddress(pubkey) ? ownerBoosts(book, pubkey, now) : { live: [], queued: [] };
   return NextResponse.json({
