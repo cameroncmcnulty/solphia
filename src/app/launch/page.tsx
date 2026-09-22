@@ -263,6 +263,8 @@ export default function LaunchPage() {
   const [age, setAge] = useState<AgeFilter>("newest");
   const [vol, setVol] = useState<VolWindow | null>(null);
   const [ranked, setRanked] = useState(false);
+  const [phase, setPhase] = useState<"live" | "graduated">("live");
+  const [tapeSort, setTapeSort] = useState<"newest" | "mcap" | "vol5m" | "vol1h" | "rank">("newest");
   const [boostOpen, setBoostOpen] = useState(false);
   const [boostRank, setBoostRank] = useState<BoostRank[]>([]);
   const [boostMine, setBoostMine] = useState<{
@@ -799,8 +801,20 @@ export default function LaunchPage() {
         : source === "market"
           ? pool.filter((c) => !c.born)
           : pool;
-    const aged = filterTape(sourced, age);
-    const rows = ranked ? rankTape(aged, solUsd) : scoreTape(sortTape(aged, vol), solUsd);
+    const staged =
+      phase === "graduated"
+        ? sourced.filter((c) => c.status === "graduated")
+        : sourced.filter((c) => c.status !== "graduated");
+    const aged = filterTape(staged, age);
+    const rows =
+      tapeSort === "rank" || ranked
+        ? rankTape(aged, solUsd)
+        : tapeSort === "mcap"
+          ? scoreTape(
+              aged.slice().sort((a, b) => (b.marketCapUsd || 0) - (a.marketCapUsd || 0) || b.createdAt - a.createdAt),
+              solUsd,
+            )
+          : scoreTape(sortTape(aged, vol), solUsd);
     const boosted = [];
     const rest = [];
     for (const row of rows) {
@@ -822,7 +836,7 @@ export default function LaunchPage() {
       }
     }
     return next;
-  }, [isSwap, mine, pool, age, vol, ranked, solUsd, source, boostRank, lookedMint, coins]);
+  }, [isSwap, mine, pool, age, vol, ranked, tapeSort, phase, solUsd, source, boostRank, lookedMint, coins]);
   const rows = board.map((r) => r.coin);
 
   return (
@@ -832,6 +846,53 @@ export default function LaunchPage() {
         <div className="flex items-center justify-between gap-3">
           <p className="text-[32px] font-semibold tracking-tight text-white">{isSwap ? "Swap" : "Launch"}</p>
         </div>
+        {isSwap && (
+          <div className="mt-4">
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <p className="text-[13px] font-medium text-white/50">Boosted</p>
+              <button
+                type="button"
+                onClick={() => setBoostOpen((v) => !v)}
+                className={`rounded-full px-3 py-1.5 text-[13px] font-medium ${boostOpen ? "bg-acid text-void" : "bg-white/10 text-white"}`}
+              >
+                Boost a coin
+              </button>
+            </div>
+            <BoostRail
+              rows={boostRank.map((b) => {
+                const hit = coins.find((c) => c.mint === b.mint || c.id === b.coinId || c.id === b.mint);
+                return {
+                  ...b,
+                  image: b.image || hit?.image,
+                  name: b.name || hit?.name,
+                  symbol: b.symbol || hit?.symbol || "",
+                };
+              })}
+              onOpen={(mint, coinId) => {
+                const hit = coins.find((c) => c.mint === mint || c.id === coinId || c.id === mint);
+                if (hit) {
+                  setOpen(hit);
+                  setLookedMint(hit.mint || hit.id);
+                  setSnapAt(Date.now());
+                }
+              }}
+            />
+            {boostOpen && (
+              <div className="mt-3">
+                {owner && (open || coins[0]) ? (
+                  <BoostBuy
+                    owner={owner}
+                    coinId={(open || coins[0]).id}
+                    symbol={(open || coins[0]).symbol}
+                    onDone={() => refreshBoosts().catch(() => {})}
+                  />
+                ) : (
+                  <p className="text-[13px] text-white/45">{owner ? "Open a token, then boost it." : "Connect Phantom to boost."}</p>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         {!isSwap && (
           <div className="mt-5 flex gap-5 border-b border-white/10 text-[16px]">
@@ -1124,26 +1185,94 @@ export default function LaunchPage() {
           {((!isSwap && tab === "mine") || isSwap) && (
           <section className="mt-2">
             {isSwap && (
-              <div className="mb-4">
-                <SwapWidget owner={owner} title="Swap" />
+            <div className="space-y-3">
+              <div className="flex gap-1 rounded-full bg-white/[0.06] p-1">
+                {(["live", "graduated"] as const).map((k) => (
+                  <button
+                    key={k}
+                    type="button"
+                    onClick={() => setPhase(k)}
+                    className={`flex-1 rounded-full py-2 text-[14px] font-medium ${
+                      phase === k ? "bg-white text-void" : "text-white/45"
+                    }`}
+                  >
+                    {k === "live" ? "Live" : "Graduated"}
+                  </button>
+                ))}
               </div>
-            )}
-            {isSwap && (
-            <div className="flex gap-5 border-b border-white/10 text-[16px]">
-              <button
-                type="button"
-                onClick={() => setTab("tape")}
-                className={`pb-2 ${tab === "tape" ? "border-b-2 border-white font-medium text-white" : "text-white/40"}`}
-              >
-                Open
-              </button>
-              <button
-                type="button"
-                onClick={() => setTab("mine")}
-                className={`pb-2 ${tab === "mine" ? "border-b-2 border-white font-medium text-white" : "text-white/40"}`}
-              >
-                Closed
-              </button>
+              <div className="relative">
+                <SafeField
+                  value={caQuery}
+                  placeholder="Search by CA or ticker"
+                  className="min-h-[44px] w-full rounded-full border border-white/10 bg-black/35 px-4 pl-4 text-[15px] text-white"
+                  onChange={(v) => {
+                    setCaQuery(v);
+                    setCaErr("");
+                  }}
+                />
+                <button
+                  type="button"
+                  disabled={caBusy}
+                  onClick={() => searchMint().catch(() => {})}
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-full bg-acid px-4 py-1.5 text-[13px] font-semibold text-void disabled:opacity-40"
+                >
+                  {caBusy ? "…" : "Go"}
+                </button>
+              </div>
+              {caErr && <p className="text-[13px] text-blood">{caErr}</p>}
+              <div className="flex gap-1 overflow-x-auto pb-1">
+                {(
+                  [
+                    ["newest", "Newest"],
+                    ["mcap", "Mcap"],
+                    ["vol5m", "5m vol"],
+                    ["vol1h", "1h vol"],
+                    ["rank", "Rank"],
+                  ] as const
+                ).map(([k, label]) => (
+                  <button
+                    key={k}
+                    type="button"
+                    onClick={() => {
+                      setTapeSort(k);
+                      setRanked(k === "rank");
+                      setVol(k === "vol5m" ? "5m" : k === "vol1h" ? "1h" : null);
+                    }}
+                    className={`shrink-0 rounded-full px-3.5 py-1.5 text-[13px] font-medium ${
+                      tapeSort === k ? "bg-acid/20 text-acid" : "bg-white/[0.06] text-white/45"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <div className="flex gap-1 overflow-x-auto">
+                {(["newest", "1h", "6h", "24h"] as const).map((k) => (
+                  <button
+                    key={k}
+                    type="button"
+                    onClick={() => setAge(k)}
+                    className={`shrink-0 rounded-full px-3 py-1 text-[12px] ${
+                      age === k ? "text-white" : "text-white/35"
+                    }`}
+                  >
+                    {k === "newest" ? "Any age" : k}
+                  </button>
+                ))}
+                <span className="mx-1 h-5 w-px self-center bg-white/10" />
+                {(["all", "born", "market"] as const).map((k) => (
+                  <button
+                    key={k}
+                    type="button"
+                    onClick={() => setSource(k)}
+                    className={`shrink-0 rounded-full px-3 py-1 text-[12px] ${
+                      source === k ? "text-white" : "text-white/35"
+                    }`}
+                  >
+                    {k === "all" ? "All" : k === "born" ? "Pad" : "Market"}
+                  </button>
+                ))}
+              </div>
             </div>
             )}
             {!isSwap && (
@@ -1203,128 +1332,7 @@ export default function LaunchPage() {
               </div>
             )}
             <div className="mt-3 space-y-2">
-              {isSwap && (
-                <BoostRail
-                  rows={boostRank.map((b) => {
-                    const hit = coins.find((c) => c.mint === b.mint || c.id === b.coinId || c.id === b.mint);
-                    return {
-                      ...b,
-                      image: b.image || hit?.image,
-                      name: b.name || hit?.name,
-                      symbol: b.symbol || hit?.symbol || "",
-                    };
-                  })}
-                  onOpen={(mint, coinId) => {
-                    const hit = coins.find((c) => c.mint === mint || c.id === coinId || c.id === mint);
-                    if (hit) {
-                      setOpen(hit);
-                      setLookedMint(hit.mint || hit.id);
-                      setSnapAt(Date.now());
-                    }
-                  }}
-                />
-              )}
-              {isSwap && (
-              <>
-              <div className="flex gap-2">
-                <SafeField
-                  value={caQuery}
-                  placeholder="Search mint (CA)"
-                  className="min-h-[40px] min-w-0 flex-1 rounded-full border border-violet/30 bg-void px-4 font-mono text-[11px] text-ghost"
-                  onChange={(v) => {
-                    setCaQuery(v);
-                    setCaErr("");
-                  }}
-                />
-                <button type="button" disabled={caBusy} onClick={() => searchMint().catch(() => {})} className="btn-ghost min-h-[40px] rounded-full px-4 font-mono text-[11px] disabled:opacity-40">
-                  {caBusy ? "…" : "Search"}
-                </button>
-              </div>
-              {caErr && <p className="font-mono text-[11px] text-blood">{caErr}</p>}
-              <div>
-                <div className="font-mono text-[10px] tracking-[0.22em] text-mute">SOURCE</div>
-                <div className="mt-1 flex flex-wrap gap-1 rounded-2xl border border-violet/25 p-1">
-                  {(["all", "born", "market"] as const).map((k) => (
-                    <button
-                      key={k}
-                      type="button"
-                      onClick={() => setSource(k)}
-                      className={`rounded-full px-3 py-1 font-mono text-[10px] ${source === k ? "bg-acid/20 text-acid" : "text-mute hover:text-ghost"}`}
-                    >
-                      {k === "all" ? "ALL" : k === "born" ? "SOLPHIA" : "MARKET"}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <div className="font-mono text-[10px] tracking-[0.22em] text-mute">WHEN</div>
-                <div className="mt-1 flex flex-wrap gap-1 rounded-2xl border border-violet/25 p-1">
-                  {(["newest", "1h", "6h", "24h"] as const).map((k) => (
-                    <button
-                      key={k}
-                      type="button"
-                      onClick={() => setAge(k)}
-                      className={`rounded-full px-3 py-1 font-mono text-[10px] ${age === k ? "bg-acid/20 text-acid" : "text-mute hover:text-ghost"}`}
-                    >
-                      {k === "newest" ? "NEWEST" : k === "1h" ? "1 HR" : k === "6h" ? "6 HR" : "24 HR"}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <div className="font-mono text-[10px] tracking-[0.22em] text-mute">VOLUME</div>
-                <div className={`mt-1 flex flex-wrap gap-1 rounded-2xl border border-violet/25 p-1 ${ranked ? "opacity-40" : ""}`}>
-                  {(["5m", "30m", "1h", "6h", "24h"] as const).map((k) => (
-                    <button
-                      key={k}
-                      type="button"
-                      onClick={() => {
-                        setRanked(false);
-                        setVol((cur) => (cur === k ? null : k));
-                      }}
-                      className={`rounded-full px-3 py-1 font-mono text-[10px] ${!ranked && vol === k ? "bg-acid/20 text-acid" : "text-mute hover:text-ghost"}`}
-                    >
-                      {k === "5m" ? "5 M" : k === "30m" ? "30 M" : k === "1h" ? "1 HR" : k === "6h" ? "6 HR" : "24 HR"}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setRanked((v) => !v);
-                    if (!ranked) setVol(null);
-                  }}
-                  className={`flex-1 rounded-full px-4 py-2 font-mono text-[11px] tracking-[0.16em] ${
-                    ranked ? "btn-on" : "btn-ghost"
-                  }`}
-                >
-                  Rank
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setBoostOpen((v) => !v)}
-                  className={`flex-1 rounded-full px-4 py-2 font-mono text-[11px] tracking-[0.16em] ${
-                    boostOpen ? "btn-on" : "btn-ghost"
-                  }`}
-                >
-                  Boost
-                </button>
-              </div>
-              {boostOpen && owner && (open || mine[0]) && (
-                <BoostBuy
-                  owner={owner}
-                  coinId={(open || mine[0]).id}
-                  symbol={(open || mine[0]).symbol}
-                  onDone={() => refreshBoosts().catch(() => {})}
-                />
-              )}
-              {boostOpen && owner && !open && !mine[0] && (
-                <p className="text-[12px] text-mute">Open a token, then boost it.</p>
-              )}
-              {boostOpen && !owner && <p className="text-[12px] text-mute">Connect to boost a token to the top.</p>}
-              {tab === "mine" && boostMine.live.length > 0 && (
+              {!isSwap && tab === "mine" && boostMine.live.length > 0 && (
                 <div className="space-y-1 text-[12px] text-mute">
                   {boostMine.live.map((b) => (
                     <div key={`l-${b.symbol}`} className="text-acid">
@@ -1332,8 +1340,6 @@ export default function LaunchPage() {
                     </div>
                   ))}
                 </div>
-              )}
-              </>
               )}
             </div>
             <div className="mt-1 divide-y divide-white/[0.06]">

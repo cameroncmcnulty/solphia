@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { BurstSticker } from "@/components/BurstSticker";
 import { AccountMenu } from "@/components/AccountMenu";
+import { ParticleField } from "@/components/ParticleField";
 import { CartoonPfp } from "@/components/CartoonPfp";
 import { SwapWidget } from "@/components/SwapWidget";
 import { WalletConnect } from "@/components/WalletConnect";
@@ -614,10 +615,11 @@ export default function ShillPage() {
   const live = Math.max(pack?.members || 0, (pack?.typing || []).length + (owner ? 1 : 0), msgs.length ? 1 : 0);
 
   return (
-    <main ref={frame} className="fixed inset-0 z-40 overflow-hidden bg-void pb-[calc(3.7rem+env(safe-area-inset-bottom))] md:pb-0">
-      <div className="relative z-10 mx-auto grid h-full min-h-0 w-full grid-rows-[auto_auto_minmax(0,1fr)_auto] overflow-hidden lg:max-w-6xl lg:grid-cols-[minmax(0,1fr)_22rem] lg:grid-rows-[auto_auto_minmax(0,1fr)]">
-        <div className="lg:col-span-2">
-          <header className="flex items-center gap-2 border-b border-white/10 bg-[#04000a]/55 px-2 pb-2 pt-[max(0.4rem,env(safe-area-inset-top))] backdrop-blur-xl">
+    <main ref={frame} className="fixed inset-0 z-10 flex flex-col overflow-hidden pb-[calc(3.7rem+env(safe-area-inset-bottom))] md:pb-0">
+      <ParticleField />
+      <div className="relative z-10 mx-auto flex h-full min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden lg:max-w-6xl">
+        <div className="shrink-0">
+          <header className="relative z-[80] flex items-center gap-2 border-b border-white/10 bg-[#04000a]/55 px-2 pb-2 pt-[max(0.4rem,env(safe-area-inset-top))] backdrop-blur-xl">
             <div className="min-w-0 flex-1 px-1">
               <div className="flex items-center gap-2">
                 <span className="shill-live" />
@@ -687,19 +689,11 @@ export default function ShillPage() {
           )}
         </div>
 
-        {!owner && (
-          <div className="absolute inset-x-0 top-[7.5rem] z-30 flex justify-center px-4 lg:col-span-2">
-            <div className="shill-glass flex w-full max-w-md flex-col items-center gap-3 rounded-3xl px-5 py-4 text-center">
-              <p className="font-mono text-[11px] tracking-[0.22em] text-acid">PHANTOM</p>
-              <p className="font-display text-[22px] text-ghost">Connect to unlock chat</p>
-              <p className="text-[14px] text-mute">Read the room. Sign in to send, pin, vote, and reply.</p>
-              <WalletConnect />
-            </div>
-          </div>
-        )}
+        <div className="flex min-h-0 min-w-0 flex-1">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <div
           ref={scroller}
-          className={`relative min-h-0 overflow-y-auto px-2 py-3 lg:col-start-1 ${tab === "chat" ? "" : "hidden"}`}
+          className={`relative min-h-0 flex-1 overflow-y-auto px-2 py-3 ${tab === "chat" ? "" : "hidden"}`}
           onClick={() => setPicker(null)}
           onScroll={(e) => {
             const el = e.currentTarget;
@@ -847,7 +841,7 @@ export default function ShillPage() {
         </div>
 
         {tab === "pins" && (
-          <div className="min-h-0 overflow-y-auto px-4 py-5 lg:col-start-1">
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5">
             <p className="font-mono text-[11px] tracking-[0.28em] text-acid">PINNED</p>
             <h2 className="mt-1 font-display text-[26px] tracking-tight text-ghost">On the rail</h2>
             <p className="mt-1 text-[15px] text-white/45">Paid pins sit at the top of chat for 3 hours. {SHILL_PIN_SOL} SOL.</p>
@@ -882,7 +876,7 @@ export default function ShillPage() {
           </div>
         )}
         {tab === "board" && (
-          <div className="min-h-0 overflow-y-auto px-4 py-5 lg:col-start-1 lg:hidden">
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 lg:hidden">
             <VoteBoard rows={voteRows} canVote={canVote} onVote={upvote} nextVote={nextVote} now={now} />
             {you && (
               <button type="button" onClick={() => owner && setPeek(owner)} className="shill-glass mt-5 flex w-full items-center gap-3 rounded-2xl p-3 text-left">
@@ -896,10 +890,14 @@ export default function ShillPage() {
           </div>
         )}
 
-        <div className={`relative z-20 border-t border-white/10 bg-[#04000a]/70 pb-[max(0.5rem,env(safe-area-inset-bottom))] backdrop-blur-xl lg:col-start-1 ${tab === "chat" ? "" : "hidden lg:block"}`}>
+        <div className={`relative z-20 shrink-0 border-t border-white/10 bg-[#04000a]/80 backdrop-blur-xl ${tab === "chat" ? "" : "hidden"}`}>
           {!owner ? (
-            <div className="flex items-center justify-between gap-3 px-4 py-3">
-              <p className="text-[14px] text-mute">Connect Phantom to unlock chat.</p>
+            <div className="flex items-center gap-3 px-3 py-3">
+              <input
+                disabled
+                placeholder="Connect Phantom to chat"
+                className="h-11 min-w-0 flex-1 rounded-full border border-white/10 bg-white/[0.06] px-4 text-[16px] text-white/40 outline-none"
+              />
               <WalletConnect />
             </div>
           ) : (
@@ -965,8 +963,9 @@ export default function ShillPage() {
             </>
           )}
         </div>
+        </div>
 
-        <aside className="hidden min-h-0 overflow-y-auto border-l border-white/10 bg-black/15 p-5 backdrop-blur-md lg:col-start-2 lg:row-start-2 lg:row-span-2 lg:block">
+        <aside className="hidden min-h-0 w-[22rem] shrink-0 overflow-y-auto border-l border-white/10 bg-black/15 p-5 backdrop-blur-md lg:block">
           <VoteBoard rows={voteRows} canVote={canVote} onVote={upvote} nextVote={nextVote} now={now} />
           {you && (
             <button type="button" onClick={() => owner && setPeek(owner)} className="shill-glass mt-6 flex w-full items-center gap-3 rounded-2xl p-3 text-left">
@@ -978,6 +977,7 @@ export default function ShillPage() {
             </button>
           )}
         </aside>
+        </div>
 
         {peek && (
           <ProfileOverlay

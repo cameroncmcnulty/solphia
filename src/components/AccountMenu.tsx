@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { CircleUser, Gift, Rocket, Users } from "lucide-react";
 import { useOwner } from "@/lib/hooks";
@@ -22,7 +23,10 @@ export function AccountMenu() {
   const [open, setOpen] = useState(false);
   const [desk, setDesk] = useState<Desk | null>(null);
   const [busy, setBusy] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  const [pos, setPos] = useState({ top: 0, right: 0 });
   const box = useRef<HTMLDivElement>(null);
+  const btn = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!owner) {
@@ -36,9 +40,15 @@ export function AccountMenu() {
   }, [owner]);
 
   useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
     if (!open) return;
     const onDoc = (e: MouseEvent) => {
-      if (box.current && !box.current.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      if (box.current?.contains(t) || btn.current?.contains(t)) return;
+      setOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setOpen(false);
@@ -51,13 +61,77 @@ export function AccountMenu() {
     };
   }, [open]);
 
+  function toggle() {
+    const r = btn.current?.getBoundingClientRect();
+    if (r) setPos({ top: r.bottom + 8, right: Math.max(8, window.innerWidth - r.right) });
+    setOpen((v) => !v);
+  }
+
   if (!owner) return <WalletConnect />;
 
+  const menu = open && mounted && createPortal(
+    <div
+      ref={box}
+      role="menu"
+      style={{ top: pos.top, right: pos.right }}
+      className="fixed z-[90] w-64 overflow-hidden rounded-2xl border border-violet/30 bg-ink/95 shadow-[0_16px_48px_rgba(0,0,0,0.55)] backdrop-blur-xl"
+    >
+      <div className="flex items-center gap-3 border-b border-violet/20 px-3 py-3">
+        <CartoonPfp seed={owner} src={desk?.pfp} className="h-11 w-11" />
+        <div className="min-w-0">
+          <div className="truncate font-mono text-xs text-ghost">
+            {desk?.username ? `@${desk.username}` : `${owner.slice(0, 6)}…${owner.slice(-6)}`}
+          </div>
+          <div className="truncate font-mono text-[10px] text-mute">
+            {owner.slice(0, 4)}…{owner.slice(-4)}
+          </div>
+        </div>
+      </div>
+      <nav className="py-1">
+        {LINKS.map((l) => (
+          <Link
+            key={l.href}
+            href={l.href}
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              if (l.href.includes("#")) queueMicrotask(() => window.dispatchEvent(new Event("hashchange")));
+            }}
+            className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-mute hover:bg-white/5 hover:text-ghost"
+          >
+            <l.Icon className="h-4 w-4 shrink-0 text-acid" />
+            {l.label}
+          </Link>
+        ))}
+        <button
+          type="button"
+          role="menuitem"
+          disabled={busy}
+          onClick={async () => {
+            setBusy(true);
+            try {
+              await switchPhantom();
+            } finally {
+              setBusy(false);
+              setOpen(false);
+            }
+          }}
+          className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left text-sm text-mute hover:bg-white/5 hover:text-ghost disabled:opacity-40"
+        >
+          <PhantomMark className="h-4 w-4 shrink-0 text-white" />
+          {busy ? "Opening Phantom…" : "Switch wallet"}
+        </button>
+      </nav>
+    </div>,
+    document.body,
+  );
+
   return (
-    <div ref={box} className="relative">
+    <div className="relative z-[80]">
       <button
+        ref={btn}
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={toggle}
         aria-expanded={open}
         aria-haspopup="menu"
         title="Account"
@@ -68,59 +142,7 @@ export function AccountMenu() {
           {desk?.username ? `@${desk.username}` : `${owner.slice(0, 4)}…${owner.slice(-4)}`}
         </span>
       </button>
-      {open && (
-        <div
-          role="menu"
-          className="absolute right-0 z-50 mt-2 w-64 overflow-hidden rounded-2xl border border-violet/30 bg-ink/95 shadow-[0_16px_48px_rgba(0,0,0,0.45)] backdrop-blur"
-        >
-          <div className="flex items-center gap-3 border-b border-violet/20 px-3 py-3">
-            <CartoonPfp seed={owner} src={desk?.pfp} className="h-11 w-11" />
-            <div className="min-w-0">
-              <div className="truncate font-mono text-xs text-ghost">
-                {desk?.username ? `@${desk.username}` : `${owner.slice(0, 6)}…${owner.slice(-6)}`}
-              </div>
-              <div className="truncate font-mono text-[10px] text-mute">
-                {owner.slice(0, 4)}…{owner.slice(-4)}
-              </div>
-            </div>
-          </div>
-          <nav className="py-1">
-            {LINKS.map((l) => (
-              <Link
-                key={l.href}
-                href={l.href}
-                role="menuitem"
-                onClick={() => {
-                  setOpen(false);
-                  if (l.href.includes("#")) queueMicrotask(() => window.dispatchEvent(new Event("hashchange")));
-                }}
-                className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-mute hover:bg-white/5 hover:text-ghost"
-              >
-                <l.Icon className="h-4 w-4 shrink-0 text-acid" />
-                {l.label}
-              </Link>
-            ))}
-            <button
-              type="button"
-              role="menuitem"
-              disabled={busy}
-              onClick={async () => {
-                setBusy(true);
-                try {
-                  await switchPhantom();
-                } finally {
-                  setBusy(false);
-                  setOpen(false);
-                }
-              }}
-              className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left text-sm text-mute hover:bg-white/5 hover:text-ghost disabled:opacity-40"
-            >
-              <PhantomMark className="h-4 w-4 shrink-0 text-white" />
-              {busy ? "Opening Phantom…" : "Switch wallet"}
-            </button>
-          </nav>
-        </div>
-      )}
+      {menu}
     </div>
   );
 }

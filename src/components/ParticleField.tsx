@@ -57,5 +57,5 @@ export function ParticleField() {
     };
   }, []);
 
-  return <canvas ref={ref} className="pointer-events-none fixed inset-0 z-0 opacity-90" />;
+  return <canvas ref={ref} className="pointer-events-none fixed inset-0 z-0 opacity-100" />;
 }

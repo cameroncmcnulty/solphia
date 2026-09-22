@@ -40,8 +40,6 @@ export function Shell({ children }: { children: React.ReactNode }) {
   if (isShill) {
     return (
       <div className="relative min-h-screen overflow-hidden bg-void">
-        <ParticleField />
-        <div className="vignette" />
         <Suspense fallback={null}>
           <ReferralCapture />
         </Suspense>
