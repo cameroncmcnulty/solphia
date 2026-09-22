@@ -105,7 +105,7 @@ describe("rocket boosts", () => {
     assert.equal(b.ok, false);
   });
 
-  it("house-fills from the top 10 until 8-10 live, and refills at 6-7", () => {
+  it("house-fills from the top 10 until 8-10 live, and does not reshuffle while any are live", () => {
     const book = bookWithCoins();
     const t0 = 9_000_000;
     const top = book.coins.slice(0, 10).map((c) => ({ id: c.id, mint: c.mint, symbol: c.symbol, name: c.name, image: c.image }));
@@ -113,11 +113,8 @@ describe("rocket boosts", () => {
     const n = rankedBoosts(book, t0).length;
     assert.ok(n >= 8 && n <= 10);
     assert.equal(fillHouseBoosts(book, top, t0), false);
-    const keep = rankedBoosts(book, t0).slice(0, 6);
-    for (const b of liveBoosts(book, t0)) {
-      if (!keep.some((k) => k.coinId === b.coinId)) b.status = "done";
-    }
-    assert.ok(rankedBoosts(book, t0).length <= 6);
+    for (const b of liveBoosts(book, t0)) b.status = "done";
+    assert.equal(rankedBoosts(book, t0).length, 0);
     assert.equal(fillHouseBoosts(book, top, t0 + 1), true);
     assert.ok(rankedBoosts(book, t0 + 1).length >= 8);
   });

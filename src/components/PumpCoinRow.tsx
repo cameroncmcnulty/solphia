@@ -30,6 +30,7 @@ export function PumpCoinRow({
   change,
   active,
   badge,
+  place,
   onOpen,
 }: {
   name: string;
@@ -41,6 +42,7 @@ export function PumpCoinRow({
   change?: number;
   active?: boolean;
   badge?: string;
+  place?: number;
   onOpen: () => void;
 }) {
   const up = (change || 0) >= 0;
@@ -51,7 +53,10 @@ export function PumpCoinRow({
       onClick={onOpen}
       className={`flex w-full items-center gap-3 px-1 py-3 text-left transition ${active ? "opacity-100" : "active:opacity-80"}`}
     >
-      <TokenArt src={image} mint={mint} label={ticker} className="h-14 w-14 rounded-[18px]" />
+      <div className={place === 1 ? "rank-wrap rank-1" : place === 2 ? "rank-wrap rank-2" : place === 3 ? "rank-wrap rank-3" : ""}>
+        <TokenArt src={image} mint={mint} label={ticker} className="h-14 w-14 rounded-[18px]" />
+        {place ? <span className="rank-num">{place}</span> : null}
+      </div>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
           <p className="truncate text-[17px] font-semibold tracking-tight text-white">{name || ticker}</p>

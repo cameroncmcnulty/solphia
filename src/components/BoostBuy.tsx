@@ -93,7 +93,9 @@ export function BoostRail({
   onOpen: (mint: string, coinId: string) => void;
 }) {
   const [sort, setSort] = useState<BoostSort>("top");
-  if (!rows.length) return null;
+  if (!rows.length) {
+    return <p className="py-2 text-[13px] text-white/40">Boost a coin to take the rail.</p>;
+  }
   const ordered =
     sort === "latest"
       ? [...rows].sort((a, b) => (b.lastBoostAt || 0) - (a.lastBoostAt || 0) || b.rockets - a.rockets)

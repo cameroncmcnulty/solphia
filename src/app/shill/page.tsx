@@ -311,18 +311,6 @@ function VoteBoard({
   );
 }
 
-function windowsBottomLift() {
-  if (typeof window === "undefined") return 0;
-  if (!/Windows/i.test(navigator.userAgent || "")) return 0;
-  const screenH = window.screen?.height || 0;
-  const availH = window.screen?.availHeight || 0;
-  const measured = Math.max(0, screenH - availH);
-  const outer = window.outerHeight || 0;
-  const fillsScreen = screenH > 0 && outer >= Math.min(screenH, availH || screenH) - 16;
-  if (!fillsScreen) return 12;
-  return Math.max(measured, 48);
-}
-
 export default function ShillPage() {
   const owner = useOwner();
   const frame = useRef<HTMLElement>(null);
@@ -361,26 +349,33 @@ export default function ShillPage() {
     const r = await fetch(`/api/shill?${q}`, { cache: "no-store", signal: ac.signal });
     const j = (await r.json()) as Pack;
     setPack((prev) => {
-      if (!since || !prev) return j;
-      const seen = new Map((prev.messages || []).map((m) => [m.id, m]));
-      for (const m of j.messages || []) seen.set(m.id, m);
-      for (const loc of [...seen.values()].filter((m) => String(m.id).startsWith("local-"))) {
-        const hit = (j.messages || []).find(
-          (m) => m.owner === loc.owner && (m.text || "") === (loc.text || "") && Math.abs(m.at - loc.at) < 12_000,
+      const server = j.messages || [];
+      const locals = (prev?.messages || []).filter((m) => String(m.id).startsWith("local-"));
+      const seen = new Map(((full ? server : prev?.messages) || server).map((m) => [m.id, m]));
+      for (const m of server) seen.set(m.id, m);
+      for (const loc of locals) {
+        const hit = [...seen.values()].find(
+          (m) =>
+            !String(m.id).startsWith("local-") &&
+            m.owner === loc.owner &&
+            (m.text || "") === (loc.text || "") &&
+            (m.sticker || "") === (loc.sticker || "") &&
+            Math.abs(m.at - loc.at) < 15_000,
         );
         if (hit) seen.delete(loc.id);
+        else if (!seen.has(loc.id)) seen.set(loc.id, loc);
       }
       const messages = [...seen.values()].sort((a, b) => a.at - b.at).slice(-200);
       return {
-        ...prev,
+        ...(prev || {}),
         ...j,
         messages,
-        board: j.board || prev.board,
-        profiles: j.profiles ? { ...prev.profiles, ...j.profiles } : prev.profiles,
-        voteBoard: j.voteBoard || prev.voteBoard,
-        you: j.you ?? prev.you,
-        pins: j.pins || prev.pins,
-        members: j.members ?? prev.members,
+        board: j.board || prev?.board,
+        profiles: j.profiles ? { ...prev?.profiles, ...j.profiles } : prev?.profiles,
+        voteBoard: j.voteBoard || prev?.voteBoard,
+        you: j.you ?? prev?.you,
+        pins: j.pins || prev?.pins,
+        members: j.members ?? prev?.members,
       };
     });
     const latest = (j.messages || []) as Msg[];
@@ -428,14 +423,14 @@ export default function ShillPage() {
       const vv = window.visualViewport;
       const visH = Math.round(vv?.height || window.innerHeight);
       const visTop = Math.round(vv?.offsetTop || 0);
-      const keyboard = visTop > 0 || visH < window.innerHeight - 80;
-      const lift = keyboard ? 0 : windowsBottomLift();
+      const keyboard = visTop > 8 || visH < window.innerHeight - 120;
       el.style.top = `${visTop}px`;
       el.style.right = "0px";
       el.style.left = "0px";
       el.style.bottom = "auto";
-      el.style.height = `${Math.max(280, visH - lift)}px`;
-      el.style.setProperty("--shill-lift", `${lift}px`);
+      el.style.height = `${Math.max(240, visH)}px`;
+      el.style.paddingBottom = keyboard ? "0px" : "";
+      document.body.classList.toggle("shill-kbd", keyboard);
       window.scrollTo(0, 0);
     };
     fit();
@@ -443,6 +438,7 @@ export default function ShillPage() {
     window.visualViewport?.addEventListener("scroll", fit);
     window.addEventListener("resize", fit);
     return () => {
+      document.body.classList.remove("shill-kbd");
       window.visualViewport?.removeEventListener("resize", fit);
       window.visualViewport?.removeEventListener("scroll", fit);
       window.removeEventListener("resize", fit);
@@ -503,7 +499,7 @@ export default function ShillPage() {
       if (real?.id) {
         setPack((prev) => {
           if (!prev) return prev;
-          const rest = (prev.messages || []).filter((m) => m.id !== localId);
+          const rest = (prev.messages || []).filter((m) => m.id !== localId && m.id !== real.id);
           return { ...prev, messages: [...rest, { ...real, pending: false }] };
         });
         lastAt.current = Math.max(lastAt.current, real.at);

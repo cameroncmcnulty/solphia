@@ -855,6 +855,46 @@ body {
   object-fit: cover;
   background: #12081c;
 }
+.rank-wrap {
+  position: relative;
+  flex-shrink: 0;
+  border-radius: 22px;
+  padding: 3px;
+}
+.rank-wrap.rank-1 {
+  background: linear-gradient(135deg, #ffe27a, #ffd24a 40%, #c9a227);
+  box-shadow: 0 0 18px rgba(255, 210, 74, 0.45);
+}
+.rank-wrap.rank-2 {
+  background: linear-gradient(135deg, #f3f3f3, #cfd6df 45%, #8e9aa8);
+  box-shadow: 0 0 14px rgba(207, 214, 223, 0.35);
+}
+.rank-wrap.rank-3 {
+  background: linear-gradient(135deg, #f0c19a, #c47a4a 45%, #8a4b28);
+  box-shadow: 0 0 14px rgba(196, 122, 74, 0.35);
+}
+.rank-num {
+  position: absolute;
+  left: 50%;
+  bottom: -7px;
+  z-index: 1;
+  display: flex;
+  height: 18px;
+  min-width: 18px;
+  translate: -50% 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: #04000a;
+  font-family: var(--font-plex), ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 700;
+  color: #fff;
+  box-shadow: 0 0 0 2px currentColor;
+}
+.rank-1 .rank-num { color: #ffd24a; }
+.rank-2 .rank-num { color: #d5dde6; }
+.rank-3 .rank-num { color: #e0a06a; }
 .boost-tile.gold .boost-tile-art {
   box-shadow: 0 0 0 2px #ffd24a, 0 0 18px rgba(255, 210, 74, 0.75);
   animation: gold-shine 1.8s ease-in-out infinite;
@@ -1029,4 +1069,8 @@ input[type="range"]::-webkit-slider-thumb {
 }
 @media (prefers-reduced-motion: reduce) {
   .shill-live { animation: none; }
+}
+body.shill-kbd .bottom-nav {
+  transform: translateY(110%);
+  pointer-events: none;
 }

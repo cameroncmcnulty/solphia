@@ -227,7 +227,7 @@ export function fillHouseBoosts(book: LaunchBook, candidates: HouseCoin[], now =
   tickBoosts(book, now);
   const ranked = rankedBoosts(book, now);
   const liveN = ranked.length;
-  if (liveN >= HOUSE_KEEP_MIN) return false;
+  if (liveN > 0) return false;
   const add =
     liveN === 0 ? HOUSE_KEEP_MIN + Math.floor(Math.random() * (HOUSE_KEEP_MAX - HOUSE_KEEP_MIN + 1)) : liveN <= 6 ? 3 : 2;
   const taken = new Set(ranked.map((r) => r.mint || r.coinId));

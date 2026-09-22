@@ -326,7 +326,10 @@ export default function LaunchPage() {
   async function refreshBoosts() {
     const q = owner ? `?pubkey=${encodeURIComponent(owner)}` : "";
     const j = await fetch(`/api/launch/boost${q}`, { cache: "no-store" }).then((r) => r.json());
-    setBoostRank(Array.isArray(j.ranked) ? j.ranked : Array.isArray(j.live) ? j.live : []);
+    const incoming = Array.isArray(j.ranked) ? j.ranked : Array.isArray(j.live) ? j.live : null;
+    if (incoming) {
+      setBoostRank((prev) => (incoming.length === 0 && prev.length > 0 ? prev : incoming));
+    }
     if (j.mine) setBoostMine({ live: j.mine.live || [], queued: [] });
   }
 
@@ -334,7 +337,6 @@ export default function LaunchPage() {
     try {
       const tape = await fetch("/api/launch/tape", { cache: "no-store" }).then((r) => r.json());
       if (tape.solUsd) setSolUsd((s) => s || tape.solUsd);
-      if (Array.isArray(tape.ranked)) setBoostRank(tape.ranked);
       const market: Coin[] = Array.isArray(tape.coins) ? tape.coins : [];
       setCoins((prev) => {
         const padCoins = prev.filter((c) => c.born);
@@ -805,7 +807,16 @@ export default function LaunchPage() {
       phase === "graduated"
         ? sourced.filter((c) => c.status === "graduated")
         : sourced.filter((c) => c.status !== "graduated");
-    const aged = filterTape(staged, age);
+    const q = caQuery.trim().toLowerCase().replace(/^\$+/, "");
+    const searched = q
+      ? staged.filter((c) => {
+          const sym = (c.symbol || "").toLowerCase().replace(/^\$+/, "");
+          const name = (c.name || "").toLowerCase();
+          const mint = (c.mint || "").toLowerCase();
+          return sym.includes(q) || name.includes(q) || mint.includes(q);
+        })
+      : staged;
+    const aged = filterTape(searched, age);
     const rows =
       tapeSort === "rank" || ranked
         ? rankTape(aged, solUsd)
@@ -836,7 +847,7 @@ export default function LaunchPage() {
       }
     }
     return next;
-  }, [isSwap, mine, pool, age, vol, ranked, tapeSort, phase, solUsd, source, boostRank, lookedMint, coins]);
+  }, [isSwap, mine, pool, age, vol, ranked, tapeSort, phase, solUsd, source, boostRank, lookedMint, coins, caQuery]);
   const rows = board.map((r) => r.coin);
 
   return (
@@ -1196,7 +1207,7 @@ export default function LaunchPage() {
                       phase === k ? "bg-white text-void" : "text-white/45"
                     }`}
                   >
-                    {k === "live" ? "Live" : "Graduated"}
+                    {k === "live" ? "Curve" : "Graduated"}
                   </button>
                 ))}
               </div>
@@ -1398,6 +1409,7 @@ export default function LaunchPage() {
                     marketCapSol={row.coin.marketCapSol}
                     change={row.coin.change24h ?? row.coin.change1h}
                     active={open?.id === row.coin.id}
+                    place={isSwap && tapeSort === "rank" && row.rank >= 1 && row.rank <= 3 ? row.rank : undefined}
                     badge={row.coin.born ? "✓" : undefined}
                     onOpen={() => {
                       setOpen((cur) => {
@@ -1495,6 +1507,7 @@ function CoinDesk({
   const tradeErr = useConfirmErrors<"wallet" | "amount">();
   const audit = useMemo(() => auditLaunchCoin(open, solUsd), [open, solUsd]);
   const creator = Boolean(owner && open.creator === owner);
+  const [tradeOpen, setTradeOpen] = useState(true);
   const padTrade = Boolean(open.born || open.venue === "solphia" || open.venue === "pumpfun");
   const snipeLeft = Math.max(0, ANTI_SNIPE_MS - (Date.now() - open.createdAt));
   const cap = open.maxBuySol ?? 0;
@@ -1590,10 +1603,6 @@ function CoinDesk({
         </button>
       </div>
 
-      {owner && (
-        <BoostBuy owner={owner} coinId={open.id} symbol={open.symbol} />
-      )}
-
       <TokenChart
         key={open.mint || open.id}
         mint={open.mint}
@@ -1653,9 +1662,18 @@ function CoinDesk({
           </div>
         </div>
 
+        <button
+          type="button"
+          onClick={() => setTradeOpen((v) => !v)}
+          className="flex w-full items-center justify-between rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-left"
+        >
+          <span className="text-[16px] font-semibold text-white">Swap {tick(open.symbol)}</span>
+          <span className="font-mono text-[12px] text-acid">{tradeOpen ? "hide" : "open"}</span>
+        </button>
+        {tradeOpen && (
         <SwapShell
           title={`Trade ${tick(open.symbol)}`}
-          subtitle="Bonding curve on Meteora DBC. Jupiter and Phantom Swap can route it like Pump.fun pre-grad."
+          subtitle="On the curve until it graduates. Phantom Swap can route it."
         >
           {!padTrade ? (
             <MarketSwap open={open} owner={owner} sol={sol} setSol={setSol} solUsd={solUsd} />
@@ -1768,6 +1786,7 @@ function CoinDesk({
             </>
           )}
         </SwapShell>
+        )}
       </div>
     </section>
   );
