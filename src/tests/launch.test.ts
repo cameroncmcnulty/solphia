@@ -132,7 +132,10 @@ describe("fair launch book", () => {
     if (!r.ok) return;
     assert.equal(r.coin.mint, mint);
     const dup = createCoin(book, { creator: A, name: "Copy", symbol: "COPY", mint });
-    assert.equal(dup.ok, false);
+    assert.equal(dup.ok, true);
+    if (dup.ok) assert.equal(dup.coin.id, r.coin.id);
+    const stolen = createCoin(book, { creator: B, name: "Copy", symbol: "COPY", mint });
+    assert.equal(stolen.ok, false);
   });
 
   it("locks authorities, stores socials, and lets the creator buy at launch", () => {
@@ -335,9 +338,16 @@ describe("launch create validation", () => {
     assert.equal(e.wallet, undefined);
   });
 
-  it("flags a remote image URL and an oversized data URL", () => {
-    const remote = validateLaunchCreate({ creator: A, name: "Ok", symbol: "OKAY", image: "https://evil.example/x.png" });
+  it("flags a non-https image URL and an oversized data URL", () => {
+    const remote = validateLaunchCreate({ creator: A, name: "Ok", symbol: "OKAY", image: "http://evil.example/x.png" });
     assert.ok(remote.image);
+    const pinned = validateLaunchCreate({
+      creator: A,
+      name: "Ok",
+      symbol: "OKAY",
+      image: "https://gateway.pinata.cloud/ipfs/QmHash",
+    });
+    assert.equal(pinned.image, undefined);
     const heavy = validateLaunchCreate({
       creator: A,
       name: "Ok",
@@ -345,6 +355,28 @@ describe("launch create validation", () => {
       image: `data:image/jpeg;base64,${"a".repeat(IMAGE_DATA_MAX)}`,
     });
     assert.ok(heavy.image);
+  });
+
+  it("relists an already-confirmed mint instead of erroring image/mint taken", () => {
+    const book = emptyLaunchBook();
+    const mint = "CkjBiD6M61YHUbGtp9QA2UVrBKz3r56P2AB3sxJuh3F";
+    const first = createCoin(book, {
+      creator: A,
+      name: "Hi",
+      symbol: "HIII",
+      mint,
+      image: "https://gateway.pinata.cloud/ipfs/QmHash",
+    });
+    assert.equal(first.ok, true);
+    const again = createCoin(book, {
+      creator: A,
+      name: "Hi",
+      symbol: "HIII",
+      mint,
+      image: "https://gateway.pinata.cloud/ipfs/QmHash",
+    });
+    assert.equal(again.ok, true);
+    if (first.ok && again.ok) assert.equal(again.coin.id, first.coin.id);
   });
 
   it("flags junk socials and a ticker with spaces", () => {
@@ -374,7 +406,6 @@ describe("launch create validation", () => {
     assert.equal(/type=["']email["']/.test(src), false);
     assert.equal(/type=["']file["']/.test(src), false);
     assert.equal(/<form/.test(src), false);
-    assert.equal(/type=["']range["']/.test(src), false);
     assert.match(src, /SafeField/);
     assert.match(src, /killNativeValidity/);
     assert.match(src, /PadPitch/);

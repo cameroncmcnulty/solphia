@@ -506,16 +506,18 @@ export function createCoin(
   if (issues.website || issues.x || issues.telegram || issues.discord) return { ok: false, error: "bad_link" };
   const name = opts.name.trim();
   const symbol = opts.symbol.trim().toUpperCase();
-  if (book.coins.some((c) => c.symbol === symbol && c.status === "curve")) {
-    return { ok: false, error: "ticker_taken" };
-  }
   const img = storedImage(opts.image);
   if (opts.image && !img) return { ok: false, error: "bad_image" };
   const launchBuy = Math.min(launchDevBuyCap(), Math.max(0, Number(opts.launchBuySol) || 0));
   const now = opts.now || Date.now();
   const mint = opts.mint && isSolanaAddress(opts.mint) ? opts.mint : `curve:${symbol}:${now.toString(36)}`;
-  if (book.coins.some((c) => c.mint === mint)) {
-    return { ok: false, error: "mint_taken" };
+  const existing = book.coins.find((c) => c.mint === mint);
+  if (existing) {
+    if (existing.creator !== opts.creator) return { ok: false, error: "mint_taken" };
+    return { ok: true, coin: existing };
+  }
+  if (book.coins.some((c) => c.symbol === symbol && c.status === "curve")) {
+    return { ok: false, error: "ticker_taken" };
   }
   const creatorAcc = ensureAccount(book, opts.creator);
   const coin: LaunchCoin = {

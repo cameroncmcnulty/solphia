@@ -137,6 +137,49 @@ export async function buildDbcLaunchTx(opts: {
   return { transaction: encodeTx(tx), mint: mint.toBase58(), tokensOut: 0, feeSol: buySol * 0.01 };
 }
 
+export type DbcFees = {
+  creatorFeesSol: number;
+  creatorUnclaimedSol: number;
+  partnerFeesSol: number;
+  partnerUnclaimedSol: number;
+};
+
+function lamportsToSol(v: { toString(): string } | number | null | undefined): number {
+  const n = Number(v?.toString?.() || v || 0);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return n / 1e9;
+}
+
+export async function dbcFeeBreakdown(mint: string): Promise<DbcFees | null> {
+  if (!dbcEnabled() || !mint) return null;
+  try {
+    const dbc = client();
+    const row = await dbc.state.getPoolByBaseMint(mint);
+    if (!row) return null;
+    const bd = await dbc.state.getPoolFeeBreakdown(row.publicKey);
+    return {
+      creatorFeesSol: lamportsToSol(bd.creator.totalQuoteFee),
+      creatorUnclaimedSol: lamportsToSol(bd.creator.unclaimedQuoteFee),
+      partnerFeesSol: lamportsToSol(bd.partner.totalQuoteFee),
+      partnerUnclaimedSol: lamportsToSol(bd.partner.unclaimedQuoteFee),
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function dbcFeesForMints(mints: string[]): Promise<Record<string, DbcFees>> {
+  const out: Record<string, DbcFees> = {};
+  const uniq = [...new Set(mints.filter(Boolean))].slice(0, 24);
+  await Promise.all(
+    uniq.map(async (mint) => {
+      const fees = await dbcFeeBreakdown(mint);
+      if (fees) out[mint] = fees;
+    }),
+  );
+  return out;
+}
+
 export async function buildDbcClaimCreatorTx(opts: {
   mint: string;
   owner: string;
@@ -155,6 +198,32 @@ export async function buildDbcClaimCreatorTx(opts: {
       maxQuoteAmount: max,
     });
     const tx = await readyTx(raw as Transaction, creator);
+    return { ok: true, transaction: encodeTx(tx) };
+  } catch {
+    return { ok: false, error: "empty" };
+  }
+}
+
+export async function buildDbcClaimPartnerTx(opts: {
+  mint: string;
+  owner: string;
+  receiver?: string;
+}): Promise<{ ok: true; transaction: string } | { ok: false; error: string }> {
+  const dbc = client();
+  const row = await dbc.state.getPoolByBaseMint(opts.mint);
+  if (!row) return { ok: false, error: "curve_missing" };
+  const claimer = new PublicKey(opts.owner);
+  const max = new BN("1000000000000000");
+  try {
+    const raw = await dbc.partner.claimPartnerTradingFee({
+      feeClaimer: claimer,
+      payer: claimer,
+      pool: row.publicKey,
+      maxBaseAmount: max,
+      maxQuoteAmount: max,
+      receiver: opts.receiver ? new PublicKey(opts.receiver) : undefined,
+    });
+    const tx = await readyTx(raw as Transaction, claimer);
     return { ok: true, transaction: encodeTx(tx) };
   } catch {
     return { ok: false, error: "empty" };

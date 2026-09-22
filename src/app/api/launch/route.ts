@@ -19,10 +19,9 @@ import {
 } from "@/lib/launch/engine";
 import { lastPairPrices } from "@/lib/tick";
 import { liveBoosts, publicLiveBoost, tickBoosts } from "@/lib/launch/boost";
-import { IMAGE_DATA_MAX, storedImage, validateLaunchCreate } from "@/lib/launch/validate";
+import { storedImage, validateLaunchCreate } from "@/lib/launch/validate";
 import { pinDataUrl, pinJson } from "@/lib/pinata";
 import { creditRank } from "@/lib/rank/engine";
-import { SITE_URL } from "@/lib/config";
 import { tokenMetadataJson } from "@/lib/token/metadata";
 import {
   buildPadLaunchTx,
@@ -53,6 +52,7 @@ const Body = z.object({
     "trade_confirm",
     "quote",
     "withdraw_dev",
+    "withdraw_partner",
     "withdraw_owner",
     "withdraw_referral",
     "set_owner",
@@ -93,22 +93,32 @@ function fail(code: string, status = 400) {
 
 type LaunchBody = z.infer<typeof Body>;
 
+function dataMime(dataUrl?: string): string | undefined {
+  const s = (dataUrl || "").slice(5, (dataUrl || "").indexOf(","));
+  const mime = (s.split(";")[0] || "").trim();
+  return mime.startsWith("image/") ? mime : undefined;
+}
+
 async function resolveArt(opts: { image?: string; name: string; symbol: string; blurb: string; website?: string; mint: string }) {
   let image = storedImage(opts.image);
+  const mime = dataMime(opts.image);
   if (opts.image?.startsWith("data:")) {
     const pinned = await pinDataUrl(opts.image, opts.symbol);
-    image = pinned?.url || "";
+    if (!pinned?.url) throw new Error("pin_failed");
+    image = pinned.url;
   }
+  if (!image.startsWith("https://")) throw new Error("pin_failed");
   const json = tokenMetadataJson({
     name: opts.name,
     symbol: opts.symbol,
     description: opts.blurb || opts.name,
-    image: image.startsWith("https://") ? image : "",
+    image,
     website: opts.website,
+    mime,
   });
   const meta = await pinJson(json, `${opts.symbol}-meta`);
-  const uri = meta?.url || `${SITE_URL.replace(/\/$/, "")}/api/launch/meta?mint=${encodeURIComponent(opts.mint)}`;
-  return { image: image || storedImage(opts.image), uri };
+  if (!meta?.url) throw new Error("pin_failed");
+  return { image, uri: meta.url };
 }
 
 async function prepareMint(b: LaunchBody) {
@@ -152,7 +162,9 @@ async function prepareMint(b: LaunchBody) {
   let art: { image: string; uri: string };
   try {
     art = await resolveArt({ image: b.image, name, symbol, blurb, website, mint });
-  } catch {
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "";
+    if (msg === "pin_failed") return fail("pin_failed");
     return fail("chain_failed");
   }
   try {
@@ -284,8 +296,21 @@ async function getLaunch(req: NextRequest) {
   const listed = viewer
     ? book.coins.filter((c) => c.creator === viewer)
     : book.coins;
+  const rows = listed.slice(0, 80).map((c) => publicCoin(c, solUsd, viewer, book));
+  if (dbcEnabled()) {
+    try {
+      const fees = await (await dbcApi()).dbcFeesForMints(rows.map((c) => c.mint || "").filter(Boolean));
+      for (const row of rows) {
+        const f = row.mint ? fees[row.mint] : undefined;
+        if (!f) continue;
+        Object.assign(row, f);
+      }
+    } catch {
+      /* tape still useful */
+    }
+  }
   return NextResponse.json({
-    coins: listed.slice(0, 80).map((c) => publicCoin(c, solUsd, viewer, book)),
+    coins: rows,
     solUsd,
     ownerWallet: book.ownerWallet || null,
     ownerEarningsSol: book.ownerEarningsSol,
@@ -430,6 +455,26 @@ async function postLaunch(req: NextRequest) {
         claim: true,
         transaction: built.transaction,
         coin: publicCoin(coin, solUsd, b.pubkey, bookOf(snap)),
+      });
+    }
+  }
+
+  if (b.action === "withdraw_partner") {
+    const snap = await withLaunch((st) => st, false);
+    const book = bookOf(snap);
+    const coin = book.coins.find((c) => c.id === b.id || (b.mint && c.mint === b.mint));
+    if (!coin) return fail("not_found", 404);
+    if (book.ownerWallet && book.ownerWallet !== b.pubkey) return fail("not_owner");
+    if (dbcEnabled() && coin.mint && isSolanaAddress(coin.mint)) {
+      const built = await (await dbcApi()).buildDbcClaimPartnerTx({ mint: coin.mint, owner: b.pubkey });
+      if (!built.ok) return fail(built.error);
+      return NextResponse.json({
+        ok: true,
+        needsSign: true,
+        claim: true,
+        partner: true,
+        transaction: built.transaction,
+        coin: publicCoin(coin, solUsd, b.pubkey, book),
       });
     }
   }

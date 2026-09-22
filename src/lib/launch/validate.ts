@@ -5,8 +5,8 @@ export function walletOk(s: string): boolean {
   return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(s);
 }
 
-/** Data-URL cap. JPEG is compressed to fit before upload. */
-export const IMAGE_DATA_MAX = 140_000;
+/** Data-URL cap. 512×512 PNG/JPEG for wallets; also used for profile art. */
+export const IMAGE_DATA_MAX = 360_000;
 
 export type LaunchField =
   | "wallet"
@@ -55,12 +55,32 @@ export function imageOk(raw?: string): string {
   return s;
 }
 
-/** Data-URL upload or a public https image already pinned. */
+function trustedImageHost(host: string): boolean {
+  const h = host.toLowerCase();
+  return (
+    h === "solphia.io" ||
+    h.endsWith(".solphia.io") ||
+    h.endsWith(".pinata.cloud") ||
+    h.endsWith(".mypinata.cloud") ||
+    h === "ipfs.io" ||
+    h.endsWith(".ipfs.io") ||
+    h.endsWith(".nftstorage.link") ||
+    h.endsWith(".arweave.net") ||
+    h === "arweave.net"
+  );
+}
+
+/** Data-URL upload or a public https image already pinned to IPFS. */
 export function storedImage(raw?: string): string {
   const data = imageOk(raw);
   if (data) return data;
   const s = (raw || "").trim();
-  if (/^https:\/\//i.test(s) && s.length <= 512) return s;
+  if (!/^https:\/\//i.test(s) || s.length > 512) return "";
+  try {
+    if (trustedImageHost(new URL(s).hostname)) return s;
+  } catch {
+    return "";
+  }
   return "";
 }
 
@@ -84,10 +104,10 @@ export function validateLaunchCreate(input: LaunchCreateInput): Partial<Record<L
   if ((input.blurb || "").length > 280) errors.blurb = "Keep the one-liner under 280 characters.";
 
   if (input.image) {
-    if (!imageOk(input.image)) {
+    if (!storedImage(input.image)) {
       errors.image = input.image.startsWith("data:image")
         ? "Image is too heavy. Try a simpler photo."
-        : "Use a photo from your camera roll. We crop a square.";
+        : "Use a photo from your camera roll. We crop a 512×512 square.";
     }
   }
 
@@ -122,7 +142,7 @@ export function launchCodeToField(code?: string): LaunchField | "form" {
   if (code === "bad_wallet") return "wallet";
   if (code === "bad_name") return "name";
   if (code === "bad_ticker" || code === "ticker_taken") return "symbol";
-  if (code === "bad_image") return "image";
+  if (code === "bad_image" || code === "pin_failed") return "image";
   if (code === "dev_buy_cap") return "launchBuySol";
   if (code === "bad_link") return "website";
   return "form";

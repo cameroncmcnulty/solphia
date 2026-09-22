@@ -21,7 +21,30 @@ describe("spha metadata", () => {
       website: "https://solphia.io",
     });
     assert.equal(j.name, "Solphia");
-    assert.equal(j.image, "https://example.com/spha.jpg");
+    assert.equal(j.image, "https://example.com/spha.jpg?ext=jpg");
     assert.equal(j.external_url, "https://solphia.io");
+    const files = (j.properties as { files: { uri: string; type: string }[] }).files;
+    assert.equal(files[0].type, "image/jpeg");
+    assert.equal(files[0].uri, "https://example.com/spha.jpg?ext=jpg");
+  });
+
+  it("tags IPFS URLs with ?ext= so Phantom does not assume PNG", () => {
+    const png = tokenMetadataJson({
+      name: "Hi",
+      symbol: "HI",
+      description: "hi",
+      image: "https://gateway.pinata.cloud/ipfs/QmHashNoExt",
+      mime: "image/png",
+    });
+    assert.equal(png.image, "https://gateway.pinata.cloud/ipfs/QmHashNoExt?ext=png");
+    const jpg = tokenMetadataJson({
+      name: "Hi",
+      symbol: "HI",
+      description: "hi",
+      image: "https://gateway.pinata.cloud/ipfs/QmHashNoExt",
+      mime: "image/jpeg",
+    });
+    assert.equal(jpg.image, "https://gateway.pinata.cloud/ipfs/QmHashNoExt?ext=jpg");
+    assert.equal((jpg.properties as { files: { type: string }[] }).files[0].type, "image/jpeg");
   });
 });

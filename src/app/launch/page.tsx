@@ -45,6 +45,7 @@ import { BoostBuy, BoostRail, fmtLeft } from "@/components/BoostBuy";
 import { TokenImageCrop, readLaunchImage, type CropSource } from "@/components/TokenImageCrop";
 import { yourLaunches } from "@/lib/launch/yours";
 import { clearPending, loadPending, savePending, type PendingLaunch } from "@/lib/launch/pending";
+import { hideLaunch, loadHidden } from "@/lib/launch/hidden";
 import { PadPitch } from "@/components/PadPitch";
 import { killNativeValidity } from "@/lib/killNativeValidity";
 
@@ -86,6 +87,10 @@ type Coin = {
   myTokens?: number;
   maxBuySol?: number;
   devRewardsSol: number;
+  creatorFeesSol?: number;
+  creatorUnclaimedSol?: number;
+  partnerFeesSol?: number;
+  partnerUnclaimedSol?: number;
   volSol?: number;
   vol5m?: number;
   vol30m?: number;
@@ -272,12 +277,15 @@ export default function LaunchPage() {
   const bootMint = useRef(false);
   const [snapAt, setSnapAt] = useState(0);
   const [pending, setPending] = useState<PendingLaunch[]>([]);
+  const [hidden, setHidden] = useState<string[]>([]);
+  const [ownerWallet, setOwnerWallet] = useState("");
   const lastMintRef = useRef("");
   const cropUrlRef = useRef<string>("");
   const devPct = buySupplyPct(emptyCurve(), devBuy);
 
   useEffect(() => {
     setPending(loadPending());
+    setHidden(loadHidden());
     return () => {
       if (cropUrlRef.current) URL.revokeObjectURL(cropUrlRef.current);
     };
@@ -302,6 +310,7 @@ export default function LaunchPage() {
     const q = owner ? `pubkey=${encodeURIComponent(owner)}` : "";
     const pad = await fetch(`/api/launch?${q}`, { cache: "no-store" }).then((r) => r.json());
     if (pad.solUsd) setSolUsd(pad.solUsd);
+    if (typeof pad.ownerWallet === "string") setOwnerWallet(pad.ownerWallet);
     const padCoins: Coin[] = Array.isArray(pad.coins) ? pad.coins.map((c: Coin) => ({ ...c, born: true })) : [];
     setCoins((prev) => {
       const market = prev.filter((c) => !c.born);
@@ -345,11 +354,8 @@ export default function LaunchPage() {
 
   useEffect(() => killNativeValidity(), []);
 
-  async function recoverPending(p: PendingLaunch) {
+  async function absorbPending(p: PendingLaunch) {
     if (!owner) return;
-    setBusy(true);
-    setErr("");
-    setMsg("Checking " + p.mint + " on Solana…");
     try {
       const r = await fetch("/api/launch", {
         method: "POST",
@@ -369,17 +375,23 @@ export default function LaunchPage() {
         clearPending(p.mint);
         setPending(loadPending());
         setCoins((prev) => [j.coin, ...prev.filter((c) => c.id !== j.coin.id)]);
-        setOpen(j.coin);
-        setTab("mine");
-        setMsg("Recovered " + (p.symbol || p.mint));
-        return;
       }
-      setErr((j.message || "This mint is not on-chain. You can launch again.") + " CA " + p.mint);
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "recover failed");
-    } finally {
-      setBusy(false);
+    } catch {
+      /* stay on pending until they remove it */
     }
+  }
+
+  function removeFromDashboard(mint: string, symbol?: string) {
+    const label = symbol ? `$${symbol}` : "this token";
+    const ok = window.confirm(
+      `Remove ${label} from your dashboard? This is permanent on this device. The token still exists on Solana.`,
+    );
+    if (!ok) return;
+    hideLaunch(mint);
+    clearPending(mint);
+    setHidden(loadHidden());
+    setPending(loadPending());
+    setOpen((cur) => (cur?.mint === mint ? null : cur));
   }
 
   async function pickArtFile() {
@@ -433,6 +445,13 @@ export default function LaunchPage() {
       clearInterval(tapeT);
       clearInterval(boostT);
     };
+  }, [owner]);
+
+  useEffect(() => {
+    if (!owner) return;
+    const leftover = loadPending().filter((p) => !hidden.includes(p.mint));
+    leftover.forEach((p) => absorbPending(p).catch(() => {}));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [owner]);
 
   useEffect(() => {
@@ -701,7 +720,7 @@ export default function LaunchPage() {
         setMsg(j.claim ? "Sign the claim in Phantom…" : "Sign the swap in Phantom…");
         const sig = await signPhantomAndSend(j.transaction);
         if (j.claim) {
-          setMsg("Creator fees claimed into this wallet.");
+          setMsg(j.partner ? "Protocol fees claimed into this wallet." : "Creator fees claimed into this wallet.");
           await Promise.all([refreshPad(), refreshTape()]);
           return;
         }
@@ -745,7 +764,7 @@ export default function LaunchPage() {
         setDevBuy(0);
         setTab("mine");
         setMsg("Live on Meteora DBC.");
-      } else if (body.action === "withdraw_dev") setMsg("Dev rewards booked.");
+      } else if (body.action === "withdraw_dev" || body.action === "withdraw_partner") setMsg("Fees claimed.");
       else setMsg("Filled. Tokens are in your wallet.");
     } catch (e) {
       if (body.action !== "create") setErr(e instanceof Error ? e.message : "failed");
@@ -754,7 +773,14 @@ export default function LaunchPage() {
     }
   }
 
-  const mine = yourLaunches(coins, owner);
+  const mine = yourLaunches(coins, owner).filter((c) => !hidden.includes(c.mint || ""));
+  const claimable = mine.filter((c) => (c.creatorUnclaimedSol || 0) > 1e-6);
+  const protocolClaimable = mine.filter((c) => (c.partnerUnclaimedSol || 0) > 1e-6);
+  const generatedSol = mine.reduce((s, c) => s + (c.creatorFeesSol || c.devRewardsSol || 0), 0);
+  const unclaimedSol = mine.reduce((s, c) => s + (c.creatorUnclaimedSol || 0), 0);
+  const protocolGeneratedSol = mine.reduce((s, c) => s + (c.partnerFeesSol || 0), 0);
+  const protocolUnclaimedSol = mine.reduce((s, c) => s + (c.partnerUnclaimedSol || 0), 0);
+  const isProtocol = Boolean(owner && ownerWallet && owner === ownerWallet);
   const pool = isSwap ? coins : mine;
   const board = useMemo(() => {
     if (!isSwap) {
@@ -1118,7 +1144,60 @@ export default function LaunchPage() {
             </div>
             )}
             {!isSwap && (
-              <p className="mb-2 text-[15px] text-white/45">Coins you launched. Manage them and claim creator fees here.</p>
+              <div className="mb-4 rounded-3xl border border-white/10 bg-black/30 p-4">
+                <p className="font-mono text-[11px] tracking-[0.28em] text-acid">DEV REWARDS</p>
+                <h2 className="mt-1 text-[22px] font-semibold tracking-tight text-white">Claim fees</h2>
+                <p className="mt-1 text-[14px] leading-snug text-white/45">
+                  Swaps on Meteora pay 1%. Half is yours (claimable here). Half is the protocol share for treasury/owner.
+                </p>
+                <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  <div>
+                    <p className="font-mono text-[10px] text-white/40">YOUR GENERATED</p>
+                    <p className="stat-num text-[18px] text-acid">{fmtSol(generatedSol, 4)} SOL</p>
+                  </div>
+                  <div>
+                    <p className="font-mono text-[10px] text-white/40">YOUR UNCLAIMED</p>
+                    <p className="stat-num text-[18px] text-white">{fmtSol(unclaimedSol, 4)} SOL</p>
+                  </div>
+                  <div>
+                    <p className="font-mono text-[10px] text-white/40">PROTOCOL GENERATED</p>
+                    <p className="stat-num text-[18px] text-white/80">{fmtSol(protocolGeneratedSol, 4)} SOL</p>
+                  </div>
+                  <div>
+                    <p className="font-mono text-[10px] text-white/40">PROTOCOL UNCLAIMED</p>
+                    <p className="stat-num text-[18px] text-white/80">{fmtSol(protocolUnclaimedSol, 4)} SOL</p>
+                  </div>
+                </div>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    disabled={busy || claimable.length === 0}
+                    onClick={() => {
+                      const first = claimable[0];
+                      if (first) act({ action: "withdraw_dev", id: first.id, mint: first.mint });
+                    }}
+                    className="rounded-full bg-[#14f195] px-4 py-2 text-[14px] font-semibold text-[#04000a] disabled:opacity-40"
+                  >
+                    {claimable.length > 1 ? `Claim ${fmtSol(unclaimedSol, 4)} SOL` : "Claim creator fees"}
+                  </button>
+                  {isProtocol && protocolClaimable.length > 0 && (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => {
+                        const first = protocolClaimable[0];
+                        if (first) act({ action: "withdraw_partner", id: first.id, mint: first.mint });
+                      }}
+                      className="rounded-full border border-white/15 px-4 py-2 text-[14px] text-white disabled:opacity-40"
+                    >
+                      Claim protocol fees
+                    </button>
+                  )}
+                </div>
+                {claimable.length > 1 && (
+                  <p className="mt-2 text-[12px] text-white/40">Signs one token at a time. After it lands, tap claim again for the next.</p>
+                )}
+              </div>
             )}
             <div className="mt-3 space-y-2">
               {isSwap && (
@@ -1257,7 +1336,7 @@ export default function LaunchPage() {
             <div className="mt-1 divide-y divide-white/[0.06]">
               {!isSwap &&
                 pending
-                  .filter((p) => !mine.some((c) => c.mint === p.mint))
+                  .filter((p) => !mine.some((c) => c.mint === p.mint) && !hidden.includes(p.mint))
                   .map((p) => (
                     <div key={p.mint} className="py-3">
                       <PumpCoinRow
@@ -1269,14 +1348,13 @@ export default function LaunchPage() {
                       />
                       <div className="flex flex-wrap items-center gap-2 px-1 pb-2">
                         <CopyCa ca={p.mint} compact />
-                        <p className="text-[13px] text-white/45">Saved mint. Check solscan or tap Recover if it landed.</p>
+                        <p className="text-[13px] text-white/45">Signing finished. Listing it on your dashboard…</p>
                         <button
                           type="button"
-                          disabled={busy || !owner}
-                          className="rounded-full bg-white/10 px-3 py-1 text-[13px] text-white disabled:opacity-40"
-                          onClick={() => recoverPending(p).catch(() => {})}
+                          className="rounded-full bg-white/10 px-3 py-1 text-[13px] text-white"
+                          onClick={() => removeFromDashboard(p.mint, p.symbol)}
                         >
-                          Recover
+                          Remove
                         </button>
                       </div>
                     </div>
@@ -1321,18 +1399,29 @@ export default function LaunchPage() {
                     }}
                   />
                   {!isSwap && owner && row.coin.creator === owner ? (
-                    <div className="mb-2 flex items-center justify-between gap-2 px-1 pb-2">
+                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2 px-1 pb-2">
                       <p className="text-[13px] text-white/45">
-                        Creator fees {row.coin.devRewardsSol > 0 ? `· ${fmtSol(row.coin.devRewardsSol, 4)} SOL booked` : "on Meteora"}
+                        Generated {fmtSol(row.coin.creatorFeesSol || row.coin.devRewardsSol || 0, 4)} SOL
+                        {(row.coin.creatorUnclaimedSol || 0) > 0 ? ` · ${fmtSol(row.coin.creatorUnclaimedSol || 0, 4)} unclaimed` : ""}
+                        {(row.coin.partnerFeesSol || 0) > 0 ? ` · protocol ${fmtSol(row.coin.partnerFeesSol || 0, 4)}` : ""}
                       </p>
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() => act({ action: "withdraw_dev", id: row.coin.id, mint: row.coin.mint })}
-                        className="rounded-full bg-[#14f195]/15 px-3 py-1.5 text-[13px] font-medium text-[#14f195] disabled:opacity-40"
-                      >
-                        Claim rewards
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          disabled={busy || !((row.coin.creatorUnclaimedSol || 0) > 1e-6 || row.coin.devRewardsSol > 0)}
+                          onClick={() => act({ action: "withdraw_dev", id: row.coin.id, mint: row.coin.mint })}
+                          className="rounded-full bg-[#14f195]/15 px-3 py-1.5 text-[13px] font-medium text-[#14f195] disabled:opacity-40"
+                        >
+                          Claim
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => row.coin.mint && removeFromDashboard(row.coin.mint, row.coin.symbol)}
+                          className="rounded-full bg-white/10 px-3 py-1.5 text-[13px] text-white/70"
+                        >
+                          Remove
+                        </button>
+                      </div>
                     </div>
                   ) : null}
                   {open?.id === row.coin.id && (
@@ -1658,11 +1747,11 @@ function CoinDesk({
                   {creator && (
                     <button
                       type="button"
-                      disabled={busy || !(open.devRewardsSol > 0)}
-                      onClick={() => onAct({ action: "withdraw_dev", id: open.id })}
+                      disabled={busy || !((open.creatorUnclaimedSol || 0) > 1e-6 || open.devRewardsSol > 0)}
+                      onClick={() => onAct({ action: "withdraw_dev", id: open.id, mint: open.mint })}
                       className="mt-3 w-full rounded-full border border-acid/40 py-2 text-sm text-acid disabled:opacity-40"
                     >
-                      Claim creator rewards
+                      Claim {fmtSol(open.creatorUnclaimedSol || open.devRewardsSol || 0, 4)} SOL
                     </button>
                   )}
                 </>

@@ -61,20 +61,8 @@ async function decodeFile(file: File): Promise<CropSource> {
 }
 
 function jpegFit(canvas: HTMLCanvasElement, max = IMAGE_DATA_MAX): string {
-  for (const q of [0.82, 0.7, 0.56, 0.42, 0.3]) {
+  for (const q of [0.92, 0.84, 0.72, 0.6, 0.48, 0.36]) {
     const data = canvas.toDataURL("image/jpeg", q);
-    if (data.length <= max) return data;
-  }
-  const small = document.createElement("canvas");
-  small.width = TOKEN_ART_STORE_PX;
-  small.height = TOKEN_ART_STORE_PX;
-  const sctx = small.getContext("2d");
-  if (!sctx) throw new Error("Could not encode the image.");
-  sctx.imageSmoothingEnabled = true;
-  sctx.imageSmoothingQuality = "high";
-  sctx.drawImage(canvas, 0, 0, TOKEN_ART_STORE_PX, TOKEN_ART_STORE_PX);
-  for (const q of [0.72, 0.55, 0.4, 0.28]) {
-    const data = small.toDataURL("image/jpeg", q);
     if (data.length <= max) return data;
   }
   throw new Error("Image is too heavy. Try a simpler photo.");
@@ -102,7 +90,11 @@ export async function exportTokenJpeg(img: HTMLImageElement, rect: CropRect): Pr
   if (!sctx) throw new Error("Could not crop image.");
   sctx.imageSmoothingEnabled = true;
   sctx.imageSmoothingQuality = "high";
+  sctx.fillStyle = "#04000a";
+  sctx.fillRect(0, 0, TOKEN_ART_STORE_PX, TOKEN_ART_STORE_PX);
   sctx.drawImage(full, 0, 0, TOKEN_ART_STORE_PX, TOKEN_ART_STORE_PX);
+  const png = store.toDataURL("image/png");
+  if (png.length <= IMAGE_DATA_MAX) return png;
   return jpegFit(store);
 }
 
@@ -254,9 +246,9 @@ export function TokenImageCrop({
     >
       <div className="flex min-h-[100dvh] items-center justify-center px-3 py-4">
       <div className="w-full max-w-md rounded-3xl border border-white/10 bg-[#0a0614] p-4 shadow-2xl sm:p-5">
-        <p className="font-mono text-[11px] tracking-[0.28em] text-acid">TOKEN ART · 1:1 JPEG</p>
+        <p className="font-mono text-[11px] tracking-[0.28em] text-acid">TOKEN ART · 512×512</p>
         <h3 className="mt-1 font-display text-2xl text-ghost">Frame the square</h3>
-        <p className="mt-1 text-sm text-mute">Drag to pan. Pinch or use the slider to zoom. We save a JPEG wallets can show.</p>
+        <p className="mt-1 text-sm text-mute">Drag to pan. Pinch or zoom. We save a 512×512 square Phantom and Jupiter can show.</p>
 
         <div className="mt-4 flex items-center justify-center gap-4">
           <div

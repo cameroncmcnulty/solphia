@@ -62,21 +62,62 @@ export function createMetadataV3Ix(opts: {
   });
 }
 
+function imageExt(url: string, mime?: string): "png" | "jpg" | "webp" | "gif" {
+  const m = (mime || "").toLowerCase();
+  if (m.includes("png")) return "png";
+  if (m.includes("webp")) return "webp";
+  if (m.includes("gif")) return "gif";
+  if (m.includes("jpeg") || m.includes("jpg")) return "jpg";
+  const path = url.split("?")[0].toLowerCase();
+  if (path.endsWith(".png")) return "png";
+  if (path.endsWith(".webp")) return "webp";
+  if (path.endsWith(".gif")) return "gif";
+  if (path.endsWith(".jpg") || path.endsWith(".jpeg")) return "jpg";
+  return "png";
+}
+
+function imageMime(ext: string): string {
+  if (ext === "jpg") return "image/jpeg";
+  if (ext === "webp") return "image/webp";
+  if (ext === "gif") return "image/gif";
+  return "image/png";
+}
+
+/** Phantom uses ?ext= when the URI has no filename (IPFS CIDs). */
+export function withImageExt(url: string, mime?: string): string {
+  const raw = (url || "").trim();
+  if (!raw || !/^https?:\/\//i.test(raw)) return raw;
+  const ext = imageExt(raw, mime);
+  try {
+    const u = new URL(raw);
+    if (!u.searchParams.get("ext")) u.searchParams.set("ext", ext);
+    return u.toString();
+  } catch {
+    return raw.includes("?") ? `${raw}&ext=${ext}` : `${raw}?ext=${ext}`;
+  }
+}
+
 export function tokenMetadataJson(opts: {
   name: string;
   symbol: string;
   description: string;
   image: string;
   website?: string;
+  mime?: string;
 }): Record<string, unknown> {
+  const ext = imageExt(opts.image, opts.mime);
+  const image = withImageExt(opts.image, opts.mime);
+  const type = imageMime(ext);
   return {
     name: opts.name,
     symbol: opts.symbol,
-    description: opts.description,
-    image: opts.image,
+    description: opts.description || opts.name,
+    image,
     external_url: opts.website || "https://solphia.io",
+    seller_fee_basis_points: 0,
+    attributes: [],
     properties: {
-      files: opts.image ? [{ uri: opts.image, type: "image/jpeg" }] : [],
+      files: image ? [{ uri: image, type }] : [],
       category: "image",
     },
   };
