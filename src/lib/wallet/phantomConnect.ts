@@ -3,70 +3,108 @@ import { isSolanaAddress } from "./addr";
 import { persistOwner } from "./owner";
 
 const B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-
-function b58enc(bytes: Uint8Array): string {
-  if (!bytes.length) return "";
-  const digits = [0];
-  for (const byte of bytes) {
-    let carry = byte;
-    for (let j = 0; j < digits.length; j++) {
-      carry += digits[j] << 8;
-      digits[j] = carry % 58;
-      carry = (carry / 58) | 0;
-    }
-    while (carry) {
-      digits.push(carry % 58);
-      carry = (carry / 58) | 0;
-    }
-  }
-  let zeros = 0;
-  while (zeros < bytes.length && bytes[zeros] === 0) zeros += 1;
-  return "1".repeat(zeros) + digits.reverse().map((d) => B58[d]).join("");
-}
-
-function b58dec(s: string): Uint8Array {
-  const bytes = [0];
-  for (const ch of s) {
-    const val = B58.indexOf(ch);
-    if (val < 0) throw new Error("bad b58");
-    let carry = val;
-    for (let j = 0; j < bytes.length; j++) {
-      carry += bytes[j] * 58;
-      bytes[j] = carry & 255;
-      carry >>= 8;
-    }
-    while (carry) {
-      bytes.push(carry & 255);
-      carry >>= 8;
-    }
-  }
-  let zeros = 0;
-  while (zeros < s.length && s[zeros] === "1") zeros += 1;
-  const out = new Uint8Array(zeros + bytes.length);
-  for (let i = 0; i < bytes.length; i++) out[out.length - 1 - i] = bytes[i];
-  return out;
-}
-
 const SK = "solphia_ph_sk";
 const PARAMS = ["phantom_encryption_public_key", "nonce", "data", "errorCode", "errorMessage"] as const;
 
-function phantomInjected(): boolean {
-  if (typeof window === "undefined") return false;
-  const p = window.phantom?.solana;
-  return Boolean(p?.isPhantom || window.solana?.isPhantom);
+function b58enc(bytes: Uint8Array): string {
+  if (!bytes.length) return "";
+  let hex = "";
+  for (const b of bytes) hex += b.toString(16).padStart(2, "0");
+  let n = BigInt("0x" + hex);
+  let out = "";
+  while (n > 0n) {
+    out = B58[Number(n % 58n)] + out;
+    n /= 58n;
+  }
+  for (const b of bytes) {
+    if (b !== 0) break;
+    out = "1" + out;
+  }
+  return out || "1";
 }
 
-function cleanUrl(): URL {
-  const url = new URL(window.location.href);
-  for (const k of PARAMS) url.searchParams.delete(k);
-  return url;
+function b58dec(s: string): Uint8Array {
+  let n = 0n;
+  for (const ch of s) {
+    const v = B58.indexOf(ch);
+    if (v < 0) throw new Error("bad b58");
+    n = n * 58n + BigInt(v);
+  }
+  let hex = n.toString(16);
+  if (hex.length % 2) hex = "0" + hex;
+  const body = hex === "00" || hex === "" ? new Uint8Array(0) : Uint8Array.from(hex.match(/.{2}/g)!.map((h) => parseInt(h, 16)));
+  let zeros = 0;
+  while (zeros < s.length && s[zeros] === "1") zeros += 1;
+  const out = new Uint8Array(zeros + body.length);
+  out.set(body, zeros);
+  return out;
 }
 
-/** Phantom Connect UL: approve in the app, then HTTPS redirect back to this browser. Never browse-in-Phantom. */
+function readParam(url: URL, key: string): string | null {
+  const q = url.searchParams.get(key);
+  if (q) return q;
+  const hash = url.hash.startsWith("#") ? url.hash.slice(1) : url.hash;
+  if (!hash) return null;
+  return new URLSearchParams(hash.startsWith("?") ? hash.slice(1) : hash).get(key);
+}
+
+function cleanUrl(url: URL): string {
+  const next = new URL(url.toString());
+  for (const k of PARAMS) next.searchParams.delete(k);
+  if (next.hash) {
+    const hp = new URLSearchParams(next.hash.replace(/^#/, "").replace(/^\?/, ""));
+    let touched = false;
+    for (const k of PARAMS) {
+      if (hp.has(k)) {
+        hp.delete(k);
+        touched = true;
+      }
+    }
+    next.hash = touched ? (hp.toString() ? "#" + hp.toString() : "") : next.hash;
+  }
+  return next.pathname + next.search + next.hash;
+}
+
+function storeSecret(raw: string) {
+  try {
+    localStorage.setItem(SK, raw);
+  } catch {
+    /* private mode */
+  }
+  try {
+    sessionStorage.setItem(SK, raw);
+  } catch {
+    /* ITP */
+  }
+}
+
+function loadSecret(): string | null {
+  try {
+    return sessionStorage.getItem(SK) || localStorage.getItem(SK);
+  } catch {
+    return null;
+  }
+}
+
+function dropSecret() {
+  try {
+    sessionStorage.removeItem(SK);
+  } catch {
+    /* ignore */
+  }
+  try {
+    localStorage.removeItem(SK);
+  } catch {
+    /* ignore */
+  }
+}
+
 export function beginPhantomConnect() {
   const kp = nacl.box.keyPair();
-  sessionStorage.setItem(SK, b58enc(kp.secretKey));
-  const redirect = encodeURIComponent(cleanUrl().toString());
+  storeSecret(b58enc(kp.secretKey));
+  const here = new URL(window.location.href);
+  for (const k of PARAMS) here.searchParams.delete(k);
+  const redirect = encodeURIComponent(here.toString());
   const app = encodeURIComponent(`${window.location.origin}/`);
   const dapp = encodeURIComponent(b58enc(kp.publicKey));
   window.location.assign(
@@ -77,16 +115,12 @@ export function beginPhantomConnect() {
 export function completePhantomConnect(): string | null {
   if (typeof window === "undefined") return null;
   const url = new URL(window.location.href);
-  const err = url.searchParams.get("errorCode");
-  const phantomPk = url.searchParams.get("phantom_encryption_public_key");
-  const nonce = url.searchParams.get("nonce");
-  const data = url.searchParams.get("data");
-  const touched = err || phantomPk || nonce || data;
-  if (touched) {
-    window.history.replaceState({}, "", cleanUrl().toString());
-  }
+  const err = readParam(url, "errorCode");
+  const phantomPk = readParam(url, "phantom_encryption_public_key");
+  const nonce = readParam(url, "nonce");
+  const data = readParam(url, "data");
   if (err || !phantomPk || !nonce || !data) return null;
-  const sk = sessionStorage.getItem(SK);
+  const sk = loadSecret();
   if (!sk) return null;
   try {
     const shared = nacl.box.before(b58dec(phantomPk), b58dec(sk));
@@ -96,15 +130,10 @@ export function completePhantomConnect(): string | null {
     const pubkey = json.public_key || "";
     if (!isSolanaAddress(pubkey)) return null;
     persistOwner(pubkey);
-    sessionStorage.removeItem(SK);
+    dropSecret();
+    window.history.replaceState({}, "", cleanUrl(url));
     return pubkey;
   } catch {
     return null;
   }
-}
-
-export function connectOrDeepLink(injectedConnect: () => Promise<void>) {
-  if (phantomInjected()) return injectedConnect();
-  beginPhantomConnect();
-  return Promise.resolve();
 }

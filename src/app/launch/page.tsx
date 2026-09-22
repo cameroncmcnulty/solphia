@@ -210,8 +210,12 @@ function tick(symbol?: string) {
 }
 
 function mergeCoins(remote: Coin[], prev: Coin[]): Coin[] {
-  const seen = new Set(remote.map((c) => c.id));
-  const keepBorn = prev.filter((c) => c.born && !seen.has(c.id));
+  const seen = new Set<string>();
+  for (const c of remote) {
+    seen.add(c.id);
+    if (c.mint) seen.add(c.mint);
+  }
+  const keepBorn = prev.filter((c) => c.born && !seen.has(c.id) && !(c.mint && seen.has(c.mint)));
   return [...remote, ...keepBorn];
 }
 
@@ -650,10 +654,14 @@ export default function LaunchPage() {
         throw new Error(message);
       }
       if (j.coin) {
-        setOpen(j.coin);
-        setCoins((prev) => [j.coin, ...prev.filter((c) => c.id !== j.coin.id)]);
+        const listed = { ...j.coin, born: true, creator: j.coin.creator || owner, mint: j.coin.mint || mintPk };
+        setOpen(listed);
+        setCoins((prev) => [listed, ...prev.filter((c) => c.id !== listed.id && c.mint !== listed.mint)]);
       }
-      await Promise.all([refreshPad(), refreshTape()]);
+      setTab("mine");
+      clearPending(mintPk);
+      setPending(loadPending());
+      await Promise.all([refreshPad(), refreshTape()]).catch(() => {});
       createErr.ok();
       setName("");
       setSymbol("");
@@ -668,9 +676,6 @@ export default function LaunchPage() {
       setTelegram("");
       setDiscord("");
       setDevBuy(0);
-      clearPending(mintPk);
-      setPending(loadPending());
-      setTab("mine");
       setBusy(false);
       setMsg(
         devBuy > 0

@@ -166,9 +166,9 @@ export function WalletKeepalive() {
         .catch(() => undefined);
     };
 
-    restoreFromCookie();
     const fromUl = completePhantomConnect();
     if (fromUl) persistOwner(fromUl);
+    restoreFromCookie();
     wake({ server: true });
 
     let tries = 0;
