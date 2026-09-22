@@ -160,7 +160,11 @@ function attachExtraAndSerialize(signed: unknown, extra?: Keypair): Uint8Array {
 
 export async function signPhantomAndSend(transactionB64: string, extra?: Keypair): Promise<string> {
   const provider = phantomProvider();
-  if (!provider) throw new Error("Open this page in Phantom (browser or in-app).");
+  if (!provider) {
+    const { openThisPageInPhantom } = await import("./phantomConnect");
+    openThisPageInPhantom();
+    throw new Error("Opening Phantom to sign. Tap Launch again once this page is inside the app.");
+  }
   const raw = b64ToBytes(asTxB64(transactionB64));
   const unsigned =
     raw.length > 0 && (raw[0] & 0x80) !== 0

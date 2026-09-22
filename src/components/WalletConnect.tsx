@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { PhantomMark } from "./PhantomMark";
 import { loadOwner, persistOwner, OWNER_EVENT } from "@/lib/wallet/owner";
-import { beginPhantomConnect, completePhantomConnect } from "@/lib/wallet/phantomConnect";
+import { beginPhantomConnect, completePhantomConnect, hasPhantomSigner, openThisPageInPhantom, signerPage } from "@/lib/wallet/phantomConnect";
 
 type Provider = {
   isPhantom?: boolean;
@@ -250,9 +250,10 @@ export function WalletConnect({ compact: _compact = false }: { compact?: boolean
   async function connect() {
     setBusy(true);
     try {
-      const found = phantom() || (await waitForPhantom(400));
+      const found = phantom() || (await waitForPhantom(hasPhantomSigner() ? 1200 : 250));
       if (!found) {
-        beginPhantomConnect();
+        if (signerPage()) openThisPageInPhantom();
+        else beginPhantomConnect();
         return;
       }
       const res = await withTimeout(found.connect(), 20000, "connect");

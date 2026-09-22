@@ -27,7 +27,9 @@ export function WalletMove({
   async function toTrading() {
     const provider = phantomProvider();
     if (!provider) {
-      err.fail({ wallet: "Open this page in Phantom (browser or in-app)." });
+      const { openThisPageInPhantom } = await import("@/lib/wallet/phantomConnect");
+      openThisPageInPhantom();
+      err.fail({ wallet: "Opening Phantom. Come back inside the app to move SOL." });
       return;
     }
     if (!(sol > 0)) {

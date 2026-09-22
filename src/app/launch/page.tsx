@@ -34,7 +34,8 @@ import {
   type LaunchField,
 } from "@/lib/launch/validate";
 import { FieldError, FormAlert, SafeField, fieldClass, useConfirmErrors } from "@/components/form/confirm";
-import { loadOwner, signPhantomAndSend } from "@/lib/wallet/trading";
+import { loadOwner, phantomProvider, signPhantomAndSend } from "@/lib/wallet/trading";
+import { openThisPageInPhantom } from "@/lib/wallet/phantomConnect";
 import { asTxB64 } from "@/lib/solana/wire";
 import { mintPda, newMintNonce, nonceToB64 } from "@/lib/launch/pda";
 import { dbcEnabled } from "@/lib/launch/dbcIds";
@@ -294,6 +295,24 @@ export default function LaunchPage() {
   useEffect(() => {
     setPending(loadPending());
     setHidden(loadHidden());
+    try {
+      const raw = sessionStorage.getItem("solphia_launch_draft");
+      if (raw) {
+        const d = JSON.parse(raw) as Record<string, string | number>;
+        if (typeof d.name === "string") setName(d.name);
+        if (typeof d.symbol === "string") setSymbol(d.symbol);
+        if (typeof d.blurb === "string") setBlurb(d.blurb);
+        if (typeof d.image === "string") setImage(d.image);
+        if (typeof d.website === "string") setWebsite(d.website);
+        if (typeof d.x === "string") setX(d.x);
+        if (typeof d.telegram === "string") setTelegram(d.telegram);
+        if (typeof d.discord === "string") setDiscord(d.discord);
+        if (typeof d.devBuy === "number") setDevBuy(d.devBuy);
+        sessionStorage.removeItem("solphia_launch_draft");
+      }
+    } catch {
+      /* ignore */
+    }
     return () => {
       if (cropUrlRef.current) URL.revokeObjectURL(cropUrlRef.current);
     };
@@ -549,6 +568,19 @@ export default function LaunchPage() {
     createErr.ok();
     if (!owner) {
       createErr.fail({ wallet: "Connect your wallet to launch." });
+      return;
+    }
+    if (!phantomProvider()) {
+      try {
+        sessionStorage.setItem(
+          "solphia_launch_draft",
+          JSON.stringify({ name, symbol, blurb, image, website, x, telegram, discord, devBuy }),
+        );
+      } catch {
+        /* ignore */
+      }
+      setMsg("Opening Phantom to sign the launch…");
+      openThisPageInPhantom();
       return;
     }
     setBusy(true);
@@ -958,7 +990,7 @@ export default function LaunchPage() {
             <p className="mb-4 text-[15px] text-white/45">Name, ticker, art. One Phantom signature. Lives on Meteora so Phantom Swap can buy it.</p>
             {!owner ? (
               <div className="mt-6 space-y-3">
-                <p className="text-sm text-mute">Connect your wallet to launch.</p>
+                <p className="text-sm text-mute">Launch signs in Phantom. Connect opens this pad inside the app.</p>
                 <WalletConnect />
               </div>
             ) : (

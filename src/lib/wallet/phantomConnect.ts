@@ -99,6 +99,26 @@ function dropSecret() {
   }
 }
 
+export function hasPhantomSigner(): boolean {
+  if (typeof window === "undefined") return false;
+  const w = window as unknown as { phantom?: { solana?: { isPhantom?: boolean } }; solana?: { isPhantom?: boolean } };
+  return Boolean(w.phantom?.solana?.isPhantom || w.solana?.isPhantom);
+}
+
+/** Open this exact URL inside Phantom so signTransaction is available. */
+export function openThisPageInPhantom() {
+  if (hasPhantomSigner()) return;
+  const href = window.location.href.split("#")[0];
+  const target = encodeURIComponent(href);
+  const ref = encodeURIComponent(`${window.location.origin}/`);
+  window.location.assign(`https://phantom.app/ul/browse/${target}?ref=${ref}`);
+}
+
+export function signerPage(pathname?: string): boolean {
+  const p = pathname || (typeof window !== "undefined" ? window.location.pathname : "");
+  return p === "/launch" || p === "/swap" || p.startsWith("/launch/") || p.startsWith("/swap/");
+}
+
 export function beginPhantomConnect() {
   const kp = nacl.box.keyPair();
   storeSecret(b58enc(kp.secretKey));
