@@ -5,15 +5,12 @@ import { SolphiaFace } from "@/components/SolphiaFace";
 import { SphaMark } from "@/components/SphaMark";
 import { BacktestBrochure } from "@/components/BacktestBrochure";
 import { Reveal } from "@/components/Reveal";
-import { OrbitTickers } from "@/components/OrbitTickers";
-
 export default function Home() {
   return (
     <main className="relative">
       <section className="relative">
         <div className="mx-auto grid max-w-6xl items-center gap-8 px-4 pt-4 md:px-12 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] lg:min-h-[78vh] lg:py-10">
           <div className="relative order-1 mx-auto w-full max-w-[24rem] overflow-visible sm:max-w-[440px] lg:order-2 lg:max-w-[580px]">
-            <OrbitTickers />
             <SolphiaFace mode="hero" />
           </div>
           <div className="order-2 pb-10 lg:order-1 lg:pb-4">

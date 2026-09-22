@@ -17,8 +17,8 @@ export default function FaqPage() {
           <Link href="/launch" className="btn-acid inline-flex min-h-[48px] items-center justify-center rounded-full px-6 py-3 text-center font-mono text-xs">
             Launch
           </Link>
-          <Link href="/pricing" className="btn-ghost inline-flex min-h-[48px] items-center justify-center rounded-full px-6 py-3 text-center font-mono text-xs">
-            Compare plans
+          <Link href="/token" className="btn-ghost inline-flex min-h-[48px] items-center justify-center rounded-full px-6 py-3 text-center font-mono text-xs">
+            $SPHA
           </Link>
         </div>
       </div>

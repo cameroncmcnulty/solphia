@@ -331,7 +331,7 @@ export default function ShillPage() {
   const scroller = useRef<HTMLDivElement>(null);
   const hold = useRef<number>(0);
   const lastAt = useRef(0);
-  const abortRef = useRef<AbortController | null>(null);
+  const loadGen = useRef(0);
   const [peek, setPeek] = useState<string | null>(null);
   const [toast, setToast] = useState("");
   const [now, setNow] = useState(() => Date.now());
@@ -339,15 +339,15 @@ export default function ShillPage() {
   const [atBottom, setAtBottom] = useState(true);
 
   const load = useCallback(async (full = false) => {
-    abortRef.current?.abort();
-    const ac = new AbortController();
-    abortRef.current = ac;
+    const gen = ++loadGen.current;
     const since = !full && lastAt.current ? lastAt.current : 0;
     const q = new URLSearchParams();
     if (owner) q.set("pubkey", owner);
     if (since) q.set("since", String(since));
-    const r = await fetch(`/api/shill?${q}`, { cache: "no-store", signal: ac.signal });
+    const r = await fetch(`/api/shill?${q}`, { cache: "no-store" });
+    if (gen !== loadGen.current) return;
     const j = (await r.json()) as Pack;
+    if (gen !== loadGen.current) return;
     setPack((prev) => {
       const server = j.messages || [];
       const locals = (prev?.messages || []).filter((m) => String(m.id).startsWith("local-"));
@@ -406,7 +406,7 @@ export default function ShillPage() {
     return () => {
       stop = true;
       window.clearTimeout(timer);
-      abortRef.current?.abort();
+      loadGen.current += 1;
       document.removeEventListener("visibilitychange", vis);
     };
   }, [load]);
@@ -419,19 +419,21 @@ export default function ShillPage() {
   useEffect(() => {
     const el = frame.current;
     if (!el) return;
+    let baseline = Math.max(window.innerHeight, window.visualViewport?.height || 0);
     const fit = () => {
+      const h = window.innerHeight;
       const vv = window.visualViewport;
-      const visH = Math.round(vv?.height || window.innerHeight);
-      const visTop = Math.round(vv?.offsetTop || 0);
-      const keyboard = visTop > 8 || visH < window.innerHeight - 120;
-      el.style.top = `${visTop}px`;
+      const vvH = Math.round(vv?.height || h);
+      const vvTop = Math.round(vv?.offsetTop || 0);
+      if (h > baseline) baseline = h;
+      const keyboard = baseline - Math.min(h, vvH) > 80 || vvTop > 8;
+      el.style.top = "0px";
       el.style.right = "0px";
       el.style.left = "0px";
-      el.style.bottom = "auto";
-      el.style.height = `${Math.max(240, visH)}px`;
+      el.style.bottom = "0px";
+      el.style.height = "";
       el.style.paddingBottom = keyboard ? "0px" : "";
       document.body.classList.toggle("shill-kbd", keyboard);
-      window.scrollTo(0, 0);
     };
     fit();
     window.visualViewport?.addEventListener("resize", fit);
@@ -505,8 +507,10 @@ export default function ShillPage() {
         lastAt.current = Math.max(lastAt.current, real.at);
       }
     } catch (e) {
+      const msg = e instanceof Error ? e.message : "send failed";
+      if (/abort/i.test(msg)) return;
       setPack((prev) => (prev ? { ...prev, messages: (prev.messages || []).filter((m) => m.id !== localId) } : prev));
-      setErr(e instanceof Error ? e.message : "send failed");
+      setErr(msg);
     } finally {
       setBusy(false);
     }
@@ -569,9 +573,11 @@ export default function ShillPage() {
     try {
       const j = await act({ action: "vote", mint });
       flash(`${j.votes || 1} votes · next in 1h`);
-      await load(true);
+      await load(true).catch(() => {});
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "vote failed");
+      const msg = e instanceof Error ? e.message : "vote failed";
+      if (/abort/i.test(msg)) return;
+      setErr(msg);
     }
   }
 
@@ -611,7 +617,7 @@ export default function ShillPage() {
   const live = Math.max(pack?.members || 0, (pack?.typing || []).length + (owner ? 1 : 0), msgs.length ? 1 : 0);
 
   return (
-    <main ref={frame} className="fixed inset-0 z-10 flex flex-col overflow-hidden pb-[calc(3.7rem+env(safe-area-inset-bottom))] md:pb-0">
+    <main ref={frame} className="fixed inset-0 z-10 flex flex-col overflow-hidden pb-[calc(4.85rem+env(safe-area-inset-bottom))] md:pb-0">
       <ParticleField />
       <div className="relative z-10 mx-auto flex h-full min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden lg:max-w-6xl">
         <div className="shrink-0">
@@ -886,7 +892,7 @@ export default function ShillPage() {
           </div>
         )}
 
-        <div className={`relative z-20 shrink-0 border-t border-white/10 bg-[#04000a]/80 backdrop-blur-xl ${tab === "chat" ? "" : "hidden"}`}>
+        <div className={`relative z-[60] shrink-0 border-t border-white/10 bg-[#04000a] ${tab === "chat" ? "" : "hidden"}`}>
           {!owner ? (
             <div className="flex items-center gap-3 px-3 py-3">
               <input

@@ -51,9 +51,32 @@ function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
 
 let switching = false;
 
+function waitForPhantom(ms = 900): Promise<Provider | null> {
+  const found = phantom();
+  if (found) return Promise.resolve(found);
+  return new Promise((resolve) => {
+    const start = Date.now();
+    const tick = () => {
+      const p = phantom();
+      if (p) {
+        resolve(p);
+        return;
+      }
+      if (Date.now() - start >= ms) {
+        resolve(null);
+        return;
+      }
+      window.setTimeout(tick, 80);
+    };
+    window.addEventListener("phantom#initialized", () => resolve(phantom()), { once: true });
+    tick();
+  });
+}
+
 function openPhantomBrowse() {
   const target = encodeURIComponent(window.location.href);
-  window.location.href = `https://phantom.app/ul/browse/${target}?ref=https://solphia.io`;
+  const url = `https://phantom.app/ul/browse/${target}?ref=https://solphia.io`;
+  window.location.assign(url);
 }
 
 function silentTrusted(p: Provider | null) {
@@ -223,13 +246,13 @@ export function WalletConnect({ compact: _compact = false }: { compact?: boolean
   }, []);
 
   async function connect() {
-    const found = phantom();
-    if (!found) {
-      openPhantomBrowse();
-      return;
-    }
     setBusy(true);
     try {
+      const found = phantom() || (await waitForPhantom());
+      if (!found) {
+        openPhantomBrowse();
+        return;
+      }
       const res = await withTimeout(found.connect(), 20000, "connect");
       const pubkey = res.publicKey.toString();
       setAddr(pubkey);
@@ -247,9 +270,13 @@ export function WalletConnect({ compact: _compact = false }: { compact?: boolean
     <button
       type="button"
       disabled={busy}
-      onClick={connect}
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        connect();
+      }}
       title="Connect Phantom"
-      className="btn-ghost inline-flex h-10 shrink-0 items-center gap-1.5 rounded-full px-2.5 py-2 font-mono text-[10px] tracking-widest sm:h-11 sm:gap-2 sm:px-4 sm:text-[11px]"
+      className="relative z-[70] btn-ghost inline-flex h-10 shrink-0 items-center gap-1.5 rounded-full px-2.5 py-2 font-mono text-[10px] tracking-widest sm:h-11 sm:gap-2 sm:px-4 sm:text-[11px]"
     >
       <PhantomMark className="h-4 w-4 shrink-0 text-white sm:h-5 sm:w-5" />
       <span className="whitespace-nowrap">{busy ? "…" : "CONNECT"}</span>

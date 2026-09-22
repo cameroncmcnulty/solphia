@@ -61,8 +61,8 @@ export function PlanCompare() {
         </table>
       </div>
       <div className="border-t border-violet/20 p-4 text-right">
-        <Link href="/trading" className="text-sm text-acid">
-          Open the desk →
+        <Link href="/launch" className="text-sm text-acid">
+          Open the pad →
         </Link>
       </div>
     </div>
