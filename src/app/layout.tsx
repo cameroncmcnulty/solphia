@@ -20,25 +20,25 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   metadataBase: new URL("https://solphia.io"),
   title: {
-    default: "SOLPHIA — auto-trades tokenized S&P 500, Nasdaq, and gold",
+    default: "SOLPHIA — Launch. Shill. Swap.",
     template: "%s · SOLPHIA",
   },
   description:
-    "She auto-trades tokenized S&P 500, Nasdaq, and gold. Launch pad and $SPHA.",
+    "Launch on Meteora. Shill Zone. Swap. $SPHA. Phantom signs. Nothing is custodial.",
   applicationName: "SOLPHIA",
   openGraph: {
     title: "SOLPHIA",
-    description: "She auto-trades tokenized S&P, Nasdaq, and gold. Launch pad and $SPHA.",
+    description: "Launch on Meteora. Shill Zone. Swap. $SPHA. Phantom signs. Nothing is custodial.",
     url: "https://solphia.io",
     siteName: "SOLPHIA",
-    images: [{ url: "/og.jpg", width: 1376, height: 768 }],
+    images: [{ url: "/og.jpg?v=6", width: 1200, height: 630 }],
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
     title: "SOLPHIA",
-    description: "She auto-trades tokenized S&P, Nasdaq, and gold. Launch pad and $SPHA.",
-    images: ["/og.jpg"],
+    description: "Launch on Meteora. Shill Zone. Swap. $SPHA. Phantom signs. Nothing is custodial.",
+    images: ["/og.jpg?v=6"],
   },
   icons: {
     icon: [

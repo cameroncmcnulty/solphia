@@ -2,7 +2,7 @@
   "name": "solphia",
   "version": "0.1.0",
   "private": true,
-  "description": "SOLPHIA — non-custodial SOL vs official SPYx, QQQx, and GLDx. Live desk. Backtest first.",
+  "description": "SOLPHIA — Launch on Meteora. Shill Zone. Swap. $SPHA. Phantom signs. Nothing is custodial.",
   "scripts": {
     "dev": "next dev --port 3100",
     "build": "next build",
