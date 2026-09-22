@@ -247,10 +247,13 @@ export function slimLaunch(book: LaunchBook): LaunchBook {
     };
   }
   tickBoosts(book);
+  const all = ensureBoosts(book);
+  const live = all.filter((b) => b.status === "live" || b.status === "queued");
+  const done = all.filter((b) => b.status === "done").slice(-20);
   return {
     ...book,
     accounts,
-    boosts: ensureBoosts(book).slice(-40),
+    boosts: [...live, ...done],
     coins: (book.coins || []).slice(0, 80).map((c) => ({
       ...c,
       image: (c.image || "").length > 90_000 ? "" : c.image,
