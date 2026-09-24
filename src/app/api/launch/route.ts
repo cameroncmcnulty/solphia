@@ -166,17 +166,9 @@ async function prepareMint(b: LaunchBody) {
   const book = bookOf(s);
   if (book.coins.some((c) => c.symbol === symbol && c.status === "curve")) return fail("ticker_taken");
   if (book.coins.some((c) => c.mint === mint)) return fail("mint_taken");
-  let art: { image: string; uri: string };
-  try {
-    art = await resolveArt({ image: b.image, name, symbol, blurb, website, mint });
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : "";
-    if (msg === "pin_failed") return fail("pin_failed");
-    return fail("chain_failed");
-  }
   try {
     const dbcMod = await dbcApi();
-    if (useDbc && !dbcMod.liveDbcConfig(book.dbcConfig)) {
+    if (useDbc && !dbcMod.liveDbcConfig(book.dbcConfig || b.config)) {
       const cfg = await dbcMod.buildDbcCreateConfigTx({ owner: b.pubkey });
       return NextResponse.json({
         ok: true,
@@ -186,9 +178,15 @@ async function prepareMint(b: LaunchBody) {
         txs: [cfg.transaction],
         config: cfg.config,
         configSecret: cfg.configSecret,
-        uri: art.uri,
-        image: art.image,
       });
+    }
+    let art: { image: string; uri: string };
+    try {
+      art = await resolveArt({ image: b.image, name, symbol, blurb, website, mint });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "";
+      if (msg === "pin_failed") return fail("pin_failed");
+      return fail("chain_failed");
     }
     const built = useDbc
       ? await dbcMod.buildDbcLaunchTx({

@@ -210,6 +210,29 @@ function tick(symbol?: string) {
   return s ? `$${s}` : "";
 }
 
+async function postLaunch(body: Record<string, unknown>, ms = 20_000): Promise<{ ok: boolean; status: number; json: Record<string, unknown> }> {
+  const ac = new AbortController();
+  const t = window.setTimeout(() => ac.abort(), ms);
+  try {
+    const r = await fetch("/api/launch", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+      signal: ac.signal,
+    });
+    const text = await r.text();
+    let json: Record<string, unknown> = {};
+    try {
+      json = JSON.parse(text) as Record<string, unknown>;
+    } catch {
+      json = { error: "chain_failed", message: "Launch API is down (" + r.status + ")." };
+    }
+    return { ok: r.ok, status: r.status, json };
+  } finally {
+    window.clearTimeout(t);
+  }
+}
+
 function mergeCoins(remote: Coin[], prev: Coin[]): Coin[] {
   const seen = new Set<string>();
   for (const c of remote) {
@@ -604,35 +627,24 @@ export default function LaunchPage() {
       lastMintRef.current = mintPk;
       savePending({ mint: mintPk, name: name.trim(), symbol: symbol.trim().toUpperCase(), image, at: Date.now() });
       setPending(loadPending());
-      setMsg("Building the Solphia curve… CA " + mintPk);
-      const prep = await fetch("/api/launch", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          action: "prepare",
-          pubkey: owner,
-          mint: mintPk,
-          nonce: nonce ? nonceToB64(nonce) : undefined,
-          name,
-          symbol,
-          blurb,
-          image,
-          website,
-          x,
-          telegram,
-          discord,
-          launchBuySol: devBuy,
-          referrer: peekRef() || undefined,
-        }),
-        signal: AbortSignal.timeout(28_000),
+      setMsg("Building the Solphia curve…");
+      const prep = await postLaunch({
+        action: "prepare",
+        pubkey: owner,
+        mint: mintPk,
+        nonce: nonce ? nonceToB64(nonce) : undefined,
+        name,
+        symbol,
+        blurb,
+        image,
+        website,
+        x,
+        telegram,
+        discord,
+        launchBuySol: devBuy,
+        referrer: peekRef() || undefined,
       });
-      const prepText = await prep.text();
-      let pj: Record<string, unknown> = {};
-      try {
-        pj = JSON.parse(prepText) as Record<string, unknown>;
-      } catch {
-        throw new Error("Launch API is down (" + prep.status + "). Wait a few seconds and try again.");
-      }
+      let pj = prep.json;
       let packed = "";
       try {
         packed = asTxB64(pj.tx ?? (Array.isArray(pj.txs) ? pj.txs[0] : ""));
@@ -661,33 +673,27 @@ export default function LaunchPage() {
         });
         if (!cfgRes.ok) throw new Error("Could not save the Solphia curve. Try Launch again.");
         setMsg("Curve is live. Building your token…");
-        await new Promise((res) => setTimeout(res, 800));
-        const prep2 = await fetch("/api/launch", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            action: "prepare",
-            pubkey: owner,
-            mint: mintPk,
-            name,
-            symbol,
-            blurb,
-            image,
-            website,
-            x,
-            telegram,
-            discord,
-            launchBuySol: devBuy,
-            referrer: peekRef() || undefined,
-            config: pj.config,
-          }),
-          signal: AbortSignal.timeout(28_000),
-        });
-        const p2 = (await prep2.json()) as Record<string, unknown>;
+        const prep2 = await postLaunch({
+          action: "prepare",
+          pubkey: owner,
+          mint: mintPk,
+          name,
+          symbol,
+          blurb,
+          image,
+          website,
+          x,
+          telegram,
+          discord,
+          launchBuySol: devBuy,
+          referrer: peekRef() || undefined,
+          config: pj.config,
+        }, 24_000);
+        const p2 = prep2.json;
         if (p2.step === "config") throw new Error("Curve is still saving. Tap Launch once more.");
         packed = asTxB64(p2.tx ?? (Array.isArray(p2.txs) ? p2.txs[0] : ""));
         pj = { ...pj, ...p2, step: p2.step };
-        if (!prep2.ok || !packed) throw new Error((p2.message as string) || "Could not build the token.");
+        if (!prep2.ok || !packed) throw new Error((typeof p2.message === "string" && p2.message) || "Could not build the token.");
       }
       setMsg("Sign in Phantom… CA " + mintPk);
       const extras: import("@solana/web3.js").Keypair[] = [];
