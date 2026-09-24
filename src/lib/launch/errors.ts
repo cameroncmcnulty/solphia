@@ -16,7 +16,7 @@ export const LAUNCH_ERRORS: Record<string, string> = {
   bad_mint: "That is not a valid mint address.",
   onchain_required: "Launch creates a live token in Phantom. Use the Launch button.",
   bad_image: "Use a photo from your camera roll. We crop a 512×512 square.",
-  pin_failed: "Could not pin token art. Try the photo again.",
+  pin_failed: "Could not upload token art. Wait a moment and tap Launch again.",
   bad_link: "Check the social link you entered.",
   image_too_heavy: "Image is too heavy. Try a simpler photo.",
   dev_buy_cap: `Dev buy at launch is capped at ${DEV_BUY_MAX_SOL} SOL.`,

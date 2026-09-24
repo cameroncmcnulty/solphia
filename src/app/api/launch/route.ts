@@ -175,27 +175,15 @@ async function prepareMint(b: LaunchBody) {
     if (useDbc) {
       const claimed = dbcMod.liveDbcConfig(book.dbcConfig || b.config);
       liveConfig = claimed ? await dbcMod.dbcConfigOnchain(claimed) : "";
-      if (!liveConfig && claimed && b.config && claimed === b.config) {
-        await dbcMod.waitForDbcConfig(claimed, 12);
+      if (!liveConfig && claimed) {
+        await dbcMod.waitForDbcConfig(claimed, 8);
         liveConfig = await dbcMod.dbcConfigOnchain(claimed);
       }
-      if (!liveConfig) {
-        if (book.dbcConfig && book.dbcConfig === claimed) {
-          await withLaunch((st) => {
-            const next = bookOf(st);
-            if (next.dbcConfig === claimed) next.dbcConfig = undefined;
-          }, true);
-        }
-        const cfg = await dbcMod.buildDbcCreateConfigTx({ owner: b.pubkey });
-        return NextResponse.json({
-          ok: true,
-          step: "config",
-          mint,
-          tx: cfg.transaction,
-          txs: [cfg.transaction],
-          config: cfg.config,
-          configSecret: cfg.configSecret,
-        });
+      if (!liveConfig && book.dbcConfig) {
+        await withLaunch((st) => {
+          const next = bookOf(st);
+          if (next.dbcConfig && next.dbcConfig === book.dbcConfig) next.dbcConfig = undefined;
+        }, true);
       }
     }
     let art: { image: string; uri: string };
@@ -214,7 +202,7 @@ async function prepareMint(b: LaunchBody) {
           symbol,
           uri: art.uri,
           buySol: Number(b.launchBuySol) || 0,
-          config: liveConfig || book.dbcConfig || b.config,
+          config: liveConfig,
         })
       : await buildPadLaunchTx({
           payer: b.pubkey,

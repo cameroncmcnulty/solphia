@@ -99,6 +99,52 @@ export async function pinataUsage(): Promise<PinataUsage> {
   }
 }
 
+function fileName(name: string, type: string) {
+  const ext = type.includes("json") ? "json" : type.includes("png") ? "png" : type.includes("webp") ? "webp" : "jpg";
+  return `${name.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 24) || "token"}.${ext}`;
+}
+
+async function pinOnce(bytes: Buffer, type: string, name: string): Promise<{ cid: string; url: string } | null> {
+  const blob = new Blob([new Uint8Array(bytes)], { type });
+  const file = fileName(name, type);
+  const jwt = (process.env.PINATA_JWT || "").trim();
+
+  const v2 = new FormData();
+  v2.append("file", blob, file);
+  v2.append("pinataMetadata", JSON.stringify({ name: `solphia-${name.slice(0, 24)}` }));
+  try {
+    const r = await fetch(PIN_URL, {
+      method: "POST",
+      headers: authHeaders(),
+      body: v2,
+      signal: AbortSignal.timeout(25_000),
+    });
+    const j = (await r.json().catch(() => ({}))) as { IpfsHash?: string };
+    if (r.ok && j.IpfsHash) return { cid: j.IpfsHash, url: pinataPublicUrl(j.IpfsHash) };
+  } catch {
+    /* try v3 */
+  }
+
+  if (!jwt) return null;
+  const v3 = new FormData();
+  v3.append("file", blob, file);
+  v3.append("network", "public");
+  try {
+    const r = await fetch("https://uploads.pinata.cloud/v3/files", {
+      method: "POST",
+      headers: { authorization: `Bearer ${jwt}` },
+      body: v3,
+      signal: AbortSignal.timeout(25_000),
+    });
+    const j = (await r.json().catch(() => ({}))) as { data?: { cid?: string }; IpfsHash?: string };
+    const cid = j.data?.cid || j.IpfsHash;
+    if (r.ok && cid) return { cid, url: pinataPublicUrl(cid) };
+  } catch {
+    return null;
+  }
+  return null;
+}
+
 export async function pinBytes(
   buf: Buffer | Uint8Array,
   mime: string,
@@ -108,25 +154,12 @@ export async function pinBytes(
   const bytes = Buffer.isBuffer(buf) ? buf : Buffer.from(buf);
   if (bytes.length < 32 || bytes.length > 4_000_000) return null;
   const type = (mime || "image/jpeg").split(";")[0].trim() || "image/jpeg";
-  const form = new FormData();
-  const blob = new Blob([new Uint8Array(bytes)], { type });
-  const ext = type.includes("json") ? "json" : type.includes("png") ? "png" : type.includes("webp") ? "webp" : "jpg";
-  form.append("file", blob, `${name.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 24) || "token"}.${ext}`);
-  form.append("pinataMetadata", JSON.stringify({ name: `solphia-${name.slice(0, 24)}` }));
-  try {
-    const r = await fetch(PIN_URL, {
-      method: "POST",
-      headers: authHeaders(),
-      body: form,
-      signal: AbortSignal.timeout(20_000),
-    });
-    const j = (await r.json().catch(() => ({}))) as { IpfsHash?: string };
-    if (!r.ok || !j.IpfsHash) return null;
-    const cid = j.IpfsHash;
-    return { cid, url: pinataPublicUrl(cid) };
-  } catch {
-    return null;
+  for (let i = 0; i < 3; i++) {
+    const got = await pinOnce(bytes, type, name);
+    if (got?.cid) return got;
+    await new Promise((r) => setTimeout(r, 400 * (i + 1)));
   }
+  return null;
 }
 
 export async function pinJson(value: unknown, name: string): Promise<{ cid: string; url: string } | null> {

@@ -710,7 +710,7 @@ export default function LaunchPage() {
       lastMintRef.current = mintPk;
       savePending({ mint: mintPk, name: name.trim(), symbol: symbol.trim().toUpperCase(), image, at: Date.now() });
       setPending(loadPending());
-      setMsg("Building the Solphia curve…");
+      setMsg(image.startsWith("data:") ? "Saving art, then building the launch…" : "Building the launch…");
       const prep = await postLaunch({
         action: "prepare",
         pubkey: owner,
@@ -726,9 +726,9 @@ export default function LaunchPage() {
         discord,
         launchBuySol: devBuy,
         referrer: peekRef() || undefined,
-      });
-      let pj = prep.json;
-      let packed = packFromPrep(pj);
+      }, 40_000);
+      const pj = prep.json;
+      const packed = packFromPrep(pj);
       if (!prep.ok || !packed) {
         const code = typeof pj.error === "string" ? pj.error : "";
         const message =
@@ -740,61 +740,16 @@ export default function LaunchPage() {
         else createErr.fail({}, message);
         throw new Error(message);
       }
-      if (pj.step === "config" && typeof pj.configSecret === "string") {
-        setMsg("Installing the Solphia curve…");
-        const cfgKp = Keypair.fromSecretKey(b64ToBytes(pj.configSecret));
-        const cfgSig = await signPhantomAndSend(packed, cfgKp, {
-          kind: "launch_config",
-          owner,
-          mint: mintPk,
-          mintSecret: mintKp ? bytesToB64(mintKp.secretKey) : undefined,
-          config: typeof pj.config === "string" ? pj.config : undefined,
-          name: name.trim(),
-          symbol: symbol.trim(),
-          blurb,
-          image,
-          website,
-          x,
-          telegram,
-          discord,
-          launchBuySol: devBuy,
-        });
-        const cfgRes = await fetch("/api/launch", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ action: "confirm_dbc_config", pubkey: owner, config: pj.config, sig: cfgSig }),
-        });
-        if (!cfgRes.ok) throw new Error("Could not save the Solphia curve. Try Launch again.");
-        setMsg("Curve is live. Building your token…");
-        const prep2 = await postLaunch({
-          action: "prepare",
-          pubkey: owner,
-          mint: mintPk,
-          name,
-          symbol,
-          blurb,
-          image,
-          website,
-          x,
-          telegram,
-          discord,
-          launchBuySol: devBuy,
-          referrer: peekRef() || undefined,
-          config: pj.config,
-        }, 24_000);
-        const p2 = prep2.json;
-        if (p2.step === "config") throw new Error("Curve is still saving. Tap Launch once more.");
-        packed = packFromPrep(p2);
-        pj = { ...pj, ...p2, step: p2.step };
-        if (!prep2.ok || !packed) throw new Error((typeof p2.message === "string" && p2.message) || launchError(typeof p2.error === "string" ? p2.error : "") || "Could not build the token.");
-      }
+      if (typeof pj.image === "string" && pj.image.startsWith("https://")) setImage(pj.image);
       setMsg("Sign in Phantom… CA " + mintPk);
       const extras: import("@solana/web3.js").Keypair[] = [];
-      if (pj.step !== "config" && mintKp) extras.push(mintKp);
+      if (mintKp) extras.push(mintKp);
+      if (typeof pj.configSecret === "string") extras.push(Keypair.fromSecretKey(b64ToBytes(pj.configSecret)));
       const sig = await signPhantomAndSend(packed, extras.length ? extras : undefined, {
         kind: "launch_pool",
         owner,
         mint: mintPk,
+        mintSecret: mintKp ? bytesToB64(mintKp.secretKey) : undefined,
         config: typeof pj.config === "string" ? pj.config : undefined,
         tokensOut: Number(pj.tokensOut) || 0,
         uri: typeof pj.uri === "string" ? pj.uri : undefined,
@@ -1410,6 +1365,19 @@ export default function LaunchPage() {
                       setImage(dataUrl);
                       setCropOpen(false);
                       createErr.clear("image");
+                      void fetch("/api/launch/art", {
+                        method: "POST",
+                        headers: { "content-type": "application/json" },
+                        body: JSON.stringify({ image: dataUrl, symbol }),
+                      })
+                        .then((r) => r.json())
+                        .then((j) => {
+                          if (typeof j.url === "string" && j.url.startsWith("https://")) {
+                            setImage(j.url);
+                            saveLaunchDraft({ name, symbol, blurb, image: j.url, website, x, telegram, discord, devBuy });
+                          }
+                        })
+                        .catch(() => undefined);
                     }}
                   />
                 ) : null}
