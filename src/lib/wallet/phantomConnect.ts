@@ -1,6 +1,6 @@
 import { isSolanaAddress } from "./addr";
 import { persistOwner } from "./owner";
-import { PHANTOM_PARAMS, decryptBox, type PhAfter } from "./phantomBox";
+import { PHANTOM_PARAMS, decryptBox, isPhJob, isPhSession, type PhAfter, type PhJob, type PhSession } from "./phantomBox";
 
 export type { PhAfter };
 
@@ -139,6 +139,51 @@ export function readPhantomReturn(): {
   };
 }
 
+const SESS_KEY = "solphia_ph_session";
+const JOB_KEY = "solphia_ph_job";
+
+function saveLocalSession(s: PhSession) {
+  const raw = JSON.stringify(s);
+  try {
+    localStorage.setItem(SESS_KEY, raw);
+  } catch {
+    /* quota */
+  }
+  try {
+    sessionStorage.setItem(SESS_KEY, raw);
+  } catch {
+    /* ITP */
+  }
+}
+
+function loadLocalSession(): PhSession | null {
+  try {
+    const raw = localStorage.getItem(SESS_KEY) || sessionStorage.getItem(SESS_KEY);
+    const j = raw ? JSON.parse(raw) : null;
+    return isPhSession(j) ? j : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveLocalJob(job: PhJob) {
+  try {
+    localStorage.setItem(JOB_KEY, JSON.stringify(job));
+  } catch {
+    /* quota — job without image still fits */
+  }
+}
+
+function loadLocalJob(): PhJob | null {
+  try {
+    const raw = localStorage.getItem(JOB_KEY);
+    const j = raw ? JSON.parse(raw) : null;
+    return isPhJob(j) ? j : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Chrome/Safari: open Phantom to connect or sign, then come back to this same page. */
 export async function openPhantomUl(opts?: {
   packed?: string;
@@ -155,10 +200,19 @@ export async function openPhantomUl(opts?: {
       extraSecrets: opts?.extraSecrets,
       after: opts?.after,
       pubkey: opts?.pubkey || undefined,
+      session: loadLocalSession(),
       redirectPath: typeof window !== "undefined" ? window.location.pathname + window.location.search : "/launch",
     }),
   });
-  const j = (await r.json().catch(() => ({}))) as { url?: string; app?: string; error?: string };
+  const j = (await r.json().catch(() => ({}))) as {
+    url?: string;
+    app?: string;
+    error?: string;
+    job?: PhJob;
+    session?: PhSession;
+  };
+  if (j.job && isPhJob(j.job)) saveLocalJob(j.job);
+  if (j.session && isPhSession(j.session)) saveLocalSession(j.session);
   if (!r.ok || !j.url) throw new Error(typeof j.error === "string" ? j.error : "Could not open Phantom.");
   openPhantomLink(j.url, j.app);
   throw new Error(PHANTOM_REDIRECT);
@@ -167,6 +221,8 @@ export async function openPhantomUl(opts?: {
 export function beginPhantomConnect() {
   void openPhantomUl().catch(() => undefined);
 }
+
+let completing: string | null = null;
 
 export async function completePhantomUl(): Promise<{
   pubkey?: string;
@@ -178,30 +234,44 @@ export async function completePhantomUl(): Promise<{
 } | null> {
   const got = readPhantomReturn();
   if (!got?.ph && !got?.nonce && !got?.errorCode) return null;
-  const lock = "solphia_ph_lock_" + (got.ph || got.nonce || "x");
+  const key = got.ph || got.nonce || "x";
+  if (completing === key) return null;
+  completing = key;
+  const backup = loadLocalJob();
   try {
-    if (sessionStorage.getItem(lock)) return null;
-    sessionStorage.setItem(lock, "1");
-  } catch {
-    /* private mode — still complete once */
+    const r = await fetch("/api/phantom", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        action: "complete",
+        id: got.ph,
+        ...got,
+        job: backup && backup.id === got.ph ? backup : undefined,
+      }),
+    });
+    const j = (await r.json().catch(() => ({}))) as {
+      pubkey?: string;
+      signature?: string;
+      after?: PhAfter;
+      url?: string;
+      app?: string;
+      error?: string;
+      session?: PhSession;
+      job?: PhJob;
+    };
+    if (typeof j.pubkey === "string" && isSolanaAddress(j.pubkey)) persistOwner(j.pubkey);
+    if (j.session && isPhSession(j.session)) saveLocalSession(j.session);
+    if (j.job && isPhJob(j.job)) saveLocalJob(j.job);
+    if (!r.ok) {
+      completing = null;
+      return { error: typeof j.error === "string" ? j.error : "Phantom came back empty." };
+    }
+    window.history.replaceState({}, "", cleanPhantomUrl());
+    return j;
+  } catch (e) {
+    completing = null;
+    throw e;
   }
-  window.history.replaceState({}, "", cleanPhantomUrl());
-  const r = await fetch("/api/phantom", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ action: "complete", id: got.ph, ...got }),
-  });
-  const j = (await r.json().catch(() => ({}))) as {
-    pubkey?: string;
-    signature?: string;
-    after?: PhAfter;
-    url?: string;
-    app?: string;
-    error?: string;
-  };
-  if (typeof j.pubkey === "string" && isSolanaAddress(j.pubkey)) persistOwner(j.pubkey);
-  if (!r.ok) return { error: typeof j.error === "string" ? j.error : "Phantom came back empty." };
-  return j;
 }
 
 /** Legacy client-side connect decrypt. Ignored when the server job (`ph=`) is present. */

@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { b58dec, b58enc, decryptBox, encryptBox, newDappKey } from "../lib/wallet/phantomBox";
+import { b58dec, b58enc, decryptBox, encryptBox, isPhJob, newDappKey, slimAfter } from "../lib/wallet/phantomBox";
 import { phantomAppUrl } from "../lib/wallet/phantomConnect";
 
 describe("phantom box", () => {
@@ -22,5 +22,12 @@ describe("phantom box", () => {
   it("turns the https UL into phantom:// so Chrome does not load the download page", () => {
     const https = "https://phantom.app/ul/v1/connect?app_url=https%3A%2F%2Fsolphia.io%2F";
     assert.equal(phantomAppUrl(https), "phantom://v1/connect?app_url=https%3A%2F%2Fsolphia.io%2F");
+  });
+
+  it("strips data-url art from a Phantom job so the session can persist", () => {
+    const after = slimAfter({ kind: "launch_pool", image: "data:image/png;base64,aaaa", mint: "Mint111" });
+    assert.equal(after?.image, undefined);
+    assert.equal(after?.mint, "Mint111");
+    assert.equal(isPhJob({ id: "abcdefghijk", dappSk: "1".repeat(32) }), true);
   });
 });

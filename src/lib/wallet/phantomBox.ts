@@ -53,6 +53,28 @@ export type PhJob = {
   done?: boolean;
 };
 
+export function slimAfter(after?: PhAfter): PhAfter | undefined {
+  if (!after) return undefined;
+  const image = after.image && after.image.startsWith("data:") ? undefined : after.image;
+  return { ...after, image };
+}
+
+export function slimJob(job: PhJob): PhJob {
+  return { ...job, after: slimAfter(job.after) };
+}
+
+export function isPhJob(v: unknown): v is PhJob {
+  if (!v || typeof v !== "object") return false;
+  const j = v as PhJob;
+  return typeof j.id === "string" && j.id.length > 8 && typeof j.dappSk === "string" && j.dappSk.length > 20;
+}
+
+export function isPhSession(v: unknown): v is PhSession {
+  if (!v || typeof v !== "object") return false;
+  const s = v as PhSession;
+  return Boolean(s.dappSk && s.phantomPk && s.session);
+}
+
 export function b58enc(bytes: Uint8Array): string {
   if (!bytes.length) return "";
   let hex = "";

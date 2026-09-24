@@ -211,6 +211,14 @@ function tick(symbol?: string) {
   return s ? `$${s}` : "";
 }
 
+function packFromPrep(j: Record<string, unknown>): string {
+  try {
+    return asTxB64(j.tx ?? (Array.isArray(j.txs) ? j.txs[0] : j.transaction));
+  } catch {
+    return "";
+  }
+}
+
 async function postLaunch(body: Record<string, unknown>, ms = 20_000): Promise<{ ok: boolean; status: number; json: Record<string, unknown> }> {
   const ac = new AbortController();
   const t = window.setTimeout(() => ac.abort(), ms);
@@ -720,12 +728,7 @@ export default function LaunchPage() {
         referrer: peekRef() || undefined,
       });
       let pj = prep.json;
-      let packed = "";
-      try {
-        packed = asTxB64(pj.tx ?? (Array.isArray(pj.txs) ? pj.txs[0] : ""));
-      } catch {
-        packed = "";
-      }
+      let packed = packFromPrep(pj);
       if (!prep.ok || !packed) {
         const code = typeof pj.error === "string" ? pj.error : "";
         const message =
@@ -781,9 +784,9 @@ export default function LaunchPage() {
         }, 24_000);
         const p2 = prep2.json;
         if (p2.step === "config") throw new Error("Curve is still saving. Tap Launch once more.");
-        packed = asTxB64(p2.tx ?? (Array.isArray(p2.txs) ? p2.txs[0] : ""));
+        packed = packFromPrep(p2);
         pj = { ...pj, ...p2, step: p2.step };
-        if (!prep2.ok || !packed) throw new Error((typeof p2.message === "string" && p2.message) || "Could not build the token.");
+        if (!prep2.ok || !packed) throw new Error((typeof p2.message === "string" && p2.message) || launchError(typeof p2.error === "string" ? p2.error : "") || "Could not build the token.");
       }
       setMsg("Sign in Phantom… CA " + mintPk);
       const extras: import("@solana/web3.js").Keypair[] = [];
@@ -914,7 +917,7 @@ export default function LaunchPage() {
       });
       if (!cfgRes.ok) throw new Error("Could not save the Solphia curve. Try Launch again.");
       setMsg("Curve is live. Building your token…");
-      const prep2 = await postLaunch({
+      let prep2 = await postLaunch({
         action: "prepare",
         pubkey: ownerPk,
         mint: after.mint,
@@ -930,10 +933,35 @@ export default function LaunchPage() {
         referrer: peekRef() || undefined,
         config: after.config,
       }, 24_000);
+      if (prep2.json.step === "config") {
+        await new Promise((res) => setTimeout(res, 1600));
+        prep2 = await postLaunch({
+          action: "prepare",
+          pubkey: ownerPk,
+          mint: after.mint,
+          name: after.name,
+          symbol: after.symbol,
+          blurb: after.blurb,
+          image: after.image,
+          website: after.website,
+          x: after.x,
+          telegram: after.telegram,
+          discord: after.discord,
+          launchBuySol: after.launchBuySol,
+          referrer: peekRef() || undefined,
+          config: after.config,
+        }, 24_000);
+      }
       const p2 = prep2.json;
       if (p2.step === "config") throw new Error("Curve is still saving. Tap Launch once more.");
-      const packed = asTxB64(p2.tx ?? (Array.isArray(p2.txs) ? p2.txs[0] : ""));
-      if (!prep2.ok || !packed) throw new Error((typeof p2.message === "string" && p2.message) || "Could not build the token.");
+      const packed = packFromPrep(p2);
+      if (!prep2.ok || !packed) {
+        throw new Error(
+          (typeof p2.message === "string" && p2.message) ||
+            launchError(typeof p2.error === "string" ? p2.error : "") ||
+            "Could not build the token.",
+        );
+      }
       const mintKp = after.mintSecret ? Keypair.fromSecretKey(b64ToBytes(after.mintSecret)) : null;
       setMsg("Sign in Phantom… CA " + (after.mint || ""));
       await signPhantomAndSend(packed, mintKp ? [mintKp] : undefined, {

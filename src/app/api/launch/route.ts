@@ -130,16 +130,19 @@ async function resolveArt(opts: { image?: string; name: string; symbol: string; 
 }
 
 async function prepareMint(b: LaunchBody) {
+  const s0 = await withLaunch((st) => st, false);
+  const book0 = bookOf(s0);
   const name = sanitizeText(b.name || "", 24);
   const symbol = sanitizeText(b.symbol || "", 10).toUpperCase();
   const blurb = sanitizeText(b.blurb || "", 280);
   const website = sanitizeText(b.website || "", 160);
+  const image = (b.image && b.image.length > 8 ? b.image : "") || book0.accounts?.[b.pubkey]?.draft?.image || "";
   const issues = validateLaunchCreate({
     creator: b.pubkey,
     name,
     symbol,
     blurb,
-    image: b.image,
+    image,
     website,
     x: b.x,
     telegram: b.telegram,
@@ -163,8 +166,8 @@ async function prepareMint(b: LaunchBody) {
     mint = mintPda(b.pubkey, nonce).toBase58();
     if (b.mint && b.mint !== mint) return fail("bad_mint");
   }
-  const s = await withLaunch((st) => st, false);
-  const book = bookOf(s);
+  const s = s0;
+  const book = book0;
   if (book.coins.some((c) => c.symbol === symbol && c.status === "curve")) return fail("ticker_taken");
   if (book.coins.some((c) => c.mint === mint)) return fail("mint_taken");
   try {
@@ -183,7 +186,7 @@ async function prepareMint(b: LaunchBody) {
     }
     let art: { image: string; uri: string };
     try {
-      art = await resolveArt({ image: b.image, name, symbol, blurb, website, mint });
+      art = await resolveArt({ image, name, symbol, blurb, website, mint });
     } catch (e) {
       const msg = e instanceof Error ? e.message : "";
       if (msg === "pin_failed") return fail("pin_failed");

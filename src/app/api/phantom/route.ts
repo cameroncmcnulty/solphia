@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { clientIp, isSolanaAddress, rateLimit } from "@/lib/security";
-import { b58dec, b58enc, decryptBox, dappPublic, encryptBox, newDappKey, newJobId, type PhAfter, type PhJob } from "@/lib/wallet/phantomBox";
+import { b58dec, b58enc, decryptBox, dappPublic, encryptBox, isPhJob, isPhSession, newDappKey, newJobId, slimJob, type PhAfter, type PhJob } from "@/lib/wallet/phantomBox";
 import { delPhJob, getPhJob, loadPhSession, putPhJob, savePhSession } from "@/lib/wallet/phantomJob";
 import { extrasFromSecrets, signedTxB64 } from "@/lib/solana/extraSign";
 import { broadcastB64 } from "@/lib/solana/broadcast";
@@ -74,7 +74,8 @@ async function openJob(req: NextRequest, body: Record<string, unknown>) {
     : [];
   const after = body.after && typeof body.after === "object" ? (body.after as PhAfter) : undefined;
   const redirectPath = typeof body.redirectPath === "string" ? body.redirectPath.slice(0, 400) : "/launch";
-  const sess = pubkey ? await loadPhSession(pubkey) : null;
+  const fromClient = isPhSession(body.session) ? body.session : null;
+  const sess = fromClient || (pubkey ? await loadPhSession(pubkey) : null);
   const keys = sess?.dappSk ? { sk: sess.dappSk, pk: dappPublic(sess.dappSk) } : newDappKey();
   const job: PhJob = {
     id: newJobId(),
@@ -89,17 +90,22 @@ async function openJob(req: NextRequest, body: Record<string, unknown>) {
     pubkey: pubkey || undefined,
   };
   await putPhJob(job);
+  const snap = slimJob(job);
   if (job.session && job.phantomPk && job.packed) {
     const url = signUrl(req, job);
-    if (url) return NextResponse.json(packLink(url, { id: job.id, mode: "sign" }));
+    if (url) return NextResponse.json(packLink(url, { id: job.id, mode: "sign", job: snap }));
   }
-  return NextResponse.json(packLink(connectUrl(req, job), { id: job.id, mode: "connect" }));
+  return NextResponse.json(packLink(connectUrl(req, job), { id: job.id, mode: "connect", job: snap }));
 }
 
 async function completeJob(req: NextRequest, body: Record<string, unknown>) {
   const id = typeof body.id === "string" ? body.id.trim() : "";
   if (!id) return NextResponse.json({ error: "missing_job" }, { status: 400 });
-  const job = await getPhJob(id);
+  let job = await getPhJob(id);
+  if (!job && isPhJob(body.job) && body.job.id === id) {
+    job = slimJob(body.job);
+    await putPhJob(job);
+  }
   if (!job) return NextResponse.json({ error: "Launch session expired. Tap Launch again." }, { status: 400 });
   if (job.done && job.signature) {
     return NextResponse.json({ signature: job.signature, after: job.after, pubkey: job.pubkey });
@@ -130,12 +136,13 @@ async function completeJob(req: NextRequest, body: Record<string, unknown>) {
     job.session = json.session;
     job.phantomPk = phantomPk;
     await putPhJob(job);
-    await savePhSession(json.public_key, { dappSk: job.dappSk, phantomPk, session: json.session });
+    const sess = { dappSk: job.dappSk, phantomPk, session: json.session };
+    await savePhSession(json.public_key, sess);
     if (job.packed) {
       const url = signUrl(req, job);
-      if (url) return NextResponse.json(packLink(url, { id: job.id, pubkey: json.public_key, mode: "sign" }));
+      if (url) return NextResponse.json(packLink(url, { id: job.id, pubkey: json.public_key, mode: "sign", session: sess, job: slimJob(job) }));
     }
-    return NextResponse.json({ id: job.id, pubkey: json.public_key, mode: "connect" });
+    return NextResponse.json({ id: job.id, pubkey: json.public_key, mode: "connect", session: sess });
   }
   if (!json.transaction) {
     return NextResponse.json({ error: "Phantom did not return a signed transaction." }, { status: 400 });
