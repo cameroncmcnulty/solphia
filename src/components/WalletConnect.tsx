@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { PhantomMark } from "./PhantomMark";
 import { loadOwner, persistOwner, OWNER_EVENT } from "@/lib/wallet/owner";
-import { beginPhantomConnect, completePhantomConnect, completePhantomUl, hasPhantomSigner, inPhantomWebView, openPhantomUl, PHANTOM_EVENT, readPhantomReturn } from "@/lib/wallet/phantomConnect";
+import { beginPhantomConnect, completePhantomConnect, completePhantomUl, hasPhantomSigner, inPhantomWebView, injectedProvider, openPhantomLink, openPhantomUl, PHANTOM_EVENT, readPhantomReturn } from "@/lib/wallet/phantomConnect";
 
 type Provider = {
   isPhantom?: boolean;
@@ -23,11 +23,7 @@ declare global {
 }
 
 function phantom(): Provider | null {
-  if (typeof window === "undefined") return null;
-  const p = window.phantom?.solana;
-  if (p?.isPhantom) return p;
-  if (window.solana?.isPhantom) return window.solana;
-  return null;
+  return (injectedProvider() as Provider | null) || null;
 }
 
 function keep(pubkey: string | null | undefined) {
@@ -173,7 +169,7 @@ export function WalletKeepalive() {
         .then((j) => {
           if (!j) return;
           if (j.url) {
-            window.location.assign(j.url);
+            openPhantomLink(j.url, j.app);
             return;
           }
           window.dispatchEvent(new CustomEvent(PHANTOM_EVENT, { detail: j }));
@@ -262,7 +258,8 @@ export function WalletConnect({ compact: _compact = false }: { compact?: boolean
   async function connect() {
     setBusy(true);
     try {
-      const found = phantom() || (await waitForPhantom(inPhantomWebView() || hasPhantomSigner() ? 3000 : 400));
+      let found = phantom() || (await waitForPhantom(inPhantomWebView() || hasPhantomSigner() ? 4000 : 400));
+      if (!found && inPhantomWebView()) found = await waitForPhantom(8000);
       if (!found) {
         if (inPhantomWebView()) return;
         await openPhantomUl({ pubkey: loadOwner() });

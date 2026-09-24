@@ -29,6 +29,14 @@ function redirectFor(req: NextRequest, job: PhJob): string {
   return u.toString();
 }
 
+function asApp(httpsUl: string) {
+  return httpsUl.replace(/^https:\/\/phantom\.app\/ul\//i, "phantom://");
+}
+
+function packLink(httpsUl: string, extra: Record<string, unknown> = {}) {
+  return { url: httpsUl, app: asApp(httpsUl), ...extra };
+}
+
 function connectUrl(req: NextRequest, job: PhJob): string {
   const origin = originOf(req);
   const q = new URLSearchParams({
@@ -83,9 +91,9 @@ async function openJob(req: NextRequest, body: Record<string, unknown>) {
   await putPhJob(job);
   if (job.session && job.phantomPk && job.packed) {
     const url = signUrl(req, job);
-    if (url) return NextResponse.json({ id: job.id, url, mode: "sign" });
+    if (url) return NextResponse.json(packLink(url, { id: job.id, mode: "sign" }));
   }
-  return NextResponse.json({ id: job.id, url: connectUrl(req, job), mode: "connect" });
+  return NextResponse.json(packLink(connectUrl(req, job), { id: job.id, mode: "connect" }));
 }
 
 async function completeJob(req: NextRequest, body: Record<string, unknown>) {
@@ -112,7 +120,7 @@ async function completeJob(req: NextRequest, body: Record<string, unknown>) {
     job.session = undefined;
     job.phantomPk = undefined;
     await putPhJob(job);
-    return NextResponse.json({ error: "Could not read Phantom's reply.", url: connectUrl(req, job), mode: "connect" });
+    return NextResponse.json({ error: "Could not read Phantom's reply.", ...packLink(connectUrl(req, job), { mode: "connect" }) });
   }
   if (json.public_key && json.session) {
     if (!isSolanaAddress(json.public_key)) {
@@ -125,7 +133,7 @@ async function completeJob(req: NextRequest, body: Record<string, unknown>) {
     await savePhSession(json.public_key, { dappSk: job.dappSk, phantomPk, session: json.session });
     if (job.packed) {
       const url = signUrl(req, job);
-      if (url) return NextResponse.json({ id: job.id, pubkey: json.public_key, url, mode: "sign" });
+      if (url) return NextResponse.json(packLink(url, { id: job.id, pubkey: json.public_key, mode: "sign" }));
     }
     return NextResponse.json({ id: job.id, pubkey: json.public_key, mode: "connect" });
   }

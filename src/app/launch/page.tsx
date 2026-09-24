@@ -686,9 +686,10 @@ export default function LaunchPage() {
       discord,
       launchBuySol: devBuy,
     }).catch(() => {});
-    if (!phantomProvider() && inPhantomWebView()) {
-      setMsg("Waiting for Phantom…");
-      await waitForInjected(3500);
+    if (!phantomProvider()) {
+      const inside = inPhantomWebView();
+      if (inside) setMsg("Waiting for Phantom…");
+      await waitForInjected(inside ? 8000 : /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ? 1200 : 200);
     }
     setBusy(true);
     setMsg("");

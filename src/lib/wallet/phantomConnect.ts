@@ -11,15 +11,33 @@ export function isPhantomRedirect(e: unknown): boolean {
   return e instanceof Error && e.message === PHANTOM_REDIRECT;
 }
 
+type Injected = {
+  isPhantom?: boolean;
+  publicKey?: { toString(): string };
+  signTransaction?: (tx: unknown) => Promise<unknown>;
+  connect?: (opts?: { onlyIfTrusted?: boolean }) => Promise<{ publicKey: { toString(): string } }>;
+};
+
+export function injectedProvider(): Injected | null {
+  if (typeof window === "undefined") return null;
+  const w = window as unknown as { phantom?: { solana?: Injected }; solana?: Injected };
+  const p = w.phantom?.solana || (w.solana?.isPhantom ? w.solana : null);
+  if (!p) return null;
+  if (p.isPhantom || typeof p.signTransaction === "function" || typeof p.connect === "function") return p;
+  return null;
+}
+
 export function hasPhantomSigner(): boolean {
-  if (typeof window === "undefined") return false;
-  const w = window as unknown as { phantom?: { solana?: { isPhantom?: boolean } }; solana?: { isPhantom?: boolean } };
-  return Boolean(w.phantom?.solana?.isPhantom || w.solana?.isPhantom);
+  return Boolean(injectedProvider());
 }
 
 export function inPhantomWebView(): boolean {
-  if (typeof navigator === "undefined") return false;
-  return /Phantom/i.test(navigator.userAgent || "");
+  if (typeof window === "undefined") return false;
+  const ua = navigator.userAgent || "";
+  if (/Phantom/i.test(ua)) return true;
+  // New Phantom in-app browser often uses a stock WebKit UA but still injects.
+  const mobile = /iPhone|iPad|iPod|Android/i.test(ua);
+  return mobile && Boolean((window as unknown as { phantom?: { solana?: unknown } }).phantom?.solana);
 }
 
 export function waitForInjected(ms = 2500): Promise<boolean> {
@@ -40,6 +58,27 @@ export function waitForInjected(ms = 2500): Promise<boolean> {
     window.addEventListener("phantom#initialized", () => resolve(true), { once: true });
     tick();
   });
+}
+
+/** https://phantom.app/ul/v1/connect loads Phantom's download page in Chrome. phantom:// opens the app. */
+export function phantomAppUrl(httpsUl: string): string {
+  return httpsUl.replace(/^https:\/\/phantom\.app\/ul\//i, "phantom://");
+}
+
+export function openPhantomLink(httpsUl: string, appUl?: string) {
+  const app = appUl || phantomAppUrl(httpsUl);
+  const ua = typeof navigator !== "undefined" ? navigator.userAgent : "";
+  if (/Android/i.test(ua)) {
+    try {
+      const u = new URL(httpsUl);
+      const rest = u.pathname.replace(/^\/ul\//, "") + u.search;
+      window.location.href = `intent://${rest}#Intent;scheme=phantom;package=app.phantom;S.browser_fallback_url=${encodeURIComponent(httpsUl)};end`;
+      return;
+    } catch {
+      /* use custom scheme */
+    }
+  }
+  window.location.href = app;
 }
 
 export function signerPage(pathname?: string): boolean {
@@ -119,9 +158,9 @@ export async function openPhantomUl(opts?: {
       redirectPath: typeof window !== "undefined" ? window.location.pathname + window.location.search : "/launch",
     }),
   });
-  const j = (await r.json().catch(() => ({}))) as { url?: string; error?: string };
+  const j = (await r.json().catch(() => ({}))) as { url?: string; app?: string; error?: string };
   if (!r.ok || !j.url) throw new Error(typeof j.error === "string" ? j.error : "Could not open Phantom.");
-  window.location.assign(j.url);
+  openPhantomLink(j.url, j.app);
   throw new Error(PHANTOM_REDIRECT);
 }
 
@@ -134,6 +173,7 @@ export async function completePhantomUl(): Promise<{
   signature?: string;
   after?: PhAfter;
   url?: string;
+  app?: string;
   error?: string;
 } | null> {
   const got = readPhantomReturn();
@@ -156,6 +196,7 @@ export async function completePhantomUl(): Promise<{
     signature?: string;
     after?: PhAfter;
     url?: string;
+    app?: string;
     error?: string;
   };
   if (typeof j.pubkey === "string" && isSolanaAddress(j.pubkey)) persistOwner(j.pubkey);

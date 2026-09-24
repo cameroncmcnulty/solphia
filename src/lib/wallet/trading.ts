@@ -5,7 +5,7 @@ import { Keypair, PublicKey, SystemProgram, Transaction, VersionedTransaction, L
 import { loadOwner as readOwner, persistOwner } from "./owner";
 import { asTxB64, b64ToBytes, bytesToB64 } from "../solana/wire";
 import { applyExtras, extraKeys, parseTx, serializeTx } from "../solana/extraSign";
-import { openPhantomUl, type PhAfter } from "./phantomConnect";
+import { inPhantomWebView, injectedProvider, openPhantomUl, waitForInjected, type PhAfter } from "./phantomConnect";
 
 const SECRET = "solphia_trading_secret";
 
@@ -118,10 +118,13 @@ export function phantomProvider(): {
   signAndSendTransaction: (tx: Transaction | VersionedTransaction) => Promise<{ signature?: string } | string>;
   signTransaction: (tx: Transaction | VersionedTransaction) => Promise<Transaction | VersionedTransaction>;
 } | null {
-  if (typeof window === "undefined") return null;
-  const w = window as unknown as { phantom?: { solana?: any }; solana?: any };
-  const p = w.phantom?.solana?.isPhantom ? w.phantom.solana : w.solana?.isPhantom ? w.solana : null;
-  return p || null;
+  const p = injectedProvider();
+  if (!p || typeof p.signTransaction !== "function") return null;
+  return p as {
+    isPhantom?: boolean;
+    signAndSendTransaction: (tx: Transaction | VersionedTransaction) => Promise<{ signature?: string } | string>;
+    signTransaction: (tx: Transaction | VersionedTransaction) => Promise<Transaction | VersionedTransaction>;
+  };
 }
 
 export async function signAndSendPhantom(transactionB64: string): Promise<string> {
@@ -141,13 +144,22 @@ export async function signLegacyTx(tx: Transaction, extra?: Keypair, after?: PhA
 export async function signPhantomAndSend(transactionB64: string, extra?: Keypair | Keypair[], after?: PhAfter): Promise<string> {
   const packed = asTxB64(transactionB64);
   const extras = extraKeys(extra);
-  const provider = phantomProvider();
+  let provider = phantomProvider();
+  if (!provider) {
+    const ua = typeof navigator !== "undefined" ? navigator.userAgent : "";
+    const mobile = /iPhone|iPad|iPod|Android/i.test(ua);
+    await waitForInjected(inPhantomWebView() ? 8000 : mobile ? 1200 : 200);
+    provider = phantomProvider();
+  }
   if (provider) {
     const raw = b64ToBytes(packed);
     const tx = parseTx(raw);
     const fromPhantom = (await provider.signTransaction(tx as Transaction)) as Transaction | VersionedTransaction;
     applyExtras(fromPhantom, extras);
     return sendSignedB64(toB64(serializeTx(fromPhantom)));
+  }
+  if (inPhantomWebView()) {
+    throw new Error("Phantom is open but isn't ready to sign. Pull down to refresh this tab, then tap Launch again.");
   }
   await openPhantomUl({
     packed,
