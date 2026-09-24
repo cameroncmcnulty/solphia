@@ -145,23 +145,42 @@ function extraKeys(extra?: Keypair | Keypair[]): Keypair[] {
   return Array.isArray(extra) ? extra.filter(Boolean) : [extra];
 }
 
-function attachExtraAndSerialize(signed: unknown, extra?: Keypair | Keypair[]): Uint8Array {
-  if (!signed || typeof signed !== "object") {
-    throw new Error("Phantom did not return a transaction.");
+function requiredSignerSet(tx: Transaction | VersionedTransaction): Set<string> {
+  const out = new Set<string>();
+  if ("instructions" in tx && Array.isArray((tx as Transaction).instructions)) {
+    for (const s of (tx as Transaction).signatures) {
+      if (s.publicKey) out.add(s.publicKey.toBase58());
+    }
+    return out;
   }
-  const extras = extraKeys(extra);
-  const s = signed as Transaction & VersionedTransaction;
-  if (typeof s.partialSign === "function" && Array.isArray((s as Transaction).instructions)) {
-    if (extras.length) s.partialSign(...extras);
-    return toBytes((s as Transaction).serialize());
+  const msg = (tx as VersionedTransaction).message;
+  const keys = "staticAccountKeys" in msg ? msg.staticAccountKeys : [];
+  const n = "header" in msg ? msg.header.numRequiredSignatures : 0;
+  for (let i = 0; i < n && i < keys.length; i++) out.add(keys[i]!.toBase58());
+  return out;
+}
+
+function applyExtras(tx: Transaction | VersionedTransaction, extra?: Keypair | Keypair[]) {
+  const need = requiredSignerSet(tx);
+  const extras = extraKeys(extra).filter((k) => need.has(k.publicKey.toBase58()));
+  if (!extras.length) return;
+  if (typeof (tx as Transaction).partialSign === "function" && Array.isArray((tx as Transaction).instructions)) {
+    (tx as Transaction).partialSign(...extras);
+    return;
   }
-  if (extras.length && typeof s.sign === "function") {
-    s.sign(extras);
+  if (typeof (tx as VersionedTransaction).sign === "function") {
+    (tx as VersionedTransaction).sign(extras);
   }
-  if (typeof s.serialize !== "function") {
+}
+
+function serializeTx(tx: Transaction | VersionedTransaction): Uint8Array {
+  if (typeof (tx as Transaction).serialize !== "function") {
     throw new Error("Phantom returned an unusable transaction.");
   }
-  return toBytes(s.serialize());
+  if ("instructions" in tx && Array.isArray((tx as Transaction).instructions)) {
+    return toBytes((tx as Transaction).serialize({ requireAllSignatures: true }));
+  }
+  return toBytes((tx as VersionedTransaction).serialize());
 }
 
 export async function signPhantomAndSend(transactionB64: string, extra?: Keypair | Keypair[]): Promise<string> {
@@ -172,13 +191,14 @@ export async function signPhantomAndSend(transactionB64: string, extra?: Keypair
     throw new Error("Opening Phantom to sign. Tap Launch again once this page is inside the app.");
   }
   const raw = b64ToBytes(asTxB64(transactionB64));
-  const unsigned =
+  const unsigned: Transaction | VersionedTransaction =
     raw.length > 0 && (raw[0] & 0x80) !== 0
       ? VersionedTransaction.deserialize(raw)
       : Transaction.from(raw);
-  const signed = await provider.signTransaction(unsigned as Transaction);
-  const bytes = attachExtraAndSerialize(signed, extra);
-  return sendSignedB64(toB64(bytes));
+  applyExtras(unsigned, extra);
+  const signed = (await provider.signTransaction(unsigned as Transaction)) as Transaction | VersionedTransaction;
+  applyExtras(signed, extra);
+  return sendSignedB64(toB64(serializeTx(signed)));
 }
 
 async function sendViaApi(b64: string): Promise<string> {

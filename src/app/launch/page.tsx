@@ -654,12 +654,14 @@ export default function LaunchPage() {
         setMsg("Installing the Solphia curve…");
         const cfgKp = Keypair.fromSecretKey(b64ToBytes(pj.configSecret));
         await signPhantomAndSend(packed, cfgKp);
-        await fetch("/api/launch", {
+        const cfgRes = await fetch("/api/launch", {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ action: "confirm_dbc_config", pubkey: owner, config: pj.config }),
         });
+        if (!cfgRes.ok) throw new Error("Could not save the Solphia curve. Try Launch again.");
         setMsg("Curve is live. Building your token…");
+        await new Promise((res) => setTimeout(res, 800));
         const prep2 = await fetch("/api/launch", {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -677,17 +679,19 @@ export default function LaunchPage() {
             discord,
             launchBuySol: devBuy,
             referrer: peekRef() || undefined,
+            config: pj.config,
           }),
           signal: AbortSignal.timeout(28_000),
         });
         const p2 = (await prep2.json()) as Record<string, unknown>;
+        if (p2.step === "config") throw new Error("Curve is still saving. Tap Launch once more.");
         packed = asTxB64(p2.tx ?? (Array.isArray(p2.txs) ? p2.txs[0] : ""));
-        pj = { ...pj, ...p2 };
+        pj = { ...pj, ...p2, step: p2.step };
         if (!prep2.ok || !packed) throw new Error((p2.message as string) || "Could not build the token.");
       }
       setMsg("Sign in Phantom… CA " + mintPk);
       const extras: import("@solana/web3.js").Keypair[] = [];
-      if (mintKp) extras.push(mintKp);
+      if (pj.step !== "config" && mintKp) extras.push(mintKp);
       const sig = await signPhantomAndSend(packed, extras.length ? extras : undefined);
       savePending({ mint: mintPk, name: name.trim(), symbol: symbol.trim().toUpperCase(), image, at: Date.now(), sig });
       setPending(loadPending());

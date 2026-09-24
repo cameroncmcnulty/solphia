@@ -198,7 +198,7 @@ async function prepareMint(b: LaunchBody) {
           symbol,
           uri: art.uri,
           buySol: Number(b.launchBuySol) || 0,
-          config: book.dbcConfig,
+          config: book.dbcConfig || b.config,
         })
       : await buildPadLaunchTx({
           payer: b.pubkey,
