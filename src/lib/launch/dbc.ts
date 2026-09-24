@@ -87,6 +87,31 @@ export function curveNeedsInstall(bookConfig?: string | null): boolean {
   return !liveDbcConfig(bookConfig);
 }
 
+export async function buildDbcCreateConfigTx(opts: { owner: string }): Promise<{
+  transaction: string;
+  config: string;
+  configSecret: string;
+}> {
+  const payer = new PublicKey(opts.owner);
+  const treasury = new PublicKey(treasuryAddress());
+  const config = Keypair.generate();
+  const params = await solphiaCurveConfig();
+  const raw = await client().partner.createConfig({
+    ...params,
+    config: config.publicKey,
+    feeClaimer: treasury,
+    leftoverReceiver: treasury,
+    quoteMint: new PublicKey(WSOL),
+    payer,
+  });
+  const tx = await readyTx(raw as Transaction, payer);
+  return {
+    transaction: encodeTx(tx),
+    config: config.publicKey.toBase58(),
+    configSecret: bytesToB64(config.secretKey),
+  };
+}
+
 async function readyTx(tx: Transaction, payer: PublicKey): Promise<Transaction> {
   const latest = await connection().getLatestBlockhash("confirmed");
   tx.feePayer = payer;

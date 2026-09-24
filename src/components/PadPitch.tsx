@@ -1,8 +1,6 @@
 "use client";
 
-import { CopyCa } from "@/components/CopyCa";
-import { DBC_PROGRAM_ID, dbcEnabled } from "@/lib/launch/dbcIds";
-import { PAD_PROGRAM_ID } from "@/lib/launch/ids";
+
 
 const ROWS: { k: string; us: string; them: string; usW: number; themW: number }[] = [
   { k: "Trade fee", us: "1.00%", them: "1.25%", usW: 100, themW: 125 },
@@ -23,7 +21,6 @@ function Bar({ pct, tone }: { pct: number; tone: "us" | "them" }) {
 }
 
 export function PadPitch() {
-  const dbc = dbcEnabled();
   return (
     <section className="panel-bubble relative overflow-hidden rounded-3xl">
       <div
@@ -37,15 +34,13 @@ export function PadPitch() {
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-[#04000a] via-[#04000a]/92 to-[#04000a]/55" />
       <div className="relative z-10 grid gap-6 p-5 sm:p-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(240px,0.85fr)]">
         <div>
-          <p className="font-mono text-[11px] tracking-[0.28em] text-acid">{dbc ? "METEORA DBC · JUPITER ROUTED" : "MAINNET CURVE · LIVE"}</p>
+          <p className="font-mono text-[11px] tracking-[0.28em] text-acid">SOLPHIA CURVE · LIVE</p>
           <h2 className="mt-2 font-display text-3xl leading-tight text-ghost sm:text-4xl">
             1% curve.
-            <span className="block text-acid">{dbc ? "Phantom can buy it." : "Devs take half."}</span>
+            <span className="block text-acid">Devs take half.</span>
           </h2>
           <p className="mt-3 max-w-lg text-sm leading-relaxed text-mute">
-            {dbc
-              ? "Same virtual AMM family as Pump.fun, on Meteora’s Dynamic Bonding Curve — the program Jupiter Instant Routing already indexes. Paste the CA into Phantom Swap and it quotes, like a Pump.fun coin before graduation. After the curve fills it moves to Meteora DAMM v2, still Jupiter-routable."
-              : "Same virtual AMM family as Pump.fun. Buy and sell on this page. Phantom Swap uses Jupiter and will not see this curve until we finish the Meteora deploy."}
+            Solphia’s own bonding curve. One Phantom sign. Buy and sell on the pad. Creators keep half of every swap fee for life.
           </p>
           <div className="mt-5 grid grid-cols-3 gap-2">
             {[
@@ -80,13 +75,8 @@ export function PadPitch() {
             ))}
           </div>
           <p className="mt-3 text-[11px] leading-relaxed text-mute">
-            Pump.fun bonding curve: 1.25% (0.30% creator + 0.95% protocol). Solphia: 1.00% (0.50% creator + 0.25% owner +
-            0.25% treasury), paid in the same swap. Create is 0 SOL on both.
+            Pump.fun: 1.25% (0.30% creator). Solphia: 1.00% and creators keep half. Paid in the same swap. Launch is free.
           </p>
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <span className="font-mono text-[10px] uppercase tracking-wider text-mute">{dbc ? "Meteora DBC" : "Program"}</span>
-            <CopyCa ca={dbc ? DBC_PROGRAM_ID : PAD_PROGRAM_ID} compact />
-          </div>
         </div>
         <div className="hidden min-h-[220px] lg:block" />
       </div>

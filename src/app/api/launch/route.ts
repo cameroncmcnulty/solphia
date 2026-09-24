@@ -33,10 +33,12 @@ import {
 } from "@/lib/launch/program";
 import { mintPda, nonceFromB64 } from "@/lib/launch/pda";
 import { dbcEnabled, LEGACY_DBC_CONFIG } from "@/lib/launch/dbcIds";
+import { connection, waitForSignature } from "@/lib/solana/connection";
+import { PublicKey } from "@solana/web3.js";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-export const maxDuration = 30;
+export const maxDuration = 60;
 
 async function dbcApi() {
   return import("@/lib/launch/dbc");
@@ -173,8 +175,23 @@ async function prepareMint(b: LaunchBody) {
     return fail("chain_failed");
   }
   try {
+    const dbcMod = await dbcApi();
+    if (useDbc && !dbcMod.liveDbcConfig(book.dbcConfig)) {
+      const cfg = await dbcMod.buildDbcCreateConfigTx({ owner: b.pubkey });
+      return NextResponse.json({
+        ok: true,
+        step: "config",
+        mint,
+        tx: cfg.transaction,
+        txs: [cfg.transaction],
+        config: cfg.config,
+        configSecret: cfg.configSecret,
+        uri: art.uri,
+        image: art.image,
+      });
+    }
     const built = useDbc
-      ? await (await dbcApi()).buildDbcLaunchTx({
+      ? await dbcMod.buildDbcLaunchTx({
           payer: b.pubkey,
           mint,
           name,
@@ -218,8 +235,18 @@ async function confirmMint(b: LaunchBody, solUsd: number) {
   if (!b.mint || !isSolanaAddress(b.mint)) return fail("bad_mint");
   let liveCurve: import("@/lib/launch/curve").CurveState | undefined;
   if (dbcEnabled()) {
-    const pool = await (await dbcApi()).waitForDbcPool(b.mint);
-    if (!pool) return fail("curve_missing");
+    const sig = b.sigs?.[0] || b.sig || "";
+    if (sig) {
+      const landed = await waitForSignature(sig, 45);
+      if (landed.err && landed.err !== "timeout" && landed.err !== "missing") {
+        return NextResponse.json({ error: "chain_failed", message: "The launch transaction failed on Solana." }, { status: 400 });
+      }
+    }
+    const pool = await (await dbcApi()).waitForDbcPool(b.mint, 32);
+    if (!pool) {
+      const info = await connection().getAccountInfo(new PublicKey(b.mint));
+      if (!info) return fail("curve_missing");
+    }
   } else {
     const ready = await waitForPadCurve(b.mint, b.sigs?.[0] || b.sig);
     if (!ready.ok) return fail(ready.error);

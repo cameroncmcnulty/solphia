@@ -13,6 +13,22 @@ export function heliusEnabled(): boolean {
   return Boolean(HELIUS_API_KEY);
 }
 
+export async function waitForSignature(sig: string, tries = 40): Promise<{ ok: boolean; err?: string }> {
+  if (!sig) return { ok: false, err: "missing" };
+  for (let i = 0; i < tries; i++) {
+    try {
+      const st = await connection().getSignatureStatuses([sig], { searchTransactionHistory: true });
+      const v = st.value[0];
+      if (v?.err) return { ok: false, err: typeof v.err === "string" ? v.err : "failed" };
+      if (v?.confirmationStatus === "confirmed" || v?.confirmationStatus === "finalized") return { ok: true };
+    } catch {
+      /* rpc blip */
+    }
+    await new Promise((r) => setTimeout(r, 400));
+  }
+  return { ok: false, err: "timeout" };
+}
+
 export function subscriptionLamports(): number {
   return Math.round(SUBSCRIPTION_SOL * LAMPORTS_PER_SOL);
 }

@@ -341,7 +341,17 @@ export default function LaunchPage() {
     const padCoins: Coin[] = Array.isArray(pad.coins) ? pad.coins.map((c: Coin) => ({ ...c, born: true })) : [];
     setCoins((prev) => {
       const market = prev.filter((c) => !c.born);
-      const next = [...padCoins, ...market];
+      const padded = padCoins.map((c) => {
+        const old = prev.find((p) => p.id === c.id || (c.mint && p.mint === c.mint));
+        if (!old) return c;
+        return {
+          ...c,
+          creatorFeesSol: Math.max(Number(c.creatorFeesSol) || 0, Number(old.creatorFeesSol) || 0, Number(old.devRewardsSol) || 0),
+          creatorUnclaimedSol: typeof c.creatorUnclaimedSol === "number" ? c.creatorUnclaimedSol : old.creatorUnclaimedSol,
+          devRewardsSol: Math.max(Number(c.devRewardsSol) || 0, Number(old.devRewardsSol) || 0),
+        };
+      });
+      const next = [...padded, ...market];
       setOpen((cur) => (cur ? next.find((c) => c.id === cur.id) || cur : cur));
       return mergeCoins(next, prev.filter((c) => c.born));
     });
@@ -640,12 +650,44 @@ export default function LaunchPage() {
         else createErr.fail({}, message);
         throw new Error(message);
       }
-      setMsg("Sign once in Phantom… CA " + mintPk);
+      if (pj.step === "config" && typeof pj.configSecret === "string") {
+        setMsg("Installing the Solphia curve…");
+        const cfgKp = Keypair.fromSecretKey(b64ToBytes(pj.configSecret));
+        await signPhantomAndSend(packed, cfgKp);
+        await fetch("/api/launch", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ action: "confirm_dbc_config", pubkey: owner, config: pj.config }),
+        });
+        setMsg("Curve is live. Building your token…");
+        const prep2 = await fetch("/api/launch", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            action: "prepare",
+            pubkey: owner,
+            mint: mintPk,
+            name,
+            symbol,
+            blurb,
+            image,
+            website,
+            x,
+            telegram,
+            discord,
+            launchBuySol: devBuy,
+            referrer: peekRef() || undefined,
+          }),
+          signal: AbortSignal.timeout(28_000),
+        });
+        const p2 = (await prep2.json()) as Record<string, unknown>;
+        packed = asTxB64(p2.tx ?? (Array.isArray(p2.txs) ? p2.txs[0] : ""));
+        pj = { ...pj, ...p2 };
+        if (!prep2.ok || !packed) throw new Error((p2.message as string) || "Could not build the token.");
+      }
+      setMsg("Sign in Phantom… CA " + mintPk);
       const extras: import("@solana/web3.js").Keypair[] = [];
       if (mintKp) extras.push(mintKp);
-      if (typeof pj.configSecret === "string" && pj.configSecret) {
-        extras.push(Keypair.fromSecretKey(b64ToBytes(pj.configSecret)));
-      }
       const sig = await signPhantomAndSend(packed, extras.length ? extras : undefined);
       savePending({ mint: mintPk, name: name.trim(), symbol: symbol.trim().toUpperCase(), image, at: Date.now(), sig });
       setPending(loadPending());
@@ -675,9 +717,9 @@ export default function LaunchPage() {
         body: JSON.stringify(confirmBody),
       });
       let j = await r.json();
-      for (let i = 0; i < 4 && !r.ok && j.error === "curve_missing"; i++) {
-        setMsg("Signature is in. Waiting on Solana…");
-        await new Promise((res) => setTimeout(res, 2000));
+      for (let i = 0; i < 8 && !r.ok && j.error === "curve_missing"; i++) {
+        setMsg("Landing on Solana…");
+        await new Promise((res) => setTimeout(res, 2500));
         r = await fetch("/api/launch", {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -717,14 +759,14 @@ export default function LaunchPage() {
       setBusy(false);
       setMsg(
         devBuy > 0
-          ? `Live on Meteora DBC. CA ${mintPk}. First buy is in this wallet. Checking Phantom Swap…`
-          : `Live on Meteora DBC. CA ${mintPk}. Supply sits on the curve. Checking Phantom Swap…`,
+          ? `Live on the Solphia curve. CA ${mintPk}. First buy is in this wallet.`
+          : `Live on the Solphia curve. CA ${mintPk}.`,
       );
       const routed = await waitForPhantomRoute(mintPk);
       setMsg(
         routed.ok
-          ? `Live. Phantom Swap can buy ${symbol || "it"} now${routed.via ? ` via ${routed.via}` : ""}. CA ${mintPk}`
-          : `Live on the curve. CA ${mintPk}. Jupiter is still indexing — paste the CA into Phantom Swap in a minute.`,
+          ? `Live. CA ${mintPk}`
+          : `Live on the curve. CA ${mintPk}`,
       );
     } catch (e) {
       const timed = e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError");
@@ -813,7 +855,7 @@ export default function LaunchPage() {
         setDiscord("");
         setDevBuy(0);
         setTab("mine");
-        setMsg("Live on Meteora DBC.");
+        setMsg("Live on the Solphia curve.");
       } else if (body.action === "withdraw_dev" || body.action === "withdraw_partner") setMsg("Fees claimed.");
       else setMsg("Filled. Tokens are in your wallet.");
     } catch (e) {
@@ -989,7 +1031,7 @@ export default function LaunchPage() {
           <PadPitch />
           <section id="solphia-launch" className="overflow-hidden rounded-3xl border border-white/10 bg-black/30 p-5">
             <h2 className="mb-1 text-[22px] font-semibold text-white">Create a coin</h2>
-            <p className="mb-4 text-[15px] text-white/45">Name, ticker, art. One Phantom signature. Lives on Meteora so Phantom Swap can buy it.</p>
+            <p className="mb-4 text-[15px] text-white/45">Name, ticker, art. Phantom signs. It lives on the Solphia curve.</p>
             {!owner ? (
               <div className="mt-6 space-y-3">
                 <p className="text-sm text-mute">Launch signs in Phantom. Connect opens this pad inside the app.</p>
@@ -1696,7 +1738,7 @@ function CoinDesk({
 
         <SwapShell
           title={`Trade ${tick(open.symbol)}`}
-          subtitle="On the curve until it graduates. Phantom Swap can route it."
+          subtitle="On the Solphia curve until it graduates."
         >
           {!padTrade ? (
             <MarketSwap open={open} owner={owner} sol={sol} setSol={setSol} solUsd={solUsd} />
