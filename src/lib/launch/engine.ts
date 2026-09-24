@@ -112,6 +112,8 @@ export type LaunchBook = {
   treasuryFeesSol: number;
   accounts: Record<string, LaunchAccount>;
   boosts?: LaunchBoost[];
+  /** Partner DBC config. 40 SOL open / 585 SOL graduate. */
+  dbcConfig?: string;
 };
 
 export function emptyLaunchBook(): LaunchBook {

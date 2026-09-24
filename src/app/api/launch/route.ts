@@ -20,7 +20,7 @@ import {
 import { lastPairPrices } from "@/lib/tick";
 import { liveBoosts, publicLiveBoost, tickBoosts } from "@/lib/launch/boost";
 import { storedImage, validateLaunchCreate } from "@/lib/launch/validate";
-import { pinDataUrl, pinJson } from "@/lib/pinata";
+import { ipfsMetadataUrl, pinDataUrl, pinJson } from "@/lib/pinata";
 import { creditRank } from "@/lib/rank/engine";
 import { tokenMetadataJson } from "@/lib/token/metadata";
 import {
@@ -56,6 +56,8 @@ const Body = z.object({
     "withdraw_owner",
     "withdraw_referral",
     "set_owner",
+    "dbc_config",
+    "confirm_dbc_config",
   ]),
   pubkey: z.string(),
   id: z.string().optional(),
@@ -80,6 +82,7 @@ const Body = z.object({
   side: z.enum(["buy", "sell"]).optional(),
   feeSol: z.number().optional(),
   referrer: z.string().max(64).optional(),
+  config: z.string().optional(),
 });
 
 function bookOf(s: { launch?: ReturnType<typeof emptyLaunchBook>; ownerWallet?: string }) {
@@ -106,7 +109,8 @@ async function resolveArt(opts: { image?: string; name: string; symbol: string; 
   if (opts.image?.startsWith("data:")) {
     const pinned = await pinDataUrl(opts.image, opts.symbol);
     if (!pinned?.url) throw new Error("pin_failed");
-    image = pinned.url;
+    const ext = mime?.includes("jpeg") || mime?.includes("jpg") ? "jpg" : mime?.includes("webp") ? "webp" : "png";
+    image = ipfsMetadataUrl(pinned.cid, ext);
   }
   if (!image.startsWith("https://")) throw new Error("pin_failed");
   const json = tokenMetadataJson({
@@ -118,8 +122,8 @@ async function resolveArt(opts: { image?: string; name: string; symbol: string; 
     mime,
   });
   const meta = await pinJson(json, `${opts.symbol}-meta`);
-  if (!meta?.url) throw new Error("pin_failed");
-  return { image, uri: meta.url };
+  if (!meta?.cid) throw new Error("pin_failed");
+  return { image, uri: ipfsMetadataUrl(meta.cid, "json") };
 }
 
 async function prepareMint(b: LaunchBody) {
@@ -177,6 +181,7 @@ async function prepareMint(b: LaunchBody) {
           symbol,
           uri: art.uri,
           buySol: Number(b.launchBuySol) || 0,
+          config: book.dbcConfig,
         })
       : await buildPadLaunchTx({
           payer: b.pubkey,
@@ -311,12 +316,15 @@ async function getLaunch(req: NextRequest) {
       /* tape still useful */
     }
   }
+  const dbc = await dbcApi();
   return NextResponse.json({
     coins: rows,
     solUsd,
     ownerWallet: book.ownerWallet || null,
     ownerEarningsSol: book.ownerEarningsSol,
     boosts: liveBoosts(book).map((b) => publicLiveBoost(b)),
+    dbcConfig: dbc.liveDbcConfig(book.dbcConfig),
+    needsNewCurve: dbcEnabled() && dbc.curveNeedsInstall(book.dbcConfig),
   });
 }
 
@@ -441,6 +449,33 @@ async function postLaunch(req: NextRequest) {
       });
     }
     if (!coin) return fail("not_found", 404);
+  }
+
+  if (b.action === "dbc_config") {
+    const snap = await withLaunch((st) => st, false);
+    const book = bookOf(snap);
+    if (book.ownerWallet && book.ownerWallet !== b.pubkey) return fail("not_owner");
+    if (!dbcEnabled()) return fail("chain_failed");
+    const built = await (await dbcApi()).buildDbcCreateConfigTx({ owner: b.pubkey });
+    return NextResponse.json({
+      ok: true,
+      needsSign: true,
+      dbcConfig: true,
+      transaction: built.transaction,
+      config: built.config,
+      configSecret: built.configSecret,
+    });
+  }
+
+  if (b.action === "confirm_dbc_config") {
+    const cfg = (b.config || b.mint || "").trim();
+    if (!isSolanaAddress(cfg)) return fail("bad_mint");
+    await withLaunch((st) => {
+      const book = bookOf(st);
+      if (book.ownerWallet && book.ownerWallet !== b.pubkey) return;
+      book.dbcConfig = cfg;
+    }, true);
+    return NextResponse.json({ ok: true, dbcConfig: cfg });
   }
 
   if (b.action === "withdraw_dev") {

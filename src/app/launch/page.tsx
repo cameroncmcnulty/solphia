@@ -36,7 +36,7 @@ import {
 import { FieldError, FormAlert, SafeField, fieldClass, useConfirmErrors } from "@/components/form/confirm";
 import { loadOwner, phantomProvider, signPhantomAndSend } from "@/lib/wallet/trading";
 import { openThisPageInPhantom } from "@/lib/wallet/phantomConnect";
-import { asTxB64 } from "@/lib/solana/wire";
+import { asTxB64, b64ToBytes } from "@/lib/solana/wire";
 import { mintPda, newMintNonce, nonceToB64 } from "@/lib/launch/pda";
 import { dbcEnabled } from "@/lib/launch/dbcIds";
 
@@ -288,6 +288,7 @@ export default function LaunchPage() {
   const [pending, setPending] = useState<PendingLaunch[]>([]);
   const [hidden, setHidden] = useState<string[]>([]);
   const [ownerWallet, setOwnerWallet] = useState("");
+  const [needsNewCurve, setNeedsNewCurve] = useState(false);
   const lastMintRef = useRef("");
   const cropUrlRef = useRef<string>("");
   const devPct = buySupplyPct(emptyCurve(), devBuy);
@@ -338,6 +339,7 @@ export default function LaunchPage() {
     const pad = await fetch(`/api/launch?${q}`, { cache: "no-store" }).then((r) => r.json());
     if (pad.solUsd) setSolUsd(pad.solUsd);
     if (typeof pad.ownerWallet === "string") setOwnerWallet(pad.ownerWallet);
+    if (typeof pad.needsNewCurve === "boolean") setNeedsNewCurve(pad.needsNewCurve);
     const padCoins: Coin[] = Array.isArray(pad.coins) ? pad.coins.map((c: Coin) => ({ ...c, born: true })) : [];
     setCoins((prev) => {
       const market = prev.filter((c) => !c.born);
@@ -763,6 +765,20 @@ export default function LaunchPage() {
       if (j.needsSign && j.transaction) {
         setMsg(j.claim ? "Sign the claim in Phantom…" : "Sign the swap in Phantom…");
         const sig = await signPhantomAndSend(j.transaction);
+        if (j.dbcConfig && j.configSecret && j.transaction) {
+          setMsg("Sign the $4.7k curve config in Phantom…");
+          const kp = Keypair.fromSecretKey(b64ToBytes(j.configSecret));
+          await signPhantomAndSend(j.transaction, kp);
+          await fetch("/api/launch", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ action: "confirm_dbc_config", pubkey: owner, config: j.config }),
+          });
+          setNeedsNewCurve(false);
+          setMsg("Curve installed. New launches open near $4.7k, not $475k.");
+          await refreshPad().catch(() => {});
+          return;
+        }
         if (j.claim) {
           setMsg(j.partner ? "Protocol fees claimed into this wallet." : "Creator fees claimed into this wallet.");
           await Promise.all([refreshPad(), refreshTape()]);
@@ -985,6 +1001,20 @@ export default function LaunchPage() {
           {!isSwap && tab === "tape" && (
           <div className="space-y-5">
           <PadPitch />
+          {needsNewCurve && owner && ownerWallet && owner === ownerWallet && (
+            <div className="rounded-3xl border border-[#ffd24a]/40 bg-[#ffd24a]/10 p-4">
+              <p className="font-mono text-[11px] tracking-[0.2em] text-[#ffd24a]">CURVE</p>
+              <p className="mt-1 text-[15px] text-white">Current pools open at ~4,000 SOL market cap (~$475k). Pump-style is ~40 SOL (~$4.7k). Sign once to install the new curve. Already-live tokens keep the old curve.</p>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => act({ action: "dbc_config" })}
+                className="btn-acid mt-3 rounded-full px-5 py-2 text-[14px] disabled:opacity-40"
+              >
+                Install $4.7k curve
+              </button>
+            </div>
+          )}
           <section id="solphia-launch" className="overflow-hidden rounded-3xl border border-white/10 bg-black/30 p-5">
             <h2 className="mb-1 text-[22px] font-semibold text-white">Create a coin</h2>
             <p className="mb-4 text-[15px] text-white/45">Name, ticker, art. One Phantom signature. Lives on Meteora so Phantom Swap can buy it.</p>

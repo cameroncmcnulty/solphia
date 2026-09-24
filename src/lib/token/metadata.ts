@@ -115,10 +115,11 @@ export function tokenMetadataJson(opts: {
     image,
     external_url: opts.website || "https://solphia.io",
     seller_fee_basis_points: 0,
+    token_standard: "Fungible",
     attributes: [],
     properties: {
-      files: image ? [{ uri: image, type }] : [],
-      category: "image",
+      files: image ? [{ uri: image, type, cdn: true }] : [],
+      category: "fungible",
     },
   };
 }

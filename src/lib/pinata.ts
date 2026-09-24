@@ -44,6 +44,12 @@ export function pinataPublicUrl(cid: string): string {
   return `${GATEWAY}/${cid}`;
 }
 
+/** Phantom-friendly IPFS URL. CID with ?ext= so wallets do not assume the wrong type. */
+export function ipfsMetadataUrl(cid: string, ext?: string): string {
+  const q = ext ? `?ext=${ext}` : "";
+  return `https://ipfs.io/ipfs/${cid}${q}`;
+}
+
 export function pinataConfigured(): boolean {
   const jwt = (process.env.PINATA_JWT || "").trim();
   const key = (process.env.PINATA_API_KEY || "").trim();

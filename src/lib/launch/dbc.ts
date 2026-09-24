@@ -6,11 +6,16 @@
  */
 import * as DbcMod from "@meteora-ag/dynamic-bonding-curve-sdk";
 import BN from "bn.js";
-import { PublicKey, Transaction } from "@solana/web3.js";
+
 import { connection } from "../solana/connection";
+import { Keypair, PublicKey, Transaction } from "@solana/web3.js";
 import { encodeTx } from "../token/mint";
+import { bytesToB64 } from "../solana/wire";
+import { treasuryAddress } from "../treasury";
 import { DBC_CONFIG, dbcEnabled } from "./dbcIds";
 import { MIN_TRADE_SOL } from "./curve";
+
+const WSOL = "So11111111111111111111111111111111111111112";
 
 export { dbcEnabled };
 
@@ -70,9 +75,45 @@ export async function solphiaCurveConfig() {
       cliffDurationFromMigrationTime: 0,
     },
     activationType: m.ActivationType.Timestamp,
-    initialMarketCap: 4_000,
-    migrationMarketCap: 69_000,
+    /** Quote mint is SOL. 40 SOL FDV ≈ $4.7k; 585 SOL ≈ $69k graduate. Not USD. */
+    initialMarketCap: 40,
+    migrationMarketCap: 585,
   });
+}
+
+export function liveDbcConfig(bookConfig?: string | null): string {
+  const fromBook = (bookConfig || "").trim();
+  if (/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(fromBook)) return fromBook;
+  return DBC_CONFIG;
+}
+
+export function curveNeedsInstall(bookConfig?: string | null): boolean {
+  return liveDbcConfig(bookConfig) === DBC_CONFIG;
+}
+
+export async function buildDbcCreateConfigTx(opts: { owner: string }): Promise<{
+  transaction: string;
+  config: string;
+  configSecret: string;
+}> {
+  const payer = new PublicKey(opts.owner);
+  const treasury = new PublicKey(treasuryAddress());
+  const config = Keypair.generate();
+  const params = await solphiaCurveConfig();
+  const raw = await client().partner.createConfig({
+    ...params,
+    config: config.publicKey,
+    feeClaimer: treasury,
+    leftoverReceiver: treasury,
+    quoteMint: new PublicKey(WSOL),
+    payer,
+  });
+  const tx = await readyTx(raw as Transaction, payer);
+  return {
+    transaction: encodeTx(tx),
+    config: config.publicKey.toBase58(),
+    configSecret: bytesToB64(config.secretKey),
+  };
 }
 
 async function readyTx(tx: Transaction, payer: PublicKey): Promise<Transaction> {
@@ -108,6 +149,7 @@ export async function buildDbcLaunchTx(opts: {
   symbol: string;
   uri: string;
   buySol?: number;
+  config?: string;
 }): Promise<{ transaction: string; mint: string; tokensOut: number; feeSol: number }> {
   if (!dbcEnabled()) throw new Error("DBC config missing.");
   const payer = new PublicKey(opts.payer);
@@ -119,7 +161,7 @@ export async function buildDbcLaunchTx(opts: {
     uri: opts.uri.slice(0, 255),
     payer,
     poolCreator: payer,
-    config: new PublicKey(DBC_CONFIG),
+    config: new PublicKey(liveDbcConfig(opts.config)),
     baseMint: mint,
   };
   const firstBuy =
