@@ -18,6 +18,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const path = usePathname();
   const isAdmin = path.startsWith("/admin");
   const isShill = path === "/shill" || path.startsWith("/shill/");
+  const skipHuman = isAdmin || path === "/launch" || path === "/swap" || path.startsWith("/launch/");
 
   useEffect(() => {
     if (isShill) {
@@ -45,7 +46,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
         </Suspense>
         {children}
         {runners}
-        <HumanGate />
+        {!skipHuman && <HumanGate />}
         <BottomNav />
       </div>
     );
@@ -66,7 +67,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
       </div>
       <SiteFooter />
       {runners}
-      {!isAdmin && <HumanGate />}
+      {!skipHuman && <HumanGate />}
       {!isAdmin && <BottomNav />}
     </div>
   );

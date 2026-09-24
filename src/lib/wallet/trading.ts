@@ -160,16 +160,34 @@ function requiredSignerSet(tx: Transaction | VersionedTransaction): Set<string> 
   return out;
 }
 
+function isLegacy(tx: Transaction | VersionedTransaction): tx is Transaction {
+  return "instructions" in tx && Array.isArray((tx as Transaction).instructions);
+}
+
 function applyExtras(tx: Transaction | VersionedTransaction, extra?: Keypair | Keypair[]) {
   const need = requiredSignerSet(tx);
   const extras = extraKeys(extra).filter((k) => need.has(k.publicKey.toBase58()));
   if (!extras.length) return;
-  if (typeof (tx as Transaction).partialSign === "function" && Array.isArray((tx as Transaction).instructions)) {
-    (tx as Transaction).partialSign(...extras);
+  if (isLegacy(tx)) {
+    tx.partialSign(...extras);
     return;
   }
-  if (typeof (tx as VersionedTransaction).sign === "function") {
-    (tx as VersionedTransaction).sign(extras);
+  tx.sign(extras);
+}
+
+function copyWalletSigs(from: Transaction | VersionedTransaction, onto: Transaction | VersionedTransaction) {
+  if (isLegacy(from) && isLegacy(onto)) {
+    for (const s of from.signatures) {
+      if (s.signature && s.publicKey) onto.addSignature(s.publicKey, s.signature);
+    }
+    return;
+  }
+  const a = from as VersionedTransaction;
+  const b = onto as VersionedTransaction;
+  const keys = b.message.staticAccountKeys;
+  for (let i = 0; i < a.signatures.length && i < b.signatures.length && i < keys.length; i++) {
+    const sig = a.signatures[i];
+    if (sig && sig.some((n) => n !== 0)) b.signatures[i] = sig;
   }
 }
 
@@ -177,9 +195,7 @@ function serializeTx(tx: Transaction | VersionedTransaction): Uint8Array {
   if (typeof (tx as Transaction).serialize !== "function") {
     throw new Error("Phantom returned an unusable transaction.");
   }
-  if ("instructions" in tx && Array.isArray((tx as Transaction).instructions)) {
-    return toBytes((tx as Transaction).serialize({ requireAllSignatures: true }));
-  }
+  if (isLegacy(tx)) return toBytes(tx.serialize({ requireAllSignatures: true }));
   return toBytes((tx as VersionedTransaction).serialize());
 }
 
@@ -191,14 +207,17 @@ export async function signPhantomAndSend(transactionB64: string, extra?: Keypair
     throw new Error("Opening Phantom to sign. Tap Launch again once this page is inside the app.");
   }
   const raw = b64ToBytes(asTxB64(transactionB64));
-  const unsigned: Transaction | VersionedTransaction =
+  const original: Transaction | VersionedTransaction =
     raw.length > 0 && (raw[0] & 0x80) !== 0
       ? VersionedTransaction.deserialize(raw)
       : Transaction.from(raw);
-  applyExtras(unsigned, extra);
-  const signed = (await provider.signTransaction(unsigned as Transaction)) as Transaction | VersionedTransaction;
-  applyExtras(signed, extra);
-  return sendSignedB64(toB64(serializeTx(signed)));
+  const forWallet: Transaction | VersionedTransaction = isLegacy(original)
+    ? Transaction.from(original.serialize({ requireAllSignatures: false }))
+    : VersionedTransaction.deserialize((original as VersionedTransaction).serialize());
+  const fromPhantom = (await provider.signTransaction(forWallet as Transaction)) as Transaction | VersionedTransaction;
+  copyWalletSigs(fromPhantom, original);
+  applyExtras(original, extra);
+  return sendSignedB64(toB64(serializeTx(original)));
 }
 
 async function sendViaApi(b64: string): Promise<string> {
