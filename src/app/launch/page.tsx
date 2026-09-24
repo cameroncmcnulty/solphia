@@ -349,6 +349,7 @@ export default function LaunchPage() {
   const [pending, setPending] = useState<PendingLaunch[]>([]);
   const [hidden, setHidden] = useState<string[]>([]);
   const [ownerWallet, setOwnerWallet] = useState("");
+  const [needPhantom, setNeedPhantom] = useState(false);
   const lastMintRef = useRef("");
   const cropUrlRef = useRef<string>("");
   const devPct = buySupplyPct(emptyCurve(), devBuy);
@@ -393,6 +394,18 @@ export default function LaunchPage() {
     const pad = await fetch(`/api/launch?${q}`, { cache: "no-store" }).then((r) => r.json());
     if (pad.solUsd) setSolUsd(pad.solUsd);
     if (typeof pad.ownerWallet === "string") setOwnerWallet(pad.ownerWallet);
+    const d = pad.draft as Record<string, unknown> | null | undefined;
+    if (d && typeof d === "object") {
+      if (typeof d.name === "string" && d.name) setName(d.name);
+      if (typeof d.symbol === "string" && d.symbol) setSymbol(d.symbol);
+      if (typeof d.blurb === "string") setBlurb(d.blurb);
+      if (typeof d.image === "string" && d.image) setImage(d.image);
+      if (typeof d.website === "string") setWebsite(d.website);
+      if (typeof d.x === "string") setX(d.x);
+      if (typeof d.telegram === "string") setTelegram(d.telegram);
+      if (typeof d.discord === "string") setDiscord(d.discord);
+      if (typeof d.devBuy === "number") setDevBuy(d.devBuy);
+    }
     const padCoins: Coin[] = Array.isArray(pad.coins) ? pad.coins.map((c: Coin) => ({ ...c, born: true })) : [];
     setCoins((prev) => {
       const market = prev.filter((c) => !c.born);
@@ -636,6 +649,19 @@ export default function LaunchPage() {
       return;
     }
     saveLaunchDraft({ name, symbol, blurb, image, website, x, telegram, discord, devBuy });
+    void postLaunch({
+      action: "save_draft",
+      pubkey: owner,
+      name,
+      symbol,
+      blurb,
+      image,
+      website,
+      x,
+      telegram,
+      discord,
+      launchBuySol: devBuy,
+    }).catch(() => {});
     if (!phantomProvider()) {
       if (inPhantomWebView()) {
         setMsg("Waiting for Phantom…");
@@ -645,8 +671,8 @@ export default function LaunchPage() {
           return;
         }
       } else {
-        setMsg("Opening Phantom… your form is saved.");
-        openThisPageInPhantom();
+        setNeedPhantom(true);
+        setMsg("Launch signs in the Phantom app. Your form is saved — open Launch there.");
         return;
       }
     }
@@ -815,8 +841,11 @@ export default function LaunchPage() {
       );
     } catch (e) {
       const timed = e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError");
-      if (!createErr.banner) {
-        const raw = e instanceof Error ? e.message : "launch failed";
+      const raw = e instanceof Error ? e.message : "launch failed";
+      if (raw === "OPEN_IN_PHANTOM") {
+        setNeedPhantom(true);
+        setMsg("Launch signs in the Phantom app. Your form is saved — open Launch there.");
+      } else if (!createErr.banner) {
         const ca = lastMintRef.current;
         const extra = ca ? ` CA ${ca}` : "";
         setErr((timed ? "Launch timed out building the curve. Try again." : raw) + extra);
@@ -1314,6 +1343,31 @@ export default function LaunchPage() {
                   <div data-field="wallet" className={createErr.errors.wallet ? "rounded-full ring-1 ring-blood/70" : undefined}>
                     <WalletConnect />
                   </div>
+                  {needPhantom && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        saveLaunchDraft({ name, symbol, blurb, image, website, x, telegram, discord, devBuy });
+                        void postLaunch({
+                          action: "save_draft",
+                          pubkey: owner,
+                          name,
+                          symbol,
+                          blurb,
+                          image,
+                          website,
+                          x,
+                          telegram,
+                          discord,
+                          launchBuySol: devBuy,
+                        }).catch(() => {});
+                        openThisPageInPhantom();
+                      }}
+                      className="btn-acid min-h-[48px] rounded-full px-6"
+                    >
+                      Open Launch in Phantom
+                    </button>
+                  )}
                   <button
                     type="button"
                     disabled={busy}

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { clientIp, isSolanaAddress, rateLimit, sanitizeText } from "@/lib/security";
 import { withLaunch } from "@/lib/store";
-import { emptyLaunchBook } from "@/lib/launch/engine";
+import { emptyLaunchBook, ensureAccount } from "@/lib/launch/engine";
 import {
   applyCurveState,
   buyCoin,
@@ -60,6 +60,7 @@ const Body = z.object({
     "set_owner",
     "dbc_config",
     "confirm_dbc_config",
+    "save_draft",
   ]),
   pubkey: z.string(),
   id: z.string().optional(),
@@ -356,6 +357,7 @@ async function getLaunch(req: NextRequest) {
     boosts: liveBoosts(book).map((b) => publicLiveBoost(b)),
     dbcConfig: dbc.liveDbcConfig(book.dbcConfig),
     needsNewCurve: dbcEnabled() && dbc.curveNeedsInstall(book.dbcConfig),
+    draft: viewer && isSolanaAddress(viewer) ? book.accounts?.[viewer]?.draft || null : null,
   });
 }
 
@@ -491,6 +493,24 @@ async function postLaunch(req: NextRequest) {
       book.dbcConfig = cfg;
     }, true);
     return NextResponse.json({ ok: true, dbcConfig: cfg });
+  }
+
+  if (b.action === "save_draft") {
+    await withLaunch((st) => {
+      const acc = ensureAccount(bookOf(st), b.pubkey);
+      acc.draft = {
+        name: (b.name || "").slice(0, 32),
+        symbol: (b.symbol || "").slice(0, 12),
+        blurb: (b.blurb || "").slice(0, 280),
+        image: (b.image || "").slice(0, 400_000),
+        website: (b.website || "").slice(0, 160),
+        x: (b.x || "").slice(0, 80),
+        telegram: (b.telegram || "").slice(0, 80),
+        discord: (b.discord || "").slice(0, 120),
+        devBuy: Number(b.launchBuySol) || 0,
+      };
+    }, true);
+    return NextResponse.json({ ok: true });
   }
 
   if (b.action === "withdraw_dev") {

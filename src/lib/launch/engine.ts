@@ -103,6 +103,17 @@ export type LaunchAccount = {
   rankDay?: { ymd: string; chat: number; swapXp: number; launches: number };
   rankEvents?: { id: string; kind: string; xp: number; at: number }[];
   circleCredited?: boolean;
+  draft?: {
+    name?: string;
+    symbol?: string;
+    blurb?: string;
+    image?: string;
+    website?: string;
+    x?: string;
+    telegram?: string;
+    discord?: string;
+    devBuy?: number;
+  };
 };
 
 export type LaunchBook = {

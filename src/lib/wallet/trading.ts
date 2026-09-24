@@ -175,22 +175,6 @@ function applyExtras(tx: Transaction | VersionedTransaction, extra?: Keypair | K
   tx.sign(extras);
 }
 
-function copyWalletSigs(from: Transaction | VersionedTransaction, onto: Transaction | VersionedTransaction) {
-  if (isLegacy(from) && isLegacy(onto)) {
-    for (const s of from.signatures) {
-      if (s.signature && s.publicKey) onto.addSignature(s.publicKey, s.signature);
-    }
-    return;
-  }
-  const a = from as VersionedTransaction;
-  const b = onto as VersionedTransaction;
-  const keys = b.message.staticAccountKeys;
-  for (let i = 0; i < a.signatures.length && i < b.signatures.length && i < keys.length; i++) {
-    const sig = a.signatures[i];
-    if (sig && sig.some((n) => n !== 0)) b.signatures[i] = sig;
-  }
-}
-
 function serializeTx(tx: Transaction | VersionedTransaction): Uint8Array {
   if (typeof (tx as Transaction).serialize !== "function") {
     throw new Error("Phantom returned an unusable transaction.");
@@ -202,22 +186,16 @@ function serializeTx(tx: Transaction | VersionedTransaction): Uint8Array {
 export async function signPhantomAndSend(transactionB64: string, extra?: Keypair | Keypair[]): Promise<string> {
   const provider = phantomProvider();
   if (!provider) {
-    const { openThisPageInPhantom } = await import("./phantomConnect");
-    openThisPageInPhantom();
-    throw new Error("Opening Phantom to sign. Tap Launch again once this page is inside the app.");
+    throw new Error("OPEN_IN_PHANTOM");
   }
   const raw = b64ToBytes(asTxB64(transactionB64));
-  const original: Transaction | VersionedTransaction =
+  const tx: Transaction | VersionedTransaction =
     raw.length > 0 && (raw[0] & 0x80) !== 0
       ? VersionedTransaction.deserialize(raw)
       : Transaction.from(raw);
-  const forWallet: Transaction | VersionedTransaction = isLegacy(original)
-    ? Transaction.from(original.serialize({ requireAllSignatures: false }))
-    : VersionedTransaction.deserialize((original as VersionedTransaction).serialize());
-  const fromPhantom = (await provider.signTransaction(forWallet as Transaction)) as Transaction | VersionedTransaction;
-  copyWalletSigs(fromPhantom, original);
-  applyExtras(original, extra);
-  return sendSignedB64(toB64(serializeTx(original)));
+  const fromPhantom = (await provider.signTransaction(tx as Transaction)) as Transaction | VersionedTransaction;
+  applyExtras(fromPhantom, extra);
+  return sendSignedB64(toB64(serializeTx(fromPhantom)));
 }
 
 async function sendViaApi(b64: string): Promise<string> {
