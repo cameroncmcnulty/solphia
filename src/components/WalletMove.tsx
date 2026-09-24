@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { buildTransfer, phantomProvider, signLegacyTx, withdrawToOwner } from "@/lib/wallet/trading";
+import { buildTransfer, signLegacyTx, withdrawToOwner } from "@/lib/wallet/trading";
+import { isPhantomRedirect } from "@/lib/wallet/phantomConnect";
 import { FieldError, useConfirmErrors } from "./form/confirm";
 
 const PRESETS = [0.1, 0.5, 1, 2];
@@ -25,13 +26,6 @@ export function WalletMove({
   const sol = custom.trim() ? Number(custom) : amt;
 
   async function toTrading() {
-    const provider = phantomProvider();
-    if (!provider) {
-      const { openThisPageInPhantom } = await import("@/lib/wallet/phantomConnect");
-      openThisPageInPhantom();
-      err.fail({ wallet: "Opening Phantom. Come back inside the app to move SOL." });
-      return;
-    }
     if (!(sol > 0)) {
       err.fail({ amount: "Pick how much SOL to move." });
       return;
@@ -45,6 +39,10 @@ export function WalletMove({
       setMsg(`Sent ${sol} SOL to the trading wallet · ${sig.slice(0, 16)}…`);
       setTimeout(() => onDone?.(), 2500);
     } catch (e) {
+      if (isPhantomRedirect(e)) {
+        setMsg("Approve in Phantom…");
+        return;
+      }
       err.fail({}, e instanceof Error ? e.message : "transfer rejected");
     } finally {
       setBusy(false);

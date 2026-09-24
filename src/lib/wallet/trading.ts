@@ -4,6 +4,8 @@ import { Keypair, PublicKey, SystemProgram, Transaction, VersionedTransaction, L
 
 import { loadOwner as readOwner, persistOwner } from "./owner";
 import { asTxB64, b64ToBytes, bytesToB64 } from "../solana/wire";
+import { applyExtras, extraKeys, parseTx, serializeTx } from "../solana/extraSign";
+import { openPhantomUl, type PhAfter } from "./phantomConnect";
 
 const SECRET = "solphia_trading_secret";
 
@@ -131,71 +133,29 @@ export async function signAndSendPhantom(transactionB64: string): Promise<string
  * Extra signers (mint keypairs) must be attached AFTER Phantom signs — never before.
  * https://docs.phantom.com/developer-powertools/domain-and-transaction-warnings
  */
-export async function signLegacyTx(tx: Transaction, extra?: Keypair): Promise<string> {
+export async function signLegacyTx(tx: Transaction, extra?: Keypair, after?: PhAfter): Promise<string> {
   const unsigned = tx.serialize({ requireAllSignatures: false, verifySignatures: false });
-  return signPhantomAndSend(toB64(unsigned), extra);
+  return signPhantomAndSend(toB64(unsigned), extra, after);
 }
 
-function toBytes(ser: Uint8Array | number[]): Uint8Array {
-  return ser instanceof Uint8Array ? ser : Uint8Array.from(ser);
-}
-
-function extraKeys(extra?: Keypair | Keypair[]): Keypair[] {
-  if (!extra) return [];
-  return Array.isArray(extra) ? extra.filter(Boolean) : [extra];
-}
-
-function requiredSignerSet(tx: Transaction | VersionedTransaction): Set<string> {
-  const out = new Set<string>();
-  if ("instructions" in tx && Array.isArray((tx as Transaction).instructions)) {
-    for (const s of (tx as Transaction).signatures) {
-      if (s.publicKey) out.add(s.publicKey.toBase58());
-    }
-    return out;
-  }
-  const msg = (tx as VersionedTransaction).message;
-  const keys = "staticAccountKeys" in msg ? msg.staticAccountKeys : [];
-  const n = "header" in msg ? msg.header.numRequiredSignatures : 0;
-  for (let i = 0; i < n && i < keys.length; i++) out.add(keys[i]!.toBase58());
-  return out;
-}
-
-function isLegacy(tx: Transaction | VersionedTransaction): tx is Transaction {
-  return "instructions" in tx && Array.isArray((tx as Transaction).instructions);
-}
-
-function applyExtras(tx: Transaction | VersionedTransaction, extra?: Keypair | Keypair[]) {
-  const need = requiredSignerSet(tx);
-  const extras = extraKeys(extra).filter((k) => need.has(k.publicKey.toBase58()));
-  if (!extras.length) return;
-  if (isLegacy(tx)) {
-    tx.partialSign(...extras);
-    return;
-  }
-  tx.sign(extras);
-}
-
-function serializeTx(tx: Transaction | VersionedTransaction): Uint8Array {
-  if (typeof (tx as Transaction).serialize !== "function") {
-    throw new Error("Phantom returned an unusable transaction.");
-  }
-  if (isLegacy(tx)) return toBytes(tx.serialize({ requireAllSignatures: true }));
-  return toBytes((tx as VersionedTransaction).serialize());
-}
-
-export async function signPhantomAndSend(transactionB64: string, extra?: Keypair | Keypair[]): Promise<string> {
+export async function signPhantomAndSend(transactionB64: string, extra?: Keypair | Keypair[], after?: PhAfter): Promise<string> {
+  const packed = asTxB64(transactionB64);
+  const extras = extraKeys(extra);
   const provider = phantomProvider();
-  if (!provider) {
-    throw new Error("OPEN_IN_PHANTOM");
+  if (provider) {
+    const raw = b64ToBytes(packed);
+    const tx = parseTx(raw);
+    const fromPhantom = (await provider.signTransaction(tx as Transaction)) as Transaction | VersionedTransaction;
+    applyExtras(fromPhantom, extras);
+    return sendSignedB64(toB64(serializeTx(fromPhantom)));
   }
-  const raw = b64ToBytes(asTxB64(transactionB64));
-  const tx: Transaction | VersionedTransaction =
-    raw.length > 0 && (raw[0] & 0x80) !== 0
-      ? VersionedTransaction.deserialize(raw)
-      : Transaction.from(raw);
-  const fromPhantom = (await provider.signTransaction(tx as Transaction)) as Transaction | VersionedTransaction;
-  applyExtras(fromPhantom, extra);
-  return sendSignedB64(toB64(serializeTx(fromPhantom)));
+  await openPhantomUl({
+    packed,
+    extraSecrets: extras.map((k) => toB64(k.secretKey)),
+    after,
+    pubkey: readOwner(),
+  });
+  throw new Error("PHANTOM_REDIRECT");
 }
 
 async function sendViaApi(b64: string): Promise<string> {

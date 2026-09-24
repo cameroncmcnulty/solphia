@@ -103,6 +103,8 @@ export type LaunchAccount = {
   rankDay?: { ymd: string; chat: number; swapXp: number; launches: number };
   rankEvents?: { id: string; kind: string; xp: number; at: number }[];
   circleCredited?: boolean;
+  /** Phantom UL session so Chrome iOS can sign without the in-app browser. */
+  phSession?: { dappSk: string; phantomPk: string; session: string };
   draft?: {
     name?: string;
     symbol?: string;
@@ -125,6 +127,8 @@ export type LaunchBook = {
   boosts?: LaunchBoost[];
   /** Partner DBC config. 40 SOL open / 585 SOL graduate. */
   dbcConfig?: string;
+  /** Short-lived Phantom connect/sign jobs. Never returned on public GET. */
+  phJobs?: Record<string, import("../wallet/phantomBox").PhJob>;
 };
 
 export function emptyLaunchBook(): LaunchBook {
@@ -263,10 +267,16 @@ export function slimLaunch(book: LaunchBook): LaunchBook {
   const all = ensureBoosts(book);
   const live = all.filter((b) => b.status === "live" || b.status === "queued");
   const done = all.filter((b) => b.status === "done").slice(-20);
+  const phJobs: NonNullable<LaunchBook["phJobs"]> = {};
+  const cutoff = Date.now() - 20 * 60_000;
+  for (const [id, job] of Object.entries(book.phJobs || {})) {
+    if (job?.at && job.at >= cutoff) phJobs[id] = job;
+  }
   return {
     ...book,
     accounts,
     boosts: [...live, ...done],
+    phJobs: Object.keys(phJobs).length ? phJobs : undefined,
     coins: (book.coins || []).slice(0, 80).map((c) => ({
       ...c,
       image: (c.image || "").length > 90_000 ? "" : c.image,
@@ -303,6 +313,14 @@ export function mergeLaunch(local: LaunchBook, remote: LaunchBook): LaunchBook {
   const boostMap = new Map<string, NonNullable<LaunchBook["boosts"]>[number]>();
   for (const b of remote.boosts || []) boostMap.set(b.id, b);
   for (const b of local.boosts || []) boostMap.set(b.id, b);
+  const cutoff = Date.now() - 20 * 60_000;
+  const phJobs: NonNullable<LaunchBook["phJobs"]> = { ...(remote.phJobs || {}) };
+  for (const [id, job] of Object.entries(local.phJobs || {})) {
+    if (job) phJobs[id] = job;
+  }
+  for (const id of Object.keys(phJobs)) {
+    if (!phJobs[id]?.at || phJobs[id]!.at < cutoff) delete phJobs[id];
+  }
   return {
     coins,
     ownerWallet: local.ownerWallet || remote.ownerWallet,
@@ -310,6 +328,8 @@ export function mergeLaunch(local: LaunchBook, remote: LaunchBook): LaunchBook {
     treasuryFeesSol: Math.max(local.treasuryFeesSol || 0, remote.treasuryFeesSol || 0),
     accounts,
     boosts: [...boostMap.values()],
+    dbcConfig: local.dbcConfig || remote.dbcConfig,
+    phJobs: Object.keys(phJobs).length ? phJobs : undefined,
   };
 }
 
@@ -346,6 +366,7 @@ export function mergeAccount(remote: LaunchAccount, local: LaunchAccount, key: s
     rankDay,
     rankEvents: eventsA.length >= eventsB.length ? eventsA : eventsB,
     circleCredited: Boolean(local.circleCredited || remote.circleCredited),
+    phSession: local.phSession?.session ? local.phSession : remote.phSession,
   };
 }
 

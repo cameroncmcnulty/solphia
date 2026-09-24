@@ -1,102 +1,14 @@
-import nacl from "tweetnacl";
 import { isSolanaAddress } from "./addr";
 import { persistOwner } from "./owner";
+import { PHANTOM_PARAMS, decryptBox, type PhAfter } from "./phantomBox";
 
-const B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-const SK = "solphia_ph_sk";
-const PARAMS = ["phantom_encryption_public_key", "nonce", "data", "errorCode", "errorMessage"] as const;
+export type { PhAfter };
 
-function b58enc(bytes: Uint8Array): string {
-  if (!bytes.length) return "";
-  let hex = "";
-  for (const b of bytes) hex += b.toString(16).padStart(2, "0");
-  let n = BigInt("0x" + hex);
-  let out = "";
-  while (n > 0n) {
-    out = B58[Number(n % 58n)] + out;
-    n /= 58n;
-  }
-  for (const b of bytes) {
-    if (b !== 0) break;
-    out = "1" + out;
-  }
-  return out || "1";
-}
+export const PHANTOM_REDIRECT = "PHANTOM_REDIRECT";
+export const PHANTOM_EVENT = "solphia:phantom";
 
-function b58dec(s: string): Uint8Array {
-  let n = 0n;
-  for (const ch of s) {
-    const v = B58.indexOf(ch);
-    if (v < 0) throw new Error("bad b58");
-    n = n * 58n + BigInt(v);
-  }
-  let hex = n.toString(16);
-  if (hex.length % 2) hex = "0" + hex;
-  const body = hex === "00" || hex === "" ? new Uint8Array(0) : Uint8Array.from(hex.match(/.{2}/g)!.map((h) => parseInt(h, 16)));
-  let zeros = 0;
-  while (zeros < s.length && s[zeros] === "1") zeros += 1;
-  const out = new Uint8Array(zeros + body.length);
-  out.set(body, zeros);
-  return out;
-}
-
-function readParam(url: URL, key: string): string | null {
-  const q = url.searchParams.get(key);
-  if (q) return q;
-  const hash = url.hash.startsWith("#") ? url.hash.slice(1) : url.hash;
-  if (!hash) return null;
-  return new URLSearchParams(hash.startsWith("?") ? hash.slice(1) : hash).get(key);
-}
-
-function cleanUrl(url: URL): string {
-  const next = new URL(url.toString());
-  for (const k of PARAMS) next.searchParams.delete(k);
-  if (next.hash) {
-    const hp = new URLSearchParams(next.hash.replace(/^#/, "").replace(/^\?/, ""));
-    let touched = false;
-    for (const k of PARAMS) {
-      if (hp.has(k)) {
-        hp.delete(k);
-        touched = true;
-      }
-    }
-    next.hash = touched ? (hp.toString() ? "#" + hp.toString() : "") : next.hash;
-  }
-  return next.pathname + next.search + next.hash;
-}
-
-function storeSecret(raw: string) {
-  try {
-    localStorage.setItem(SK, raw);
-  } catch {
-    /* private mode */
-  }
-  try {
-    sessionStorage.setItem(SK, raw);
-  } catch {
-    /* ITP */
-  }
-}
-
-function loadSecret(): string | null {
-  try {
-    return sessionStorage.getItem(SK) || localStorage.getItem(SK);
-  } catch {
-    return null;
-  }
-}
-
-function dropSecret() {
-  try {
-    sessionStorage.removeItem(SK);
-  } catch {
-    /* ignore */
-  }
-  try {
-    localStorage.removeItem(SK);
-  } catch {
-    /* ignore */
-  }
+export function isPhantomRedirect(e: unknown): boolean {
+  return e instanceof Error && e.message === PHANTOM_REDIRECT;
 }
 
 export function hasPhantomSigner(): boolean {
@@ -130,53 +42,144 @@ export function waitForInjected(ms = 2500): Promise<boolean> {
   });
 }
 
-/** Open this exact URL inside Phantom so signTransaction is available. Never reload if already in the app. */
-export function openThisPageInPhantom() {
-  if (hasPhantomSigner() || inPhantomWebView()) return;
-  const href = window.location.href.split("#")[0];
-  const target = encodeURIComponent(href);
-  const ref = encodeURIComponent(`${window.location.origin}/`);
-  window.location.assign(`https://phantom.app/ul/browse/${target}?ref=${ref}`);
-}
-
 export function signerPage(pathname?: string): boolean {
   const p = pathname || (typeof window !== "undefined" ? window.location.pathname : "");
   return p === "/launch" || p === "/swap" || p.startsWith("/launch/") || p.startsWith("/swap/");
 }
 
-export function beginPhantomConnect() {
-  const kp = nacl.box.keyPair();
-  storeSecret(b58enc(kp.secretKey));
-  const here = new URL(window.location.href);
-  for (const k of PARAMS) here.searchParams.delete(k);
-  const redirect = encodeURIComponent(here.toString());
-  const app = encodeURIComponent(`${window.location.origin}/`);
-  const dapp = encodeURIComponent(b58enc(kp.publicKey));
-  window.location.assign(
-    `https://phantom.app/ul/v1/connect?app_url=${app}&dapp_encryption_public_key=${dapp}&redirect_link=${redirect}&cluster=mainnet-beta`,
-  );
+function readParam(url: URL, key: string): string | null {
+  const q = url.searchParams.get(key);
+  if (q) return q;
+  const hash = url.hash.startsWith("#") ? url.hash.slice(1) : url.hash;
+  if (!hash) return null;
+  return new URLSearchParams(hash.startsWith("?") ? hash.slice(1) : hash).get(key);
 }
 
-export function completePhantomConnect(): string | null {
+export function cleanPhantomUrl(url = typeof window !== "undefined" ? new URL(window.location.href) : null): string {
+  if (!url) return "/";
+  const next = new URL(url.toString());
+  for (const k of PHANTOM_PARAMS) next.searchParams.delete(k);
+  if (next.hash) {
+    const hp = new URLSearchParams(next.hash.replace(/^#/, "").replace(/^\?/, ""));
+    let touched = false;
+    for (const k of PHANTOM_PARAMS) {
+      if (hp.has(k)) {
+        hp.delete(k);
+        touched = true;
+      }
+    }
+    next.hash = touched ? (hp.toString() ? "#" + hp.toString() : "") : next.hash;
+  }
+  return next.pathname + next.search + next.hash;
+}
+
+export function readPhantomReturn(): {
+  ph: string;
+  phantom_encryption_public_key: string;
+  nonce: string;
+  data: string;
+  errorCode: string;
+  errorMessage: string;
+} | null {
   if (typeof window === "undefined") return null;
   const url = new URL(window.location.href);
-  const err = readParam(url, "errorCode");
-  const phantomPk = readParam(url, "phantom_encryption_public_key");
-  const nonce = readParam(url, "nonce");
-  const data = readParam(url, "data");
-  if (err || !phantomPk || !nonce || !data) return null;
-  const sk = loadSecret();
-  if (!sk) return null;
+  const ph = readParam(url, "ph") || "";
+  const nonce = readParam(url, "nonce") || "";
+  const data = readParam(url, "data") || "";
+  const errorCode = readParam(url, "errorCode") || "";
+  const errorMessage = readParam(url, "errorMessage") || "";
+  const phantomPk = readParam(url, "phantom_encryption_public_key") || "";
+  if (!ph && !nonce && !data && !errorCode) return null;
+  return {
+    ph,
+    phantom_encryption_public_key: phantomPk,
+    nonce,
+    data,
+    errorCode,
+    errorMessage,
+  };
+}
+
+/** Chrome/Safari: open Phantom to connect or sign, then come back to this same page. */
+export async function openPhantomUl(opts?: {
+  packed?: string;
+  extraSecrets?: string[];
+  after?: PhAfter;
+  pubkey?: string | null;
+}): Promise<never> {
+  const r = await fetch("/api/phantom", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      action: "open",
+      packed: opts?.packed,
+      extraSecrets: opts?.extraSecrets,
+      after: opts?.after,
+      pubkey: opts?.pubkey || undefined,
+      redirectPath: typeof window !== "undefined" ? window.location.pathname + window.location.search : "/launch",
+    }),
+  });
+  const j = (await r.json().catch(() => ({}))) as { url?: string; error?: string };
+  if (!r.ok || !j.url) throw new Error(typeof j.error === "string" ? j.error : "Could not open Phantom.");
+  window.location.assign(j.url);
+  throw new Error(PHANTOM_REDIRECT);
+}
+
+export function beginPhantomConnect() {
+  void openPhantomUl().catch(() => undefined);
+}
+
+export async function completePhantomUl(): Promise<{
+  pubkey?: string;
+  signature?: string;
+  after?: PhAfter;
+  url?: string;
+  error?: string;
+} | null> {
+  const got = readPhantomReturn();
+  if (!got?.ph && !got?.nonce && !got?.errorCode) return null;
+  const lock = "solphia_ph_lock_" + (got.ph || got.nonce || "x");
   try {
-    const shared = nacl.box.before(b58dec(phantomPk), b58dec(sk));
-    const opened = nacl.box.open.after(b58dec(data), b58dec(nonce), shared);
-    if (!opened) return null;
-    const json = JSON.parse(new TextDecoder().decode(opened)) as { public_key?: string };
-    const pubkey = json.public_key || "";
+    if (sessionStorage.getItem(lock)) return null;
+    sessionStorage.setItem(lock, "1");
+  } catch {
+    /* private mode — still complete once */
+  }
+  window.history.replaceState({}, "", cleanPhantomUrl());
+  const r = await fetch("/api/phantom", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ action: "complete", id: got.ph, ...got }),
+  });
+  const j = (await r.json().catch(() => ({}))) as {
+    pubkey?: string;
+    signature?: string;
+    after?: PhAfter;
+    url?: string;
+    error?: string;
+  };
+  if (typeof j.pubkey === "string" && isSolanaAddress(j.pubkey)) persistOwner(j.pubkey);
+  if (!r.ok) return { error: typeof j.error === "string" ? j.error : "Phantom came back empty." };
+  return j;
+}
+
+/** Legacy client-side connect decrypt. Ignored when the server job (`ph=`) is present. */
+export function completePhantomConnect(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const url = new URL(window.location.href);
+    if (readParam(url, "ph")) return null;
+    const nonce = readParam(url, "nonce");
+    const data = readParam(url, "data");
+    const phantomPk = readParam(url, "phantom_encryption_public_key");
+    if (!nonce || !data || !phantomPk) return null;
+    const sk = sessionStorage.getItem("solphia_ph_sk") || localStorage.getItem("solphia_ph_sk");
+    if (!sk) return null;
+    const json = decryptBox(sk, phantomPk, nonce, data);
+    window.history.replaceState({}, "", cleanPhantomUrl(url));
+    const pubkey = json?.public_key || "";
     if (!isSolanaAddress(pubkey)) return null;
     persistOwner(pubkey);
-    dropSecret();
-    window.history.replaceState({}, "", cleanUrl(url));
     return pubkey;
   } catch {
     return null;

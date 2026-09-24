@@ -14,6 +14,7 @@ export const KEYS = {
   shill: "solphia:shill",
   mail: "solphia:mail",
   signer: (owner: string) => `solphia:signer:${owner}`,
+  phjob: (id: string) => `solphia:ph:${id}`,
 };
 
 const BLOB_PATH = "solphia-state.json";
@@ -91,6 +92,11 @@ export async function kvSetJson(key: string, value: unknown): Promise<boolean> {
     body: JSON.stringify(value),
     signal: AbortSignal.timeout(12_000),
   });
+  return r.ok;
+}
+
+export async function kvSetEx(key: string, value: unknown, seconds: number): Promise<boolean> {
+  const r = await kvCommand(["SET", key, JSON.stringify(value), "EX", Math.max(30, Math.floor(seconds))]);
   return r.ok;
 }
 

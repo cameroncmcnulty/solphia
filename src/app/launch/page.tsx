@@ -35,8 +35,9 @@ import {
 } from "@/lib/launch/validate";
 import { FieldError, FormAlert, SafeField, fieldClass, useConfirmErrors } from "@/components/form/confirm";
 import { loadOwner, phantomProvider, signPhantomAndSend } from "@/lib/wallet/trading";
-import { inPhantomWebView, openThisPageInPhantom, waitForInjected } from "@/lib/wallet/phantomConnect";
-import { asTxB64, b64ToBytes } from "@/lib/solana/wire";
+import { inPhantomWebView, isPhantomRedirect, PHANTOM_EVENT, waitForInjected } from "@/lib/wallet/phantomConnect";
+import type { PhAfter } from "@/lib/wallet/phantomBox";
+import { asTxB64, b64ToBytes, bytesToB64 } from "@/lib/solana/wire";
 import { mintPda, newMintNonce, nonceToB64 } from "@/lib/launch/pda";
 import { dbcEnabled } from "@/lib/launch/dbcIds";
 
@@ -349,8 +350,8 @@ export default function LaunchPage() {
   const [pending, setPending] = useState<PendingLaunch[]>([]);
   const [hidden, setHidden] = useState<string[]>([]);
   const [ownerWallet, setOwnerWallet] = useState("");
-  const [needPhantom, setNeedPhantom] = useState(false);
   const lastMintRef = useRef("");
+  const finishPhantomRef = useRef<(sig: string, after: PhAfter) => Promise<void>>(async () => {});
   const cropUrlRef = useRef<string>("");
   const devPct = buySupplyPct(emptyCurve(), devBuy);
 
@@ -372,6 +373,29 @@ export default function LaunchPage() {
     return () => {
       if (cropUrlRef.current) URL.revokeObjectURL(cropUrlRef.current);
     };
+  }, []);
+
+  useEffect(() => {
+    const onPh = (e: Event) => {
+      const j = (e as CustomEvent<{ signature?: string; after?: PhAfter; error?: string }>).detail;
+      if (!j) return;
+      if (j.error) {
+        setErr(j.error);
+        setBusy(false);
+        setMsg("");
+        return;
+      }
+      if (!j.signature || !j.after) return;
+      setBusy(true);
+      setErr("");
+      setMsg("Finishing on Solana…");
+      void finishPhantomRef.current(j.signature, j.after).catch((err) => {
+        setErr(err instanceof Error ? err.message : "Launch failed after Phantom.");
+        setBusy(false);
+      });
+    };
+    window.addEventListener(PHANTOM_EVENT, onPh);
+    return () => window.removeEventListener(PHANTOM_EVENT, onPh);
   }, []);
 
   useEffect(() => {
@@ -662,19 +686,9 @@ export default function LaunchPage() {
       discord,
       launchBuySol: devBuy,
     }).catch(() => {});
-    if (!phantomProvider()) {
-      if (inPhantomWebView()) {
-        setMsg("Waiting for Phantom…");
-        const ready = await waitForInjected(3500);
-        if (!ready) {
-          createErr.fail({ wallet: "Phantom isn't ready. Pull to refresh this tab, then Launch again." });
-          return;
-        }
-      } else {
-        setNeedPhantom(true);
-        setMsg("Launch signs in the Phantom app. Your form is saved — open Launch there.");
-        return;
-      }
+    if (!phantomProvider() && inPhantomWebView()) {
+      setMsg("Waiting for Phantom…");
+      await waitForInjected(3500);
     }
     setBusy(true);
     setMsg("");
@@ -725,7 +739,22 @@ export default function LaunchPage() {
       if (pj.step === "config" && typeof pj.configSecret === "string") {
         setMsg("Installing the Solphia curve…");
         const cfgKp = Keypair.fromSecretKey(b64ToBytes(pj.configSecret));
-        await signPhantomAndSend(packed, cfgKp);
+        await signPhantomAndSend(packed, cfgKp, {
+          kind: "launch_config",
+          owner,
+          mint: mintPk,
+          mintSecret: mintKp ? bytesToB64(mintKp.secretKey) : undefined,
+          config: typeof pj.config === "string" ? pj.config : undefined,
+          name: name.trim(),
+          symbol: symbol.trim(),
+          blurb,
+          image,
+          website,
+          x,
+          telegram,
+          discord,
+          launchBuySol: devBuy,
+        });
         const cfgRes = await fetch("/api/launch", {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -758,7 +787,23 @@ export default function LaunchPage() {
       setMsg("Sign in Phantom… CA " + mintPk);
       const extras: import("@solana/web3.js").Keypair[] = [];
       if (pj.step !== "config" && mintKp) extras.push(mintKp);
-      const sig = await signPhantomAndSend(packed, extras.length ? extras : undefined);
+      const sig = await signPhantomAndSend(packed, extras.length ? extras : undefined, {
+        kind: "launch_pool",
+        owner,
+        mint: mintPk,
+        config: typeof pj.config === "string" ? pj.config : undefined,
+        tokensOut: Number(pj.tokensOut) || 0,
+        uri: typeof pj.uri === "string" ? pj.uri : undefined,
+        image: typeof pj.image === "string" ? pj.image : image,
+        name: name.trim(),
+        symbol: symbol.trim(),
+        blurb,
+        website,
+        x,
+        telegram,
+        discord,
+        launchBuySol: devBuy,
+      });
       savePending({ mint: mintPk, name: name.trim(), symbol: symbol.trim().toUpperCase(), image, at: Date.now(), sig });
       setPending(loadPending());
       setMsg("Waiting for the curve on Solana… CA " + mintPk);
@@ -840,20 +885,176 @@ export default function LaunchPage() {
           : `Live on the curve. CA ${mintPk}`,
       );
     } catch (e) {
+      if (isPhantomRedirect(e)) {
+        setMsg("Approve in Phantom. You'll come back here.");
+        return;
+      }
       const timed = e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError");
       const raw = e instanceof Error ? e.message : "launch failed";
-      if (raw === "OPEN_IN_PHANTOM") {
-        setNeedPhantom(true);
-        setMsg("Launch signs in the Phantom app. Your form is saved — open Launch there.");
-      } else if (!createErr.banner) {
+      if (!createErr.banner) {
         const ca = lastMintRef.current;
         const extra = ca ? ` CA ${ca}` : "";
         setErr((timed ? "Launch timed out building the curve. Try again." : raw) + extra);
       }
-    } finally {
       setBusy(false);
     }
   }
+
+  async function finishPhantomLaunch(sig: string, after: PhAfter) {
+    const ownerPk = after.owner || loadOwner() || owner;
+    if (!ownerPk) throw new Error("Connect Phantom, then tap Launch again.");
+    if (after.kind === "launch_config") {
+      setBusy(true);
+      setMsg("Installing the Solphia curve…");
+      const cfgRes = await fetch("/api/launch", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "confirm_dbc_config", pubkey: ownerPk, config: after.config }),
+      });
+      if (!cfgRes.ok) throw new Error("Could not save the Solphia curve. Try Launch again.");
+      setMsg("Curve is live. Building your token…");
+      const prep2 = await postLaunch({
+        action: "prepare",
+        pubkey: ownerPk,
+        mint: after.mint,
+        name: after.name,
+        symbol: after.symbol,
+        blurb: after.blurb,
+        image: after.image,
+        website: after.website,
+        x: after.x,
+        telegram: after.telegram,
+        discord: after.discord,
+        launchBuySol: after.launchBuySol,
+        referrer: peekRef() || undefined,
+        config: after.config,
+      }, 24_000);
+      const p2 = prep2.json;
+      if (p2.step === "config") throw new Error("Curve is still saving. Tap Launch once more.");
+      const packed = asTxB64(p2.tx ?? (Array.isArray(p2.txs) ? p2.txs[0] : ""));
+      if (!prep2.ok || !packed) throw new Error((typeof p2.message === "string" && p2.message) || "Could not build the token.");
+      const mintKp = after.mintSecret ? Keypair.fromSecretKey(b64ToBytes(after.mintSecret)) : null;
+      setMsg("Sign in Phantom… CA " + (after.mint || ""));
+      await signPhantomAndSend(packed, mintKp ? [mintKp] : undefined, {
+        ...after,
+        kind: "launch_pool",
+        tokensOut: Number(p2.tokensOut) || 0,
+        uri: typeof p2.uri === "string" ? p2.uri : after.uri,
+        image: typeof p2.image === "string" ? p2.image : after.image,
+        config: typeof p2.config === "string" ? p2.config : after.config,
+      });
+      return;
+    }
+    if (after.kind === "launch_pool") {
+      const mintPk = after.mint || "";
+      lastMintRef.current = mintPk;
+      setBusy(true);
+      setMsg("Waiting for the curve on Solana… CA " + mintPk);
+      const confirmBody = {
+        action: "confirm",
+        pubkey: ownerPk,
+        mint: mintPk,
+        sigs: [sig],
+        tokens: Number(after.tokensOut) || 0,
+        name: after.name,
+        symbol: after.symbol,
+        blurb: after.blurb,
+        image: after.image,
+        website: after.website,
+        x: after.x,
+        telegram: after.telegram,
+        discord: after.discord,
+        launchBuySol: after.launchBuySol,
+        uri: after.uri,
+        referrer: peekRef() || undefined,
+        config: after.config,
+      };
+      let r = await fetch("/api/launch", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(confirmBody),
+      });
+      let j = await r.json();
+      for (let i = 0; i < 8 && !r.ok && j.error === "curve_missing"; i++) {
+        setMsg("Landing on Solana…");
+        await new Promise((res) => setTimeout(res, 2500));
+        r = await fetch("/api/launch", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(confirmBody),
+        });
+        j = await r.json();
+      }
+      if (!r.ok) {
+        const code = typeof j.error === "string" ? j.error : "";
+        throw new Error(j.message || launchError(code) || "Curve landed but the pad could not list it yet.");
+      }
+      if (j.coin) {
+        const listed = { ...j.coin, born: true, creator: j.coin.creator || ownerPk, mint: j.coin.mint || mintPk };
+        setOpen(listed);
+        setCoins((prev) => [listed, ...prev.filter((c) => c.id !== listed.id && c.mint !== listed.mint)]);
+      }
+      setTab("mine");
+      clearPending(mintPk);
+      setPending(loadPending());
+      await Promise.all([refreshPad(), refreshTape()]).catch(() => {});
+      createErr.ok();
+      setName("");
+      setSymbol("");
+      setBlurb("");
+      setImage("");
+      if (cropUrlRef.current) URL.revokeObjectURL(cropUrlRef.current);
+      cropUrlRef.current = "";
+      setCropSrc(null);
+      setCropOpen(false);
+      setWebsite("");
+      setX("");
+      setTelegram("");
+      setDiscord("");
+      setDevBuy(0);
+      clearLaunchDraft();
+      setBusy(false);
+      setMsg((after.launchBuySol || 0) > 0 ? `Live on the Solphia curve. CA ${mintPk}. First buy is in this wallet.` : `Live on the Solphia curve. CA ${mintPk}.`);
+      const routed = await waitForPhantomRoute(mintPk);
+      setMsg(routed.ok ? `Live. CA ${mintPk}` : `Live on the curve. CA ${mintPk}`);
+      return;
+    }
+    if (after.kind === "claim") {
+      setMsg(after.partner ? "Protocol fees claimed into this wallet." : "Creator fees claimed into this wallet.");
+      await Promise.all([refreshPad(), refreshTape()]).catch(() => {});
+      setBusy(false);
+      return;
+    }
+    if (after.kind === "swap") {
+      if (after.id) {
+        const conf = await fetch("/api/launch", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            action: "trade_confirm",
+            pubkey: ownerPk,
+            id: after.id,
+            mint: after.mint,
+            side: after.side === "sell" ? "sell" : "buy",
+            sol: after.sol,
+            tokens: after.tokens,
+            sig,
+          }),
+        });
+        const listed = await conf.json();
+        if (!conf.ok) throw new Error(listed.message || launchError(listed.error) || "Trade landed but the tape missed it.");
+        if (listed.coin) {
+          setOpen(listed.coin);
+          setCoins((prev) => [listed.coin, ...prev.filter((c: { id: string }) => c.id !== listed.coin.id)]);
+        }
+      }
+      setMsg(`Filled · ${sig.slice(0, 8)}… Tokens landed in your wallet.`);
+      await Promise.all([refreshPad(), refreshTape()]).catch(() => {});
+      setBusy(false);
+    }
+  }
+
+  finishPhantomRef.current = finishPhantomLaunch;
 
   async function act(body: Record<string, unknown>) {
     if (!owner) {
@@ -864,6 +1065,7 @@ export default function LaunchPage() {
     setBusy(true);
     setMsg("");
     setErr("");
+    let redirected = false;
     try {
       const r = await fetch("/api/launch", {
         method: "POST",
@@ -884,7 +1086,17 @@ export default function LaunchPage() {
       let listed = j;
       if (j.needsSign && j.transaction) {
         setMsg(j.claim ? "Sign the claim in Phantom…" : "Sign the swap in Phantom…");
-        const sig = await signPhantomAndSend(j.transaction);
+        const sig = await signPhantomAndSend(j.transaction, undefined, {
+          kind: j.claim ? "claim" : "swap",
+          owner,
+          mint: j.coin?.mint,
+          id: typeof body.id === "string" ? body.id : undefined,
+          claim: Boolean(j.claim),
+          partner: Boolean(j.partner),
+          side: body.action === "sell" ? "sell" : "buy",
+          sol: body.action === "sell" ? Number(j.solOut) || 0 : Number(body.sol) || 0,
+          tokens: body.action === "sell" ? Number(body.tokens) || 0 : Number(j.tokensOut) || 0,
+        });
         if (j.claim) {
           setMsg(j.partner ? "Protocol fees claimed into this wallet." : "Creator fees claimed into this wallet.");
           await Promise.all([refreshPad(), refreshTape()]);
@@ -933,9 +1145,12 @@ export default function LaunchPage() {
       } else if (body.action === "withdraw_dev" || body.action === "withdraw_partner") setMsg("Fees claimed.");
       else setMsg("Filled. Tokens are in your wallet.");
     } catch (e) {
-      if (body.action !== "create") setErr(e instanceof Error ? e.message : "failed");
+      if (isPhantomRedirect(e)) {
+        redirected = true;
+        setMsg("Approve in Phantom. You'll come back here.");
+      } else if (body.action !== "create") setErr(e instanceof Error ? e.message : "failed");
     } finally {
-      setBusy(false);
+      if (!redirected) setBusy(false);
     }
   }
 
@@ -1343,31 +1558,6 @@ export default function LaunchPage() {
                   <div data-field="wallet" className={createErr.errors.wallet ? "rounded-full ring-1 ring-blood/70" : undefined}>
                     <WalletConnect />
                   </div>
-                  {needPhantom && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        saveLaunchDraft({ name, symbol, blurb, image, website, x, telegram, discord, devBuy });
-                        void postLaunch({
-                          action: "save_draft",
-                          pubkey: owner,
-                          name,
-                          symbol,
-                          blurb,
-                          image,
-                          website,
-                          x,
-                          telegram,
-                          discord,
-                          launchBuySol: devBuy,
-                        }).catch(() => {});
-                        openThisPageInPhantom();
-                      }}
-                      className="btn-acid min-h-[48px] rounded-full px-6"
-                    >
-                      Open Launch in Phantom
-                    </button>
-                  )}
                   <button
                     type="button"
                     disabled={busy}
@@ -2054,13 +2244,17 @@ function MarketSwap({
       });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || "Could not build the swap.");
-      const sig = await signPhantomAndSend(j.transaction);
+      const sig = await signPhantomAndSend(j.transaction, undefined, { kind: "swap", owner, mint, side, sol: amount });
       setMsg(`Filled · ${sig.slice(0, 8)}… Tokens landed in your wallet.`);
       if (owner && mint) {
         const b = await fetch(`/api/sol/token?owner=${encodeURIComponent(owner)}&mint=${encodeURIComponent(mint)}`).then((x) => x.json());
         setHeld(Number(b.amount) || 0);
       }
     } catch (e) {
+      if (isPhantomRedirect(e)) {
+        setMsg("Approve in Phantom. You'll come back here.");
+        return;
+      }
       tradeErr.fail({ amount: e instanceof Error ? e.message : "swap failed" });
     } finally {
       setBusy(false);

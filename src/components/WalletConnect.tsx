@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { PhantomMark } from "./PhantomMark";
 import { loadOwner, persistOwner, OWNER_EVENT } from "@/lib/wallet/owner";
-import { beginPhantomConnect, completePhantomConnect, hasPhantomSigner, inPhantomWebView, openThisPageInPhantom, signerPage, waitForInjected } from "@/lib/wallet/phantomConnect";
+import { beginPhantomConnect, completePhantomConnect, completePhantomUl, hasPhantomSigner, inPhantomWebView, openPhantomUl, PHANTOM_EVENT, readPhantomReturn } from "@/lib/wallet/phantomConnect";
 
 type Provider = {
   isPhantom?: boolean;
@@ -168,6 +168,18 @@ export function WalletKeepalive() {
 
     const fromUl = completePhantomConnect();
     if (fromUl) persistOwner(fromUl);
+    if (readPhantomReturn()) {
+      void completePhantomUl()
+        .then((j) => {
+          if (!j) return;
+          if (j.url) {
+            window.location.assign(j.url);
+            return;
+          }
+          window.dispatchEvent(new CustomEvent(PHANTOM_EVENT, { detail: j }));
+        })
+        .catch(() => undefined);
+    }
     restoreFromCookie();
     wake({ server: true });
 
@@ -253,8 +265,7 @@ export function WalletConnect({ compact: _compact = false }: { compact?: boolean
       const found = phantom() || (await waitForPhantom(inPhantomWebView() || hasPhantomSigner() ? 3000 : 400));
       if (!found) {
         if (inPhantomWebView()) return;
-        if (signerPage()) openThisPageInPhantom();
-        else beginPhantomConnect();
+        await openPhantomUl({ pubkey: loadOwner() });
         return;
       }
       const res = await withTimeout(found.connect(), 20000, "connect");
