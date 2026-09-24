@@ -105,9 +105,34 @@ export function hasPhantomSigner(): boolean {
   return Boolean(w.phantom?.solana?.isPhantom || w.solana?.isPhantom);
 }
 
-/** Open this exact URL inside Phantom so signTransaction is available. */
+export function inPhantomWebView(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return /Phantom/i.test(navigator.userAgent || "");
+}
+
+export function waitForInjected(ms = 2500): Promise<boolean> {
+  if (hasPhantomSigner()) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    const start = Date.now();
+    const tick = () => {
+      if (hasPhantomSigner()) {
+        resolve(true);
+        return;
+      }
+      if (Date.now() - start >= ms) {
+        resolve(false);
+        return;
+      }
+      window.setTimeout(tick, 80);
+    };
+    window.addEventListener("phantom#initialized", () => resolve(true), { once: true });
+    tick();
+  });
+}
+
+/** Open this exact URL inside Phantom so signTransaction is available. Never reload if already in the app. */
 export function openThisPageInPhantom() {
-  if (hasPhantomSigner()) return;
+  if (hasPhantomSigner() || inPhantomWebView()) return;
   const href = window.location.href.split("#")[0];
   const target = encodeURIComponent(href);
   const ref = encodeURIComponent(`${window.location.origin}/`);

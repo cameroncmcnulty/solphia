@@ -35,7 +35,7 @@ import {
 } from "@/lib/launch/validate";
 import { FieldError, FormAlert, SafeField, fieldClass, useConfirmErrors } from "@/components/form/confirm";
 import { loadOwner, phantomProvider, signPhantomAndSend } from "@/lib/wallet/trading";
-import { openThisPageInPhantom } from "@/lib/wallet/phantomConnect";
+import { inPhantomWebView, openThisPageInPhantom, waitForInjected } from "@/lib/wallet/phantomConnect";
 import { asTxB64, b64ToBytes } from "@/lib/solana/wire";
 import { mintPda, newMintNonce, nonceToB64 } from "@/lib/launch/pda";
 import { dbcEnabled } from "@/lib/launch/dbcIds";
@@ -233,6 +233,44 @@ async function postLaunch(body: Record<string, unknown>, ms = 20_000): Promise<{
   }
 }
 
+const LAUNCH_DRAFT = "solphia_launch_draft";
+
+function saveLaunchDraft(d: Record<string, unknown>) {
+  const raw = JSON.stringify(d);
+  try {
+    localStorage.setItem(LAUNCH_DRAFT, raw);
+  } catch {
+    /* quota */
+  }
+  try {
+    sessionStorage.setItem(LAUNCH_DRAFT, raw);
+  } catch {
+    /* ITP */
+  }
+}
+
+function loadLaunchDraft(): Record<string, unknown> | null {
+  try {
+    const raw = localStorage.getItem(LAUNCH_DRAFT) || sessionStorage.getItem(LAUNCH_DRAFT);
+    return raw ? (JSON.parse(raw) as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
+
+function clearLaunchDraft() {
+  try {
+    localStorage.removeItem(LAUNCH_DRAFT);
+  } catch {
+    /* ignore */
+  }
+  try {
+    sessionStorage.removeItem(LAUNCH_DRAFT);
+  } catch {
+    /* ignore */
+  }
+}
+
 function mergeCoins(remote: Coin[], prev: Coin[]): Coin[] {
   const seen = new Set<string>();
   for (const c of remote) {
@@ -318,23 +356,17 @@ export default function LaunchPage() {
   useEffect(() => {
     setPending(loadPending());
     setHidden(loadHidden());
-    try {
-      const raw = sessionStorage.getItem("solphia_launch_draft");
-      if (raw) {
-        const d = JSON.parse(raw) as Record<string, string | number>;
-        if (typeof d.name === "string") setName(d.name);
-        if (typeof d.symbol === "string") setSymbol(d.symbol);
-        if (typeof d.blurb === "string") setBlurb(d.blurb);
-        if (typeof d.image === "string") setImage(d.image);
-        if (typeof d.website === "string") setWebsite(d.website);
-        if (typeof d.x === "string") setX(d.x);
-        if (typeof d.telegram === "string") setTelegram(d.telegram);
-        if (typeof d.discord === "string") setDiscord(d.discord);
-        if (typeof d.devBuy === "number") setDevBuy(d.devBuy);
-        sessionStorage.removeItem("solphia_launch_draft");
-      }
-    } catch {
-      /* ignore */
+    const d = loadLaunchDraft();
+    if (d) {
+      if (typeof d.name === "string") setName(d.name);
+      if (typeof d.symbol === "string") setSymbol(d.symbol);
+      if (typeof d.blurb === "string") setBlurb(d.blurb);
+      if (typeof d.image === "string") setImage(d.image);
+      if (typeof d.website === "string") setWebsite(d.website);
+      if (typeof d.x === "string") setX(d.x);
+      if (typeof d.telegram === "string") setTelegram(d.telegram);
+      if (typeof d.discord === "string") setDiscord(d.discord);
+      if (typeof d.devBuy === "number") setDevBuy(d.devBuy);
     }
     return () => {
       if (cropUrlRef.current) URL.revokeObjectURL(cropUrlRef.current);
@@ -603,18 +635,20 @@ export default function LaunchPage() {
       createErr.fail({ wallet: "Connect your wallet to launch." });
       return;
     }
+    saveLaunchDraft({ name, symbol, blurb, image, website, x, telegram, discord, devBuy });
     if (!phantomProvider()) {
-      try {
-        sessionStorage.setItem(
-          "solphia_launch_draft",
-          JSON.stringify({ name, symbol, blurb, image, website, x, telegram, discord, devBuy }),
-        );
-      } catch {
-        /* ignore */
+      if (inPhantomWebView()) {
+        setMsg("Waiting for Phantom…");
+        const ready = await waitForInjected(3500);
+        if (!ready) {
+          createErr.fail({ wallet: "Phantom isn't ready. Pull to refresh this tab, then Launch again." });
+          return;
+        }
+      } else {
+        setMsg("Opening Phantom… your form is saved.");
+        openThisPageInPhantom();
+        return;
       }
-      setMsg("Opening Phantom to sign the launch…");
-      openThisPageInPhantom();
-      return;
     }
     setBusy(true);
     setMsg("");
@@ -766,6 +800,7 @@ export default function LaunchPage() {
       setTelegram("");
       setDiscord("");
       setDevBuy(0);
+      clearLaunchDraft();
       setBusy(false);
       setMsg(
         devBuy > 0
