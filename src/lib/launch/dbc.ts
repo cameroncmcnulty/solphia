@@ -87,6 +87,26 @@ export function curveNeedsInstall(bookConfig?: string | null): boolean {
   return !liveDbcConfig(bookConfig);
 }
 
+export async function dbcConfigOnchain(config?: string | null): Promise<string> {
+  const pk = liveDbcConfig(config);
+  if (!pk) return "";
+  try {
+    const state = await client().state.getPoolConfig(pk);
+    return state ? pk : "";
+  } catch {
+    return "";
+  }
+}
+
+export async function waitForDbcConfig(config: string, tries = 24): Promise<boolean> {
+  if (!liveDbcConfig(config)) return false;
+  for (let i = 0; i < tries; i++) {
+    if (await dbcConfigOnchain(config)) return true;
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  return false;
+}
+
 export async function buildDbcCreateConfigTx(opts: { owner: string }): Promise<{
   transaction: string;
   config: string;
@@ -158,7 +178,7 @@ export async function buildDbcLaunchTx(opts: {
   const payer = new PublicKey(opts.payer);
   const mint = new PublicKey(opts.mint);
   const buySol = Math.max(0, Number(opts.buySol) || 0);
-  const existing = liveDbcConfig(opts.config);
+  const existing = await dbcConfigOnchain(opts.config);
   const name = opts.name.slice(0, 32);
   const symbol = opts.symbol.slice(0, 10);
   const uri = opts.uri.slice(0, 255);

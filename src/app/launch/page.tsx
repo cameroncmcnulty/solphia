@@ -743,7 +743,7 @@ export default function LaunchPage() {
       if (pj.step === "config" && typeof pj.configSecret === "string") {
         setMsg("Installing the Solphia curve…");
         const cfgKp = Keypair.fromSecretKey(b64ToBytes(pj.configSecret));
-        await signPhantomAndSend(packed, cfgKp, {
+        const cfgSig = await signPhantomAndSend(packed, cfgKp, {
           kind: "launch_config",
           owner,
           mint: mintPk,
@@ -762,7 +762,7 @@ export default function LaunchPage() {
         const cfgRes = await fetch("/api/launch", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ action: "confirm_dbc_config", pubkey: owner, config: pj.config }),
+          body: JSON.stringify({ action: "confirm_dbc_config", pubkey: owner, config: pj.config, sig: cfgSig }),
         });
         if (!cfgRes.ok) throw new Error("Could not save the Solphia curve. Try Launch again.");
         setMsg("Curve is live. Building your token…");
@@ -913,7 +913,7 @@ export default function LaunchPage() {
       const cfgRes = await fetch("/api/launch", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action: "confirm_dbc_config", pubkey: ownerPk, config: after.config }),
+        body: JSON.stringify({ action: "confirm_dbc_config", pubkey: ownerPk, config: after.config, sig }),
       });
       if (!cfgRes.ok) throw new Error("Could not save the Solphia curve. Try Launch again.");
       setMsg("Curve is live. Building your token…");

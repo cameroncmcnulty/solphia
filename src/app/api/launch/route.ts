@@ -166,23 +166,37 @@ async function prepareMint(b: LaunchBody) {
     mint = mintPda(b.pubkey, nonce).toBase58();
     if (b.mint && b.mint !== mint) return fail("bad_mint");
   }
-  const s = s0;
   const book = book0;
   if (book.coins.some((c) => c.symbol === symbol && c.status === "curve")) return fail("ticker_taken");
   if (book.coins.some((c) => c.mint === mint)) return fail("mint_taken");
   try {
     const dbcMod = await dbcApi();
-    if (useDbc && !dbcMod.liveDbcConfig(book.dbcConfig || b.config)) {
-      const cfg = await dbcMod.buildDbcCreateConfigTx({ owner: b.pubkey });
-      return NextResponse.json({
-        ok: true,
-        step: "config",
-        mint,
-        tx: cfg.transaction,
-        txs: [cfg.transaction],
-        config: cfg.config,
-        configSecret: cfg.configSecret,
-      });
+    let liveConfig = "";
+    if (useDbc) {
+      const claimed = dbcMod.liveDbcConfig(book.dbcConfig || b.config);
+      liveConfig = claimed ? await dbcMod.dbcConfigOnchain(claimed) : "";
+      if (!liveConfig && claimed && b.config && claimed === b.config) {
+        await dbcMod.waitForDbcConfig(claimed, 12);
+        liveConfig = await dbcMod.dbcConfigOnchain(claimed);
+      }
+      if (!liveConfig) {
+        if (book.dbcConfig && book.dbcConfig === claimed) {
+          await withLaunch((st) => {
+            const next = bookOf(st);
+            if (next.dbcConfig === claimed) next.dbcConfig = undefined;
+          }, true);
+        }
+        const cfg = await dbcMod.buildDbcCreateConfigTx({ owner: b.pubkey });
+        return NextResponse.json({
+          ok: true,
+          step: "config",
+          mint,
+          tx: cfg.transaction,
+          txs: [cfg.transaction],
+          config: cfg.config,
+          configSecret: cfg.configSecret,
+        });
+      }
     }
     let art: { image: string; uri: string };
     try {
@@ -200,7 +214,7 @@ async function prepareMint(b: LaunchBody) {
           symbol,
           uri: art.uri,
           buySol: Number(b.launchBuySol) || 0,
-          config: book.dbcConfig || b.config,
+          config: liveConfig || book.dbcConfig || b.config,
         })
       : await buildPadLaunchTx({
           payer: b.pubkey,
@@ -490,6 +504,24 @@ async function postLaunch(req: NextRequest) {
   if (b.action === "confirm_dbc_config") {
     const cfg = (b.config || b.mint || "").trim();
     if (!isSolanaAddress(cfg)) return fail("bad_mint");
+    const sig = (b.sig || b.sigs?.[0] || "").trim();
+    if (sig) {
+      const landed = await waitForSignature(sig, 45);
+      if (!landed.ok) {
+        return NextResponse.json(
+          { error: "curve_missing", message: landed.err === "failed" ? "The curve transaction failed on Solana. Tap Launch again." : "Solana has not confirmed the curve yet. Tap Launch again." },
+          { status: 400 },
+        );
+      }
+    }
+    const dbc = await dbcApi();
+    const onchain = await dbc.waitForDbcConfig(cfg, 24);
+    if (!onchain) {
+      return NextResponse.json(
+        { error: "curve_missing", message: "The Solphia curve is not on Solana yet. Tap Launch again." },
+        { status: 400 },
+      );
+    }
     await withLaunch((st) => {
       const book = bookOf(st);
       if (book.ownerWallet && book.ownerWallet !== b.pubkey) return;
