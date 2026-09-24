@@ -288,7 +288,6 @@ export default function LaunchPage() {
   const [pending, setPending] = useState<PendingLaunch[]>([]);
   const [hidden, setHidden] = useState<string[]>([]);
   const [ownerWallet, setOwnerWallet] = useState("");
-  const [needsNewCurve, setNeedsNewCurve] = useState(false);
   const lastMintRef = useRef("");
   const cropUrlRef = useRef<string>("");
   const devPct = buySupplyPct(emptyCurve(), devBuy);
@@ -339,7 +338,6 @@ export default function LaunchPage() {
     const pad = await fetch(`/api/launch?${q}`, { cache: "no-store" }).then((r) => r.json());
     if (pad.solUsd) setSolUsd(pad.solUsd);
     if (typeof pad.ownerWallet === "string") setOwnerWallet(pad.ownerWallet);
-    if (typeof pad.needsNewCurve === "boolean") setNeedsNewCurve(pad.needsNewCurve);
     const padCoins: Coin[] = Array.isArray(pad.coins) ? pad.coins.map((c: Coin) => ({ ...c, born: true })) : [];
     setCoins((prev) => {
       const market = prev.filter((c) => !c.born);
@@ -643,7 +641,12 @@ export default function LaunchPage() {
         throw new Error(message);
       }
       setMsg("Sign once in Phantom… CA " + mintPk);
-      const sig = await signPhantomAndSend(packed, mintKp || undefined);
+      const extras: import("@solana/web3.js").Keypair[] = [];
+      if (mintKp) extras.push(mintKp);
+      if (typeof pj.configSecret === "string" && pj.configSecret) {
+        extras.push(Keypair.fromSecretKey(b64ToBytes(pj.configSecret)));
+      }
+      const sig = await signPhantomAndSend(packed, extras.length ? extras : undefined);
       savePending({ mint: mintPk, name: name.trim(), symbol: symbol.trim().toUpperCase(), image, at: Date.now(), sig });
       setPending(loadPending());
       setMsg("Waiting for the curve on Solana… CA " + mintPk);
@@ -664,6 +667,7 @@ export default function LaunchPage() {
         launchBuySol: devBuy,
         uri: pj.uri,
         referrer: peekRef() || undefined,
+        config: typeof pj.config === "string" ? pj.config : undefined,
       };
       let r = await fetch("/api/launch", {
         method: "POST",
@@ -765,20 +769,6 @@ export default function LaunchPage() {
       if (j.needsSign && j.transaction) {
         setMsg(j.claim ? "Sign the claim in Phantom…" : "Sign the swap in Phantom…");
         const sig = await signPhantomAndSend(j.transaction);
-        if (j.dbcConfig && j.configSecret && j.transaction) {
-          setMsg("Sign the $4.7k curve config in Phantom…");
-          const kp = Keypair.fromSecretKey(b64ToBytes(j.configSecret));
-          await signPhantomAndSend(j.transaction, kp);
-          await fetch("/api/launch", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ action: "confirm_dbc_config", pubkey: owner, config: j.config }),
-          });
-          setNeedsNewCurve(false);
-          setMsg("Curve installed. New launches open near $4.7k, not $475k.");
-          await refreshPad().catch(() => {});
-          return;
-        }
         if (j.claim) {
           setMsg(j.partner ? "Protocol fees claimed into this wallet." : "Creator fees claimed into this wallet.");
           await Promise.all([refreshPad(), refreshTape()]);
@@ -835,12 +825,8 @@ export default function LaunchPage() {
 
   const mine = yourLaunches(coins, owner).filter((c) => !hidden.includes(c.mint || ""));
   const claimable = mine.filter((c) => (c.creatorUnclaimedSol || 0) > 1e-6);
-  const protocolClaimable = mine.filter((c) => (c.partnerUnclaimedSol || 0) > 1e-6);
   const generatedSol = mine.reduce((s, c) => s + (c.creatorFeesSol || c.devRewardsSol || 0), 0);
   const unclaimedSol = mine.reduce((s, c) => s + (c.creatorUnclaimedSol || 0), 0);
-  const protocolGeneratedSol = mine.reduce((s, c) => s + (c.partnerFeesSol || 0), 0);
-  const protocolUnclaimedSol = mine.reduce((s, c) => s + (c.partnerUnclaimedSol || 0), 0);
-  const isProtocol = Boolean(owner && ownerWallet && owner === ownerWallet);
   const pool = isSwap ? coins : mine;
   const board = useMemo(() => {
     if (!isSwap) {
@@ -1001,20 +987,6 @@ export default function LaunchPage() {
           {!isSwap && tab === "tape" && (
           <div className="space-y-5">
           <PadPitch />
-          {needsNewCurve && owner && ownerWallet && owner === ownerWallet && (
-            <div className="rounded-3xl border border-[#ffd24a]/40 bg-[#ffd24a]/10 p-4">
-              <p className="font-mono text-[11px] tracking-[0.2em] text-[#ffd24a]">CURVE</p>
-              <p className="mt-1 text-[15px] text-white">Current pools open at ~4,000 SOL market cap (~$475k). Pump-style is ~40 SOL (~$4.7k). Sign once to install the new curve. Already-live tokens keep the old curve.</p>
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => act({ action: "dbc_config" })}
-                className="btn-acid mt-3 rounded-full px-5 py-2 text-[14px] disabled:opacity-40"
-              >
-                Install $4.7k curve
-              </button>
-            </div>
-          )}
           <section id="solphia-launch" className="overflow-hidden rounded-3xl border border-white/10 bg-black/30 p-5">
             <h2 className="mb-1 text-[22px] font-semibold text-white">Create a coin</h2>
             <p className="mb-4 text-[15px] text-white/45">Name, ticker, art. One Phantom signature. Lives on Meteora so Phantom Swap can buy it.</p>
@@ -1374,24 +1346,16 @@ export default function LaunchPage() {
                 <p className="font-mono text-[11px] tracking-[0.28em] text-acid">DEV REWARDS</p>
                 <h2 className="mt-1 text-[22px] font-semibold tracking-tight text-white">Claim fees</h2>
                 <p className="mt-1 text-[14px] leading-snug text-white/45">
-                  Swaps on Meteora pay 1%. Half is yours (claimable here). Half is the protocol share for treasury/owner.
+                  Swaps on the curve pay 1%. Half is yours. Claim into this wallet.
                 </p>
-                <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <div className="mt-4 grid grid-cols-2 gap-3">
                   <div>
-                    <p className="font-mono text-[10px] text-white/40">YOUR GENERATED</p>
+                    <p className="font-mono text-[10px] text-white/40">GENERATED</p>
                     <p className="stat-num text-[18px] text-acid">{fmtSol(generatedSol, 4)} SOL</p>
                   </div>
                   <div>
-                    <p className="font-mono text-[10px] text-white/40">YOUR UNCLAIMED</p>
+                    <p className="font-mono text-[10px] text-white/40">UNCLAIMED</p>
                     <p className="stat-num text-[18px] text-white">{fmtSol(unclaimedSol, 4)} SOL</p>
-                  </div>
-                  <div>
-                    <p className="font-mono text-[10px] text-white/40">PROTOCOL GENERATED</p>
-                    <p className="stat-num text-[18px] text-white/80">{fmtSol(protocolGeneratedSol, 4)} SOL</p>
-                  </div>
-                  <div>
-                    <p className="font-mono text-[10px] text-white/40">PROTOCOL UNCLAIMED</p>
-                    <p className="stat-num text-[18px] text-white/80">{fmtSol(protocolUnclaimedSol, 4)} SOL</p>
                   </div>
                 </div>
                 <div className="mt-4 flex flex-wrap gap-2">
@@ -1406,19 +1370,6 @@ export default function LaunchPage() {
                   >
                     {claimable.length > 1 ? `Claim ${fmtSol(unclaimedSol, 4)} SOL` : "Claim creator fees"}
                   </button>
-                  {isProtocol && protocolClaimable.length > 0 && (
-                    <button
-                      type="button"
-                      disabled={busy}
-                      onClick={() => {
-                        const first = protocolClaimable[0];
-                        if (first) act({ action: "withdraw_partner", id: first.id, mint: first.mint });
-                      }}
-                      className="rounded-full border border-white/15 px-4 py-2 text-[14px] text-white disabled:opacity-40"
-                    >
-                      Claim protocol fees
-                    </button>
-                  )}
                 </div>
                 {claimable.length > 1 && (
                   <p className="mt-2 text-[12px] text-white/40">Signs one token at a time. After it lands, tap claim again for the next.</p>
@@ -1507,7 +1458,6 @@ export default function LaunchPage() {
                       <p className="text-[13px] text-white/45">
                         Generated {fmtSol(row.coin.creatorFeesSol || row.coin.devRewardsSol || 0, 4)} SOL
                         {(row.coin.creatorUnclaimedSol || 0) > 0 ? ` · ${fmtSol(row.coin.creatorUnclaimedSol || 0, 4)} unclaimed` : ""}
-                        {(row.coin.partnerFeesSol || 0) > 0 ? ` · protocol ${fmtSol(row.coin.partnerFeesSol || 0, 4)}` : ""}
                       </p>
                       <div className="flex items-center gap-2">
                         <button

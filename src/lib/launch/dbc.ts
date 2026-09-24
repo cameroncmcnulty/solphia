@@ -12,7 +12,7 @@ import { Keypair, PublicKey, Transaction } from "@solana/web3.js";
 import { encodeTx } from "../token/mint";
 import { bytesToB64 } from "../solana/wire";
 import { treasuryAddress } from "../treasury";
-import { DBC_CONFIG, dbcEnabled } from "./dbcIds";
+import { liveDbcConfig, dbcEnabled } from "./dbcIds";
 import { MIN_TRADE_SOL } from "./curve";
 
 const WSOL = "So11111111111111111111111111111111111111112";
@@ -81,39 +81,10 @@ export async function solphiaCurveConfig() {
   });
 }
 
-export function liveDbcConfig(bookConfig?: string | null): string {
-  const fromBook = (bookConfig || "").trim();
-  if (/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(fromBook)) return fromBook;
-  return DBC_CONFIG;
-}
+export { liveDbcConfig };
 
 export function curveNeedsInstall(bookConfig?: string | null): boolean {
-  return liveDbcConfig(bookConfig) === DBC_CONFIG;
-}
-
-export async function buildDbcCreateConfigTx(opts: { owner: string }): Promise<{
-  transaction: string;
-  config: string;
-  configSecret: string;
-}> {
-  const payer = new PublicKey(opts.owner);
-  const treasury = new PublicKey(treasuryAddress());
-  const config = Keypair.generate();
-  const params = await solphiaCurveConfig();
-  const raw = await client().partner.createConfig({
-    ...params,
-    config: config.publicKey,
-    feeClaimer: treasury,
-    leftoverReceiver: treasury,
-    quoteMint: new PublicKey(WSOL),
-    payer,
-  });
-  const tx = await readyTx(raw as Transaction, payer);
-  return {
-    transaction: encodeTx(tx),
-    config: config.publicKey.toBase58(),
-    configSecret: bytesToB64(config.secretKey),
-  };
+  return !liveDbcConfig(bookConfig);
 }
 
 async function readyTx(tx: Transaction, payer: PublicKey): Promise<Transaction> {
@@ -150,20 +121,22 @@ export async function buildDbcLaunchTx(opts: {
   uri: string;
   buySol?: number;
   config?: string;
-}): Promise<{ transaction: string; mint: string; tokensOut: number; feeSol: number }> {
+}): Promise<{
+  transaction: string;
+  mint: string;
+  tokensOut: number;
+  feeSol: number;
+  config?: string;
+  configSecret?: string;
+}> {
   if (!dbcEnabled()) throw new Error("DBC config missing.");
   const payer = new PublicKey(opts.payer);
   const mint = new PublicKey(opts.mint);
   const buySol = Math.max(0, Number(opts.buySol) || 0);
-  const createPoolParam = {
-    name: opts.name.slice(0, 32),
-    symbol: opts.symbol.slice(0, 10),
-    uri: opts.uri.slice(0, 255),
-    payer,
-    poolCreator: payer,
-    config: new PublicKey(liveDbcConfig(opts.config)),
-    baseMint: mint,
-  };
+  const existing = liveDbcConfig(opts.config);
+  const name = opts.name.slice(0, 32);
+  const symbol = opts.symbol.slice(0, 10);
+  const uri = opts.uri.slice(0, 255);
   const firstBuy =
     buySol >= MIN_TRADE_SOL
       ? {
@@ -173,11 +146,51 @@ export async function buildDbcLaunchTx(opts: {
           referralTokenAccount: null,
         }
       : undefined;
-  const raw = firstBuy
-    ? await client().creator.createPoolWithFirstBuy({ createPoolParam, firstBuyParam: firstBuy })
-    : await client().creator.createPool(createPoolParam);
+
+  if (existing) {
+    const createPoolParam = {
+      name,
+      symbol,
+      uri,
+      payer,
+      poolCreator: payer,
+      config: new PublicKey(existing),
+      baseMint: mint,
+    };
+    const raw = firstBuy
+      ? await client().creator.createPoolWithFirstBuy({ createPoolParam, firstBuyParam: firstBuy })
+      : await client().creator.createPool(createPoolParam);
+    const tx = await readyTx(raw as Transaction, payer);
+    return { transaction: encodeTx(tx), mint: mint.toBase58(), tokensOut: 0, feeSol: buySol * 0.01, config: existing };
+  }
+
+  const configKp = Keypair.generate();
+  const treasury = new PublicKey(treasuryAddress());
+  const curve = await solphiaCurveConfig();
+  const raw = await client().partner.createConfigAndPool({
+    ...curve,
+    config: configKp.publicKey,
+    feeClaimer: treasury,
+    leftoverReceiver: treasury,
+    quoteMint: new PublicKey(WSOL),
+    payer,
+    preCreatePoolParam: {
+      name,
+      symbol,
+      uri,
+      poolCreator: payer,
+      baseMint: mint,
+    },
+  });
   const tx = await readyTx(raw as Transaction, payer);
-  return { transaction: encodeTx(tx), mint: mint.toBase58(), tokensOut: 0, feeSol: buySol * 0.01 };
+  return {
+    transaction: encodeTx(tx),
+    mint: mint.toBase58(),
+    tokensOut: 0,
+    feeSol: buySol * 0.01,
+    config: configKp.publicKey.toBase58(),
+    configSecret: bytesToB64(configKp.secretKey),
+  };
 }
 
 export type DbcFees = {

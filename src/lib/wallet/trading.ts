@@ -140,17 +140,23 @@ function toBytes(ser: Uint8Array | number[]): Uint8Array {
   return ser instanceof Uint8Array ? ser : Uint8Array.from(ser);
 }
 
-function attachExtraAndSerialize(signed: unknown, extra?: Keypair): Uint8Array {
+function extraKeys(extra?: Keypair | Keypair[]): Keypair[] {
+  if (!extra) return [];
+  return Array.isArray(extra) ? extra.filter(Boolean) : [extra];
+}
+
+function attachExtraAndSerialize(signed: unknown, extra?: Keypair | Keypair[]): Uint8Array {
   if (!signed || typeof signed !== "object") {
     throw new Error("Phantom did not return a transaction.");
   }
+  const extras = extraKeys(extra);
   const s = signed as Transaction & VersionedTransaction;
   if (typeof s.partialSign === "function" && Array.isArray((s as Transaction).instructions)) {
-    if (extra) s.partialSign(extra);
+    if (extras.length) s.partialSign(...extras);
     return toBytes((s as Transaction).serialize());
   }
-  if (extra && typeof s.sign === "function") {
-    s.sign([extra]);
+  if (extras.length && typeof s.sign === "function") {
+    s.sign(extras);
   }
   if (typeof s.serialize !== "function") {
     throw new Error("Phantom returned an unusable transaction.");
@@ -158,7 +164,7 @@ function attachExtraAndSerialize(signed: unknown, extra?: Keypair): Uint8Array {
   return toBytes(s.serialize());
 }
 
-export async function signPhantomAndSend(transactionB64: string, extra?: Keypair): Promise<string> {
+export async function signPhantomAndSend(transactionB64: string, extra?: Keypair | Keypair[]): Promise<string> {
   const provider = phantomProvider();
   if (!provider) {
     const { openThisPageInPhantom } = await import("./phantomConnect");

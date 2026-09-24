@@ -32,7 +32,7 @@ import {
   quotePadTrade,
 } from "@/lib/launch/program";
 import { mintPda, nonceFromB64 } from "@/lib/launch/pda";
-import { dbcEnabled } from "@/lib/launch/dbcIds";
+import { dbcEnabled, LEGACY_DBC_CONFIG } from "@/lib/launch/dbcIds";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -203,6 +203,8 @@ async function prepareMint(b: LaunchBody) {
       uri: art.uri,
       image: art.image,
       tokensOut: built.tokensOut,
+      config: "config" in built ? built.config : undefined,
+      configSecret: "configSecret" in built ? built.configSecret : undefined,
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Could not build the launch.";
@@ -232,6 +234,10 @@ async function confirmMint(b: LaunchBody, solUsd: number) {
   const out = await withLaunch((s) => {
     const book = bookOf(s);
     bookSnap = book;
+    const cfg = (b.config || "").trim();
+    if (cfg && isSolanaAddress(cfg) && cfg !== LEGACY_DBC_CONFIG) {
+      book.dbcConfig = cfg;
+    }
     const made = createCoin(book, {
       creator: b.pubkey,
       name,
@@ -449,22 +455,6 @@ async function postLaunch(req: NextRequest) {
       });
     }
     if (!coin) return fail("not_found", 404);
-  }
-
-  if (b.action === "dbc_config") {
-    const snap = await withLaunch((st) => st, false);
-    const book = bookOf(snap);
-    if (book.ownerWallet && book.ownerWallet !== b.pubkey) return fail("not_owner");
-    if (!dbcEnabled()) return fail("chain_failed");
-    const built = await (await dbcApi()).buildDbcCreateConfigTx({ owner: b.pubkey });
-    return NextResponse.json({
-      ok: true,
-      needsSign: true,
-      dbcConfig: true,
-      transaction: built.transaction,
-      config: built.config,
-      configSecret: built.configSecret,
-    });
   }
 
   if (b.action === "confirm_dbc_config") {
