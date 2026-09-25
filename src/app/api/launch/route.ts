@@ -61,6 +61,7 @@ const Body = z.object({
     "dbc_config",
     "confirm_dbc_config",
     "save_draft",
+    "recover",
   ]),
   pubkey: z.string(),
   id: z.string().optional(),
@@ -106,7 +107,7 @@ function dataMime(dataUrl?: string): string | undefined {
   return mime.startsWith("image/") ? mime : undefined;
 }
 
-async function resolveArt(opts: { image?: string; name: string; symbol: string; blurb: string; website?: string; mint: string }) {
+async function resolveArt(opts: { image?: string; name: string; symbol: string; blurb: string; website?: string; x?: string; telegram?: string; mint: string }) {
   let image = storedImage(opts.image);
   const mime = dataMime(opts.image);
   if (opts.image?.startsWith("data:")) {
@@ -119,9 +120,11 @@ async function resolveArt(opts: { image?: string; name: string; symbol: string; 
   const json = tokenMetadataJson({
     name: opts.name,
     symbol: opts.symbol,
-    description: opts.blurb || opts.name,
+    description: opts.blurb || `${opts.name} launched on Solphia`,
     image,
     website: opts.website,
+    x: opts.x,
+    telegram: opts.telegram,
     mime,
   });
   const meta = await pinJson(json, `${opts.symbol}-meta`);
@@ -188,7 +191,7 @@ async function prepareMint(b: LaunchBody) {
     }
     let art: { image: string; uri: string };
     try {
-      art = await resolveArt({ image, name, symbol, blurb, website, mint });
+      art = await resolveArt({ image, name, symbol, blurb, website, x: b.x, telegram: b.telegram, mint });
     } catch (e) {
       const msg = e instanceof Error ? e.message : "";
       if (msg === "pin_failed") return fail("pin_failed");
@@ -521,6 +524,34 @@ async function postLaunch(req: NextRequest) {
       book.dbcConfig = cfg;
     }, true);
     return NextResponse.json({ ok: true, dbcConfig: cfg });
+  }
+
+  if (b.action === "recover") {
+    const mint = (b.mint || "").trim();
+    if (!isSolanaAddress(mint)) return fail("bad_mint");
+    const dbc = await dbcApi();
+    const pool = dbcEnabled() ? await dbc.dbcPoolByMint(mint) : null;
+    const info = await connection().getAccountInfo(new PublicKey(mint));
+    if (!pool && !info) return fail("not_found", 404);
+    const image = storedImage(b.image) || "https://solphia.io/og.jpg";
+    const out = await withLaunch((st) => {
+      const book = bookOf(st);
+      return createCoin(book, {
+        creator: b.pubkey,
+        name: (b.name || "Token").slice(0, 24),
+        symbol: (b.symbol || "TKN").slice(0, 10),
+        blurb: b.blurb,
+        image,
+        website: b.website,
+        x: b.x,
+        telegram: b.telegram,
+        discord: b.discord,
+        mint,
+        venue: "solphia",
+      });
+    }, true);
+    if (!out.ok) return fail(out.error);
+    return NextResponse.json({ ok: true, coin: publicCoin(out.coin, solUsd, b.pubkey) });
   }
 
   if (b.action === "save_draft") {

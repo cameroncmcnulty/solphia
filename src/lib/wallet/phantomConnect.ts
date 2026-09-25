@@ -65,6 +65,32 @@ export function phantomAppUrl(httpsUl: string): string {
   return httpsUl.replace(/^https:\/\/phantom\.app\/ul\//i, "phantom://");
 }
 
+const WAIT_KEY = "solphia_ph_waiting";
+
+export function markPhantomWaiting() {
+  try {
+    sessionStorage.setItem(WAIT_KEY, String(Date.now()));
+  } catch {
+    /* ignore */
+  }
+}
+
+export function clearPhantomWaiting() {
+  try {
+    sessionStorage.removeItem(WAIT_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+export function phantomWaitingAt(): number {
+  try {
+    return Number(sessionStorage.getItem(WAIT_KEY) || 0) || 0;
+  } catch {
+    return 0;
+  }
+}
+
 export function openPhantomLink(httpsUl: string, appUl?: string) {
   const app = appUl || phantomAppUrl(httpsUl);
   const ua = typeof navigator !== "undefined" ? navigator.userAgent : "";
@@ -214,6 +240,7 @@ export async function openPhantomUl(opts?: {
   if (j.job && isPhJob(j.job)) saveLocalJob(j.job);
   if (j.session && isPhSession(j.session)) saveLocalSession(j.session);
   if (!r.ok || !j.url) throw new Error(typeof j.error === "string" ? j.error : "Could not open Phantom.");
+  markPhantomWaiting();
   openPhantomLink(j.url, j.app);
   throw new Error(PHANTOM_REDIRECT);
 }
@@ -267,6 +294,7 @@ export async function completePhantomUl(): Promise<{
       return { error: typeof j.error === "string" ? j.error : "Phantom came back empty." };
     }
     window.history.replaceState({}, "", cleanPhantomUrl());
+    clearPhantomWaiting();
     return j;
   } catch (e) {
     completing = null;

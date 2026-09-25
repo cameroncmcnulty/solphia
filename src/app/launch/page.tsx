@@ -35,7 +35,7 @@ import {
 } from "@/lib/launch/validate";
 import { FieldError, FormAlert, SafeField, fieldClass, useConfirmErrors } from "@/components/form/confirm";
 import { loadOwner, phantomProvider, signPhantomAndSend } from "@/lib/wallet/trading";
-import { inPhantomWebView, isPhantomRedirect, PHANTOM_EVENT, waitForInjected } from "@/lib/wallet/phantomConnect";
+import { clearPhantomWaiting, inPhantomWebView, isPhantomRedirect, PHANTOM_EVENT, phantomWaitingAt, readPhantomReturn, waitForInjected } from "@/lib/wallet/phantomConnect";
 import type { PhAfter } from "@/lib/wallet/phantomBox";
 import { asTxB64, b64ToBytes, bytesToB64 } from "@/lib/solana/wire";
 import { mintPda, newMintNonce, nonceToB64 } from "@/lib/launch/pda";
@@ -403,7 +403,28 @@ export default function LaunchPage() {
       });
     };
     window.addEventListener(PHANTOM_EVENT, onPh);
-    return () => window.removeEventListener(PHANTOM_EVENT, onPh);
+    const unstick = () => {
+      if (readPhantomReturn()) return;
+      if (!phantomWaitingAt()) return;
+      window.setTimeout(() => {
+        if (readPhantomReturn()) return;
+        if (!phantomWaitingAt()) return;
+        clearPhantomWaiting();
+        setBusy(false);
+        setMsg("");
+        setErr("Phantom closed without a signature. Tap Launch again.");
+      }, 1800);
+    };
+    const onVis = () => {
+      if (document.visibilityState === "visible") unstick();
+    };
+    window.addEventListener("pageshow", unstick);
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      window.removeEventListener(PHANTOM_EVENT, onPh);
+      window.removeEventListener("pageshow", unstick);
+      document.removeEventListener("visibilitychange", onVis);
+    };
   }, []);
 
   useEffect(() => {
@@ -582,6 +603,33 @@ export default function LaunchPage() {
       clearInterval(padT);
       clearInterval(tapeT);
       clearInterval(boostT);
+    };
+  }, [owner]);
+
+  useEffect(() => {
+    if (!owner) return;
+    const rows = loadPending();
+    if (!rows.length) return;
+    let stop = false;
+    void (async () => {
+      for (const p of rows) {
+        if (stop) return;
+        const r = await postLaunch({
+          action: "recover",
+          pubkey: owner,
+          mint: p.mint,
+          name: p.name,
+          symbol: p.symbol,
+          image: p.image,
+        });
+        if (r.ok) clearPending(p.mint);
+      }
+      if (stop) return;
+      setPending(loadPending());
+      await refreshPad().catch(() => {});
+    })();
+    return () => {
+      stop = true;
     };
   }, [owner]);
 
@@ -1783,8 +1831,9 @@ export default function LaunchPage() {
                   {!isSwap && owner && row.coin.creator === owner ? (
                     <div className="mb-2 flex flex-wrap items-center justify-between gap-2 px-1 pb-2">
                       <p className="text-[13px] text-white/45">
-                        Generated {fmtSol(row.coin.creatorFeesSol || row.coin.devRewardsSol || 0, 4)} SOL
-                        {(row.coin.creatorUnclaimedSol || 0) > 0 ? ` · ${fmtSol(row.coin.creatorUnclaimedSol || 0, 4)} unclaimed` : ""}
+                        {fmtSol(row.coin.creatorFeesSol || row.coin.devRewardsSol || 0, 4)} SOL generated
+                        {" · "}
+                        {fmtSol(row.coin.creatorUnclaimedSol || 0, 4)} SOL unclaimed
                       </p>
                       <div className="flex items-center gap-2">
                         <button

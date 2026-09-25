@@ -164,7 +164,8 @@ export function WalletKeepalive() {
 
     const fromUl = completePhantomConnect();
     if (fromUl) persistOwner(fromUl);
-    if (readPhantomReturn()) {
+    const ingestReturn = () => {
+      if (!readPhantomReturn()) return;
       void completePhantomUl()
         .then((j) => {
           if (!j) return;
@@ -175,7 +176,8 @@ export function WalletKeepalive() {
           window.dispatchEvent(new CustomEvent(PHANTOM_EVENT, { detail: j }));
         })
         .catch(() => undefined);
-    }
+    };
+    ingestReturn();
     restoreFromCookie();
     wake({ server: true });
 
@@ -199,7 +201,10 @@ export function WalletKeepalive() {
       }
     }, 400);
 
-    const onShow = () => wake({ server: true });
+    const onShow = () => {
+      wake({ server: true });
+      ingestReturn();
+    };
     document.addEventListener("visibilitychange", onShow);
     window.addEventListener("focus", onShow);
     window.addEventListener("pageshow", onShow);

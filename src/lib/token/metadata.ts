@@ -103,23 +103,30 @@ export function tokenMetadataJson(opts: {
   description: string;
   image: string;
   website?: string;
+  x?: string;
+  telegram?: string;
   mime?: string;
 }): Record<string, unknown> {
   const ext = imageExt(opts.image, opts.mime);
   const image = withImageExt(opts.image, opts.mime);
   const type = imageMime(ext);
+  const site = opts.website || "https://solphia.io";
   return {
     name: opts.name,
     symbol: opts.symbol,
-    description: opts.description || opts.name,
+    description: opts.description || `${opts.name} on Solphia`,
     image,
-    external_url: opts.website || "https://solphia.io",
+    external_url: site,
+    website: site,
+    twitter: opts.x || undefined,
+    telegram: opts.telegram || undefined,
+    createdOn: "https://solphia.io",
     seller_fee_basis_points: 0,
     token_standard: "Fungible",
     attributes: [],
     properties: {
       files: image ? [{ uri: image, type, cdn: true }] : [],
-      category: "fungible",
+      category: "image",
     },
   };
 }
