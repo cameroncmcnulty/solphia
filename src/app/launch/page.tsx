@@ -321,6 +321,8 @@ export default function LaunchPage() {
   const [symbol, setSymbol] = useState("");
   const [blurb, setBlurb] = useState("");
   const [image, setImage] = useState("");
+  const [pinnedUrl, setPinnedUrl] = useState("");
+  const tookDraft = useRef(false);
   const [cropSrc, setCropSrc] = useState<CropSource | null>(null);
   const [cropOpen, setCropOpen] = useState(false);
   const [website, setWebsite] = useState("");
@@ -368,6 +370,7 @@ export default function LaunchPage() {
     setHidden(loadHidden());
     const d = loadLaunchDraft();
     if (d) {
+      tookDraft.current = true;
       if (typeof d.name === "string") setName(d.name);
       if (typeof d.symbol === "string") setSymbol(d.symbol);
       if (typeof d.blurb === "string") setBlurb(d.blurb);
@@ -428,6 +431,16 @@ export default function LaunchPage() {
   }, []);
 
   useEffect(() => {
+    if (tab !== "tape") return;
+    if (!busy && !msg && !err && !createErr.banner) return;
+    const id = err ? "launch-status" : "launch-form-status";
+    const t = window.setTimeout(() => {
+      document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 60);
+    return () => window.clearTimeout(t);
+  }, [busy, msg, err, createErr.banner, tab]);
+
+  useEffect(() => {
     if (!open || !snapAt) return;
     const id = `desk-${open.id}`;
     let n = 0;
@@ -448,9 +461,10 @@ export default function LaunchPage() {
     if (pad.solUsd) setSolUsd(pad.solUsd);
     if (typeof pad.ownerWallet === "string") setOwnerWallet(pad.ownerWallet);
     const d = pad.draft as Record<string, unknown> | null | undefined;
-    if (d && typeof d === "object") {
-      if (typeof d.name === "string" && d.name) setName(d.name);
-      if (typeof d.symbol === "string" && d.symbol) setSymbol(d.symbol);
+    if (!tookDraft.current && d && typeof d === "object" && typeof d.name === "string" && d.name) {
+      tookDraft.current = true;
+      setName(d.name);
+      if (typeof d.symbol === "string") setSymbol(d.symbol);
       if (typeof d.blurb === "string") setBlurb(d.blurb);
       if (typeof d.image === "string" && d.image) setImage(d.image);
       if (typeof d.website === "string") setWebsite(d.website);
@@ -728,14 +742,15 @@ export default function LaunchPage() {
       createErr.fail({ wallet: "Connect your wallet to launch." });
       return;
     }
-    saveLaunchDraft({ name, symbol, blurb, image, website, x, telegram, discord, devBuy });
+    const art = pinnedUrl || image;
+    saveLaunchDraft({ name, symbol, blurb, image: art, website, x, telegram, discord, devBuy });
     void postLaunch({
       action: "save_draft",
       pubkey: owner,
       name,
       symbol,
       blurb,
-      image,
+      image: art,
       website,
       x,
       telegram,
@@ -756,9 +771,9 @@ export default function LaunchPage() {
       const nonce = useDbc ? null : newMintNonce();
       const mintPk = mintKp ? mintKp.publicKey.toBase58() : mintPda(owner, nonce!).toBase58();
       lastMintRef.current = mintPk;
-      savePending({ mint: mintPk, name: name.trim(), symbol: symbol.trim().toUpperCase(), image, at: Date.now() });
+      savePending({ mint: mintPk, name: name.trim(), symbol: symbol.trim().toUpperCase(), image: art, at: Date.now() });
       setPending(loadPending());
-      setMsg(image.startsWith("data:") ? "Saving art, then building the launch…" : "Building the launch…");
+      setMsg(art.startsWith("data:") ? "Saving art, then building the launch…" : "Building the launch…");
       const prep = await postLaunch({
         action: "prepare",
         pubkey: owner,
@@ -767,7 +782,7 @@ export default function LaunchPage() {
         name,
         symbol,
         blurb,
-        image,
+        image: art,
         website,
         x,
         telegram,
@@ -788,7 +803,7 @@ export default function LaunchPage() {
         else createErr.fail({}, message);
         throw new Error(message);
       }
-      if (typeof pj.image === "string" && pj.image.startsWith("https://")) setImage(pj.image);
+      if (typeof pj.image === "string" && pj.image.startsWith("https://")) setPinnedUrl(pj.image);
       setMsg("Sign in Phantom… CA " + mintPk);
       const extras: import("@solana/web3.js").Keypair[] = [];
       if (mintKp) extras.push(mintKp);
@@ -801,7 +816,7 @@ export default function LaunchPage() {
         config: typeof pj.config === "string" ? pj.config : undefined,
         tokensOut: Number(pj.tokensOut) || 0,
         uri: typeof pj.uri === "string" ? pj.uri : undefined,
-        image: typeof pj.image === "string" ? pj.image : image,
+        image: typeof pj.image === "string" ? pj.image : art,
         name: name.trim(),
         symbol: symbol.trim(),
         blurb,
@@ -823,7 +838,7 @@ export default function LaunchPage() {
         name,
         symbol,
         blurb,
-        image: pj.image || image,
+        image: pj.image || art,
         website,
         x,
         telegram,
@@ -861,6 +876,7 @@ export default function LaunchPage() {
         setCoins((prev) => [listed, ...prev.filter((c) => c.id !== listed.id && c.mint !== listed.mint)]);
       }
       setTab("mine");
+      tookDraft.current = true;
       clearPending(mintPk);
       setPending(loadPending());
       await Promise.all([refreshPad(), refreshTape()]).catch(() => {});
@@ -869,6 +885,7 @@ export default function LaunchPage() {
       setSymbol("");
       setBlurb("");
       setImage("");
+      setPinnedUrl("");
       if (cropUrlRef.current) URL.revokeObjectURL(cropUrlRef.current);
       cropUrlRef.current = "";
       setCropSrc(null);
@@ -879,7 +896,24 @@ export default function LaunchPage() {
       setDiscord("");
       setDevBuy(0);
       clearLaunchDraft();
+      void postLaunch({
+        action: "save_draft",
+        pubkey: owner,
+        name: "",
+        symbol: "",
+        blurb: "",
+        image: "",
+        website: "",
+        x: "",
+        telegram: "",
+        discord: "",
+        launchBuySol: 0,
+      }).catch(() => {});
       setBusy(false);
+      setSnapAt(Date.now());
+      window.setTimeout(() => {
+        document.getElementById("your-tokens")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 80);
       setMsg(
         devBuy > 0
           ? `Live on the Solphia curve. CA ${mintPk}. First buy is in this wallet.`
@@ -1026,6 +1060,7 @@ export default function LaunchPage() {
         setCoins((prev) => [listed, ...prev.filter((c) => c.id !== listed.id && c.mint !== listed.mint)]);
       }
       setTab("mine");
+      tookDraft.current = true;
       clearPending(mintPk);
       setPending(loadPending());
       await Promise.all([refreshPad(), refreshTape()]).catch(() => {});
@@ -1033,6 +1068,7 @@ export default function LaunchPage() {
       setName("");
       setSymbol("");
       setBlurb("");
+      setPinnedUrl("");
       setImage("");
       if (cropUrlRef.current) URL.revokeObjectURL(cropUrlRef.current);
       cropUrlRef.current = "";
@@ -1044,7 +1080,26 @@ export default function LaunchPage() {
       setDiscord("");
       setDevBuy(0);
       clearLaunchDraft();
+      if (ownerPk) {
+        void postLaunch({
+          action: "save_draft",
+          pubkey: ownerPk,
+          name: "",
+          symbol: "",
+          blurb: "",
+          image: "",
+          website: "",
+          x: "",
+          telegram: "",
+          discord: "",
+          launchBuySol: 0,
+        }).catch(() => {});
+      }
       setBusy(false);
+      setSnapAt(Date.now());
+      window.setTimeout(() => {
+        document.getElementById("your-tokens")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 80);
       setMsg((after.launchBuySol || 0) > 0 ? `Live on the Solphia curve. CA ${mintPk}. First buy is in this wallet.` : `Live on the Solphia curve. CA ${mintPk}.`);
       const routed = await waitForPhantomRoute(mintPk);
       setMsg(routed.ok ? `Live. CA ${mintPk}` : `Live on the curve. CA ${mintPk}`);
@@ -1337,6 +1392,7 @@ export default function LaunchPage() {
             </button>
             <button
               type="button"
+              id="your-tokens"
               onClick={() => setTab("mine")}
               className={`pb-2 ${tab === "mine" ? "border-b-2 border-white font-medium text-white" : "text-white/40"}`}
             >
@@ -1390,6 +1446,7 @@ export default function LaunchPage() {
                           type="button"
                           onClick={() => {
                             setImage("");
+                            setPinnedUrl("");
                             if (cropUrlRef.current) URL.revokeObjectURL(cropUrlRef.current);
                             cropUrlRef.current = "";
                             setCropSrc(null);
@@ -1410,6 +1467,7 @@ export default function LaunchPage() {
                     onCancel={() => setCropOpen(false)}
                     onDone={(dataUrl) => {
                       setImage(dataUrl);
+                      setPinnedUrl("");
                       setCropOpen(false);
                       createErr.clear("image");
                       void fetch("/api/launch/art", {
@@ -1420,7 +1478,7 @@ export default function LaunchPage() {
                         .then((r) => r.json())
                         .then((j) => {
                           if (typeof j.url === "string" && j.url.startsWith("https://")) {
-                            setImage(j.url);
+                            setPinnedUrl(j.url);
                             saveLaunchDraft({ name, symbol, blurb, image: j.url, website, x, telegram, discord, devBuy });
                           }
                         })
@@ -1613,8 +1671,9 @@ export default function LaunchPage() {
                 </div>
                 <p className="mt-2 text-xs text-mute">One Phantom prompt. 1% total. Half of that fee hits the creator on-chain.</p>
                 <FieldError error={createErr.errors.wallet} />
-                <div className="mt-3">
+                <div id="launch-form-status" className="mt-3">
                   <FormAlert error={createErr.banner} />
+                  {msg && tab === "tape" ? <p className="mt-2 font-mono text-sm text-acid">{msg}</p> : null}
                 </div>
                 </div>
               </>
@@ -1876,7 +1935,7 @@ export default function LaunchPage() {
         </div>
 
         {err && (
-          <div className="relative z-10 mt-4 rounded-2xl border border-blood/50 bg-blood/10 px-4 py-3 text-sm text-blood">
+          <div id="launch-status" className="relative z-10 mt-4 rounded-2xl border border-blood/50 bg-blood/10 px-4 py-3 text-sm text-blood">
             <p className="font-mono">{err}</p>
             {pending[0]?.mint ? (
               <div className="mt-2 flex flex-wrap items-center gap-2 text-ghost">

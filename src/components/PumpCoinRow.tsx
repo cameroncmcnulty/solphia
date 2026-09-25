@@ -4,12 +4,12 @@ import { TokenArt } from "@/components/TokenArt";
 
 function fmtMc(usd?: number, sol?: number) {
   const n = usd || 0;
-  if (n >= 1_000_000_000) return `$${(n / 1_000_000_000).toFixed(1)}B`;
-  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `$${(n / 1_000).toFixed(1)}K`;
-  if (n > 0) return `$${n < 10 ? n.toFixed(2) : n.toFixed(0)}`;
-  if (sol && sol > 0) return `${sol >= 10 ? sol.toFixed(1) : sol.toFixed(2)} SOL`;
-  return "$0";
+  if (n >= 1_000_000_000) return `$${(n / 1_000_000_000).toFixed(1)}B MC`;
+  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M MC`;
+  if (n >= 1_000) return `$${(n / 1_000).toFixed(1)}K MC`;
+  if (n > 0) return `$${n < 10 ? n.toFixed(2) : n.toFixed(0)} MC`;
+  if (sol && sol > 0) return `${sol >= 10 ? sol.toFixed(1) : sol.toFixed(2)} SOL MC`;
+  return "$0 MC";
 }
 
 function fmtPct(n?: number) {

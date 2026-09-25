@@ -16,13 +16,21 @@ function ipfsCid(src: string): string | null {
   return null;
 }
 
+function cidGateways(cid: string): string[] {
+  return [
+    `https://gateway.pinata.cloud/ipfs/${cid}`,
+    `https://ipfs.io/ipfs/${cid}`,
+    `https://cloudflare-ipfs.com/ipfs/${cid}`,
+  ];
+}
+
 export function rewriteImageUrl(src?: string): string {
   if (!src) return "";
   const s = src.trim();
   if (!s) return "";
   if (s.startsWith("data:") || s.startsWith("blob:") || s.startsWith("/")) return s;
   const cid = ipfsCid(s);
-  if (cid) return `https://pump.mypinata.cloud/ipfs/${cid}`;
+  if (cid) return cidGateways(cid)[0]!;
   return s;
 }
 
@@ -45,15 +53,18 @@ export function TokenArt({
   className?: string;
   eager?: boolean;
 }) {
-  const direct = rewriteImageUrl(src);
+  const cid = src ? ipfsCid(src) : null;
+  const [gw, setGw] = useState(0);
+  const direct = cid ? cidGateways(cid)[Math.min(gw, 2)]! : rewriteImageUrl(src);
   const dex = mint ? `https://dd.dexscreener.com/ds-data/tokens/solana/${mint}.png` : "";
   const [mode, setMode] = useState<"direct" | "proxy" | "dex" | "off">(direct ? "direct" : dex ? "dex" : "off");
   const [shown, setShown] = useState(false);
 
   useEffect(() => {
-    setMode(direct ? "direct" : dex ? "dex" : "off");
+    setGw(0);
+    setMode(src ? "direct" : dex ? "dex" : "off");
     setShown(false);
-  }, [direct, dex]);
+  }, [src, dex]);
 
   const letter = (label || "").replace(/^\$+/, "").trim().slice(0, 1).toUpperCase() || "•";
   const href = mode === "direct" ? direct : mode === "proxy" && direct ? proxyUrl(direct) : mode === "dex" ? dex : "";
@@ -73,6 +84,10 @@ export function TokenArt({
           decoding="async"
           onLoad={() => setShown(true)}
           onError={() => {
+            if (cid && gw < 2) {
+              setGw((n) => n + 1);
+              return;
+            }
             if (mode === "direct" && direct.startsWith("https:")) setMode("proxy");
             else if (mode !== "dex" && dex) setMode("dex");
             else setMode("off");
