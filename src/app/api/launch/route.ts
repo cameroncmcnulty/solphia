@@ -33,7 +33,7 @@ import {
 } from "@/lib/launch/program";
 import { mintPda, nonceFromB64 } from "@/lib/launch/pda";
 import { dbcEnabled, LEGACY_DBC_CONFIG } from "@/lib/launch/dbcIds";
-import { connection, waitForSignature } from "@/lib/solana/connection";
+import { connection, rpcBusyMessage, waitForSignature } from "@/lib/solana/connection";
 import { PublicKey } from "@solana/web3.js";
 
 export const dynamic = "force-dynamic";
@@ -228,8 +228,13 @@ async function prepareMint(b: LaunchBody) {
       configSecret: "configSecret" in built ? built.configSecret : undefined,
     });
   } catch (e) {
+    const busy = rpcBusyMessage(e);
+    if (busy) return NextResponse.json({ error: "rate_limited", message: busy }, { status: 429 });
     const message = e instanceof Error ? e.message : "Could not build the launch.";
-    return NextResponse.json({ error: "chain_failed", message }, { status: 400 });
+    const clean = /failed to get info about account/i.test(message)
+      ? "Solana is busy right now. Wait a few seconds and tap Launch again."
+      : message;
+    return NextResponse.json({ error: "chain_failed", message: clean }, { status: 400 });
   }
 }
 

@@ -1,12 +1,87 @@
-import { Connection, PublicKey, LAMPORTS_PER_SOL } from "@solana/web3.js";
+import { Connection, PublicKey, LAMPORTS_PER_SOL, type AccountInfo, type Commitment, type GetAccountInfoConfig } from "@solana/web3.js";
 import { rpcUrl, HELIUS_API_KEY, SUBSCRIPTION_SOL } from "../config";
+
+const WSOL = "So11111111111111111111111111111111111111112";
+const STABLE = new Set([
+  WSOL,
+  "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+  "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+  "11111111111111111111111111111111",
+  "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s",
+  "dbcij3LWUppWqq96dh6gJWwBifmcGfLSB5D4DuSMaqN",
+  "ComputeBudget111111111111111111111111111111",
+  "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL",
+]);
+
+const accountCache = new Map<string, { at: number; info: AccountInfo<Buffer> | null }>();
+
+function isRateLimit(e: unknown) {
+  const m = e instanceof Error ? e.message : String(e);
+  return /429|Too Many Requests|rate.?limit|busy/i.test(m);
+}
+
+async function rpcFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  let wait = 700;
+  let last: Response | null = null;
+  for (let i = 0; i < 8; i++) {
+    const res = await fetch(input, init);
+    last = res;
+    if (res.status !== 429) return res;
+    if (i === 7) return res;
+    const retryAfter = Number(res.headers.get("retry-after"));
+    const delay = Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : wait;
+    await new Promise((r) => setTimeout(r, delay));
+    wait = Math.min(10_000, wait * 2);
+  }
+  return last!;
+}
+
+class SolphiaConnection extends Connection {
+  async getAccountInfo(
+    publicKey: PublicKey,
+    commitmentOrConfig?: Commitment | GetAccountInfoConfig,
+  ): Promise<AccountInfo<Buffer> | null> {
+    const key = publicKey.toBase58();
+    const ttl = STABLE.has(key) ? 15 * 60_000 : 0;
+    const hit = accountCache.get(key);
+    if (ttl && hit && Date.now() - hit.at < ttl) return hit.info;
+    let last: unknown;
+    for (let i = 0; i < 6; i++) {
+      try {
+        const info = await super.getAccountInfo(publicKey, commitmentOrConfig);
+        if (ttl) accountCache.set(key, { at: Date.now(), info });
+        return info;
+      } catch (e) {
+        last = e;
+        if (!isRateLimit(e) || i === 5) throw e;
+        await new Promise((r) => setTimeout(r, 700 * 2 ** i));
+      }
+    }
+    throw last instanceof Error ? last : new Error("rpc");
+  }
+}
 
 let conn: Connection | null = null;
 
 export function connection(): Connection {
   const url = rpcUrl();
-  if (!conn || conn.rpcEndpoint !== url) conn = new Connection(url, { commitment: "confirmed" });
+  if (!conn || conn.rpcEndpoint !== url) {
+    conn = new SolphiaConnection(url, {
+      commitment: "confirmed",
+      fetch: rpcFetch as typeof fetch,
+      disableRetryOnRateLimit: true,
+    });
+    void conn.getAccountInfo(new PublicKey(WSOL)).catch(() => undefined);
+  }
   return conn;
+}
+
+export function rpcBusyMessage(e: unknown): string | null {
+  const m = e instanceof Error ? e.message : String(e);
+  if (/429|Too Many Requests|rate.?limit/i.test(m)) {
+    return "Solana is busy right now. Wait a few seconds and tap Launch again.";
+  }
+  return null;
 }
 
 export function heliusEnabled(): boolean {

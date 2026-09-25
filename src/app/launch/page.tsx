@@ -851,9 +851,8 @@ export default function LaunchPage() {
       const timed = e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError");
       const raw = e instanceof Error ? e.message : "launch failed";
       if (!createErr.banner) {
-        const ca = lastMintRef.current;
-        const extra = ca ? ` CA ${ca}` : "";
-        setErr((timed ? "Launch timed out building the curve. Try again." : raw) + extra);
+        const busy = /429|Too Many Requests|Solana is busy/i.test(raw);
+        setErr(timed ? "Launch timed out building the curve. Try again." : busy ? "Solana is busy right now. Wait a few seconds and tap Launch again." : raw);
       }
       setBusy(false);
     }
