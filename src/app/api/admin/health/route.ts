@@ -9,6 +9,7 @@ import { signerConfigured } from "@/lib/live/crypto";
 import { pinataConfigured } from "@/lib/pinata";
 import { durableKind } from "@/lib/persist";
 import { HELIUS_API_KEY, XAI_API_KEY } from "@/lib/config";
+import { jupFeeAccounts, jupFeeStatus } from "@/lib/jup/swapV2";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -55,7 +56,9 @@ export async function GET(req: NextRequest) {
       pinata: pinataConfigured(),
       signer: signerConfigured(),
       smtp: Boolean(process.env.SMTP_HOST),
+      jupiter: jupFeeStatus().hasApiKey,
     },
+    jup: { ...jupFeeStatus(), ...(await jupFeeAccounts().catch(() => ({ sol: false, usdc: false, collecting: false }))) },
     speeds: probed.speeds,
     pinata: probed.pinata,
     storeBytes: probed.storeBytes,

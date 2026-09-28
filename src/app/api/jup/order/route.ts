@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { clientIp, isSolanaAddress, rateLimit } from "@/lib/security";
-import { jupFeeStatus, jupOrder } from "@/lib/jup/swapV2";
+import { jupFeeAccounts, jupFeeStatus, jupOrder } from "@/lib/jup/swapV2";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const maxDuration = 20;
 
 export async function GET() {
-  return NextResponse.json(jupFeeStatus());
+  const accounts = await jupFeeAccounts().catch(() => ({ sol: false, usdc: false, collecting: false }));
+  return NextResponse.json({ ...jupFeeStatus(), ...accounts });
 }
 
 export async function POST(req: NextRequest) {

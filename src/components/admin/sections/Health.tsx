@@ -37,7 +37,16 @@ type Pack = {
   log24h: Sample[];
   log7d: Sample[];
   cronTicks24h?: number;
-  keys: { helius: boolean; xai: boolean; pinata: boolean; signer: boolean; smtp?: boolean };
+  keys: { helius: boolean; xai: boolean; pinata: boolean; signer: boolean; smtp?: boolean; jupiter?: boolean };
+  jup?: {
+    hasApiKey?: boolean;
+    referralAccount?: string | null;
+    referralFeeBps?: number;
+    sol?: boolean;
+    usdc?: boolean;
+    collecting?: boolean;
+    note?: string;
+  };
 };
 
 function fmtBytes(n: number) {
@@ -347,7 +356,18 @@ export function HealthSection() {
             <span className={pack?.keys.signer ? "text-acid" : "text-mute"}>Signer {pack?.keys.signer ? "on" : "off"}</span>
             <span className={pack?.keys.xai ? "text-acid" : "text-mute"}>xAI {pack?.keys.xai ? "on" : "off"}</span>
             <span className={pack?.keys.smtp ? "text-acid" : "text-mute"}>SMTP {pack?.keys.smtp ? "on" : "off"}</span>
+            <span className={pack?.keys.jupiter ? "text-acid" : "text-mute"}>Jupiter key {pack?.keys.jupiter ? "on" : "off"}</span>
+            <span className={pack?.jup?.collecting ? "text-acid" : "text-blood"}>
+              Swap 1% {pack?.jup?.collecting ? "on" : "off"}
+            </span>
           </div>
+          {pack?.jup && (
+            <p className="mt-3 text-[12px] text-mute">
+              {pack.jup.collecting
+                ? `SOL ${pack.jup.sol ? "ready" : "missing"} · USDC ${pack.jup.usdc ? "ready" : "missing"}${pack.keys.jupiter ? "" : " · add JUPITER_API_KEY on Vercel for rate limits"}`
+                : "Create SOL and USDC referral token accounts at referral.jup.ag or the 1% silently drops."}
+            </p>
+          )}
         </div>
       </div>
 

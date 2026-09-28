@@ -138,7 +138,7 @@ export function SwapWidget({
           setErr("");
           setQuote(fromAtoms(String(j.outAmount), outputMint));
           const bps = Number(j.feeBps) || 0;
-          const collecting = Boolean(j.referralAccount);
+          const collecting = bps >= 50 && Boolean(j.referralAccount);
           setFeeNote(collecting ? `Fee ${bps} bps · Solphia 1% integrator` : `Fee ${bps} bps · referral not collecting`);
         })
         .catch(() => setQuote(""));
