@@ -71,6 +71,27 @@ const SOL_MINT = "So11111111111111111111111111111111111111112";
 const USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 const JUP_REF = (process.env.NEXT_PUBLIC_JUPITER_REFERRAL_ACCOUNT || "").trim();
 
+function loadJupiterScript(): Promise<void> {
+  const w = window as unknown as { Jupiter?: { init: (p: object) => void } };
+  if (w.Jupiter?.init) return Promise.resolve();
+  const existing = document.querySelector('script[src="https://plugin.jup.ag/plugin-v1.js"]');
+  if (existing) {
+    return new Promise((resolve, reject) => {
+      existing.addEventListener("load", () => resolve(), { once: true });
+      existing.addEventListener("error", () => reject(new Error("jupiter script")), { once: true });
+      window.setTimeout(() => (w.Jupiter?.init ? resolve() : reject(new Error("jupiter timeout"))), 8000);
+    });
+  }
+  return new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = "https://plugin.jup.ag/plugin-v1.js";
+    s.async = true;
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error("jupiter script"));
+    document.head.appendChild(s);
+  });
+}
+
 export function SwapWidget({
   title = "Swap",
   defaultMint = "",
@@ -79,55 +100,48 @@ export function SwapWidget({
   title?: string;
   defaultMint?: string;
 }) {
-  const [target] = useState(() => "jup-swap-" + Math.random().toString(36).slice(2, 10));
+  const target = "jupiter-plugin";
+  const [err, setErr] = useState("");
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
     let gone = false;
-    const boot = () => {
-      const jup = (window as unknown as { Jupiter?: { init: (p: object) => void; close?: () => void } }).Jupiter;
-      if (!jup?.init) return false;
+    setErr("");
+    setReady(false);
+    void (async () => {
       try {
-        jup.close?.();
+        await loadJupiterScript();
+        if (gone) return;
+        const jup = (window as unknown as { Jupiter?: { init: (p: object) => void } }).Jupiter;
+        if (!jup?.init) throw new Error("Jupiter plugin missing");
+        const formProps: Record<string, string | number> = {
+          initialInputMint: SOL_MINT,
+          initialOutputMint: defaultMint && defaultMint.length > 30 ? defaultMint : USDC_MINT,
+          referralFee: 100,
+        };
+        if (JUP_REF) formProps.referralAccount = JUP_REF;
+        jup.init({
+          displayMode: "integrated",
+          integratedTargetId: target,
+          defaultExplorer: "Solscan",
+          formProps,
+          branding: { logoUri: "https://solphia.io/icon-192.png", name: "Solphia" },
+        });
+        if (!gone) setReady(true);
       } catch {
-        /* first load */
+        if (!gone) setErr("Jupiter did not load. Refresh, or swap on jup.ag.");
       }
-      const formProps: Record<string, string | number> = {
-        initialInputMint: SOL_MINT,
-        initialOutputMint: defaultMint && defaultMint.length > 30 ? defaultMint : USDC_MINT,
-        referralFee: 100,
-      };
-      if (JUP_REF) formProps.referralAccount = JUP_REF;
-      jup.init({
-        displayMode: "integrated",
-        integratedTargetId: target,
-        defaultExplorer: "Solscan",
-        formProps,
-        branding: { logoUri: "https://solphia.io/og.jpg", name: "Solphia" },
-      });
-      setReady(true);
-      return true;
-    };
-    if (boot()) return () => { gone = true; };
-    const t = window.setInterval(() => {
-      if (gone) return;
-      if (boot()) window.clearInterval(t);
-    }, 350);
+    })();
     return () => {
       gone = true;
-      window.clearInterval(t);
-      try {
-        (window as unknown as { Jupiter?: { close?: () => void } }).Jupiter?.close?.();
-      } catch {
-        /* unmount */
-      }
     };
-  }, [defaultMint, target]);
+  }, [defaultMint]);
 
   return (
     <SwapShell title={title} subtitle="Jupiter Ultra. 1% protocol fee into the Solphia treasury.">
-      <div id={target} className="min-h-[480px] w-full overflow-hidden rounded-2xl" />
-      {!ready ? <p className="mt-3 text-center text-[13px] text-white/40">Loading Jupiter…</p> : null}
+      <div id={target} className="min-h-[520px] w-full overflow-visible rounded-2xl bg-black/40" />
+      {!ready && !err ? <p className="mt-3 text-center text-[13px] text-white/40">Loading Jupiter…</p> : null}
+      {err ? <p className="mt-3 text-center text-[13px] text-blood">{err}</p> : null}
     </SwapShell>
   );
 }

@@ -484,6 +484,7 @@ export default function LaunchPage() {
       if (typeof d.discord === "string") setDiscord(d.discord);
       if (typeof d.devBuy === "number") setDevBuy(d.devBuy);
     }
+    if (isSwap) return;
     const padCoins: Coin[] = Array.isArray(pad.coins) ? pad.coins.map((c: Coin) => ({ ...c, born: true })) : [];
     setCoins((prev) => {
       const market = prev.filter((c) => !c.born);
@@ -492,9 +493,12 @@ export default function LaunchPage() {
         if (!old) return c;
         return {
           ...c,
+          name: /solphia\.io\/og/i.test(c.image || "") && old.name ? old.name : c.name,
+          image: /solphia\.io\/og/i.test(c.image || "") && old.image ? old.image : c.image,
           creatorFeesSol: Math.max(Number(c.creatorFeesSol) || 0, Number(old.creatorFeesSol) || 0, Number(old.devRewardsSol) || 0),
           creatorUnclaimedSol: typeof c.creatorUnclaimedSol === "number" ? c.creatorUnclaimedSol : old.creatorUnclaimedSol,
           devRewardsSol: Math.max(Number(c.devRewardsSol) || 0, Number(old.devRewardsSol) || 0),
+          marketCapUsd: Math.max(Number(c.marketCapUsd) || 0, Number(old.marketCapUsd) || 0),
         };
       });
       const next = [...padded, ...market];
@@ -1917,7 +1921,7 @@ export default function LaunchPage() {
                     symbol={row.coin.symbol}
                     image={row.coin.image}
                     mint={row.coin.mint}
-                    marketCapUsd={row.coin.marketCapUsd}
+                    marketCapUsd={row.coin.marketCapUsd || (solUsd > 0 ? (row.coin.marketCapSol || 0) * solUsd : 0)}
                     marketCapSol={row.coin.marketCapSol}
                     change={row.coin.change24h ?? row.coin.change1h}
                     active={open?.id === row.coin.id}

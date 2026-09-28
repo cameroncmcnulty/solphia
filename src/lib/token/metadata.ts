@@ -8,6 +8,30 @@ import {
 /** Metaplex Token Metadata program. */
 export const TOKEN_METADATA_PROGRAM_ID = new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s");
 
+export function parseMetaplexData(data: Uint8Array): { name: string; symbol: string; uri: string } | null {
+  if (data.length < 70) return null;
+  try {
+    const buf = Buffer.from(data);
+    let o = 1 + 32 + 32;
+    const str = () => {
+      if (o + 4 > buf.length) return "";
+      const len = buf.readUInt32LE(o);
+      o += 4;
+      if (len > 256 || o + len > buf.length) return "";
+      const s = buf.slice(o, o + len).toString("utf8").replace(/\0/g, "").trim();
+      o += len;
+      return s;
+    };
+    const name = str();
+    const symbol = str();
+    const uri = str();
+    if (!name && !symbol) return null;
+    return { name, symbol, uri };
+  } catch {
+    return null;
+  }
+}
+
 export function metadataPda(mint: PublicKey): PublicKey {
   return PublicKey.findProgramAddressSync(
     [Buffer.from("metadata"), TOKEN_METADATA_PROGRAM_ID.toBuffer(), mint.toBuffer()],

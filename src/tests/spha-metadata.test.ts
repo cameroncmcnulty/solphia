@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { PublicKey } from "@solana/web3.js";
-import { metadataPda, TOKEN_METADATA_PROGRAM_ID, tokenMetadataJson } from "../lib/token/metadata";
+import { metadataPda, parseMetaplexData, TOKEN_METADATA_PROGRAM_ID, tokenMetadataJson } from "../lib/token/metadata";
 
 describe("spha metadata", () => {
   it("derives a stable metaplex PDA", () => {
@@ -46,5 +46,26 @@ describe("spha metadata", () => {
     });
     assert.equal(jpg.image, "https://gateway.pinata.cloud/ipfs/QmHashNoExt?ext=jpg");
     assert.equal((jpg.properties as { files: { type: string }[] }).files[0].type, "image/jpeg");
+  });
+
+  it("parses Metaplex name/symbol/uri from account bytes", () => {
+    const str = (s: string) => {
+      const b = Buffer.from(s, "utf8");
+      const n = Buffer.alloc(4);
+      n.writeUInt32LE(b.length, 0);
+      return Buffer.concat([n, b]);
+    };
+    const raw = Buffer.concat([
+      Buffer.from([0]),
+      Buffer.alloc(32),
+      Buffer.alloc(32),
+      str("Princess"),
+      str("PRINCESS"),
+      str("https://ipfs.io/ipfs/QmMeta/json"),
+    ]);
+    const got = parseMetaplexData(raw);
+    assert.equal(got?.name, "Princess");
+    assert.equal(got?.symbol, "PRINCESS");
+    assert.equal(got?.uri.startsWith("https://ipfs.io"), true);
   });
 });

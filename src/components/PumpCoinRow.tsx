@@ -2,14 +2,13 @@
 
 import { TokenArt } from "@/components/TokenArt";
 
-function fmtMc(usd?: number, sol?: number) {
+function fmtMc(usd?: number) {
   const n = usd || 0;
-  if (n >= 1_000_000_000) return `$${(n / 1_000_000_000).toFixed(1)}B MC`;
-  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M MC`;
-  if (n >= 1_000) return `$${(n / 1_000).toFixed(1)}K MC`;
-  if (n > 0) return `$${n < 10 ? n.toFixed(2) : n.toFixed(0)} MC`;
-  if (sol && sol > 0) return `${sol >= 10 ? sol.toFixed(1) : sol.toFixed(2)} SOL MC`;
-  return "$0 MC";
+  if (n >= 1_000_000_000) return `$${(n / 1_000_000_000).toFixed(1)}B`;
+  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `$${(n / 1_000).toFixed(1)}K`;
+  if (n > 0) return `$${n < 10 ? n.toFixed(2) : n.toFixed(0)}`;
+  return "—";
 }
 
 function fmtPct(n?: number) {
@@ -65,7 +64,7 @@ export function PumpCoinRow({
         <p className="mt-0.5 truncate text-[15px] text-white/45">{ticker}</p>
       </div>
       <div className="shrink-0 text-right">
-        <p className="text-[17px] font-semibold tabular-nums tracking-tight text-white">{fmtMc(marketCapUsd, marketCapSol)}</p>
+        <p className="text-[17px] font-semibold tabular-nums tracking-tight text-white">{fmtMc(marketCapUsd)}</p>
         <span
           className={`mt-1 inline-flex rounded-md px-1.5 py-0.5 text-[12px] font-semibold tabular-nums ${
             up ? "bg-[#14f195]/15 text-[#14f195]" : "bg-[#ff4d6a]/15 text-[#ff4d6a]"

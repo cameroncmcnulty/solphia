@@ -22,6 +22,7 @@ import { treasuryAddress } from "@/lib/treasury";
 import { DEFAULT_OWNER } from "@/lib/protocolWallets";
 import { liveBoosts, publicLiveBoost, tickBoosts } from "@/lib/launch/boost";
 import { storedImage, validateLaunchCreate } from "@/lib/launch/validate";
+import { isPlaceholderMeta, readSplMeta } from "@/lib/token/onchainMeta";
 import { ipfsMetadataUrl, pinDataUrl, pinJson } from "@/lib/pinata";
 import { creditRank } from "@/lib/rank/engine";
 import { tokenMetadataJson } from "@/lib/token/metadata";
@@ -353,19 +354,34 @@ async function getLaunch(req: NextRequest) {
   if (dbcEnabled() && viewer && isSolanaAddress(viewer)) {
     try {
       const chain = await dbc.chainCoinsForCreator(viewer);
-      if (chain.length) {
+      for (const p of chain) {
+        if (!p.mint) continue;
+        const bookNow = await withLaunch((st) => bookOf(st), false);
+        const existing = bookNow.coins.find((c) => c.mint === p.mint);
+        const needsMeta = !existing || isPlaceholderMeta(existing.name, existing.image || "", p.mint);
+        const meta = needsMeta ? await readSplMeta(p.mint) : null;
         await withLaunch((st) => {
           const b = bookOf(st);
-          for (const p of chain) {
-            if (!p.mint) continue;
-            createCoin(b, {
-              creator: p.creator || viewer,
-              name: (p.mint.slice(0, 8) || "Token").toUpperCase(),
-              symbol: (p.mint.slice(0, 6) || "TKN").toUpperCase(),
-              image: "https://solphia.io/og.jpg",
-              mint: p.mint,
-              venue: "solphia",
-            });
+          const row = b.coins.find((c) => c.mint === p.mint);
+          if (row) {
+            if (meta?.name && isPlaceholderMeta(row.name, row.image || "", p.mint)) {
+              row.name = meta.name;
+              if (meta.symbol) row.symbol = meta.symbol;
+              if (meta.image) row.image = meta.image;
+            }
+            if (p.quoteSol > 0) row.curve = { ...row.curve, realSol: Math.max(row.curve.realSol || 0, p.quoteSol) };
+            return;
+          }
+          const made = createCoin(b, {
+            creator: p.creator || viewer,
+            name: (meta?.name && meta.name.length >= 2 ? meta.name : "Token"),
+            symbol: (meta?.symbol && meta.symbol.length >= 2 ? meta.symbol : "TOKEN"),
+            image: meta?.image || "",
+            mint: p.mint,
+            venue: "solphia",
+          });
+          if (made.ok && p.quoteSol > 0) {
+            made.coin.curve = { ...made.coin.curve, virtualSol: 40, virtualTokens: 1_000_000_000, realSol: p.quoteSol };
           }
         }, true);
       }
