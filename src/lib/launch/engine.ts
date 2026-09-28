@@ -568,8 +568,8 @@ export function createCoin(
     if (existing.creator !== opts.creator) return { ok: false, error: "mint_taken" };
     return { ok: true, coin: existing };
   }
-  if (book.coins.some((c) => c.symbol === symbol && c.status === "curve")) {
-    return { ok: false, error: "ticker_taken" };
+  if (book.coins.some((c) => c.symbol === symbol && c.status === "curve" && c.mint !== mint)) {
+    if (!(opts.mint && isSolanaAddress(opts.mint))) return { ok: false, error: "ticker_taken" };
   }
   if (opts.referrer) bindReferrer(book, opts.creator, opts.referrer);
   const creatorAcc = ensureAccount(book, opts.creator);

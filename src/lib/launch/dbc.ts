@@ -281,6 +281,80 @@ export async function dbcFeesForMints(mints: string[]): Promise<Record<string, D
   return out;
 }
 
+export type ChainPadCoin = {
+  mint: string;
+  pool: string;
+  creator: string;
+  creatorFeesSol: number;
+  creatorUnclaimedSol: number;
+  partnerFeesSol: number;
+  partnerUnclaimedSol: number;
+  quoteSol: number;
+};
+
+function mintOfPool(row: { publicKey: PublicKey; account: any }): string {
+  const inner = row.account?.poolState || row.account || {};
+  return String(inner.baseMint || inner.base_mint || "");
+}
+
+export async function chainCoinsForCreator(creator: string): Promise<ChainPadCoin[]> {
+  if (!dbcEnabled() || !creator) return [];
+  const dbc = client();
+  let pools: { publicKey: PublicKey; account: any }[] = [];
+  try {
+    pools = await dbc.state.getPoolsByCreator(creator);
+  } catch {
+    return [];
+  }
+  const out: ChainPadCoin[] = [];
+  for (const row of pools) {
+    const mint = mintOfPool(row);
+    if (!mint) continue;
+    const fees = await dbcFeeBreakdown(mint);
+    const inner = row.account?.poolState || row.account || {};
+    out.push({
+      mint,
+      pool: row.publicKey.toBase58(),
+      creator: String(inner.creator || creator),
+      creatorFeesSol: fees?.creatorFeesSol || 0,
+      creatorUnclaimedSol: fees?.creatorUnclaimedSol || 0,
+      partnerFeesSol: fees?.partnerFeesSol || 0,
+      partnerUnclaimedSol: fees?.partnerUnclaimedSol || 0,
+      quoteSol: lamportsToSol(inner.quoteReserve),
+    });
+  }
+  return out;
+}
+
+export async function chainPartnerTotals(config: string): Promise<{
+  unclaimedSol: number;
+  totalSol: number;
+  byMint: Record<string, DbcFees>;
+}> {
+  const empty = { unclaimedSol: 0, totalSol: 0, byMint: {} as Record<string, DbcFees> };
+  if (!dbcEnabled() || !config) return empty;
+  const dbc = client();
+  let pools: { publicKey: PublicKey; account: any }[] = [];
+  try {
+    pools = await dbc.state.getPoolsByConfig(config);
+  } catch {
+    return empty;
+  }
+  let unclaimedSol = 0;
+  let totalSol = 0;
+  const byMint: Record<string, DbcFees> = {};
+  for (const row of pools) {
+    const mint = mintOfPool(row);
+    if (!mint) continue;
+    const fees = await dbcFeeBreakdown(mint);
+    if (!fees) continue;
+    byMint[mint] = fees;
+    unclaimedSol += fees.partnerUnclaimedSol;
+    totalSol += fees.partnerFeesSol;
+  }
+  return { unclaimedSol, totalSol, byMint };
+}
+
 export async function buildDbcClaimCreatorTx(opts: {
   mint: string;
   owner: string;

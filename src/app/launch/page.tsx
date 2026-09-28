@@ -360,6 +360,8 @@ export default function LaunchPage() {
   const [pending, setPending] = useState<PendingLaunch[]>([]);
   const [hidden, setHidden] = useState<string[]>([]);
   const [ownerWallet, setOwnerWallet] = useState("");
+  const [treasuryWallet, setTreasuryWallet] = useState("");
+  const [protocol, setProtocol] = useState<{ partnerUnclaimedSol: number; partnerFeesSol: number } | null>(null);
   const lastMintRef = useRef("");
   const finishPhantomRef = useRef<(sig: string, after: PhAfter) => Promise<void>>(async () => {});
   const cropUrlRef = useRef<string>("");
@@ -460,6 +462,15 @@ export default function LaunchPage() {
     const pad = await fetch(`/api/launch?${q}`, { cache: "no-store" }).then((r) => r.json());
     if (pad.solUsd) setSolUsd(pad.solUsd);
     if (typeof pad.ownerWallet === "string") setOwnerWallet(pad.ownerWallet);
+    if (typeof pad.treasuryWallet === "string") setTreasuryWallet(pad.treasuryWallet);
+    if (pad.protocol && typeof pad.protocol === "object") {
+      setProtocol({
+        partnerUnclaimedSol: Number(pad.protocol.partnerUnclaimedSol) || 0,
+        partnerFeesSol: Number(pad.protocol.partnerFeesSol) || 0,
+      });
+    } else {
+      setProtocol(null);
+    }
     const d = pad.draft as Record<string, unknown> | null | undefined;
     if (!tookDraft.current && d && typeof d === "object" && typeof d.name === "string" && d.name) {
       tookDraft.current = true;
@@ -1240,7 +1251,10 @@ export default function LaunchPage() {
     }
   }
 
-  const mine = yourLaunches(coins, owner).filter((c) => !hidden.includes(c.mint || ""));
+  const mine = (owner && treasuryWallet && owner === treasuryWallet
+    ? coins.filter((c) => c.born)
+    : yourLaunches(coins, owner)
+  ).filter((c) => !hidden.includes(c.mint || ""));
   const claimable = mine.filter((c) => (c.creatorUnclaimedSol || 0) > 1e-6);
   const generatedSol = mine.reduce((s, c) => s + (c.creatorFeesSol || c.devRewardsSol || 0), 0);
   const unclaimedSol = mine.reduce((s, c) => s + (c.creatorUnclaimedSol || 0), 0);
@@ -1775,6 +1789,36 @@ export default function LaunchPage() {
               </div>
             </div>
             )}
+            {!isSwap && owner && treasuryWallet && owner === treasuryWallet && protocol && (
+              <div className="mb-4 rounded-3xl border border-white/10 bg-black/30 p-4">
+                <p className="font-mono text-[11px] tracking-[0.28em] text-acid">TREASURY · 50% OF CURVE FEES</p>
+                <h2 className="mt-1 text-[22px] font-semibold tracking-tight text-white">Protocol cut</h2>
+                <p className="mt-1 text-[14px] leading-snug text-white/45">
+                  On-chain partner fees from every Solphia curve swap. Claim with this treasury wallet.
+                </p>
+                <div className="mt-4 grid grid-cols-2 gap-3">
+                  <div>
+                    <p className="font-mono text-[10px] text-white/40">GENERATED</p>
+                    <p className="stat-num text-[18px] text-acid">{fmtSol(protocol.partnerFeesSol, 4)} SOL</p>
+                  </div>
+                  <div>
+                    <p className="font-mono text-[10px] text-white/40">UNCLAIMED</p>
+                    <p className="stat-num text-[18px] text-white">{fmtSol(protocol.partnerUnclaimedSol, 4)} SOL</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  disabled={busy || !coins.some((c) => (c.partnerUnclaimedSol || 0) > 1e-6)}
+                  onClick={() => {
+                    const first = coins.find((c) => (c.partnerUnclaimedSol || 0) > 1e-6);
+                    if (first) act({ action: "withdraw_partner", id: first.id, mint: first.mint });
+                  }}
+                  className="mt-4 rounded-full bg-[#14f195] px-4 py-2 text-[14px] font-semibold text-[#04000a] disabled:opacity-40"
+                >
+                  Claim protocol fees
+                </button>
+              </div>
+            )}
             {!isSwap && (
               <div className="mb-4 rounded-3xl border border-white/10 bg-black/30 p-4">
                 <p className="font-mono text-[11px] tracking-[0.28em] text-acid">DEV REWARDS</p>
@@ -1890,15 +1934,26 @@ export default function LaunchPage() {
                   {!isSwap && owner && row.coin.creator === owner ? (
                     <div className="mb-2 flex flex-wrap items-center justify-between gap-2 px-1 pb-2">
                       <p className="text-[13px] text-white/45">
-                        {fmtSol(row.coin.creatorFeesSol || row.coin.devRewardsSol || 0, 4)} SOL generated
-                        {" · "}
-                        {fmtSol(row.coin.creatorUnclaimedSol || 0, 4)} SOL unclaimed
+                        {owner === treasuryWallet
+                          ? `${fmtSol(row.coin.partnerFeesSol || 0, 4)} SOL protocol generated · ${fmtSol(row.coin.partnerUnclaimedSol || 0, 4)} SOL unclaimed`
+                          : `${fmtSol(row.coin.creatorFeesSol || row.coin.devRewardsSol || 0, 4)} SOL generated · ${fmtSol(row.coin.creatorUnclaimedSol || 0, 4)} SOL unclaimed`}
                       </p>
                       <div className="flex items-center gap-2">
                         <button
                           type="button"
-                          disabled={busy || !((row.coin.creatorUnclaimedSol || 0) > 1e-6 || row.coin.devRewardsSol > 0)}
-                          onClick={() => act({ action: "withdraw_dev", id: row.coin.id, mint: row.coin.mint })}
+                          disabled={
+                            busy ||
+                            (owner === treasuryWallet
+                              ? !((row.coin.partnerUnclaimedSol || 0) > 1e-6)
+                              : !((row.coin.creatorUnclaimedSol || 0) > 1e-6 || row.coin.devRewardsSol > 0))
+                          }
+                          onClick={() =>
+                            act({
+                              action: owner === treasuryWallet ? "withdraw_partner" : "withdraw_dev",
+                              id: row.coin.id,
+                              mint: row.coin.mint,
+                            })
+                          }
                           className="rounded-full bg-[#14f195]/15 px-3 py-1.5 text-[13px] font-medium text-[#14f195] disabled:opacity-40"
                         >
                           Claim

@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import Script from "next/script";
 import { Syne, IBM_Plex_Mono, Cormorant_Garamond } from "next/font/google";
 import "./globals.css";
 import { Shell } from "@/components/Shell";
@@ -61,6 +62,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <head>
         <script dangerouslySetInnerHTML={{ __html: OWNER_HYDRATE_SCRIPT }} />
+        <Script src="https://plugin.jup.ag/plugin-v1.js" strategy="beforeInteractive" data-preload defer />
       </head>
       <body className={`${syne.variable} ${plex.variable} ${cormorant.variable} font-sans antialiased`}>
         <Shell>{children}</Shell>
