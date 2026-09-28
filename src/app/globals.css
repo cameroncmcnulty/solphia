@@ -6,6 +6,12 @@
   --void: #04000a;
   --sol: #14f195;
   --violet: #9945ff;
+  --jupiter-plugin-primary: 20, 241, 149;
+  --jupiter-plugin-background: 4, 0, 10;
+  --jupiter-plugin-primaryText: 255, 255, 255;
+  --jupiter-plugin-warning: 251, 191, 36;
+  --jupiter-plugin-interactive: 24, 18, 36;
+  --jupiter-plugin-module: 10, 6, 18;
 }
 
 .pump-shell {

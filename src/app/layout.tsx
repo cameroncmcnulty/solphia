@@ -1,8 +1,10 @@
 import type { Metadata, Viewport } from "next";
+import Script from "next/script";
 import { Syne, IBM_Plex_Mono, Cormorant_Garamond } from "next/font/google";
 import "./globals.css";
 import { Shell } from "@/components/Shell";
 import { OWNER_HYDRATE_SCRIPT } from "@/lib/wallet/owner";
+import { JUP_PLUGIN_SRC } from "@/lib/jup/plugin";
 
 const syne = Syne({ subsets: ["latin"], variable: "--font-syne" });
 const plex = IBM_Plex_Mono({ subsets: ["latin"], weight: ["400", "500", "600", "700"], variable: "--font-plex" });
@@ -61,6 +63,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <head>
         <script dangerouslySetInnerHTML={{ __html: OWNER_HYDRATE_SCRIPT }} />
+        <Script src={JUP_PLUGIN_SRC} strategy="beforeInteractive" data-preload />
       </head>
       <body className={`${syne.variable} ${plex.variable} ${cormorant.variable} font-sans antialiased`}>
         <Shell>{children}</Shell>
