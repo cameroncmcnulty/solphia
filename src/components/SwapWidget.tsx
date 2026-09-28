@@ -103,7 +103,7 @@ function bootPlugin(targetId: string, outputMint: string) {
     displayMode: "integrated",
     integratedTargetId: targetId,
     defaultExplorer: "Solscan",
-    containerStyles: { width: "100%", height: "600px", borderRadius: "16px", overflow: "hidden" },
+    containerStyles: { width: "100%", height: "548px" },
     formProps: {
       initialInputMint: JUP_PLUGIN_SOL,
       initialOutputMint: outputMint,
@@ -116,14 +116,13 @@ function bootPlugin(targetId: string, outputMint: string) {
 }
 
 export function SwapWidget({
-  title = "Swap",
   defaultMint = "",
 }: {
   owner?: string | null;
   title?: string;
   defaultMint?: string;
 }) {
-  const target = useRef(`jup-plugin-${Math.random().toString(36).slice(2, 10)}`).current;
+  const target = useRef("jupiter-plugin").current;
   const [ready, setReady] = useState(false);
   const [err, setErr] = useState("");
   const outMint = defaultMint && defaultMint.length > 30 ? defaultMint : JUP_PLUGIN_USDC;
@@ -152,11 +151,11 @@ export function SwapWidget({
   }, [outMint, target]);
 
   return (
-    <SwapShell title={title} subtitle="Search any Solana token. Connect Phantom in the widget.">
-      <div id={target} className="w-full overflow-hidden rounded-2xl bg-black/40" style={{ minHeight: 600, height: 600 }} />
+    <div>
+      <div id={target} className="w-full overflow-hidden rounded-2xl" style={{ height: 548 }} />
       {!ready && !err ? <p className="mt-3 text-center text-[13px] text-white/40">Loading Jupiter…</p> : null}
       {err ? <p className="mt-3 text-center text-[13px] text-blood">{err}</p> : null}
-    </SwapShell>
+    </div>
   );
 }
 

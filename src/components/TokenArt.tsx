@@ -17,7 +17,7 @@ function ipfsCid(src: string): string | null {
 }
 
 function cidGateways(cid: string): string[] {
-  return [`https://w3s.link/ipfs/${cid}`, `https://gateway.pinata.cloud/ipfs/${cid}`, `https://ipfs.io/ipfs/${cid}`];
+  return [`https://gateway.pinata.cloud/ipfs/${cid}`, `https://w3s.link/ipfs/${cid}`, `https://ipfs.io/ipfs/${cid}`];
 }
 
 export function rewriteImageUrl(src?: string): string {
@@ -30,19 +30,57 @@ export function rewriteImageUrl(src?: string): string {
   return s;
 }
 
-function candidates(src?: string, mint?: string): string[] {
+/** Original URL first. Race IPFS mirrors + Dexscreener — never wait on a dead gateway. */
+export function artCandidates(src?: string, mint?: string): string[] {
   const out: string[] = [];
-  const cid = src ? ipfsCid(src) : null;
-  if (mint && mint.length >= 32) out.push(`https://dd.dexscreener.com/ds-data/tokens/solana/${mint}.png`);
-  if (cid) out.push(...cidGateways(cid));
-  else {
-    const raw = rewriteImageUrl(src);
-    if (raw.startsWith("https:") || raw.startsWith("data:") || raw.startsWith("/") || raw.startsWith("blob:")) out.push(raw);
+  const raw = (src || "").trim();
+  if (!raw && !(mint && mint.length >= 32)) return [];
+  if (raw.startsWith("data:") || raw.startsWith("blob:") || raw.startsWith("/")) return [raw];
+  const cid = raw ? ipfsCid(raw) : null;
+  if (raw.startsWith("https:")) out.push(raw);
+  if (cid) {
+    for (const g of cidGateways(cid)) if (!out.includes(g)) out.push(g);
   }
-  return [...new Set(out.filter(Boolean))];
+  if (mint && mint.length >= 32) {
+    const dex = `https://dd.dexscreener.com/ds-data/tokens/solana/${mint}.png`;
+    if (!out.includes(dex)) out.push(dex);
+  }
+  return out;
 }
 
-/** Letter stays up until a candidate actually paints. Dexscreener first, 2.5s watchdog per URL. */
+const won = new Map<string, string>();
+
+function race(urls: string[]): Promise<string> {
+  const key = urls.join("\n");
+  const hit = won.get(key);
+  if (hit) return Promise.resolve(hit);
+  if (urls.length === 1) {
+    won.set(key, urls[0]!);
+    return Promise.resolve(urls[0]!);
+  }
+  if (!urls.length) return Promise.resolve("");
+  return new Promise((resolve) => {
+    let left = urls.length;
+    let done = false;
+    const finish = (u: string) => {
+      if (done) return;
+      done = true;
+      if (u) won.set(key, u);
+      resolve(u);
+    };
+    for (const u of urls) {
+      const img = new Image();
+      img.onload = () => finish(u);
+      img.onerror = () => {
+        left -= 1;
+        if (left <= 0) finish("");
+      };
+      img.src = u;
+    }
+    window.setTimeout(() => finish(urls[0] || ""), 1800);
+  });
+}
+
 export function TokenArt({
   src,
   mint,
@@ -56,23 +94,25 @@ export function TokenArt({
   className?: string;
   eager?: boolean;
 }) {
-  const urls = useMemo(() => candidates(src, mint), [src, mint]);
-  const [i, setI] = useState(0);
+  const urls = useMemo(() => artCandidates(src, mint), [src, mint]);
+  const [href, setHref] = useState(urls[0] || "");
   const [shown, setShown] = useState(false);
 
   useEffect(() => {
-    setI(0);
+    let stop = false;
     setShown(false);
+    const cached = won.get(urls.join("\n"));
+    setHref(cached || urls[0] || "");
+    if (cached || urls.length <= 1) return;
+    void race(urls).then((u) => {
+      if (!stop && u) setHref(u);
+    });
+    return () => {
+      stop = true;
+    };
   }, [urls]);
 
-  useEffect(() => {
-    if (shown || i >= urls.length) return;
-    const t = window.setTimeout(() => setI((n) => n + 1), 2500);
-    return () => window.clearTimeout(t);
-  }, [i, shown, urls.length]);
-
   const letter = (label || "").replace(/^\$+/, "").trim().slice(0, 1).toUpperCase() || "•";
-  const href = urls[i] || "";
 
   return (
     <span className={`relative isolate inline-block shrink-0 overflow-hidden bg-violet/25 ${className || ""}`}>
@@ -88,8 +128,11 @@ export function TokenArt({
           loading={eager ? "eager" : "lazy"}
           decoding="async"
           onLoad={() => setShown(true)}
-          onError={() => setI((n) => n + 1)}
-          className={`relative z-[1] h-full w-full object-cover transition-opacity duration-200 ${shown ? "opacity-100" : "opacity-0"}`}
+          onError={() => {
+            const next = urls[urls.indexOf(href) + 1];
+            if (next) setHref(next);
+          }}
+          className={`relative z-[1] h-full w-full object-cover ${shown ? "opacity-100" : "opacity-0"}`}
         />
       ) : null}
     </span>

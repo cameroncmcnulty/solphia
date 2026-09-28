@@ -343,7 +343,6 @@ export default function LaunchPage() {
   const [phase, setPhase] = useState<"all" | "live" | "graduated">("all");
   const [tapeSort, setTapeSort] = useState<"newest" | "mcap" | "vol5m" | "vol1h" | "rank">("newest");
   const [boostOpen, setBoostOpen] = useState(false);
-  const [swapOpen, setSwapOpen] = useState(false);
   const [boostRank, setBoostRank] = useState<BoostRank[]>([]);
   const [boostMine, setBoostMine] = useState<{
     live: { symbol: string; leftMs: number; rockets: number }[];
@@ -1347,23 +1346,13 @@ export default function LaunchPage() {
     <main className="relative min-h-[calc(100vh-4rem)] overflow-x-hidden pb-24">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(120%_80%_at_50%_-10%,rgba(20,80,40,0.35),transparent_55%)]" />
       <div className="relative z-10 mx-auto max-w-lg px-4 pt-5 md:max-w-2xl md:pt-8">
-        <div className="flex items-center justify-between gap-3">
+        <div>
           <p className="text-[32px] font-semibold tracking-tight text-white">{isSwap ? "Swap" : "Launch"}</p>
-          {isSwap && (
-            <button
-              type="button"
-              onClick={() => setSwapOpen((v) => !v)}
-              className={`rounded-full px-4 py-2 text-[14px] font-semibold ${
-                swapOpen ? "bg-acid text-void" : "bg-white/10 text-white"
-              }`}
-            >
-              {swapOpen ? "Hide swap" : "Swap"}
-            </button>
-          )}
+          {isSwap ? <p className="mt-1 text-[15px] text-white/45">Pick a token below, or search inside Jupiter.</p> : null}
         </div>
-        {isSwap && swapOpen && (
+        {isSwap && (
           <div className="mt-4">
-            <SwapWidget key={open?.mint || "swap"} owner={owner} defaultMint={open?.mint || ""} title="Swap" />
+            <SwapWidget owner={owner} defaultMint={open?.mint || ""} />
           </div>
         )}
         {isSwap && (

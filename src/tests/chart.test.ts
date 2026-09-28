@@ -13,7 +13,7 @@ import {
   sparkUp,
   syntheticSpark,
 } from "../lib/launch/chart";
-import { rewriteImageUrl } from "../components/TokenArt";
+import { artCandidates, rewriteImageUrl } from "../components/TokenArt";
 
 describe("token sparks", () => {
   it("builds a 5-print path from windowed % so each coin is not the same sine wave", () => {
@@ -93,11 +93,19 @@ describe("token art urls", () => {
     assert.equal(rewriteImageUrl("data:image/png;base64,abc"), "data:image/png;base64,abc");
     assert.equal(
       rewriteImageUrl("ipfs://QmHashHereThatIsLongEnoughToPassTheCidCheckXX"),
-      "https://w3s.link/ipfs/QmHashHereThatIsLongEnoughToPassTheCidCheckXX",
+      "https://gateway.pinata.cloud/ipfs/QmHashHereThatIsLongEnoughToPassTheCidCheckXX",
     );
     assert.equal(
       rewriteImageUrl("https://ipfs.io/ipfs/bafybeibi5456odfpboswifv75btyarpbh3qpvjtai5q4k6r737jpmaczuu"),
-      "https://w3s.link/ipfs/bafybeibi5456odfpboswifv75btyarpbh3qpvjtai5q4k6r737jpmaczuu",
+      "https://gateway.pinata.cloud/ipfs/bafybeibi5456odfpboswifv75btyarpbh3qpvjtai5q4k6r737jpmaczuu",
     );
+  });
+
+  it("keeps the original https art first so the list does not wait on Dexscreener", () => {
+    const mint = "So11111111111111111111111111111111111111112";
+    const src = "https://pump.mypinata.cloud/ipfs/bafybeibi5456odfpboswifv75btyarpbh3qpvjtai5q4k6r737jpmaczuu";
+    const urls = artCandidates(src, mint);
+    assert.equal(urls[0], src);
+    assert.ok(urls.some((u) => u.includes("dd.dexscreener.com")));
   });
 });

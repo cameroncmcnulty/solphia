@@ -213,17 +213,21 @@ function Sheet({
   title,
   onClose,
   children,
+  tall,
 }: {
   open: boolean;
   title: string;
   onClose: () => void;
   children: React.ReactNode;
+  tall?: boolean;
 }) {
   if (!open) return null;
   return (
-    <div className="absolute inset-0 z-30 flex items-end justify-center bg-black/55 backdrop-blur-sm sm:items-center sm:p-6" onClick={onClose}>
+    <div className="absolute inset-0 z-30 flex items-end justify-center bg-black/70 sm:items-center sm:p-4" onClick={onClose}>
       <div
-        className="panel-bubble max-h-[min(78%,36rem)] w-full overflow-y-auto rounded-t-3xl pb-[env(safe-area-inset-bottom)] sm:max-w-lg sm:rounded-3xl sm:pb-4"
+        className={`w-full overflow-y-auto rounded-t-3xl border border-white/10 bg-[#04000a] pb-[env(safe-area-inset-bottom)] sm:rounded-3xl sm:pb-3 ${
+          tall ? "max-h-[min(96dvh,44rem)] sm:max-w-md" : "panel-bubble max-h-[min(78%,36rem)] sm:max-w-lg"
+        }`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-4 py-3">
@@ -232,7 +236,7 @@ function Sheet({
             <X className="h-5 w-5" />
           </button>
         </div>
-        <div className="px-4 pb-5">{children}</div>
+        <div className={tall ? "px-2 pb-3" : "px-4 pb-5"}>{children}</div>
       </div>
     </div>
   );
@@ -1110,8 +1114,8 @@ export default function ShillPage() {
           <VoteBoard rows={voteRows} canVote={canVote} onOpen={openVoteRow} nextVote={nextVote} now={now} />
         </Sheet>
 
-        <Sheet open={sheet === "swap"} title="Swap" onClose={() => setSheet(null)}>
-          <SwapWidget key={swapMint || "swap"} owner={owner} defaultMint={swapMint} />
+        <Sheet open={sheet === "swap"} title="Swap" onClose={() => setSheet(null)} tall>
+          <SwapWidget owner={owner} defaultMint={swapMint} />
         </Sheet>
       </div>
     </main>
