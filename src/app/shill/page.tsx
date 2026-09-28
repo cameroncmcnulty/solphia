@@ -6,6 +6,7 @@ import {
   Check,
   CheckCheck,
   ChevronDown,
+  ChevronLeft,
   ChevronUp,
   MessageCircle,
   Pin,
@@ -16,6 +17,7 @@ import {
   Trophy,
   X,
 } from "lucide-react";
+import Link from "next/link";
 import { BurstSticker } from "@/components/BurstSticker";
 import { AccountMenu } from "@/components/AccountMenu";
 import { ParticleField } from "@/components/ParticleField";
@@ -658,6 +660,13 @@ export default function ShillPage() {
       <div className="relative z-10 mx-auto flex h-full min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden lg:max-w-6xl">
         <div className="shrink-0">
           <header className="relative z-[80] flex items-center gap-2 border-b border-white/10 bg-[#04000a]/55 px-2 pb-2 pt-[max(0.4rem,env(safe-area-inset-top))] backdrop-blur-xl">
+            <Link
+              href="/"
+              aria-label="Back to home"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white hover:bg-white/10"
+            >
+              <ChevronLeft className="h-6 w-6" />
+            </Link>
             <div className="min-w-0 flex-1 px-1">
               <div className="flex items-center gap-2">
                 <span className="shill-live" />

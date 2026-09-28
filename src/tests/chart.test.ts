@@ -93,11 +93,11 @@ describe("token art urls", () => {
     assert.equal(rewriteImageUrl("data:image/png;base64,abc"), "data:image/png;base64,abc");
     assert.equal(
       rewriteImageUrl("ipfs://QmHashHereThatIsLongEnoughToPassTheCidCheckXX"),
-      "https://cloudflare-ipfs.com/ipfs/QmHashHereThatIsLongEnoughToPassTheCidCheckXX",
+      "https://w3s.link/ipfs/QmHashHereThatIsLongEnoughToPassTheCidCheckXX",
     );
     assert.equal(
       rewriteImageUrl("https://ipfs.io/ipfs/bafybeibi5456odfpboswifv75btyarpbh3qpvjtai5q4k6r737jpmaczuu"),
-      "https://cloudflare-ipfs.com/ipfs/bafybeibi5456odfpboswifv75btyarpbh3qpvjtai5q4k6r737jpmaczuu",
+      "https://w3s.link/ipfs/bafybeibi5456odfpboswifv75btyarpbh3qpvjtai5q4k6r737jpmaczuu",
     );
   });
 });

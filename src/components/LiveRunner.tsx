@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { usePathname } from "next/navigation";
 import { useMarket, useOwner } from "@/lib/hooks";
 import { exportSecret, loadOwner, tradingPubkey } from "@/lib/wallet/trading";
 import { executePendingIntent } from "@/lib/wallet/live";
@@ -11,9 +12,11 @@ import { executePendingIntent } from "@/lib/wallet/live";
  * if the server does not have the delegated key yet.
  */
 export function LiveRunner() {
+  const path = usePathname();
+  const desk = path.startsWith("/trading") || path.startsWith("/auto") || path.startsWith("/terminal") || path.startsWith("/account");
   const connected = useOwner();
   const owner = connected || (typeof window !== "undefined" ? loadOwner() : null);
-  const { data } = useMarket(20_000);
+  const { data } = useMarket(desk ? 20_000 : 180_000);
   const lock = useRef(false);
   const lastSig = useRef("");
   const delegated = useRef(false);

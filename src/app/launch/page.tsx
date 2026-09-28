@@ -351,6 +351,7 @@ export default function LaunchPage() {
   }>({ live: [], queued: [] });
   const [source, setSource] = useState<"all" | "born" | "market">("all");
   const [tapeLoading, setTapeLoading] = useState(true);
+  const [padLoading, setPadLoading] = useState(true);
   const [caQuery, setCaQuery] = useState("");
   const [caBusy, setCaBusy] = useState(false);
   const [caErr, setCaErr] = useState("");
@@ -633,9 +634,10 @@ export default function LaunchPage() {
   useEffect(() => {
     refreshPad(false)
       .then(() => {
-        if (!isSwap) return refreshPad(true);
+        setPadLoading(false);
+        if (!isSwap) return new Promise((r) => window.setTimeout(r, 800)).then(() => refreshPad(true));
       })
-      .catch(() => {});
+      .catch(() => setPadLoading(false));
     refreshTape().catch(() => setTapeLoading(false));
     refreshBoosts().catch(() => {});
     const padT = setInterval(() => refreshPad(false).catch(() => {}), 20_000);
@@ -1912,7 +1914,7 @@ export default function LaunchPage() {
                       </div>
                     </div>
                   ))}
-              {rows.length === 0 && tapeLoading && pending.length === 0 && (
+              {rows.length === 0 && (isSwap ? tapeLoading : padLoading) && pending.length === 0 && (
                 <div className="space-y-2 py-3">
                   {Array.from({ length: 12 }).map((_, i) => (
                     <div key={i} className="h-[72px] animate-pulse rounded-2xl bg-white/5" />

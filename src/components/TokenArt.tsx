@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 function ipfsCid(src: string): string | null {
   const ipfs = src.match(/^ipfs:\/\/([^/?#]+)/i);
@@ -17,11 +17,7 @@ function ipfsCid(src: string): string | null {
 }
 
 function cidGateways(cid: string): string[] {
-  return [
-    `https://cloudflare-ipfs.com/ipfs/${cid}`,
-    `https://ipfs.io/ipfs/${cid}`,
-    `https://gateway.pinata.cloud/ipfs/${cid}`,
-  ];
+  return [`https://w3s.link/ipfs/${cid}`, `https://gateway.pinata.cloud/ipfs/${cid}`, `https://ipfs.io/ipfs/${cid}`];
 }
 
 export function rewriteImageUrl(src?: string): string {
@@ -34,12 +30,19 @@ export function rewriteImageUrl(src?: string): string {
   return s;
 }
 
-function proxyUrl(src: string): string {
-  if (src.startsWith("data:") || src.startsWith("blob:") || src.startsWith("/")) return src;
-  return `/api/media?u=${encodeURIComponent(src)}`;
+function candidates(src?: string, mint?: string): string[] {
+  const out: string[] = [];
+  const cid = src ? ipfsCid(src) : null;
+  if (mint && mint.length >= 32) out.push(`https://dd.dexscreener.com/ds-data/tokens/solana/${mint}.png`);
+  if (cid) out.push(...cidGateways(cid));
+  else {
+    const raw = rewriteImageUrl(src);
+    if (raw.startsWith("https:") || raw.startsWith("data:") || raw.startsWith("/") || raw.startsWith("blob:")) out.push(raw);
+  }
+  return [...new Set(out.filter(Boolean))];
 }
 
-/** Letter stays up until the remote art actually paints. Direct URL first so 48 rows do not stampede the proxy. */
+/** Letter stays up until a candidate actually paints. Dexscreener first, 2.5s watchdog per URL. */
 export function TokenArt({
   src,
   mint,
@@ -53,21 +56,23 @@ export function TokenArt({
   className?: string;
   eager?: boolean;
 }) {
-  const cid = src ? ipfsCid(src) : null;
-  const [gw, setGw] = useState(0);
-  const direct = cid ? cidGateways(cid)[Math.min(gw, 2)]! : rewriteImageUrl(src);
-  const dex = mint ? `https://dd.dexscreener.com/ds-data/tokens/solana/${mint}.png` : "";
-  const [mode, setMode] = useState<"direct" | "proxy" | "dex" | "off">(direct ? "direct" : dex ? "dex" : "off");
+  const urls = useMemo(() => candidates(src, mint), [src, mint]);
+  const [i, setI] = useState(0);
   const [shown, setShown] = useState(false);
 
   useEffect(() => {
-    setGw(0);
-    setMode(src ? "direct" : dex ? "dex" : "off");
+    setI(0);
     setShown(false);
-  }, [src, dex]);
+  }, [urls]);
+
+  useEffect(() => {
+    if (shown || i >= urls.length) return;
+    const t = window.setTimeout(() => setI((n) => n + 1), 2500);
+    return () => window.clearTimeout(t);
+  }, [i, shown, urls.length]);
 
   const letter = (label || "").replace(/^\$+/, "").trim().slice(0, 1).toUpperCase() || "•";
-  const href = mode === "direct" ? direct : mode === "proxy" && direct ? proxyUrl(direct) : mode === "dex" ? dex : "";
+  const href = urls[i] || "";
 
   return (
     <span className={`relative isolate inline-block shrink-0 overflow-hidden bg-violet/25 ${className || ""}`}>
@@ -83,15 +88,7 @@ export function TokenArt({
           loading={eager ? "eager" : "lazy"}
           decoding="async"
           onLoad={() => setShown(true)}
-          onError={() => {
-            if (cid && gw < 2) {
-              setGw((n) => n + 1);
-              return;
-            }
-            if (mode === "direct" && direct.startsWith("https:")) setMode("proxy");
-            else if (mode !== "dex" && dex) setMode("dex");
-            else setMode("off");
-          }}
+          onError={() => setI((n) => n + 1)}
           className={`relative z-[1] h-full w-full object-cover transition-opacity duration-200 ${shown ? "opacity-100" : "opacity-0"}`}
         />
       ) : null}

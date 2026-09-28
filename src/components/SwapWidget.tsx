@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import Script from "next/script";
 import { ArrowDownUp } from "lucide-react";
 import {
   JUP_PLUGIN_ACCOUNT,
@@ -75,15 +74,32 @@ export function SwapBox({
   );
 }
 
-function bootPlugin(targetId: string, outputMint: string) {
-  const jup = window.Jupiter;
-  if (!jup?.init) return false;
-  try {
-    jup.close?.();
-  } catch {
-    /* first load */
+function loadPluginScript(): Promise<void> {
+  if (typeof window === "undefined") return Promise.resolve();
+  if (window.Jupiter?.init) return Promise.resolve();
+  const existing = document.querySelector<HTMLScriptElement>("script[data-jup-plugin]");
+  if (existing) {
+    return new Promise((resolve, reject) => {
+      if (window.Jupiter?.init) return resolve();
+      existing.addEventListener("load", () => resolve(), { once: true });
+      existing.addEventListener("error", () => reject(new Error("Jupiter script failed")), { once: true });
+    });
   }
-  jup.init({
+  return new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = JUP_PLUGIN_SRC;
+    s.async = true;
+    s.dataset.jupPlugin = "1";
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error("Jupiter script failed"));
+    document.head.appendChild(s);
+  });
+}
+
+function bootPlugin(targetId: string, outputMint: string) {
+  const el = document.getElementById(targetId);
+  if (!el || !window.Jupiter?.init) return false;
+  window.Jupiter.init({
     displayMode: "integrated",
     integratedTargetId: targetId,
     defaultExplorer: "Solscan",
@@ -114,46 +130,30 @@ export function SwapWidget({
 
   useEffect(() => {
     let gone = false;
-    const go = () => {
-      if (gone) return true;
-      if (!bootPlugin(target, outMint)) return false;
-      setReady(true);
-      setErr("");
-      return true;
-    };
-    if (go()) {
-      return () => {
-        gone = true;
-        try {
-          window.Jupiter?.close?.();
-        } catch {
-          /* unmount */
+    void (async () => {
+      try {
+        await loadPluginScript();
+        if (gone) return;
+        await new Promise((r) => requestAnimationFrame(() => r(null)));
+        if (gone) return;
+        if (!bootPlugin(target, outMint)) {
+          setErr("Jupiter did not mount. Hard-refresh once.");
+          return;
         }
-      };
-    }
-    const t = window.setInterval(() => {
-      if (go()) window.clearInterval(t);
-    }, 300);
-    const giveUp = window.setTimeout(() => {
-      window.clearInterval(t);
-      if (!gone && !window.Jupiter?.init) setErr("Jupiter plugin did not load. Hard-refresh once.");
-    }, 12_000);
+        setReady(true);
+        setErr("");
+      } catch {
+        if (!gone) setErr("Jupiter did not load. Hard-refresh once.");
+      }
+    })();
     return () => {
       gone = true;
-      window.clearInterval(t);
-      window.clearTimeout(giveUp);
-      try {
-        window.Jupiter?.close?.();
-      } catch {
-        /* unmount */
-      }
     };
   }, [outMint, target]);
 
   return (
-    <SwapShell title={title} subtitle="Jupiter Plugin. Search any token. Connect Phantom in the widget. 1% to Solphia.">
-      <Script src={JUP_PLUGIN_SRC} strategy="afterInteractive" data-preload />
-      <div id={target} className="w-full overflow-hidden rounded-2xl bg-black/40" style={{ height: 600 }} />
+    <SwapShell title={title} subtitle="Search any Solana token. Connect Phantom in the widget.">
+      <div id={target} className="w-full overflow-hidden rounded-2xl bg-black/40" style={{ minHeight: 600, height: 600 }} />
       {!ready && !err ? <p className="mt-3 text-center text-[13px] text-white/40">Loading Jupiter…</p> : null}
       {err ? <p className="mt-3 text-center text-[13px] text-blood">{err}</p> : null}
     </SwapShell>
