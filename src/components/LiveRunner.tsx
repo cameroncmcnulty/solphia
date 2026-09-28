@@ -13,7 +13,7 @@ import { executePendingIntent } from "@/lib/wallet/live";
 export function LiveRunner() {
   const connected = useOwner();
   const owner = connected || (typeof window !== "undefined" ? loadOwner() : null);
-  const { data } = useMarket(8000);
+  const { data } = useMarket(20_000);
   const lock = useRef(false);
   const lastSig = useRef("");
   const delegated = useRef(false);

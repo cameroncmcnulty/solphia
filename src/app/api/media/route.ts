@@ -43,7 +43,7 @@ export async function GET(req: NextRequest) {
     return new NextResponse(buf, {
       headers: {
         "content-type": mime,
-        "cache-control": "public, max-age=3600, s-maxage=86400",
+        "cache-control": "public, max-age=86400, s-maxage=604800, stale-while-revalidate=86400",
       },
     });
   } catch {

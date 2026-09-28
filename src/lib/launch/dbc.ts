@@ -270,15 +270,18 @@ export async function dbcFeeBreakdown(mint: string): Promise<DbcFees | null> {
 }
 
 export async function dbcFeesForMints(mints: string[]): Promise<Record<string, DbcFees>> {
-  const out: Record<string, DbcFees> = {};
-  const uniq = [...new Set(mints.filter(Boolean))].slice(0, 24);
-  await Promise.all(
-    uniq.map(async (mint) => {
-      const fees = await dbcFeeBreakdown(mint);
-      if (fees) out[mint] = fees;
-    }),
-  );
-  return out;
+  const uniq = [...new Set(mints.filter(Boolean))].slice(0, 16);
+  const key = "fees:" + uniq.sort().join(",");
+  return cached(key, 20_000, async () => {
+    const out: Record<string, DbcFees> = {};
+    await Promise.all(
+      uniq.map(async (mint) => {
+        const fees = await dbcFeeBreakdown(mint);
+        if (fees) out[mint] = fees;
+      }),
+    );
+    return out;
+  });
 }
 
 export type ChainPadCoin = {
@@ -297,33 +300,54 @@ function mintOfPool(row: { publicKey: PublicKey; account: any }): string {
   return String(inner.baseMint || inner.base_mint || "");
 }
 
+const memo = new Map<string, { at: number; data: unknown }>();
+const inflight = new Map<string, Promise<unknown>>();
+function cached<T>(key: string, ms: number, fn: () => Promise<T>): Promise<T> {
+  const hit = memo.get(key);
+  if (hit && Date.now() - hit.at < ms) return Promise.resolve(hit.data as T);
+  const pending = inflight.get(key) as Promise<T> | undefined;
+  if (pending) return pending;
+  const p = fn()
+    .then((data) => {
+      memo.set(key, { at: Date.now(), data });
+      inflight.delete(key);
+      return data;
+    })
+    .catch((e) => {
+      inflight.delete(key);
+      throw e;
+    });
+  inflight.set(key, p);
+  return p;
+}
+
 export async function chainCoinsForCreator(creator: string): Promise<ChainPadCoin[]> {
   if (!dbcEnabled() || !creator) return [];
-  const dbc = client();
-  let pools: { publicKey: PublicKey; account: any }[] = [];
-  try {
-    pools = await dbc.state.getPoolsByCreator(creator);
-  } catch {
-    return [];
-  }
-  const out: ChainPadCoin[] = [];
-  for (const row of pools) {
-    const mint = mintOfPool(row);
-    if (!mint) continue;
-    const fees = await dbcFeeBreakdown(mint);
-    const inner = row.account?.poolState || row.account || {};
-    out.push({
-      mint,
-      pool: row.publicKey.toBase58(),
-      creator: String(inner.creator || creator),
-      creatorFeesSol: fees?.creatorFeesSol || 0,
-      creatorUnclaimedSol: fees?.creatorUnclaimedSol || 0,
-      partnerFeesSol: fees?.partnerFeesSol || 0,
-      partnerUnclaimedSol: fees?.partnerUnclaimedSol || 0,
-      quoteSol: lamportsToSol(inner.quoteReserve),
-    });
-  }
-  return out;
+  return cached("pools:" + creator, 30_000, async () => {
+    const dbc = client();
+    let pools: { publicKey: PublicKey; account: any }[] = [];
+    try {
+      pools = await dbc.state.getPoolsByCreator(creator);
+    } catch {
+      return [] as ChainPadCoin[];
+    }
+    return pools
+      .map((row) => {
+        const mint = mintOfPool(row);
+        const inner = row.account?.poolState || row.account || {};
+        return {
+          mint,
+          pool: row.publicKey.toBase58(),
+          creator: String(inner.creator || creator),
+          creatorFeesSol: 0,
+          creatorUnclaimedSol: 0,
+          partnerFeesSol: 0,
+          partnerUnclaimedSol: 0,
+          quoteSol: lamportsToSol(inner.quoteReserve),
+        };
+      })
+      .filter((p) => p.mint);
+  });
 }
 
 export async function chainPartnerTotals(config: string): Promise<{

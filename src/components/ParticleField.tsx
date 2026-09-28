@@ -11,7 +11,8 @@ export function ParticleField() {
     const ctx = c.getContext("2d");
     if (!ctx) return;
     let raf = 0;
-    const dots = Array.from({ length: 88 }, () => ({
+    const n = window.innerWidth < 640 ? 28 : 56;
+    const dots = Array.from({ length: n }, () => ({
       x: Math.random(),
       y: Math.random(),
       v: 0.0001 + Math.random() * 0.00028,

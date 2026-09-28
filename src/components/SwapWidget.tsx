@@ -139,7 +139,7 @@ export function SwapWidget({
           setQuote(fromAtoms(String(j.outAmount), outputMint));
           const bps = Number(j.feeBps) || 0;
           const collecting = Boolean(j.referralAccount);
-          setFeeNote(collecting ? `Fee ${bps} bps · Solphia 1% integrator` : `Fee ${bps} bps · add JUPITER_REFERRAL_ACCOUNT to collect 1%`);
+          setFeeNote(collecting ? `Fee ${bps} bps · Solphia 1% integrator` : `Fee ${bps} bps · referral not collecting`);
         })
         .catch(() => setQuote(""));
     }, 320);

@@ -15,8 +15,8 @@ export const VOL_MS: Record<VolWindow, number> = {
   "24h": 24 * 60 * 60_000,
 };
 
-/** Ranked board: enough rows to fill the tape without scrolling. */
-export const TAPE_BOARD = 6;
+/** Ranked board: enough rows to fill Swap without looking empty. */
+export const TAPE_BOARD = 80;
 
 export type TapeCoin = {
   id: string;

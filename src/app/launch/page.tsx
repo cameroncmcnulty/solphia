@@ -340,7 +340,7 @@ export default function LaunchPage() {
   const [age, setAge] = useState<AgeFilter>("newest");
   const [vol, setVol] = useState<VolWindow | null>(null);
   const [ranked, setRanked] = useState(false);
-  const [phase, setPhase] = useState<"live" | "graduated">("live");
+  const [phase, setPhase] = useState<"all" | "live" | "graduated">("all");
   const [tapeSort, setTapeSort] = useState<"newest" | "mcap" | "vol5m" | "vol1h" | "rank">("newest");
   const [boostOpen, setBoostOpen] = useState(false);
   const [swapOpen, setSwapOpen] = useState(false);
@@ -457,9 +457,10 @@ export default function LaunchPage() {
     requestAnimationFrame(go);
   }, [open?.id, snapAt]);
 
-  async function refreshPad() {
+  async function refreshPad(sync = false) {
     const q = owner ? `pubkey=${encodeURIComponent(owner)}` : "";
-    const pad = await fetch(`/api/launch?${q}`, { cache: "no-store" }).then((r) => r.json());
+    const extra = [isSwap ? "list=all" : "", sync && owner ? "sync=1" : ""].filter(Boolean).join("&");
+    const pad = await fetch(`/api/launch?${q}${extra ? `&${extra}` : ""}`, { cache: "no-store" }).then((r) => r.json());
     if (pad.solUsd) setSolUsd(pad.solUsd);
     if (typeof pad.ownerWallet === "string") setOwnerWallet(pad.ownerWallet);
     if (typeof pad.treasuryWallet === "string") setTreasuryWallet(pad.treasuryWallet);
@@ -484,8 +485,16 @@ export default function LaunchPage() {
       if (typeof d.discord === "string") setDiscord(d.discord);
       if (typeof d.devBuy === "number") setDevBuy(d.devBuy);
     }
-    if (isSwap) return;
     const padCoins: Coin[] = Array.isArray(pad.coins) ? pad.coins.map((c: Coin) => ({ ...c, born: true })) : [];
+    if (isSwap) {
+      setCoins((prev) => {
+        const market = prev.filter((c) => !c.born);
+        const next = [...padCoins, ...market];
+        setOpen((cur) => (cur ? next.find((c) => c.id === cur.id) || cur : cur));
+        return next;
+      });
+      return;
+    }
     setCoins((prev) => {
       const market = prev.filter((c) => !c.born);
       const padded = padCoins.map((c) => {
@@ -622,18 +631,24 @@ export default function LaunchPage() {
   }
 
   useEffect(() => {
-    refreshPad().catch(() => {});
+    refreshPad(false)
+      .then(() => {
+        if (!isSwap) return refreshPad(true);
+      })
+      .catch(() => {});
     refreshTape().catch(() => setTapeLoading(false));
     refreshBoosts().catch(() => {});
-    const padT = setInterval(() => refreshPad().catch(() => {}), 8_000);
-    const tapeT = setInterval(() => refreshTape().catch(() => {}), 40_000);
-    const boostT = setInterval(() => refreshBoosts().catch(() => {}), 8_000);
+    const padT = setInterval(() => refreshPad(false).catch(() => {}), 20_000);
+    const tapeT = setInterval(() => refreshTape().catch(() => {}), 60_000);
+    const boostT = setInterval(() => refreshBoosts().catch(() => {}), 20_000);
+    const syncT = isSwap ? null : setInterval(() => refreshPad(true).catch(() => {}), 90_000);
     return () => {
       clearInterval(padT);
       clearInterval(tapeT);
       clearInterval(boostT);
+      if (syncT) clearInterval(syncT);
     };
-  }, [owner]);
+  }, [owner, isSwap]);
 
   useEffect(() => {
     if (!owner) return;
@@ -1280,7 +1295,9 @@ export default function LaunchPage() {
     const staged =
       phase === "graduated"
         ? sourced.filter((c) => c.status === "graduated")
-        : sourced.filter((c) => c.status !== "graduated");
+        : phase === "live"
+          ? sourced.filter((c) => c.status !== "graduated")
+          : sourced;
     const q = caQuery.trim().toLowerCase().replace(/^\$+/, "");
     const searched = q
       ? staged.filter((c) => {
@@ -1705,7 +1722,7 @@ export default function LaunchPage() {
             {isSwap && (
             <div className="space-y-3">
               <div className="flex gap-1 rounded-full bg-white/[0.06] p-1">
-                {(["live", "graduated"] as const).map((k) => (
+                {(["all", "live", "graduated"] as const).map((k) => (
                   <button
                     key={k}
                     type="button"
@@ -1714,7 +1731,7 @@ export default function LaunchPage() {
                       phase === k ? "bg-white text-void" : "text-white/45"
                     }`}
                   >
-                    {k === "live" ? "Curve" : "Graduated"}
+                    {k === "all" ? "All" : k === "live" ? "Curve" : "Graduated"}
                   </button>
                 ))}
               </div>
@@ -1897,7 +1914,7 @@ export default function LaunchPage() {
                   ))}
               {rows.length === 0 && tapeLoading && pending.length === 0 && (
                 <div className="space-y-2 py-3">
-                  {Array.from({ length: 8 }).map((_, i) => (
+                  {Array.from({ length: 12 }).map((_, i) => (
                     <div key={i} className="h-[72px] animate-pulse rounded-2xl bg-white/5" />
                   ))}
                 </div>

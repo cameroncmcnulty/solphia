@@ -351,7 +351,7 @@ export async function lookupTokenMint(mint: string): Promise<TokenSnapshot | nul
   return null;
 }
 
-/** Fast tape ingest. Three sources, short timeouts — the list must paint even if one feed is slow. */
+/** Fast tape ingest. Short timeouts — the list must paint even if one feed is slow. */
 export async function ingestPublicTape(): Promise<{ tokens: TokenSnapshot[]; solUsd: number }> {
   const map = new Map<string, TokenSnapshot>();
   const put = (t: TokenSnapshot | null) => {
@@ -361,38 +361,46 @@ export async function ingestPublicTape(): Promise<{ tokens: TokenSnapshot[]; sol
   };
   const jobs = [
     getJson<PumpCoin[]>(
-      "https://frontend-api-v3.pump.fun/coins?offset=0&limit=40&sort=created_timestamp&order=desc&includeNsfw=false",
-      4500,
+      "https://frontend-api-v3.pump.fun/coins?offset=0&limit=50&sort=created_timestamp&order=desc&includeNsfw=false",
+      3500,
     ).then((r) => (r.data || []).forEach((c) => put(fromPump(c)))),
     getJson<PumpCoin[]>(
-      "https://frontend-api-v3.pump.fun/coins?offset=0&limit=40&sort=last_trade_timestamp&order=desc&includeNsfw=false",
-      4500,
+      "https://frontend-api-v3.pump.fun/coins?offset=0&limit=50&sort=last_trade_timestamp&order=desc&includeNsfw=false",
+      3500,
     ).then((r) => (r.data || []).forEach((c) => put(fromPump(c)))),
-    getJson<{ pairs?: DexPair[] }>("https://api.dexscreener.com/latest/dex/search?q=pump", 4500).then((r) => {
+    getJson<{ data?: { rows?: LaunchRow[] } }>(
+      "https://launch-mint-v1.raydium.io/get/list?sort=new&size=30&mintType=default",
+      3500,
+    ).then((r) => (r.data?.data?.rows || []).forEach((row) => put(fromLaunch(row)))),
+    getJson<{ pairs?: DexPair[] }>("https://api.dexscreener.com/latest/dex/search?q=pump", 3500).then((r) => {
       const pairs = (r.data?.pairs || []).filter((p) => p.chainId === "solana");
       pairs.slice(0, 50).forEach((p) => put(fromDex(p)));
     }),
-    getJson<{ chainId?: string; tokenAddress?: string; icon?: string }[]>("https://api.dexscreener.com/token-boosts/latest/v1", 4500).then(
-      (r) => {
-        for (const row of r.data || []) {
-          if (row.chainId !== "solana" || !row.tokenAddress) continue;
-          put(blankSnapshot({ mint: row.tokenAddress, name: "", symbol: "", image: row.icon }));
-        }
-      },
-    ),
+    getJson<{ pairs?: DexPair[] }>("https://api.dexscreener.com/latest/dex/search?q=solana", 3500).then((r) => {
+      const pairs = (r.data?.pairs || []).filter((p) => p.chainId === "solana");
+      pairs.slice(0, 50).forEach((p) => put(fromDex(p)));
+    }),
+    getJson<{ data?: GeckoPool[] }>("https://api.geckoterminal.com/api/v2/networks/solana/new_pools?page=1", 3500).then((r) => {
+      (r.data?.data || []).forEach((p) => put(fromGecko(p)));
+    }),
   ];
   const [solUsd] = await Promise.all([solPriceUsd().catch(() => 100), Promise.allSettled(jobs)]);
-  const mints = [...map.keys()];
-  const chunks: string[][] = [];
-  for (let i = 0; i < Math.min(mints.length, 60); i += 30) chunks.push(mints.slice(i, i + 30));
-  await Promise.allSettled(
-    chunks.map(async (chunk) => {
-      const r = await getJson<{ pairs?: DexPair[] }>(`https://api.dexscreener.com/latest/dex/tokens/${chunk.join(",")}`, 4000);
-      const pairs = (r.data?.pairs || []).filter((p) => p.chainId === "solana");
-      pairs.sort((a, b) => num(a.liquidity?.usd) - num(b.liquidity?.usd));
-      pairs.forEach((p) => put(fromDex(p)));
-    }),
-  );
+  const named = [...map.values()].filter((t) => t.symbol && t.symbol !== "???" && t.name).length;
+  if (named < 40) {
+    const mints = [...map.keys()].filter((m) => {
+      const t = map.get(m);
+      return t && (!t.symbol || t.symbol === "???" || !t.name);
+    });
+    const chunks: string[][] = [];
+    for (let i = 0; i < Math.min(mints.length, 30); i += 30) chunks.push(mints.slice(i, i + 30));
+    await Promise.allSettled(
+      chunks.map(async (chunk) => {
+        const r = await getJson<{ pairs?: DexPair[] }>(`https://api.dexscreener.com/latest/dex/tokens/${chunk.join(",")}`, 3000);
+        const pairs = (r.data?.pairs || []).filter((p) => p.chainId === "solana");
+        pairs.forEach((p) => put(fromDex(p)));
+      }),
+    );
+  }
   return {
     tokens: [...map.values()].filter((t) => t.mint.length >= 32 && !isNativeSolSnapshot(t) && t.symbol && t.symbol !== "???"),
     solUsd: solUsd || 100,

@@ -8,7 +8,7 @@ import type { TapeCoin } from "./tape";
 /** Preferred safety floor. The board still fills to MARKET_CAP with the next-best live names. */
 export const MARKET_MIN_SCORE = 45;
 export const MARKET_MIN_MCAP_USD = 400;
-export const MARKET_CAP = 48;
+export const MARKET_CAP = 80;
 
 export function marketPasses(opts: {
   born?: boolean;
@@ -95,7 +95,9 @@ export function snapshotToTape(t: TokenSnapshot, solUsd: number): TapeCoin {
 export type MarketRow = { coin: TapeCoin; score: number; grade: string };
 
 let cache: { at: number; rows: MarketRow[]; solUsd: number; scanned: number } | null = null;
+let inflight: Promise<{ rows: MarketRow[]; solUsd: number; scanned: number; minScore: number }> | null = null;
 const CACHE_MS = 45_000;
+const STALE_MS = 5 * 60_000;
 
 export function filterMarketSnapshots(tokens: TokenSnapshot[], solUsd: number): { rows: MarketRow[]; scanned: number } {
   const scored: MarketRow[] = [];
@@ -130,19 +132,34 @@ export function filterMarketSnapshots(tokens: TokenSnapshot[], solUsd: number): 
   return { rows, scanned: tokens.length };
 }
 
+async function refreshMarketTape() {
+  if (inflight) return inflight;
+  inflight = (async () => {
+    const { tokens, solUsd } = await ingestPublicTape();
+    const { rows, scanned } = filterMarketSnapshots(tokens, solUsd);
+    cache = { at: Date.now(), rows, solUsd, scanned };
+    return { rows, solUsd, scanned, minScore: MARKET_MIN_SCORE };
+  })().finally(() => {
+    inflight = null;
+  });
+  return inflight;
+}
+
 export async function loadMarketTape(force = false): Promise<{
   rows: MarketRow[];
   solUsd: number;
   scanned: number;
   minScore: number;
 }> {
-  if (!force && cache && Date.now() - cache.at < CACHE_MS) {
+  const age = cache ? Date.now() - cache.at : Infinity;
+  if (!force && cache && age < CACHE_MS) {
     return { rows: cache.rows, solUsd: cache.solUsd, scanned: cache.scanned, minScore: MARKET_MIN_SCORE };
   }
-  const { tokens, solUsd } = await ingestPublicTape();
-  const { rows, scanned } = filterMarketSnapshots(tokens, solUsd);
-  cache = { at: Date.now(), rows, solUsd, scanned };
-  return { rows, solUsd, scanned, minScore: MARKET_MIN_SCORE };
+  if (!force && cache && age < STALE_MS) {
+    void refreshMarketTape();
+    return { rows: cache.rows, solUsd: cache.solUsd, scanned: cache.scanned, minScore: MARKET_MIN_SCORE };
+  }
+  return refreshMarketTape();
 }
 
 /** One mint, even when the public tape would hide it. Search must still open the token. */

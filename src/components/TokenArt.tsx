@@ -18,9 +18,9 @@ function ipfsCid(src: string): string | null {
 
 function cidGateways(cid: string): string[] {
   return [
-    `https://gateway.pinata.cloud/ipfs/${cid}`,
-    `https://ipfs.io/ipfs/${cid}`,
     `https://cloudflare-ipfs.com/ipfs/${cid}`,
+    `https://ipfs.io/ipfs/${cid}`,
+    `https://gateway.pinata.cloud/ipfs/${cid}`,
   ];
 }
 

@@ -3,13 +3,15 @@
 export const JUP_FEE_BPS = 100;
 const SOL = "So11111111111111111111111111111111111111112";
 const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+/** Public Jupiter referral account (not a secret). Override with JUPITER_REFERRAL_ACCOUNT. */
+const JUP_REFERRAL_DEFAULT = "rT14BqLLxVXiyK3ZeoeK8kCuU9sCQHVYUCXuBjeG8cV";
 
 function apiKey() {
   return (process.env.JUPITER_API_KEY || "").trim();
 }
 
 function referralAccount() {
-  return (process.env.JUPITER_REFERRAL_ACCOUNT || process.env.NEXT_PUBLIC_JUPITER_REFERRAL_ACCOUNT || "").trim();
+  return (process.env.JUPITER_REFERRAL_ACCOUNT || process.env.NEXT_PUBLIC_JUPITER_REFERRAL_ACCOUNT || JUP_REFERRAL_DEFAULT).trim();
 }
 
 function headers(): Record<string, string> {

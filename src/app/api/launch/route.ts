@@ -35,7 +35,7 @@ import {
   quotePadTrade,
 } from "@/lib/launch/program";
 import { mintPda, nonceFromB64 } from "@/lib/launch/pda";
-import { dbcEnabled, LEGACY_DBC_CONFIG } from "@/lib/launch/dbcIds";
+import { dbcEnabled, LEGACY_DBC_CONFIG, liveDbcConfig } from "@/lib/launch/dbcIds";
 import { connection, rpcBusyMessage, waitForSignature } from "@/lib/solana/connection";
 import { PublicKey } from "@solana/web3.js";
 
@@ -338,9 +338,11 @@ export async function GET(req: NextRequest) {
 async function getLaunch(req: NextRequest) {
   const id = req.nextUrl.searchParams.get("id") || "";
   const viewer = req.nextUrl.searchParams.get("pubkey") || "";
+  const sync = req.nextUrl.searchParams.get("sync") === "1";
+  const listAll = req.nextUrl.searchParams.get("list") === "all";
   const s = await withLaunch((st) => st, false);
   const book = bookOf(s);
-  await hydratePadCoins(book.coins);
+  if (!dbcEnabled()) await hydratePadCoins(book.coins);
   const solUsd = lastPairPrices().solUsd || 0;
   if (id) {
     const coin = book.coins.find((c) => c.id === id || c.mint === id);
@@ -348,20 +350,42 @@ async function getLaunch(req: NextRequest) {
     return NextResponse.json({ coin: publicCoin(coin, solUsd, viewer, book), solUsd });
   }
   tickBoosts(book);
-  const dbc = await dbcApi();
   const treas = treasuryAddress();
   const isProtocol = Boolean(viewer && (viewer === treas || viewer === book.ownerWallet || viewer === DEFAULT_OWNER));
+  if (!sync) {
+    const listed = listAll || !viewer || isProtocol ? book.coins : book.coins.filter((c) => c.creator === viewer);
+    return NextResponse.json({
+      coins: listed.slice(0, 80).map((c) => publicCoin(c, solUsd, viewer, book)),
+      solUsd,
+      ownerWallet: book.ownerWallet || null,
+      ownerEarningsSol: book.ownerEarningsSol,
+      treasuryWallet: treas,
+      boosts: liveBoosts(book).map((b) => publicLiveBoost(b)),
+      dbcConfig: liveDbcConfig(book.dbcConfig),
+      needsNewCurve: dbcEnabled() && !liveDbcConfig(book.dbcConfig),
+      protocol: null,
+      draft: viewer && isSolanaAddress(viewer) ? book.accounts?.[viewer]?.draft || null : null,
+    });
+  }
+  const dbc = await dbcApi();
   if (dbcEnabled() && viewer && isSolanaAddress(viewer)) {
     try {
       const chain = await dbc.chainCoinsForCreator(viewer);
-      for (const p of chain) {
-        if (!p.mint) continue;
-        const bookNow = await withLaunch((st) => bookOf(st), false);
-        const existing = bookNow.coins.find((c) => c.mint === p.mint);
-        const needsMeta = !existing || isPlaceholderMeta(existing.name, existing.image || "", p.mint);
-        const meta = needsMeta ? await readSplMeta(p.mint) : null;
-        await withLaunch((st) => {
-          const b = bookOf(st);
+      const bookNow = await withLaunch((st) => bookOf(st), false);
+      const packed = await Promise.all(
+        chain.slice(0, 16).map(async (p) => {
+          if (!p.mint) return null;
+          const existing = bookNow.coins.find((c) => c.mint === p.mint);
+          const needsMeta = !existing || isPlaceholderMeta(existing.name, existing.image || "", p.mint);
+          const meta = needsMeta ? await readSplMeta(p.mint) : null;
+          return { p, meta };
+        }),
+      );
+      await withLaunch((st) => {
+        const b = bookOf(st);
+        for (const item of packed) {
+          if (!item?.p.mint) continue;
+          const { p, meta } = item;
           const row = b.coins.find((c) => c.mint === p.mint);
           if (row) {
             if (meta?.name && isPlaceholderMeta(row.name, row.image || "", p.mint)) {
@@ -370,12 +394,12 @@ async function getLaunch(req: NextRequest) {
               if (meta.image) row.image = meta.image;
             }
             if (p.quoteSol > 0) row.curve = { ...row.curve, realSol: Math.max(row.curve.realSol || 0, p.quoteSol) };
-            return;
+            continue;
           }
           const made = createCoin(b, {
             creator: p.creator || viewer,
-            name: (meta?.name && meta.name.length >= 2 ? meta.name : "Token"),
-            symbol: (meta?.symbol && meta.symbol.length >= 2 ? meta.symbol : "TOKEN"),
+            name: meta?.name && meta.name.length >= 2 ? meta.name : "Token",
+            symbol: meta?.symbol && meta.symbol.length >= 2 ? meta.symbol : "TOKEN",
             image: meta?.image || "",
             mint: p.mint,
             venue: "solphia",
@@ -383,22 +407,18 @@ async function getLaunch(req: NextRequest) {
           if (made.ok && p.quoteSol > 0) {
             made.coin.curve = { ...made.coin.curve, virtualSol: 40, virtualTokens: 1_000_000_000, realSol: p.quoteSol };
           }
-        }, true);
-      }
+        }
+      }, true);
     } catch {
       /* book still used */
     }
   }
   const fresh = await withLaunch((st) => bookOf(st), false);
-  const listed = viewer && !isProtocol
-    ? fresh.coins.filter((c) => c.creator === viewer)
-    : isProtocol
-      ? fresh.coins
-      : fresh.coins;
+  const listed = listAll || !viewer || isProtocol ? fresh.coins : fresh.coins.filter((c) => c.creator === viewer);
   const rows = listed.slice(0, 80).map((c) => publicCoin(c, solUsd, viewer, fresh));
-  if (dbcEnabled()) {
+  if (sync && dbcEnabled() && viewer) {
     try {
-      const fees = await dbc.dbcFeesForMints(rows.map((c) => c.mint || "").filter(Boolean));
+      const fees = await dbc.dbcFeesForMints(rows.map((c) => c.mint || "").filter(Boolean).slice(0, 12));
       for (const row of rows) {
         const f = row.mint ? fees[row.mint] : undefined;
         if (!f) continue;
@@ -409,7 +429,7 @@ async function getLaunch(req: NextRequest) {
     }
   }
   let protocol: { treasury: string; partnerUnclaimedSol: number; partnerFeesSol: number } | null = null;
-  if (isProtocol && dbcEnabled()) {
+  if (sync && isProtocol && dbcEnabled()) {
     const cfg = dbc.liveDbcConfig(fresh.dbcConfig);
     try {
       const tot = cfg ? await dbc.chainPartnerTotals(cfg) : { unclaimedSol: 0, totalSol: 0, byMint: {} };
