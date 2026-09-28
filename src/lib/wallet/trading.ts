@@ -170,6 +170,25 @@ export async function signPhantomAndSend(transactionB64: string, extra?: Keypair
   throw new Error("PHANTOM_REDIRECT");
 }
 
+/** Sign only — Jupiter /execute lands the tx. Do not broadcast yourself. */
+export async function signPhantomTxB64(transactionB64: string): Promise<string> {
+  let provider = phantomProvider();
+  if (!provider) {
+    const ua = typeof navigator !== "undefined" ? navigator.userAgent : "";
+    const mobile = /iPhone|iPad|iPod|Android/i.test(ua);
+    await waitForInjected(inPhantomWebView() ? 8000 : mobile ? 1200 : 200);
+    provider = phantomProvider();
+  }
+  if (!provider) throw new Error("Open Swap inside Phantom to sign.");
+  const raw = b64ToBytes(asTxB64(transactionB64));
+  const tx = parseTx(raw);
+  const signed = (await provider.signTransaction(tx as Transaction)) as Transaction | VersionedTransaction;
+  if ("instructions" in signed && Array.isArray((signed as Transaction).instructions)) {
+    return toB64(Uint8Array.from((signed as Transaction).serialize({ requireAllSignatures: false, verifySignatures: false })));
+  }
+  return toB64((signed as VersionedTransaction).serialize());
+}
+
 async function sendViaApi(b64: string): Promise<string> {
   const r = await fetch("/api/sol/send", {
     method: "POST",
