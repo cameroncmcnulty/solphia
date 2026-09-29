@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useId, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { ArrowDownUp } from "lucide-react";
+import { PublicKey, Transaction, VersionedTransaction } from "@solana/web3.js";
 import {
   JUP_PLUGIN_ACCOUNT,
   JUP_PLUGIN_FEE_BPS,
@@ -9,6 +10,17 @@ import {
   JUP_PLUGIN_SRC,
   JUP_PLUGIN_USDC,
 } from "@/lib/jup/plugin";
+import { loadOwner, persistOwner, OWNER_EVENT } from "@/lib/wallet/owner";
+import {
+  inPhantomWebView,
+  injectedProvider,
+  openPhantomUl,
+  phantomSignError,
+  waitForInjected,
+} from "@/lib/wallet/phantomConnect";
+import { phantomProvider, signPhantomAndSend } from "@/lib/wallet/trading";
+import { bytesToB64 } from "@/lib/solana/wire";
+import { PhantomMark } from "./PhantomMark";
 
 export function SwapShell({
   title = "Swap",
@@ -103,7 +115,90 @@ function boxHeight(el: HTMLElement) {
   return Math.max(280, Math.min(400, Math.round(vh - 240)));
 }
 
-function bootPlugin(targetId: string, outputMint: string, height: number) {
+function txToB64(tx: Transaction | VersionedTransaction): string {
+  if ("instructions" in tx && Array.isArray(tx.instructions)) {
+    return bytesToB64(Uint8Array.from(tx.serialize({ requireAllSignatures: false, verifySignatures: false })));
+  }
+  return bytesToB64((tx as VersionedTransaction).serialize());
+}
+
+function jupWalletState(pubkey: string | null) {
+  const inj = injectedProvider();
+  const pkStr = inj?.publicKey?.toString() || pubkey || "";
+  let publicKey: PublicKey | null = null;
+  try {
+    if (pkStr) publicKey = new PublicKey(pkStr);
+  } catch {
+    publicKey = null;
+  }
+  const canSign = Boolean(inj && typeof inj.signTransaction === "function" && publicKey);
+  return {
+    autoConnect: false,
+    wallets: [] as unknown[],
+    wallet: canSign
+      ? {
+          adapter: {
+            name: "Phantom",
+            url: "https://phantom.app",
+            icon: "https://solphia.io/favicon.png",
+            readyState: "Installed",
+            publicKey,
+            connecting: false,
+            connected: true,
+          },
+        }
+      : null,
+    publicKey,
+    connecting: false,
+    connected: canSign,
+    disconnecting: false,
+    select: () => undefined,
+    connect: async () => {
+      const found = injectedProvider();
+      if (!found?.connect) throw new Error("Connect Phantom first.");
+      const res = await found.connect();
+      persistOwner(res.publicKey.toString());
+    },
+    disconnect: async () => undefined,
+    signTransaction: async (tx: unknown) => {
+      const found = injectedProvider();
+      if (found?.connect) {
+        try {
+          await found.connect();
+        } catch (e) {
+          throw phantomSignError(e);
+        }
+      }
+      const provider = phantomProvider();
+      if (!provider) throw new Error("Connect Phantom first.");
+      try {
+        return await provider.signTransaction(tx as Transaction | VersionedTransaction);
+      } catch (e) {
+        throw phantomSignError(e);
+      }
+    },
+    signAllTransactions: async (txs: unknown[]) => {
+      const out: unknown[] = [];
+      for (const tx of txs) {
+        const found = injectedProvider();
+        if (found?.connect) await found.connect();
+        const provider = phantomProvider();
+        if (!provider) throw new Error("Connect Phantom first.");
+        out.push(await provider.signTransaction(tx as Transaction | VersionedTransaction));
+      }
+      return out;
+    },
+    sendTransaction: async (tx: unknown) => signPhantomAndSend(txToB64(tx as Transaction | VersionedTransaction)),
+  };
+}
+
+function bootPlugin(
+  targetId: string,
+  outputMint: string,
+  height: number,
+  onRequestConnectWallet: () => void | Promise<void>,
+  pubkey: string | null,
+) {
   const el = document.getElementById(targetId);
   if (!el || !window.Jupiter?.init) return false;
   try {
@@ -115,7 +210,11 @@ function bootPlugin(targetId: string, outputMint: string, height: number) {
     displayMode: "integrated",
     integratedTargetId: targetId,
     defaultExplorer: "Solscan",
-    containerStyles: { width: "100%", height: `${height}px` },
+    autoConnect: false,
+    enableWalletPassthrough: true,
+    passthroughWalletContextState: jupWalletState(pubkey),
+    onRequestConnectWallet,
+    containerStyles: { width: "100%", height: `${height}px`, overflow: "visible" },
     formProps: {
       initialInputMint: JUP_PLUGIN_SOL,
       initialOutputMint: outputMint,
@@ -128,6 +227,7 @@ function bootPlugin(targetId: string, outputMint: string, height: number) {
 }
 
 export function SwapWidget({
+  owner,
   defaultMint = "",
 }: {
   owner?: string | null;
@@ -138,7 +238,73 @@ export function SwapWidget({
   const target = `jup-${uid}`;
   const [ready, setReady] = useState(false);
   const [err, setErr] = useState("");
+  const [pk, setPk] = useState<string | null>(owner ?? null);
+  const [busy, setBusy] = useState(false);
+  const [canSign, setCanSign] = useState(false);
+  const connectRef = useRef<() => Promise<void>>(async () => undefined);
   const outMint = defaultMint && defaultMint.length > 30 ? defaultMint : JUP_PLUGIN_USDC;
+
+  connectRef.current = async () => {
+    setBusy(true);
+    setErr("");
+    try {
+      let found = injectedProvider();
+      if (!found) {
+        await waitForInjected(inPhantomWebView() ? 8000 : 1200);
+        found = injectedProvider();
+      }
+      if (found?.connect) {
+        const res = await found.connect();
+        const pubkey = res.publicKey.toString();
+        persistOwner(pubkey);
+        setPk(pubkey);
+        window.Jupiter?.syncProps?.({ passthroughWalletContextState: jupWalletState(pubkey) });
+        return;
+      }
+      if (inPhantomWebView()) {
+        setErr("Pull down to refresh this tab, then tap Connect Phantom.");
+        return;
+      }
+      await openPhantomUl({ pubkey: loadOwner() });
+    } catch (e) {
+      if (e instanceof Error && e.message === "PHANTOM_REDIRECT") return;
+      setErr(phantomSignError(e).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  useEffect(() => {
+    setPk(owner || loadOwner());
+  }, [owner]);
+
+  useEffect(() => {
+    const tick = () => {
+      const inj = injectedProvider();
+      setCanSign(Boolean((inj?.publicKey?.toString() || pk) && inj && typeof inj.signTransaction === "function"));
+    };
+    tick();
+    window.addEventListener("phantom#initialized", tick);
+    const t = window.setInterval(tick, 800);
+    return () => {
+      window.removeEventListener("phantom#initialized", tick);
+      window.clearInterval(t);
+    };
+  }, [pk]);
+
+  useEffect(() => {
+    const onOwner = (e: Event) => {
+      const next = (e as CustomEvent<string | null>).detail || loadOwner();
+      if (next) setPk(next);
+    };
+    window.addEventListener(OWNER_EVENT, onOwner as EventListener);
+    return () => window.removeEventListener(OWNER_EVENT, onOwner as EventListener);
+  }, []);
+
+  useEffect(() => {
+    if (!ready) return;
+    window.Jupiter?.syncProps?.({ passthroughWalletContextState: jupWalletState(pk) });
+  }, [pk, ready]);
 
   useEffect(() => {
     let gone = false;
@@ -151,7 +317,11 @@ export function SwapWidget({
         if (gone || !el) return;
         const height = boxHeight(el);
         el.style.height = `${height}px`;
-        if (!bootPlugin(target, outMint, height)) {
+        if (
+          !bootPlugin(target, outMint, height, () => {
+            void connectRef.current();
+          }, loadOwner())
+        ) {
           setErr("Jupiter did not mount.");
           return;
         }
@@ -172,10 +342,21 @@ export function SwapWidget({
   }, [outMint, target]);
 
   return (
-    <div className="flex min-h-0 w-full flex-1 flex-col">
+    <div className="relative z-20 flex min-h-0 w-full flex-1 flex-col">
+      {!canSign ? (
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => void connectRef.current()}
+          className="mb-2 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full bg-white/10 px-3 text-[14px] font-semibold text-white"
+        >
+          <PhantomMark className="h-4 w-4" />
+          {busy ? "Connecting…" : "Connect Phantom"}
+        </button>
+      ) : null}
       <div
         id={target}
-        className="h-[min(22.5rem,calc(100svh-12.5rem))] max-h-full min-h-[16rem] w-full flex-1 overflow-hidden rounded-2xl sm:h-[min(28rem,calc(100svh-10rem))]"
+        className="h-[min(22.5rem,calc(100svh-12.5rem))] max-h-full min-h-[16rem] w-full flex-1 overflow-visible rounded-2xl sm:h-[min(28rem,calc(100svh-10rem))]"
       />
       {!ready && !err ? <p className="mt-2 shrink-0 text-center text-[13px] text-white/40">Loading Jupiter…</p> : null}
       {err ? <p className="mt-2 shrink-0 text-center text-[13px] text-blood">{err}</p> : null}

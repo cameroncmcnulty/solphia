@@ -5,7 +5,7 @@ import { Keypair, PublicKey, SystemProgram, Transaction, VersionedTransaction, L
 import { loadOwner as readOwner, persistOwner } from "./owner";
 import { asTxB64, b64ToBytes, bytesToB64 } from "../solana/wire";
 import { applyExtras, extraKeys, parseTx, serializeTx } from "../solana/extraSign";
-import { inPhantomWebView, injectedProvider, openPhantomUl, waitForInjected, type PhAfter } from "./phantomConnect";
+import { inPhantomWebView, injectedProvider, openPhantomUl, phantomSignError, waitForInjected, type PhAfter } from "./phantomConnect";
 
 const SECRET = "solphia_trading_secret";
 
@@ -141,20 +141,42 @@ export async function signLegacyTx(tx: Transaction, extra?: Keypair, after?: PhA
   return signPhantomAndSend(toB64(unsigned), extra, after);
 }
 
+async function waitForPhantomProvider() {
+  let provider = phantomProvider();
+  if (provider) return provider;
+  const ua = typeof navigator !== "undefined" ? navigator.userAgent : "";
+  const mobile = /iPhone|iPad|iPod|Android/i.test(ua);
+  await waitForInjected(inPhantomWebView() ? 8000 : mobile ? 1200 : 200);
+  return phantomProvider();
+}
+
+/** Phantom in-app throws 4001 unless connect() ran this session — onlyIfTrusted is not enough. */
+async function connectInjected(): Promise<void> {
+  const inj = injectedProvider();
+  if (!inj?.connect) return;
+  try {
+    const res = await inj.connect();
+    const pk = res?.publicKey?.toString();
+    if (pk) persistOwner(pk);
+  } catch (e) {
+    throw phantomSignError(e);
+  }
+}
+
 export async function signPhantomAndSend(transactionB64: string, extra?: Keypair | Keypair[], after?: PhAfter): Promise<string> {
   const packed = asTxB64(transactionB64);
   const extras = extraKeys(extra);
-  let provider = phantomProvider();
-  if (!provider) {
-    const ua = typeof navigator !== "undefined" ? navigator.userAgent : "";
-    const mobile = /iPhone|iPad|iPod|Android/i.test(ua);
-    await waitForInjected(inPhantomWebView() ? 8000 : mobile ? 1200 : 200);
-    provider = phantomProvider();
-  }
+  const provider = await waitForPhantomProvider();
   if (provider) {
+    await connectInjected();
     const raw = b64ToBytes(packed);
     const tx = parseTx(raw);
-    const fromPhantom = (await provider.signTransaction(tx as Transaction)) as Transaction | VersionedTransaction;
+    let fromPhantom: Transaction | VersionedTransaction;
+    try {
+      fromPhantom = (await provider.signTransaction(tx as Transaction)) as Transaction | VersionedTransaction;
+    } catch (e) {
+      throw phantomSignError(e);
+    }
     applyExtras(fromPhantom, extras);
     return sendSignedB64(toB64(serializeTx(fromPhantom)));
   }
@@ -172,17 +194,17 @@ export async function signPhantomAndSend(transactionB64: string, extra?: Keypair
 
 /** Sign only — Jupiter /execute lands the tx. Do not broadcast yourself. */
 export async function signPhantomTxB64(transactionB64: string): Promise<string> {
-  let provider = phantomProvider();
-  if (!provider) {
-    const ua = typeof navigator !== "undefined" ? navigator.userAgent : "";
-    const mobile = /iPhone|iPad|iPod|Android/i.test(ua);
-    await waitForInjected(inPhantomWebView() ? 8000 : mobile ? 1200 : 200);
-    provider = phantomProvider();
-  }
+  const provider = await waitForPhantomProvider();
   if (!provider) throw new Error("Open Swap inside Phantom to sign.");
+  await connectInjected();
   const raw = b64ToBytes(asTxB64(transactionB64));
   const tx = parseTx(raw);
-  const signed = (await provider.signTransaction(tx as Transaction)) as Transaction | VersionedTransaction;
+  let signed: Transaction | VersionedTransaction;
+  try {
+    signed = (await provider.signTransaction(tx as Transaction)) as Transaction | VersionedTransaction;
+  } catch (e) {
+    throw phantomSignError(e);
+  }
   if ("instructions" in signed && Array.isArray((signed as Transaction).instructions)) {
     return toB64(Uint8Array.from((signed as Transaction).serialize({ requireAllSignatures: false, verifySignatures: false })));
   }

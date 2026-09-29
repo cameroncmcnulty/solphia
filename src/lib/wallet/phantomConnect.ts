@@ -11,6 +11,25 @@ export function isPhantomRedirect(e: unknown): boolean {
   return e instanceof Error && e.message === PHANTOM_REDIRECT;
 }
 
+/** Phantom 4001 / "method has not been authorized" — origin was never connect()'d this session. */
+export function phantomSignError(e: unknown): Error {
+  if (e instanceof Error && e.message === PHANTOM_REDIRECT) return e;
+  const rec = e as { message?: string; code?: number } | null;
+  const msg = (typeof rec?.message === "string" ? rec.message : e instanceof Error ? e.message : String(e || "")).trim();
+  const code = rec?.code;
+  if (/not been authorized|has not been authorized/i.test(msg)) {
+    return new Error("Approve Phantom’s connect prompt, then try again.");
+  }
+  if (code === 4001 || /user rejected|User cancelled|User canceled/i.test(msg)) {
+    return new Error("Signature declined in Phantom.");
+  }
+  return e instanceof Error ? e : new Error(msg || "Phantom did not sign.");
+}
+
+export function isPhantomUnauthorized(message: string, code?: string): boolean {
+  return /not been authorized|has not been authorized/i.test(`${message} ${code || ""}`);
+}
+
 type Injected = {
   isPhantom?: boolean;
   publicKey?: { toString(): string };
@@ -210,6 +229,19 @@ function loadLocalJob(): PhJob | null {
   }
 }
 
+export function dropLocalPhantomSession() {
+  try {
+    localStorage.removeItem(SESS_KEY);
+  } catch {
+    /* ignore */
+  }
+  try {
+    sessionStorage.removeItem(SESS_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
 /** Chrome/Safari: open Phantom to connect or sign, then come back to this same page. */
 export async function openPhantomUl(opts?: {
   packed?: string;
@@ -285,13 +317,17 @@ export async function completePhantomUl(): Promise<{
       error?: string;
       session?: PhSession;
       job?: PhJob;
+      reconnect?: boolean;
     };
     if (typeof j.pubkey === "string" && isSolanaAddress(j.pubkey)) persistOwner(j.pubkey);
+    if (j.reconnect || (typeof j.error === "string" && isPhantomUnauthorized(j.error))) {
+      dropLocalPhantomSession();
+    }
     if (j.session && isPhSession(j.session)) saveLocalSession(j.session);
     if (j.job && isPhJob(j.job)) saveLocalJob(j.job);
     if (!r.ok) {
       completing = null;
-      return { error: typeof j.error === "string" ? j.error : "Phantom came back empty." };
+      return { error: typeof j.error === "string" ? j.error : "Phantom came back empty.", url: j.url, app: j.app };
     }
     window.history.replaceState({}, "", cleanPhantomUrl());
     clearPhantomWaiting();

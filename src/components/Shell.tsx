@@ -56,7 +56,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className={`relative min-h-screen overflow-x-hidden ${isAdmin ? "" : "pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:pb-8"}`}>
-      {!isAdmin && !isSwap && !isLaunch && <ParticleField />}
+      {!isAdmin && <ParticleField />}
       {!isAdmin && <div className="vignette" />}
       {!isAdmin && (
         <Suspense fallback={null}>

@@ -67,12 +67,17 @@ function slowIpfsHost(raw: string): boolean {
 }
 
 /** Browser never waits on these — they 403 or hang. Proxy still tries them. */
-function skipBrowserHost(raw: string): boolean {
+function skipBrowserHost(raw: string, aggressive = false): boolean {
   const host = hostOf(raw);
   if (!host) return true;
   if (slowIpfsHost(raw)) return true;
   if (host === "4everland.io" || host.endsWith(".4everland.io")) return true;
   if (host === "gmgn.ai" || host.endsWith(".gmgn.ai")) return true;
+  if (aggressive) {
+    if (host === "pbs.twimg.com" || host.endsWith(".twimg.com")) return true;
+    if (host.includes("axiom")) return true;
+    if (host === "usepaid.app" || host.endsWith(".usepaid.app")) return true;
+  }
   return false;
 }
 
@@ -154,17 +159,21 @@ export function publicImage(src?: string): string {
   return rewriteImageUrl(raw) || raw;
 }
 
-/** What the <img> should actually request. Fast public hosts, then our proxy — never hang on ipfs.io. */
-export function browserArtUrls(src?: string, mint?: string): string[] {
+/** What the <img> should actually request. Fast public hosts, then our proxy — never hang on ipfs.io.
+ *  Mobile WebKit hotlink-blocks twitter/axiom; preferProxy puts same-origin `/api/token-art` first. */
+export function browserArtUrls(src?: string, mint?: string, opts?: { preferProxy?: boolean }): string[] {
   const got = unwrapArtSrc(src);
   const raw = got.src;
   const m = mint && mint.length >= 32 ? mint : got.mint;
   if (raw.startsWith("data:") || raw.startsWith("blob:")) return [raw];
   if (raw.startsWith("/") && !raw.startsWith("/api/") && !raw.startsWith("//")) return [raw];
-  const all = artCandidates(raw, m).filter((u) => u.startsWith("https:") && !skipBrowserHost(u));
+  const all = artCandidates(raw, m).filter((u) => u.startsWith("https:") && !skipBrowserHost(u, Boolean(opts?.preferProxy)));
   const primary = all.filter((u) => !/dexscreener\.com/i.test(u));
   const dex = all.filter((u) => /dexscreener\.com/i.test(u));
   const proxy = displayArtSrc(raw, m);
+  if (opts?.preferProxy && proxy.startsWith("/api/")) {
+    return unique([proxy, ...primary, ...dex]);
+  }
   const out = [...primary];
   if (proxy.startsWith("/api/") && !out.includes(proxy)) out.push(proxy);
   for (const u of dex) if (!out.includes(u)) out.push(u);

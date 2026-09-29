@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { b58dec, b58enc, decryptBox, encryptBox, isPhJob, newDappKey, slimAfter } from "../lib/wallet/phantomBox";
-import { phantomAppUrl } from "../lib/wallet/phantomConnect";
+import { isPhantomUnauthorized, phantomAppUrl, phantomSignError } from "../lib/wallet/phantomConnect";
 
 describe("phantom box", () => {
   it("round-trips base58", () => {
@@ -29,5 +29,12 @@ describe("phantom box", () => {
     assert.equal(after?.image, undefined);
     assert.equal(after?.mint, "Mint111");
     assert.equal(isPhJob({ id: "abcdefghijk", dappSk: "1".repeat(32) }), true);
+  });
+
+  it("maps Phantom 4001 unauthorized into a connect-again prompt", () => {
+    const err = phantomSignError({ code: 4001, message: "The requested method and/or account has not been authorized by the user." });
+    assert.match(err.message, /Approve Phantom/);
+    assert.equal(isPhantomUnauthorized("The requested method and/or account has not been authorized by the user.", "4001"), true);
+    assert.equal(isPhantomUnauthorized("Signature declined in Phantom.", "user_rejected"), false);
   });
 });

@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { clientIp, isSolanaAddress, rateLimit } from "@/lib/security";
 import { b58dec, b58enc, decryptBox, dappPublic, encryptBox, isPhJob, isPhSession, newDappKey, newJobId, slimJob, type PhAfter, type PhJob } from "@/lib/wallet/phantomBox";
-import { delPhJob, getPhJob, loadPhSession, putPhJob, savePhSession } from "@/lib/wallet/phantomJob";
+import { delPhJob, dropPhSession, getPhJob, loadPhSession, putPhJob, savePhSession } from "@/lib/wallet/phantomJob";
+import { isPhantomUnauthorized } from "@/lib/wallet/phantomConnect";
 import { extrasFromSecrets, signedTxB64 } from "@/lib/solana/extraSign";
 import { broadcastB64 } from "@/lib/solana/broadcast";
 import { b64ToBytes } from "@/lib/solana/wire";
@@ -113,6 +114,17 @@ async function completeJob(req: NextRequest, body: Record<string, unknown>) {
   const err = typeof body.errorCode === "string" ? body.errorCode : "";
   if (err) {
     const message = typeof body.errorMessage === "string" && body.errorMessage ? body.errorMessage : "Signature declined in Phantom.";
+    if (isPhantomUnauthorized(message, err)) {
+      job.session = undefined;
+      job.phantomPk = undefined;
+      await putPhJob(job);
+      if (job.pubkey) await dropPhSession(job.pubkey);
+      return NextResponse.json({
+        error: "Approve Phantom’s connect prompt, then try again.",
+        reconnect: true,
+        ...packLink(connectUrl(req, job), { mode: "connect", job: slimJob(job) }),
+      });
+    }
     return NextResponse.json({ error: message, declined: /user rejected|4001/i.test(message + err) });
   }
   const nonce = typeof body.nonce === "string" ? body.nonce : "";

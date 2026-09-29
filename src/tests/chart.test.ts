@@ -151,4 +151,16 @@ describe("token art urls", () => {
     assert.ok(urls[0].includes("images.pump.fun"));
     assert.ok(urls.some((u) => u.startsWith("/api/token-art")));
   });
+
+  it("puts the same-origin proxy first on mobile so WebKit is not hotlink-blocked", () => {
+    const mint = "So11111111111111111111111111111111111111112";
+    const src = "https://pbs.twimg.com/media/abc.jpg";
+    const urls = browserArtUrls(src, mint, { preferProxy: true });
+    assert.ok(urls[0].startsWith("/api/token-art"));
+    assert.equal(
+      urls.filter((u) => u.startsWith("https:")).some((u) => u.includes("twimg")),
+      false,
+    );
+    assert.ok(urls.some((u) => u.includes("images.pump.fun")));
+  });
 });

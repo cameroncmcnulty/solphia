@@ -52,3 +52,11 @@ export async function savePhSession(pubkey: string, sess: PhSession): Promise<vo
     acc.phSession = sess;
   }, true);
 }
+
+export async function dropPhSession(pubkey?: string): Promise<void> {
+  if (!pubkey) return;
+  await withLaunch((st) => {
+    const acc = st.launch?.accounts?.[pubkey];
+    if (acc) acc.phSession = undefined;
+  }, true);
+}

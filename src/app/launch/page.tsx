@@ -2231,7 +2231,7 @@ function CoinDesk({
 
         {jupiter ? (
           <div className="min-w-0">
-            <SwapWidget key={open.mint || open.id} defaultMint={open.mint || ""} />
+            <SwapWidget key={open.mint || open.id} owner={owner} defaultMint={open.mint || ""} />
             {creator && (
               <button
                 type="button"
