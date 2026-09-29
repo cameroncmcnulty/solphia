@@ -1230,17 +1230,22 @@ export default function LaunchPage() {
         });
         if (j.claim) {
           const amt = Number(j.claimSol) || 0;
-          const more = Number(j.remaining) || 0;
+          const rest = (Array.isArray(j.remainingMints) ? j.remainingMints : []).filter(
+            (m: unknown) => typeof m === "string" && m && !(j.claimMints || []).includes(m),
+          );
+          await Promise.all([refreshPad(true), refreshTape()]);
+          if (!j.partner && rest.length) {
+            setMsg(`Claimed ${fmtClaimSol(amt)} SOL. Claiming the rest…`);
+            await act({ action: "withdraw_dev", mint: rest[0], mints: rest });
+            return;
+          }
           setMsg(
             j.partner
               ? "Protocol fees claimed into this wallet."
-              : more
-                ? `Claimed ${fmtClaimSol(amt)} SOL. Tap claim again for ${fmtClaimSol(Number(j.remainingSol) || 0)} SOL more.`
-                : amt
-                  ? `Claimed ${fmtClaimSol(amt)} SOL into this wallet.`
-                  : "Creator fees claimed into this wallet.",
+              : amt
+                ? `Claimed ${fmtClaimSol(amt)} SOL into this wallet.`
+                : "Creator fees claimed into this wallet.",
           );
-          await Promise.all([refreshPad(true), refreshTape()]);
           return;
         }
         const conf = await fetch("/api/launch", {
@@ -1892,7 +1897,7 @@ export default function LaunchPage() {
                 <p className="font-mono text-[11px] tracking-[0.28em] text-acid">DEV REWARDS</p>
                 <h2 className="mt-1 text-[22px] font-semibold tracking-tight text-white">Claim fees</h2>
                 <p className="mt-1 text-[14px] leading-snug text-white/45">
-                  Swaps on the curve pay 1%. Half is yours. Each Phantom signature pays the first token on this list. Phantom shows the exact SOL before you approve.
+                  Swaps on the curve pay 1%. Half is yours. Unclaimed is what you can withdraw. This button pays that amount.
                 </p>
                 <div className="mt-4 grid grid-cols-2 gap-3">
                   <div>
@@ -1909,27 +1914,22 @@ export default function LaunchPage() {
                     type="button"
                     disabled={busy || claimable.length === 0}
                     onClick={() => {
-                      const first = payout.next;
-                      if (!first?.mint) return;
+                      if (!payout.mints.length) return;
                       act({
                         action: "withdraw_dev",
-                        id: first.id,
-                        mint: first.mint,
-                        mints: [first.mint],
+                        mint: payout.mints[0],
+                        mints: payout.mints,
                       });
                     }}
                     className="rounded-full bg-[#14f195] px-4 py-2 text-[14px] font-semibold text-[#04000a] disabled:opacity-40"
                   >
-                    {payout.nextSol > 0 ? `Claim ${fmtClaimSol(payout.nextSol)} SOL` : "Claim creator fees"}
+                    {unclaimedSol > 0 ? `Claim ${fmtClaimSol(unclaimedSol)} SOL` : "Claim creator fees"}
                   </button>
                 </div>
-                {payout.restCount > 0 ? (
+                {unclaimedSol > 0 ? (
                   <p className="mt-2 text-[12px] text-white/40">
-                    {claimable.length} tokens hold {fmtClaimSol(unclaimedSol)} SOL. This signature pays {fmtClaimSol(payout.nextSol)} SOL.
-                    Then {fmtClaimSol(payout.restSol)} SOL on the others — tap claim again after Phantom.
+                    {fmtClaimSol(unclaimedSol)} SOL unclaimed. Phantom will credit that amount, minus the network fee.
                   </p>
-                ) : payout.nextSol > 0 ? (
-                  <p className="mt-2 text-[12px] text-white/40">Phantom will credit {fmtClaimSol(payout.nextSol)} SOL, minus the network fee.</p>
                 ) : null}
               </div>
             )}

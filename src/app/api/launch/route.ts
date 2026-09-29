@@ -647,12 +647,13 @@ async function postLaunch(req: NextRequest) {
     const book = bookOf(snap);
     const coin = book.coins.find((c) => c.id === b.id || (b.mint && c.mint === b.mint));
     if (coin && coin.creator !== b.pubkey) return fail("not_creator");
-    const mint =
-      (b.mints || []).find((m) => isSolanaAddress(m)) ||
-      (b.mint && isSolanaAddress(b.mint) ? b.mint : "") ||
-      (coin?.mint && isSolanaAddress(coin.mint) ? coin.mint : "");
-    if (!mint || !dbcEnabled()) return fail("not_found", 404);
-    const built = await (await dbcApi()).buildDbcClaimCreatorBatch({ mints: [mint], owner: b.pubkey });
+    const mints = [
+      ...((b.mints || []).filter((m) => isSolanaAddress(m))),
+      ...(b.mint && isSolanaAddress(b.mint) ? [b.mint] : []),
+      ...(coin?.mint && isSolanaAddress(coin.mint) ? [coin.mint] : []),
+    ].filter((m, i, all) => all.indexOf(m) === i);
+    if (!mints.length || !dbcEnabled()) return fail("not_found", 404);
+    const built = await (await dbcApi()).buildDbcClaimCreatorBatch({ mints, owner: b.pubkey });
     if (!built.ok) return fail(built.error);
     return NextResponse.json({
       ok: true,
@@ -663,6 +664,7 @@ async function postLaunch(req: NextRequest) {
       claimMints: built.mints,
       remaining: built.remaining,
       remainingSol: built.remainingSol,
+      remainingMints: built.remainingMints,
       coin: coin ? publicCoin(coin, solUsd, b.pubkey, book) : undefined,
     });
   }

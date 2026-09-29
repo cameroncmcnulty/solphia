@@ -67,20 +67,19 @@ export function sumCreatorGenerated(rows: { mint?: string; creatorFeesSol?: numb
   return uniqueByMint(rows).reduce((s, row) => s + Math.max(0, Number(row.creatorFeesSol) || 0), 0);
 }
 
-/** Next Phantom signature pays one pool. Button must show this, not the wallet total. */
+/** Unclaimed is withdrawable. The claim button is that same number. */
 export function nextCreatorPayout<T extends { mint?: string; creatorUnclaimedSol?: number }>(
   rows: T[],
-): { next: T | null; nextSol: number; restCount: number; restSol: number; totalUnclaimed: number } {
+): { next: T | null; nextSol: number; restCount: number; restSol: number; totalUnclaimed: number; mints: string[] } {
   const list = claimableCreator(rows);
-  const next = list[0] || null;
-  const nextSol = next ? Number(next.creatorUnclaimedSol) || 0 : 0;
   const totalUnclaimed = sumCreatorUnclaimed(list);
   return {
-    next,
-    nextSol,
-    restCount: Math.max(0, list.length - 1),
-    restSol: Math.max(0, totalUnclaimed - nextSol),
+    next: list[0] || null,
+    nextSol: totalUnclaimed,
+    restCount: 0,
+    restSol: 0,
     totalUnclaimed,
+    mints: list.map((row) => String(row.mint || "").trim()).filter(Boolean),
   };
 }
 

@@ -40,31 +40,31 @@ describe("creator claim amounts", () => {
     assert.equal(fmtClaimSol(0), "0");
   });
 
-  it("the claim button pays one pool, not the wallet total", () => {
+  it("the claim button equals unclaimed — that is the withdrawable amount", () => {
     const rows = [
       { mint: "Mint111111111111111111111111111111111111111", creatorFeesSol: 0.01, creatorUnclaimedSol: 0.003982 },
       { mint: "Mint222222222222222222222222222222222222222", creatorFeesSol: 0.072, creatorUnclaimedSol: 0.073338 },
       { mint: "Mint333333333333333333333333333333333333333", creatorFeesSol: 0, creatorUnclaimedSol: 0 },
     ];
     const p = nextCreatorPayout(rows);
-    assert.equal(p.next?.mint, "Mint222222222222222222222222222222222222222");
-    assert.equal(fmtClaimSol(p.nextSol), "0.073338");
-    assert.equal(p.restCount, 1);
+    assert.equal(fmtClaimSol(p.nextSol), "0.07732");
     assert.equal(fmtClaimSol(p.totalUnclaimed), "0.07732");
-    assert.equal(fmtClaimSol(p.restSol), "0.003982");
+    assert.equal(fmtClaimSol(p.nextSol), fmtClaimSol(p.totalUnclaimed));
+    assert.equal(p.restCount, 0);
+    assert.equal(p.mints.length, 2);
     assert.equal(fmtClaimSol(sumCreatorGenerated(rows)), "0.082");
-    assert.notEqual(fmtClaimSol(p.nextSol), fmtClaimSol(p.totalUnclaimed));
   });
 
-  it("sorts the button mint to match the first Your tokens row", () => {
+  it("header claim lists every unpaid mint, biggest first", () => {
     const rows = [
       { mint: "MintSmall111111111111111111111111111111111", creatorUnclaimedSol: 0.0029993, createdAt: 2 },
       { mint: "MintTest11111111111111111111111111111111111", creatorUnclaimedSol: 0.061849, createdAt: 1 },
     ];
     const p = nextCreatorPayout(rows);
-    assert.equal(sortByUnclaimedDesc(rows)[0]?.mint, p.next?.mint);
-    assert.equal(p.next?.mint, "MintTest11111111111111111111111111111111111");
-    assert.equal(fmtClaimSol(p.nextSol), "0.061849");
+    assert.equal(sortByUnclaimedDesc(rows)[0]?.mint, p.mints[0]);
+    assert.equal(p.mints[0], "MintTest11111111111111111111111111111111111");
+    assert.equal(fmtClaimSol(p.nextSol), "0.064848");
+    assert.equal(fmtClaimSol(p.nextSol), fmtClaimSol(p.totalUnclaimed));
   });
 
   it("advertises the simulated SOL credit Phantom shows, not a stale pool field", () => {
