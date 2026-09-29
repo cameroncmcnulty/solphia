@@ -53,13 +53,35 @@ function unique(urls: string[]): string[] {
   return out;
 }
 
-function slowIpfsHost(raw: string): boolean {
+function hostOf(raw: string): string {
   try {
-    const host = new URL(raw).hostname.toLowerCase();
-    return SLOW_IPFS_HOSTS.some((h) => host === h || host.endsWith(`.${h}`));
+    return new URL(raw).hostname.toLowerCase();
   } catch {
-    return false;
+    return "";
   }
+}
+
+function slowIpfsHost(raw: string): boolean {
+  const host = hostOf(raw);
+  return SLOW_IPFS_HOSTS.some((h) => host === h || host.endsWith(`.${h}`));
+}
+
+/** Browser never waits on these — they 403 or hang. Proxy still tries them. */
+function skipBrowserHost(raw: string): boolean {
+  const host = hostOf(raw);
+  if (!host) return true;
+  if (slowIpfsHost(raw)) return true;
+  if (host === "4everland.io" || host.endsWith(".4everland.io")) return true;
+  if (host === "gmgn.ai" || host.endsWith(".gmgn.ai")) return true;
+  return false;
+}
+
+function mintFallbacks(mint: string): string[] {
+  return [
+    `https://images.pump.fun/coin-image/${mint}?variant=600x600`,
+    `https://dd.dexscreener.com/ds-data/tokens/solana/${mint}.png`,
+    `https://cdn.dexscreener.com/ds-data/tokens/solana/${mint}.png`,
+  ];
 }
 
 export function rewriteImageUrl(src?: string): string {
@@ -90,8 +112,7 @@ export function artCandidates(src?: string, mint?: string): string[] {
     }
   }
   if (mint && mint.length >= 32) {
-    const dex = `https://dd.dexscreener.com/ds-data/tokens/solana/${mint}.png`;
-    if (!out.includes(dex)) out.push(dex);
+    for (const u of mintFallbacks(mint)) if (!out.includes(u)) out.push(u);
   }
   return unique(out);
 }
@@ -133,16 +154,20 @@ export function publicImage(src?: string): string {
   return rewriteImageUrl(raw) || raw;
 }
 
-/** What the <img> should actually request. Fast public hosts first. Never ipfs.io / public Pinata. */
+/** What the <img> should actually request. Fast public hosts, then our proxy — never hang on ipfs.io. */
 export function browserArtUrls(src?: string, mint?: string): string[] {
   const got = unwrapArtSrc(src);
   const raw = got.src;
   const m = mint && mint.length >= 32 ? mint : got.mint;
   if (raw.startsWith("data:") || raw.startsWith("blob:")) return [raw];
   if (raw.startsWith("/") && !raw.startsWith("/api/") && !raw.startsWith("//")) return [raw];
-  const out = artCandidates(raw, m).filter((u) => u.startsWith("https:") && !slowIpfsHost(u));
+  const all = artCandidates(raw, m).filter((u) => u.startsWith("https:") && !skipBrowserHost(u));
+  const primary = all.filter((u) => !/dexscreener\.com/i.test(u));
+  const dex = all.filter((u) => /dexscreener\.com/i.test(u));
   const proxy = displayArtSrc(raw, m);
+  const out = [...primary];
   if (proxy.startsWith("/api/") && !out.includes(proxy)) out.push(proxy);
+  for (const u of dex) if (!out.includes(u)) out.push(u);
   return unique(out);
 }
 
@@ -159,8 +184,20 @@ function artKey(urls: string[]): string {
   return urls.join("\n");
 }
 
+function sniffMime(buf: Uint8Array, declared: string): string | null {
+  if (buf.length >= 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return "image/jpeg";
+  if (buf.length >= 8 && buf[0] === 0x89 && buf[1] === 0x50) return "image/png";
+  if (buf.length >= 6 && buf[0] === 0x47 && buf[1] === 0x49 && buf[2] === 0x46) return "image/gif";
+  if (buf.length >= 12 && buf[8] === 0x57 && buf[9] === 0x45 && buf[10] === 0x42 && buf[11] === 0x50) return "image/webp";
+  const head = new TextDecoder().decode(buf.slice(0, 80)).trimStart().toLowerCase();
+  if (head.startsWith("<svg") || head.startsWith("<?xml")) return "image/svg+xml";
+  const mime = declared.split(";")[0]!.trim().toLowerCase();
+  if (mime.startsWith("image/") && mime !== "image/svg+xml") return mime;
+  return null;
+}
+
 export async function fetchFirstImage(urls: string[], timeoutMs = 2200): Promise<ArtBytes | null> {
-  const list = urls.filter((u) => /^https:\/\//i.test(u)).slice(0, 5);
+  const list = urls.filter((u) => /^https:\/\//i.test(u)).slice(0, 6);
   if (!list.length) return null;
   const key = artKey(list);
   const remembered = wonUrl.get(key);
@@ -186,10 +223,11 @@ export async function fetchFirstImage(urls: string[], timeoutMs = 2200): Promise
       })
         .then(async (r) => {
           if (!r.ok) throw new Error("no");
-          const mime = (r.headers.get("content-type") || "image/jpeg").split(";")[0]!.trim().toLowerCase();
-          if (!mime.startsWith("image/") || mime.includes("svg")) throw new Error("no");
+          const declared = (r.headers.get("content-type") || "").split(";")[0]!.trim().toLowerCase();
           const buf = new Uint8Array(await r.arrayBuffer());
-          if (buf.byteLength < 32 || buf.byteLength > 2_500_000) throw new Error("no");
+          if (buf.byteLength < 32 || buf.byteLength > 3_000_000) throw new Error("no");
+          const mime = sniffMime(buf, declared);
+          if (!mime) throw new Error("no");
           wonUrl.set(key, u);
           finish({ body: buf, mime, url: u });
         })

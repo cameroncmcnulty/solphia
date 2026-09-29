@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useState, type ReactNode } from "react";
 import { ArrowDownUp } from "lucide-react";
 import {
   JUP_PLUGIN_ACCOUNT,
@@ -96,14 +96,26 @@ function loadPluginScript(): Promise<void> {
   });
 }
 
-function bootPlugin(targetId: string, outputMint: string) {
+function boxHeight(el: HTMLElement) {
+  const measured = el.clientHeight;
+  if (measured >= 260) return Math.min(520, measured);
+  const vh = window.innerHeight || 700;
+  return Math.max(280, Math.min(400, Math.round(vh - 240)));
+}
+
+function bootPlugin(targetId: string, outputMint: string, height: number) {
   const el = document.getElementById(targetId);
   if (!el || !window.Jupiter?.init) return false;
+  try {
+    window.Jupiter.close?.();
+  } catch {
+    /* first mount */
+  }
   window.Jupiter.init({
     displayMode: "integrated",
     integratedTargetId: targetId,
     defaultExplorer: "Solscan",
-    containerStyles: { width: "100%", height: "548px" },
+    containerStyles: { width: "100%", height: `${height}px` },
     formProps: {
       initialInputMint: JUP_PLUGIN_SOL,
       initialOutputMint: outputMint,
@@ -122,7 +134,8 @@ export function SwapWidget({
   title?: string;
   defaultMint?: string;
 }) {
-  const target = useRef("jupiter-plugin").current;
+  const uid = useId().replace(/:/g, "");
+  const target = `jup-${uid}`;
   const [ready, setReady] = useState(false);
   const [err, setErr] = useState("");
   const outMint = defaultMint && defaultMint.length > 30 ? defaultMint : JUP_PLUGIN_USDC;
@@ -134,27 +147,38 @@ export function SwapWidget({
         await loadPluginScript();
         if (gone) return;
         await new Promise((r) => requestAnimationFrame(() => r(null)));
-        if (gone) return;
-        if (!bootPlugin(target, outMint)) {
-          setErr("Jupiter did not mount. Hard-refresh once.");
+        const el = document.getElementById(target);
+        if (gone || !el) return;
+        const height = boxHeight(el);
+        el.style.height = `${height}px`;
+        if (!bootPlugin(target, outMint, height)) {
+          setErr("Jupiter did not mount.");
           return;
         }
         setReady(true);
         setErr("");
       } catch {
-        if (!gone) setErr("Jupiter did not load. Hard-refresh once.");
+        if (!gone) setErr("Jupiter did not load.");
       }
     })();
     return () => {
       gone = true;
+      try {
+        window.Jupiter?.close?.();
+      } catch {
+        /* unmount */
+      }
     };
   }, [outMint, target]);
 
   return (
-    <div>
-      <div id={target} className="w-full overflow-hidden rounded-2xl" style={{ height: 548 }} />
-      {!ready && !err ? <p className="mt-3 text-center text-[13px] text-white/40">Loading Jupiter…</p> : null}
-      {err ? <p className="mt-3 text-center text-[13px] text-blood">{err}</p> : null}
+    <div className="flex min-h-0 w-full flex-1 flex-col">
+      <div
+        id={target}
+        className="h-[min(22.5rem,calc(100svh-12.5rem))] max-h-full min-h-[16rem] w-full flex-1 overflow-hidden rounded-2xl sm:h-[min(28rem,calc(100svh-10rem))]"
+      />
+      {!ready && !err ? <p className="mt-2 shrink-0 text-center text-[13px] text-white/40">Loading Jupiter…</p> : null}
+      {err ? <p className="mt-2 shrink-0 text-center text-[13px] text-blood">{err}</p> : null}
     </div>
   );
 }

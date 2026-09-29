@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { TokenArt } from "@/components/TokenArt";
 import { paySeatFromPhantom } from "@/lib/wallet/trading";
 import { MEGA_ROCKETS, ROCKET_PACKS, rocketSol, type BoostRank, type BoostSort } from "@/lib/launch/boost";
 
@@ -129,14 +130,7 @@ export function BoostRail({
               onClick={() => onOpen(b.mint, b.coinId)}
               className={`boost-tile ${gold ? "gold" : ""}`}
             >
-              {b.image ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={b.image} alt="" className="boost-tile-art" />
-              ) : (
-                <div className="boost-tile-art flex items-center justify-center font-display text-xs text-acid">
-                  {(ticker || "?").slice(0, 2)}
-                </div>
-              )}
+              <TokenArt src={b.image} mint={b.mint} label={ticker} className="boost-tile-art" />
               <span className="mt-1 block w-full truncate text-center text-[12px] font-semibold text-ghost">
                 ${ticker || "TOKEN"}
               </span>

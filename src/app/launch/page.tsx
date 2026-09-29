@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Rocket } from "lucide-react";
+import { ArrowDownUp, Rocket } from "lucide-react";
 import { Keypair } from "@solana/web3.js";
 import { usePathname } from "next/navigation";
 import { CopyCa } from "@/components/CopyCa";
@@ -317,6 +317,7 @@ export default function LaunchPage() {
   const owner = connected || (typeof window !== "undefined" ? loadOwner() : null);
   const [coins, setCoins] = useState<Coin[]>([]);
   const [open, setOpen] = useState<Coin | null>(null);
+  const [jupOpen, setJupOpen] = useState(false);
   const [name, setName] = useState("");
   const [symbol, setSymbol] = useState("");
   const [blurb, setBlurb] = useState("");
@@ -1345,14 +1346,40 @@ export default function LaunchPage() {
   return (
     <main className="relative min-h-[calc(100vh-4rem)] overflow-x-hidden pb-24">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(120%_80%_at_50%_-10%,rgba(20,80,40,0.35),transparent_55%)]" />
-      <div className="relative z-10 mx-auto max-w-lg px-4 pt-5 md:max-w-2xl md:pt-8">
+      <div className={`relative z-10 mx-auto px-4 pt-5 md:pt-8 ${isSwap ? "max-w-lg md:max-w-2xl lg:max-w-3xl" : "max-w-lg md:max-w-2xl"}`}>
         <div>
           <p className="text-[32px] font-semibold tracking-tight text-white">{isSwap ? "Swap" : "Launch"}</p>
-          {isSwap ? <p className="mt-1 text-[15px] text-white/45">Pick a token below, or search inside Jupiter.</p> : null}
+          {isSwap ? <p className="mt-1 text-[15px] text-white/45">Pick a token below, or tap Swap to search.</p> : null}
         </div>
         {isSwap && (
           <div className="mt-4">
-            <SwapWidget owner={owner} defaultMint={open?.mint || ""} />
+            {!jupOpen ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setOpen(null);
+                  setJupOpen(true);
+                }}
+                className="btn-acid flex min-h-[52px] w-full items-center justify-center gap-2 rounded-full text-[16px] font-semibold"
+              >
+                <ArrowDownUp className="h-5 w-5" />
+                Swap
+              </button>
+            ) : (
+              <div>
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <p className="text-[13px] font-medium text-white/50">Jupiter</p>
+                  <button
+                    type="button"
+                    onClick={() => setJupOpen(false)}
+                    className="rounded-full bg-white/10 px-3 py-1.5 text-[13px] font-medium text-white"
+                  >
+                    Close
+                  </button>
+                </div>
+                <SwapWidget owner={owner} />
+              </div>
+            )}
           </div>
         )}
         {isSwap && (
@@ -1380,6 +1407,7 @@ export default function LaunchPage() {
               onOpen={(mint, coinId) => {
                 const hit = coins.find((c) => c.mint === mint || c.id === coinId || c.id === mint);
                 if (hit) {
+                  setJupOpen(false);
                   setOpen(hit);
                   setLookedMint(hit.mint || hit.id);
                   setSnapAt(Date.now());
@@ -1937,6 +1965,7 @@ export default function LaunchPage() {
                     place={isSwap && tapeSort === "rank" && row.rank >= 1 && row.rank <= 3 ? row.rank : undefined}
                     badge={row.coin.born ? "✓" : undefined}
                     onOpen={() => {
+                      setJupOpen(false);
                       setOpen((cur) => {
                         if (cur?.id === row.coin.id) return null;
                         setSnapAt(Date.now());
@@ -1990,6 +2019,7 @@ export default function LaunchPage() {
                         setSol={setSol}
                         solUsd={solUsd}
                         busy={busy}
+                        jupiter={isSwap}
                         onClose={() => setOpen(null)}
                         onAct={act}
                       />
@@ -2026,6 +2056,7 @@ function CoinDesk({
   setSol,
   solUsd,
   busy,
+  jupiter,
   onClose,
   onAct,
 }: {
@@ -2035,6 +2066,7 @@ function CoinDesk({
   setSol: (n: number) => void;
   solUsd: number;
   busy: boolean;
+  jupiter?: boolean;
   onClose: () => void;
   onAct: (body: Record<string, unknown>) => void;
 }) {
@@ -2133,7 +2165,7 @@ function CoinDesk({
             </div>
           </div>
         </div>
-        <button type="button" onClick={onClose} className="btn-ghost rounded-full px-4 py-2 text-sm">
+        <button type="button" onClick={onClose} className="btn-ghost min-h-[44px] shrink-0 rounded-full px-4 py-2 text-sm">
           Close
         </button>
       </div>
@@ -2148,7 +2180,7 @@ function CoinDesk({
         solUsd={solUsd}
       />
 
-      <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(280px,360px)]">
+      <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(280px,400px)]">
         <div className="min-w-0">
           {open.born && (
             <div className="mb-3 h-1.5 overflow-hidden rounded-full bg-void">
@@ -2197,10 +2229,22 @@ function CoinDesk({
           </div>
         </div>
 
-        <SwapShell
-          title={`Trade ${tick(open.symbol)}`}
-          subtitle="On the Solphia curve until it graduates."
-        >
+        {jupiter ? (
+          <div className="min-w-0">
+            <SwapWidget key={open.mint || open.id} defaultMint={open.mint || ""} />
+            {creator && (
+              <button
+                type="button"
+                disabled={busy || !((open.creatorUnclaimedSol || 0) > 1e-6 || open.devRewardsSol > 0)}
+                onClick={() => onAct({ action: "withdraw_dev", id: open.id, mint: open.mint })}
+                className="mt-3 min-h-[44px] w-full rounded-full border border-acid/40 py-2 text-sm text-acid disabled:opacity-40"
+              >
+                Claim {fmtSol(open.creatorUnclaimedSol || open.devRewardsSol || 0, 4)} SOL
+              </button>
+            )}
+          </div>
+        ) : (
+        <SwapShell title={`Trade ${tick(open.symbol)}`} subtitle="On the Solphia curve until it graduates.">
           {!padTrade ? (
             <MarketSwap open={open} owner={owner} sol={sol} setSol={setSol} solUsd={solUsd} />
           ) : (
@@ -2312,6 +2356,7 @@ function CoinDesk({
             </>
           )}
         </SwapShell>
+        )}
       </div>
     </section>
   );

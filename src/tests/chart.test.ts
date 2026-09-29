@@ -126,9 +126,29 @@ describe("token art urls", () => {
     assert.equal(urls[0], `https://pump.mypinata.cloud/ipfs/${cid}`);
     assert.equal(urls.some((u) => u.startsWith("https://ipfs.io")), false);
     assert.equal(urls.some((u) => u.includes("gateway.pinata.cloud")), false);
-    assert.ok(urls[urls.length - 1]!.startsWith("/api/token-art"));
+    assert.ok(urls.some((u) => u.includes("images.pump.fun")));
+    assert.ok(urls.some((u) => u.startsWith("/api/token-art")));
+    assert.ok(urls.indexOf(urls.find((u) => u.startsWith("/api/token-art"))!) > 0);
     assert.equal(publicImage(src), `https://pump.mypinata.cloud/ipfs/${cid}`);
     assert.equal(publicImage(`/api/token-art?m=${mint}&u=${encodeURIComponent(src)}`), `https://pump.mypinata.cloud/ipfs/${cid}`);
     assert.equal(browserArtUrls("data:image/png;base64,abc")[0], "data:image/png;base64,abc");
+  });
+
+  it("skips gmgn in the browser and still has pump.fun mint art", () => {
+    const mint = "So11111111111111111111111111111111111111112";
+    const urls = browserArtUrls("https://gmgn.ai/external-res/x.webp", mint);
+    assert.equal(
+      urls.filter((u) => u.startsWith("https:")).some((u) => u.includes("gmgn.ai")),
+      false,
+    );
+    assert.ok(urls[0].includes("images.pump.fun"));
+    assert.ok(urls.some((u) => u.startsWith("/api/token-art")));
+  });
+
+  it("still finds art when the tape has a mint and no image url", () => {
+    const mint = "So11111111111111111111111111111111111111112";
+    const urls = browserArtUrls("", mint);
+    assert.ok(urls[0].includes("images.pump.fun"));
+    assert.ok(urls.some((u) => u.startsWith("/api/token-art")));
   });
 });

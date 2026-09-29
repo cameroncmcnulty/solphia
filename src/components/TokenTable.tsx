@@ -1,6 +1,7 @@
 "use client";
 
 import { TokenSocials } from "@/components/TokenSocials";
+import { TokenArt } from "@/components/TokenArt";
 
 export function TokenTable({
   rows,
@@ -33,12 +34,7 @@ export function TokenTable({
         return (
           <div key={t.mint} className="panel rounded-2xl p-4">
             <div className="flex items-start gap-3">
-              {t.image ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={t.image} alt="" className="h-10 w-10 shrink-0 rounded-full object-cover" />
-              ) : (
-                <div className="h-10 w-10 shrink-0 rounded-full bg-line" />
-              )}
+              <TokenArt src={t.image} mint={t.mint} label={t.symbol} className="h-10 w-10 shrink-0 rounded-full" />
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <span className="font-display text-lg text-ghost">{t.symbol}</span>

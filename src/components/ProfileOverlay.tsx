@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { CartoonPfp } from "./CartoonPfp";
 import { RankBadge, StaffBadge } from "./RankBadge";
+import { TokenArt } from "./TokenArt";
 
 function media(url?: string) {
   const raw = (url || "").trim();
@@ -134,14 +135,7 @@ export function ProfileOverlay({
           {pack?.intro ? <p className="mt-3 text-sm leading-relaxed text-ghost">{pack.intro}</p> : <p className="mt-3 text-sm text-mute">No intro yet.</p>}
           {fav?.mint ? (
             <div className="mt-3 flex items-center gap-2 rounded-2xl border border-acid/30 bg-acid/[0.08] p-2">
-              {fav.image ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={media(fav.image)} alt="" className="h-10 w-10 rounded-xl object-cover" />
-              ) : (
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-void font-display text-sm text-acid">
-                  {(fav.symbol || "?").slice(0, 2)}
-                </div>
-              )}
+              <TokenArt src={fav.image} mint={fav.mint} label={fav.symbol} className="h-10 w-10 rounded-xl" />
               <div className="min-w-0 flex-1">
                 <div className="font-mono text-[9px] tracking-[0.16em] text-mute">FAVOURITE PROJECT</div>
                 <div className="truncate font-display text-sm text-ghost">${(fav.symbol || "").replace(/^\$/, "") || "TOKEN"}</div>

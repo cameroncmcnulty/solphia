@@ -23,6 +23,7 @@ import { AccountMenu } from "@/components/AccountMenu";
 import { ParticleField } from "@/components/ParticleField";
 import { CartoonPfp } from "@/components/CartoonPfp";
 import { SwapWidget } from "@/components/SwapWidget";
+import { TokenArt } from "@/components/TokenArt";
 import { WalletConnect } from "@/components/WalletConnect";
 import { RankBadge } from "@/components/RankBadge";
 import { ProfileOverlay } from "@/components/ProfileOverlay";
@@ -164,14 +165,7 @@ function TokenBubble({
   const [copied, setCopied] = useState(false);
   return (
     <div className="mt-2 grid w-full grid-cols-[2.4rem_minmax(0,1fr)_auto_auto] items-center gap-2 rounded-2xl border border-white/10 bg-black/25 px-2 py-1.5">
-      {token.image ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={token.image} alt="" className="h-9 w-9 rounded-xl object-cover" />
-      ) : (
-        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-void font-display text-xs text-acid">
-          {(token.symbol || "?").slice(0, 2)}
-        </div>
-      )}
+      <TokenArt src={token.image} mint={token.mint} label={token.symbol} className="h-9 w-9 rounded-xl" />
       <div className="min-w-0 overflow-hidden">
         <div className="truncate text-[14px] font-semibold text-white">{tick(token.symbol)}</div>
         <div className="truncate font-mono text-[10px] text-white/55">
@@ -223,20 +217,25 @@ function Sheet({
 }) {
   if (!open) return null;
   return (
-    <div className="absolute inset-0 z-30 flex items-end justify-center bg-black/70 sm:items-center sm:p-4" onClick={onClose}>
+    <div
+      className="fixed inset-x-0 top-0 z-[45] flex items-end justify-center bg-black/70 bottom-[calc(4.85rem+env(safe-area-inset-bottom))] md:bottom-0 md:items-center md:p-4"
+      onClick={onClose}
+    >
       <div
-        className={`w-full overflow-y-auto rounded-t-3xl border border-white/10 bg-[#04000a] pb-[env(safe-area-inset-bottom)] sm:rounded-3xl sm:pb-3 ${
-          tall ? "max-h-[min(96dvh,44rem)] sm:max-w-md" : "panel-bubble max-h-[min(78%,36rem)] sm:max-w-lg"
+        className={`flex w-full flex-col overflow-hidden rounded-t-3xl border border-white/10 bg-[#04000a] sm:rounded-3xl ${
+          tall
+            ? "max-h-[min(70svh,32rem)] sm:max-h-[36rem] sm:max-w-md"
+            : "panel-bubble max-h-[min(70svh,32rem)] overflow-y-auto sm:max-w-lg"
         }`}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-4 py-3">
+        <div className="flex h-12 shrink-0 items-center justify-between px-4">
           <div className="font-display text-[20px] text-ghost">{title}</div>
-          <button type="button" onClick={onClose} className="flex h-9 w-9 items-center justify-center rounded-full text-white/70" aria-label="Close">
+          <button type="button" onClick={onClose} className="flex h-11 w-11 items-center justify-center rounded-full text-white/70" aria-label="Close">
             <X className="h-5 w-5" />
           </button>
         </div>
-        <div className={tall ? "px-2 pb-3" : "px-4 pb-5"}>{children}</div>
+        <div className={`min-h-0 ${tall ? "flex flex-1 flex-col overflow-hidden px-2 pb-3" : "px-4 pb-5"}`}>{children}</div>
       </div>
     </div>
   );
@@ -281,14 +280,7 @@ function VoteBoard({
                   : "border-[#c47a4a]/60 bg-[#c47a4a]/10";
             return (
               <button key={row.mint} type="button" onClick={() => onOpen(row)} className={`rounded-2xl border px-2 ${tall} ${ring}`}>
-                <div className="mx-auto flex h-12 w-12 items-center justify-center overflow-hidden rounded-full bg-void font-display text-acid">
-                  {row.image ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={row.image} alt="" className="h-full w-full object-cover" />
-                  ) : (
-                    (row.symbol || "?").slice(0, 2)
-                  )}
-                </div>
+                <TokenArt src={row.image} mint={row.mint} label={row.symbol} className="mx-auto h-12 w-12 rounded-full" />
                 <div className="mt-2 truncate text-center font-display text-sm text-white">{tick(row.symbol)}</div>
                 <div className="stat-num text-center text-[13px] text-acid">{row.votes}</div>
                 <div className="text-center font-mono text-[9px] text-white/40">#{rank}</div>
@@ -306,14 +298,7 @@ function VoteBoard({
             className="flex w-full items-center gap-3 rounded-2xl px-2 py-2 text-left hover:bg-white/5"
           >
             <span className="w-6 font-mono text-[12px] text-white/40">{i + 4}</span>
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-void font-display text-xs text-acid">
-              {row.image ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={row.image} alt="" className="h-full w-full object-cover" />
-              ) : (
-                (row.symbol || "?").slice(0, 2)
-              )}
-            </div>
+            <TokenArt src={row.image} mint={row.mint} label={row.symbol} className="h-9 w-9 rounded-xl" />
             <span className="min-w-0 flex-1 truncate text-[15px] text-white">{tick(row.symbol)}</span>
             <span className="inline-flex items-center gap-0.5 font-mono text-[12px] text-acid">
               <ChevronUp className="h-4 w-4" />
@@ -716,14 +701,7 @@ export default function ShillPage() {
                   const pct = Math.max(4, Math.min(100, (left / SHILL_PIN_MS) * 100));
                   return (
                     <button key={p.mint} type="button" onClick={() => setOpenPin(p)} className="shill-pin-tile">
-                      {p.image ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={p.image} alt="" className="shill-pin-art" />
-                      ) : (
-                        <div className="shill-pin-art flex items-center justify-center font-display text-xs text-acid">
-                          {(p.symbol || "?").slice(0, 2)}
-                        </div>
-                      )}
+                      <TokenArt src={p.image} mint={p.mint} label={p.symbol} className="shill-pin-art" />
                       <span className="block w-full truncate text-center text-[12px] font-semibold text-white">{tick(p.symbol)}</span>
                       <span className="shill-bar">
                         <i style={{ width: `${pct}%` }} />
@@ -909,12 +887,7 @@ export default function ShillPage() {
               {pins.length === 0 && <p className="py-8 text-[15px] text-white/45">No pins live. Be first.</p>}
               {pins.map((p) => (
                 <button key={p.id} type="button" onClick={() => setOpenPin(p)} className="flex w-full items-center gap-3 py-3 text-left">
-                  {p.image ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={p.image} alt="" className="h-14 w-14 rounded-[18px] object-cover" />
-                  ) : (
-                    <div className="flex h-14 w-14 items-center justify-center rounded-[18px] bg-white/10 text-sm text-acid">{(p.symbol || "?").slice(0, 2)}</div>
-                  )}
+                  <TokenArt src={p.image} mint={p.mint} label={p.symbol} className="h-14 w-14 rounded-[18px]" />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-[17px] font-semibold text-white">{tick(p.symbol)}</p>
                     <p className="truncate text-[14px] text-white/45">
@@ -1046,17 +1019,13 @@ export default function ShillPage() {
         )}
 
         {openPin && (
-          <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/55 p-3 backdrop-blur-sm" onClick={() => setOpenPin(null)}>
+          <div
+            className="fixed inset-x-0 top-0 z-[46] flex items-end justify-center bg-black/55 p-3 bottom-[calc(4.85rem+env(safe-area-inset-bottom))] backdrop-blur-sm md:bottom-0 md:items-center"
+            onClick={() => setOpenPin(null)}
+          >
             <div className="panel-bubble w-full max-w-sm rounded-3xl p-4" onClick={(e) => e.stopPropagation()}>
               <div className="flex items-center gap-3">
-                {openPin.image ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={openPin.image} alt="" className="h-14 w-14 rounded-2xl object-cover" />
-                ) : (
-                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-void font-display text-acid">
-                    {(openPin.symbol || "?").slice(0, 2)}
-                  </div>
-                )}
+                <TokenArt src={openPin.image} mint={openPin.mint} label={openPin.symbol} className="h-14 w-14 rounded-2xl" />
                 <div className="min-w-0 flex-1">
                   <div className="truncate font-display text-xl text-white">{tick(openPin.symbol)}</div>
                   <div className="truncate text-[13px] text-mute">{openPin.name}</div>
