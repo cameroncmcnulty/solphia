@@ -50,7 +50,12 @@ export function humanVerified(): boolean {
     /* private / ITP */
   }
   try {
-    if (document.cookie.split(";").some((c) => c.trim() === `${HUMAN_KEY}=1`)) return true;
+    if (localStorage.getItem(HUMAN_KEY) === "1") return true;
+  } catch {
+    /* private / ITP */
+  }
+  try {
+    if (document.cookie.split(";").some((c) => c.trim().startsWith(`${HUMAN_KEY}=1`))) return true;
   } catch {
     /* */
   }
@@ -65,7 +70,13 @@ export function markHuman(): void {
     /* private mode */
   }
   try {
-    document.cookie = `${HUMAN_KEY}=1; path=/; SameSite=Lax`;
+    localStorage.setItem(HUMAN_KEY, "1");
+  } catch {
+    /* private mode */
+  }
+  try {
+    const secure = location.protocol === "https:" ? "; Secure" : "";
+    document.cookie = `${HUMAN_KEY}=1; path=/; Max-Age=${60 * 60 * 24 * 400}; SameSite=Lax${secure}`;
   } catch {
     /* */
   }

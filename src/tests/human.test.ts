@@ -27,7 +27,7 @@ describe("human puzzle", () => {
     assert.equal(clampSlide(40), 40);
   });
 
-  it("uses a session key so one pass lasts the tab", () => {
+  it("uses a durable key so one pass lasts across Shill visits", () => {
     assert.equal(HUMAN_KEY, "solphia_human");
   });
 

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { banShill, emptyShill, extractCas, fillHousePins, mergeShill, muteShill, pinToken, postShill, pruneShill, voteBoard, voteShill } from "../lib/shill/engine";
+import { banShill, emptyShill, extractCas, fillHousePins, mergeShill, muteShill, pinToken, postShill, pruneShill, touchMember, voteBoard, voteShill } from "../lib/shill/engine";
 import {
   SHILL_CA_COOLDOWN_MS,
   SHILL_HOUSE_PIN_MAX,
@@ -45,6 +45,18 @@ describe("shill zone", () => {
     if (!b.ok) assert.equal(b.error, "ca_cooldown");
     const c = postShill(book, { owner: A, text: `later ${CA}`, now: 1 + SHILL_CA_COOLDOWN_MS + 1 });
     assert.equal(c.ok, true);
+  });
+
+  it("keeps a member touch when merging into a book that already has chat", () => {
+    const live = emptyShill();
+    const local = emptyShill();
+    const now = Date.now();
+    postShill(live, { owner: A, text: "keep me", now });
+    touchMember(local, B, now);
+    const merged = mergeShill(local, live);
+    assert.equal(merged.messages.length, 1);
+    assert.ok(merged.members[B]?.lastReadAt);
+    assert.ok(merged.members[A]);
   });
 
   it("merges two books so an empty isolate cannot wipe chat", () => {

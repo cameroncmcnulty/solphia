@@ -128,7 +128,14 @@ export function openPhantomLink(httpsUl: string, appUl?: string) {
 
 export function signerPage(pathname?: string): boolean {
   const p = pathname || (typeof window !== "undefined" ? window.location.pathname : "");
-  return p === "/launch" || p === "/swap" || p.startsWith("/launch/") || p.startsWith("/swap/");
+  return (
+    p === "/launch" ||
+    p === "/swap" ||
+    p === "/shill" ||
+    p.startsWith("/launch/") ||
+    p.startsWith("/swap/") ||
+    p.startsWith("/shill/")
+  );
 }
 
 function readParam(url: URL, key: string): string | null {

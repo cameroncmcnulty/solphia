@@ -22,7 +22,6 @@ import { treasuryAddress } from "@/lib/treasury";
 import { DEFAULT_OWNER } from "@/lib/protocolWallets";
 import { liveBoosts, publicLiveBoost, tickBoosts } from "@/lib/launch/boost";
 import { storedImage, validateLaunchCreate } from "@/lib/launch/validate";
-import { isPlaceholderMeta, readSplMeta } from "@/lib/token/onchainMeta";
 import { ipfsMetadataUrl, pinDataUrl, pinJson } from "@/lib/pinata";
 import { creditRank } from "@/lib/rank/engine";
 import { tokenMetadataJson } from "@/lib/token/metadata";
@@ -369,70 +368,52 @@ async function getLaunch(req: NextRequest) {
     });
   }
   const dbc = await dbcApi();
+  let chainFees: Awaited<ReturnType<(typeof dbc)["chainCoinsForCreator"]>> = [];
   if (dbcEnabled() && viewer && isSolanaAddress(viewer)) {
     try {
-      const chain = await dbc.chainCoinsForCreator(viewer);
-      const bookNow = await withLaunch((st) => bookOf(st), false);
-      const packed = await Promise.all(
-        chain.slice(0, 16).map(async (p, i) => {
-          if (!p.mint) return null;
-          const existing = bookNow.coins.find((c) => c.mint === p.mint);
-          const needsMeta = i < 4 && (!existing || isPlaceholderMeta(existing.name, existing.image || "", p.mint));
-          const meta = needsMeta ? await readSplMeta(p.mint) : null;
-          return { p, meta };
-        }),
-      );
-      await withLaunch((st) => {
-        const b = bookOf(st);
-        for (const item of packed) {
-          if (!item?.p.mint) continue;
-          const { p, meta } = item;
-          const row = b.coins.find((c) => c.mint === p.mint);
-          if (row) {
-            if (meta?.name && isPlaceholderMeta(row.name, row.image || "", p.mint)) {
-              row.name = meta.name;
-              if (meta.symbol) row.symbol = meta.symbol;
-              if (meta.image) row.image = meta.image;
-            }
-            if (p.quoteSol > 0) row.curve = { ...row.curve, realSol: Math.max(row.curve.realSol || 0, p.quoteSol) };
-            continue;
-          }
-          const made = createCoin(b, {
-            creator: p.creator || viewer,
-            name: meta?.name && meta.name.length >= 2 ? meta.name : "Token",
-            symbol: meta?.symbol && meta.symbol.length >= 2 ? meta.symbol : "TOKEN",
-            image: meta?.image || "",
-            mint: p.mint,
-            venue: "solphia",
-          });
-          if (made.ok && p.quoteSol > 0) {
-            made.coin.curve = { ...made.coin.curve, virtualSol: 40, virtualTokens: 1_000_000_000, realSol: p.quoteSol };
-          }
-        }
-      }, true);
+      chainFees = await dbc.chainCoinsForCreator(viewer);
     } catch {
-      /* book still used */
+      chainFees = [];
+    }
+    if (chainFees.length) {
+      const bookNow = await withLaunch((st) => bookOf(st), false);
+      const known = new Set(bookNow.coins.map((c) => c.mint).filter(Boolean));
+      const missing = chainFees.filter((p) => p.mint && !known.has(p.mint)).slice(0, 16);
+      if (missing.length) {
+        await withLaunch((st) => {
+          const b = bookOf(st);
+          for (const p of missing) {
+            if (!p.mint || b.coins.some((c) => c.mint === p.mint)) continue;
+            const made = createCoin(b, {
+              creator: p.creator || viewer,
+              name: "Token",
+              symbol: "TOKEN",
+              image: "",
+              mint: p.mint,
+              venue: "solphia",
+            });
+            if (made.ok && p.quoteSol > 0) {
+              made.coin.curve = { ...made.coin.curve, virtualSol: 40, virtualTokens: 1_000_000_000, realSol: p.quoteSol };
+            }
+          }
+        }, true);
+      }
     }
   }
   const fresh = await withLaunch((st) => bookOf(st), false);
   const listed = listAll || !viewer || isProtocol ? fresh.coins : fresh.coins.filter((c) => c.creator === viewer);
   const rows = listed.slice(0, 80).map((c) => publicCoin(c, solUsd, viewer, fresh));
-  if (sync && dbcEnabled() && viewer) {
-    try {
-      const chainFees = await dbc.chainCoinsForCreator(viewer);
-      const byMint = Object.fromEntries(chainFees.filter((p) => p.mint).map((p) => [p.mint, p]));
-      for (const row of rows) {
-        const f = row.mint ? byMint[row.mint] : undefined;
-        if (!f) continue;
-        Object.assign(row, {
-          creatorFeesSol: f.creatorFeesSol,
-          creatorUnclaimedSol: f.creatorUnclaimedSol,
-          partnerFeesSol: f.partnerFeesSol,
-          partnerUnclaimedSol: f.partnerUnclaimedSol,
-        });
-      }
-    } catch {
-      /* tape still useful */
+  if (chainFees.length) {
+    const byMint = Object.fromEntries(chainFees.filter((p) => p.mint).map((p) => [p.mint, p]));
+    for (const row of rows) {
+      const f = row.mint ? byMint[row.mint] : undefined;
+      if (!f) continue;
+      Object.assign(row, {
+        creatorFeesSol: f.creatorFeesSol,
+        creatorUnclaimedSol: f.creatorUnclaimedSol,
+        partnerFeesSol: f.partnerFeesSol,
+        partnerUnclaimedSol: f.partnerUnclaimedSol,
+      });
     }
   }
   let protocol: { treasury: string; partnerUnclaimedSol: number; partnerFeesSol: number } | null = null;
@@ -664,40 +645,26 @@ async function postLaunch(req: NextRequest) {
   if (b.action === "withdraw_dev") {
     const snap = await withLaunch((st) => st, false);
     const book = bookOf(snap);
-    const mints = (b.mints || []).filter((m) => isSolanaAddress(m));
     const coin = book.coins.find((c) => c.id === b.id || (b.mint && c.mint === b.mint));
     if (coin && coin.creator !== b.pubkey) return fail("not_creator");
-    if (mints.length > 1 && dbcEnabled()) {
-      const built = await (await dbcApi()).buildDbcClaimCreatorBatch({ mints, owner: b.pubkey });
-      if (!built.ok) return fail(built.error);
-      return NextResponse.json({
-        ok: true,
-        needsSign: true,
-        claim: true,
-        transaction: built.transaction,
-        claimSol: built.claimSol,
-        claimMints: built.mints,
-        remaining: built.remaining,
-        remainingSol: built.remainingSol,
-        coin: coin ? publicCoin(coin, solUsd, b.pubkey, book) : undefined,
-      });
-    }
-    if (!coin) return fail("not_found", 404);
-    if (dbcEnabled() && coin.mint && isSolanaAddress(coin.mint)) {
-      const built = await (await dbcApi()).buildDbcClaimCreatorBatch({ mints: [coin.mint], owner: b.pubkey });
-      if (!built.ok) return fail(built.error);
-      return NextResponse.json({
-        ok: true,
-        needsSign: true,
-        claim: true,
-        transaction: built.transaction,
-        claimSol: built.claimSol,
-        claimMints: built.mints,
-        remaining: built.remaining,
-        remainingSol: built.remainingSol,
-        coin: publicCoin(coin, solUsd, b.pubkey, book),
-      });
-    }
+    const mint =
+      (b.mints || []).find((m) => isSolanaAddress(m)) ||
+      (b.mint && isSolanaAddress(b.mint) ? b.mint : "") ||
+      (coin?.mint && isSolanaAddress(coin.mint) ? coin.mint : "");
+    if (!mint || !dbcEnabled()) return fail("not_found", 404);
+    const built = await (await dbcApi()).buildDbcClaimCreatorBatch({ mints: [mint], owner: b.pubkey });
+    if (!built.ok) return fail(built.error);
+    return NextResponse.json({
+      ok: true,
+      needsSign: true,
+      claim: true,
+      transaction: built.transaction,
+      claimSol: built.claimSol,
+      claimMints: built.mints,
+      remaining: built.remaining,
+      remainingSol: built.remainingSol,
+      coin: coin ? publicCoin(coin, solUsd, b.pubkey, book) : undefined,
+    });
   }
 
   if (b.action === "withdraw_partner") {

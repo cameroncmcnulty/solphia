@@ -2,9 +2,11 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   CLAIM_DUST_SOL,
+  claimSolFromBalances,
   claimableCreator,
   fmtClaimSol,
   nextCreatorPayout,
+  sortByUnclaimedDesc,
   sumCreatorGenerated,
   sumCreatorUnclaimed,
   uniqueByMint,
@@ -45,12 +47,33 @@ describe("creator claim amounts", () => {
       { mint: "Mint333333333333333333333333333333333333333", creatorFeesSol: 0, creatorUnclaimedSol: 0 },
     ];
     const p = nextCreatorPayout(rows);
-    assert.equal(fmtClaimSol(p.nextSol), "0.003982");
+    assert.equal(p.next?.mint, "Mint222222222222222222222222222222222222222");
+    assert.equal(fmtClaimSol(p.nextSol), "0.073338");
     assert.equal(p.restCount, 1);
     assert.equal(fmtClaimSol(p.totalUnclaimed), "0.07732");
-    assert.equal(fmtClaimSol(p.restSol), "0.073338");
+    assert.equal(fmtClaimSol(p.restSol), "0.003982");
     assert.equal(fmtClaimSol(sumCreatorGenerated(rows)), "0.082");
     assert.notEqual(fmtClaimSol(p.nextSol), fmtClaimSol(p.totalUnclaimed));
+  });
+
+  it("sorts the button mint to match the first Your tokens row", () => {
+    const rows = [
+      { mint: "MintSmall111111111111111111111111111111111", creatorUnclaimedSol: 0.0029993, createdAt: 2 },
+      { mint: "MintTest11111111111111111111111111111111111", creatorUnclaimedSol: 0.061849, createdAt: 1 },
+    ];
+    const p = nextCreatorPayout(rows);
+    assert.equal(sortByUnclaimedDesc(rows)[0]?.mint, p.next?.mint);
+    assert.equal(p.next?.mint, "MintTest11111111111111111111111111111111111");
+    assert.equal(fmtClaimSol(p.nextSol), "0.061849");
+  });
+
+  it("advertises the simulated SOL credit Phantom shows, not a stale pool field", () => {
+    const pre = 1_000_000_000;
+    const post = 1_000_195_000;
+    const fee = 8_000;
+    assert.equal(fmtClaimSol(claimSolFromBalances(pre, post, fee)), "0.000203");
+    assert.equal(claimSolFromBalances(pre, pre - 5_000, 5_000), 0);
+    assert.equal(claimSolFromBalances(pre, pre, 0), 0);
   });
 
   it("treats pool.creatorQuoteFee as unclaimed, not total trading volume", () => {

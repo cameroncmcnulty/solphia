@@ -43,8 +43,19 @@ export function uniqueByMint<T extends { mint?: string }>(rows: T[]): T[] {
   return out;
 }
 
-export function claimableCreator<T extends { mint?: string; creatorUnclaimedSol?: number }>(rows: T[]): T[] {
-  return uniqueByMint(rows).filter((row) => (Number(row.creatorUnclaimedSol) || 0) > CLAIM_DUST_SOL);
+/** Highest unclaimed first so the button, first row, and POST mint are the same pool. */
+export function sortByUnclaimedDesc<T extends { creatorUnclaimedSol?: number; createdAt?: number }>(rows: T[]): T[] {
+  return rows.slice().sort((a, b) => {
+    const d = (Number(b.creatorUnclaimedSol) || 0) - (Number(a.creatorUnclaimedSol) || 0);
+    if (d) return d;
+    return (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0);
+  });
+}
+
+export function claimableCreator<T extends { mint?: string; creatorUnclaimedSol?: number; createdAt?: number }>(
+  rows: T[],
+): T[] {
+  return sortByUnclaimedDesc(uniqueByMint(rows).filter((row) => (Number(row.creatorUnclaimedSol) || 0) > CLAIM_DUST_SOL));
 }
 
 export function sumCreatorUnclaimed(rows: { mint?: string; creatorUnclaimedSol?: number }[]): number {
@@ -85,4 +96,15 @@ export function sumPartnerUnclaimed(rows: { mint?: string; partnerUnclaimedSol?:
 export function fmtClaimSol(n: number): string {
   if (!(n > 0)) return "0";
   return n.toFixed(6).replace(/0+$/, "").replace(/\.$/, "");
+}
+
+/**
+ * SOL Phantom credits on the wallet, matching Blowfish "Solana +X" (fee listed separately).
+ * post - pre is net of the signature fee; add the fee back to get the claim credit.
+ */
+export function claimSolFromBalances(preLamports: number, postLamports: number, feeLamports: number): number {
+  if (!Number.isFinite(preLamports) || !Number.isFinite(postLamports)) return 0;
+  const gross = postLamports - preLamports + Math.max(0, feeLamports);
+  if (!Number.isFinite(gross) || gross <= 0) return 0;
+  return gross / 1e9;
 }

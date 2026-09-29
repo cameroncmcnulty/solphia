@@ -14,7 +14,7 @@ import { bytesToB64 } from "../solana/wire";
 import { treasuryAddress } from "../treasury";
 import { liveDbcConfig, dbcEnabled } from "./dbcIds";
 import { MIN_TRADE_SOL } from "./curve";
-import { feesFromPoolAccount } from "./claim";
+import { CLAIM_DUST_SOL, claimSolFromBalances, feesFromPoolAccount } from "./claim";
 
 const WSOL = "So11111111111111111111111111111111111111112";
 
@@ -337,7 +337,7 @@ function cached<T>(key: string, ms: number, fn: () => Promise<T>): Promise<T> {
 
 export async function chainCoinsForCreator(creator: string): Promise<ChainPadCoin[]> {
   if (!dbcEnabled() || !creator) return [];
-  return cached("pools:" + creator, 8_000, async () => {
+  return cached("pools:" + creator, 45_000, async () => {
     const dbc = client();
     let pools: { publicKey: PublicKey; account: any }[] = [];
     try {
@@ -400,42 +400,51 @@ export type DbcClaimBatch = {
 };
 
 /** Phantom flags unsizable / unsimmable claim batches as "this dApp could be malicious". One pool per signature. */
-async function simulateClaim(tx: Transaction): Promise<boolean> {
+async function simulateClaimPayout(
+  tx: Transaction,
+  owner: PublicKey,
+): Promise<{ ok: true; claimSol: number } | { ok: false }> {
   try {
+    const conn = connection();
     const vtx = new VersionedTransaction(tx.compileMessage());
-    const sim = await connection().simulateTransaction(vtx, {
+    const ownerKey = owner.toBase58();
+    const pre = await conn.getBalance(owner, "confirmed");
+    const sim = await conn.simulateTransaction(vtx, {
       sigVerify: false,
       replaceRecentBlockhash: true,
       commitment: "confirmed",
+      accounts: { encoding: "base64", addresses: [ownerKey] },
     });
-    return !sim.value.err;
+    if (sim.value.err) return { ok: false };
+    const post = sim.value.accounts?.[0]?.lamports;
+    if (typeof post !== "number") return { ok: false };
+    const sigs = Math.max(1, tx.compileMessage().header.numRequiredSignatures || 1);
+    const claimSol = claimSolFromBalances(pre, post, 5000 * sigs);
+    if (claimSol <= CLAIM_DUST_SOL) return { ok: false };
+    return { ok: true, claimSol };
   } catch {
-    return false;
+    return { ok: false };
   }
 }
 
 async function mergeClaimTxs(
   owner: PublicKey,
-  parts: { mint: string; unclaimedSol: number; tx: Transaction }[],
+  part: { mint: string; tx: Transaction },
+  remaining: { unclaimedSol: number }[],
 ): Promise<DbcClaimBatch | { ok: false; error: string }> {
-  if (!parts.length) return { ok: false, error: "empty" };
-  for (let i = 0; i < parts.length; i++) {
-    const part = parts[i];
-    const packed = new Transaction();
-    for (const ix of part.tx.instructions) packed.add(ix);
-    const ready = await readyTx(packed, owner);
-    if (!(await simulateClaim(ready))) continue;
-    const rest = parts.slice(i + 1);
-    return {
-      ok: true,
-      transaction: encodeTx(ready),
-      claimSol: part.unclaimedSol,
-      mints: [part.mint],
-      remaining: rest.length,
-      remainingSol: rest.reduce((s, p) => s + p.unclaimedSol, 0),
-    };
-  }
-  return { ok: false, error: "Claim would fail simulation. Phantom would block it." };
+  const packed = new Transaction();
+  for (const ix of part.tx.instructions) packed.add(ix);
+  const ready = await readyTx(packed, owner);
+  const sim = await simulateClaimPayout(ready, owner);
+  if (!sim.ok) return { ok: false, error: "Claim would fail simulation. Phantom would block it." };
+  return {
+    ok: true,
+    transaction: encodeTx(ready),
+    claimSol: sim.claimSol,
+    mints: [part.mint],
+    remaining: remaining.length,
+    remainingSol: remaining.reduce((s, p) => s + p.unclaimedSol, 0),
+  };
 }
 
 export async function buildDbcClaimCreatorTx(opts: {
@@ -454,8 +463,8 @@ export async function buildDbcClaimCreatorBatch(opts: {
   const dbc = client();
   const creator = new PublicKey(opts.owner);
   const max = new BN("1000000000000000");
-  const want = new Set(opts.mints.filter(Boolean));
-  if (!want.size) return { ok: false, error: "empty" };
+  const target = (opts.mints || []).map((m) => String(m || "").trim()).find(Boolean) || "";
+  if (!target) return { ok: false, error: "empty" };
   clearDbcCreatorCache(opts.owner);
   let pools: { publicKey: PublicKey; account: any }[] = [];
   try {
@@ -463,48 +472,41 @@ export async function buildDbcClaimCreatorBatch(opts: {
   } catch {
     pools = [];
   }
-  const parts: { mint: string; unclaimedSol: number; tx: Transaction }[] = [];
-  const used = new Set<string>();
+  const byMint = new Map<string, { mint: string; unclaimedSol: number; pool: PublicKey }>();
   for (const row of pools) {
     const mint = mintOfPool(row);
-    if (!want.has(mint) || used.has(mint)) continue;
+    if (!mint || byMint.has(mint)) continue;
     const unclaimedSol = feesFromPoolAccount(poolInner(row)).creatorUnclaimedSol;
-    if (unclaimedSol <= 1e-6) continue;
+    if (unclaimedSol <= CLAIM_DUST_SOL) continue;
+    byMint.set(mint, { mint, unclaimedSol, pool: row.publicKey });
+  }
+  let hit = byMint.get(target);
+  if (!hit) {
     try {
-      const raw = await dbc.creator.claimCreatorTradingFee({
-        creator,
-        payer: creator,
-        pool: row.publicKey,
-        maxBaseAmount: max,
-        maxQuoteAmount: max,
-      });
-      parts.push({ mint, unclaimedSol, tx: raw as Transaction });
-      used.add(mint);
+      const row = await dbc.state.getPoolByBaseMint(target);
+      if (row) {
+        const unclaimedSol = feesFromPoolAccount(poolInner(row)).creatorUnclaimedSol;
+        if (unclaimedSol > CLAIM_DUST_SOL) hit = { mint: target, unclaimedSol, pool: row.publicKey };
+      }
     } catch {
-      /* skip empty pool */
+      /* missing */
     }
   }
-  for (const mint of want) {
-    if (used.has(mint)) continue;
-    try {
-      const row = await dbc.state.getPoolByBaseMint(mint);
-      if (!row) continue;
-      const unclaimedSol = feesFromPoolAccount(poolInner(row)).creatorUnclaimedSol;
-      if (unclaimedSol <= 1e-6) continue;
-      const raw = await dbc.creator.claimCreatorTradingFee({
-        creator,
-        payer: creator,
-        pool: row.publicKey,
-        maxBaseAmount: max,
-        maxQuoteAmount: max,
-      });
-      parts.push({ mint, unclaimedSol, tx: raw as Transaction });
-      used.add(mint);
-    } catch {
-      /* skip */
-    }
+  if (!hit) return { ok: false, error: "empty" };
+  let raw: Transaction;
+  try {
+    raw = (await dbc.creator.claimCreatorTradingFee({
+      creator,
+      payer: creator,
+      pool: hit.pool,
+      maxBaseAmount: max,
+      maxQuoteAmount: max,
+    })) as Transaction;
+  } catch {
+    return { ok: false, error: "empty" };
   }
-  return mergeClaimTxs(creator, parts);
+  const rest = [...byMint.values()].filter((p) => p.mint !== hit.mint);
+  return mergeClaimTxs(creator, { mint: hit.mint, tx: raw }, rest);
 }
 
 export async function buildDbcClaimPartnerTx(opts: {

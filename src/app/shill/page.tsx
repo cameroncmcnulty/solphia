@@ -28,6 +28,7 @@ import { WalletConnect } from "@/components/WalletConnect";
 import { RankBadge } from "@/components/RankBadge";
 import { ProfileOverlay } from "@/components/ProfileOverlay";
 import { useOwner } from "@/lib/hooks";
+import { persistOwner } from "@/lib/wallet/owner";
 import { paySeatFromPhantom } from "@/lib/wallet/trading";
 import { SHILL_PIN_MS, SHILL_PIN_SOL, SHILL_REACTS, SHILL_STICKERS, type ShillToken } from "@/lib/shill/types";
 
@@ -481,6 +482,16 @@ export default function ShillPage() {
     if (!r.ok) throw new Error(j.message || j.error || "failed");
     return j;
   }
+
+  useEffect(() => {
+    if (!owner) return;
+    persistOwner(owner, { announce: false });
+    void fetch("/api/shill", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "read", pubkey: owner }),
+    }).catch(() => undefined);
+  }, [owner]);
 
   async function send(extra?: Record<string, unknown>) {
     if (!owner) {

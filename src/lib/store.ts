@@ -262,10 +262,6 @@ async function persistShill(state: AppState) {
   const local = ensureShill(state.shill);
   const raw = await kvGetJson(KEYS.shill);
   const remote = raw && typeof raw === "object" ? ensureShill(raw as ShillBook) : null;
-  if (remote && remote.messages.length && !local.messages.length) {
-    state.shill = remote;
-    return;
-  }
   const merged = remote ? mergeShill(local, remote) : local;
   state.shill = merged;
   await kvSetJson(KEYS.shill, merged);

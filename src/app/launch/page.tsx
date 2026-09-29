@@ -46,7 +46,7 @@ import { BoostBuy, BoostRail, fmtLeft } from "@/components/BoostBuy";
 
 import { TokenImageCrop, readLaunchImage, type CropSource } from "@/components/TokenImageCrop";
 import { yourLaunches } from "@/lib/launch/yours";
-import { claimableCreator, fmtClaimSol, nextCreatorPayout, sumCreatorGenerated, uniqueByMint } from "@/lib/launch/claim";
+import { claimableCreator, fmtClaimSol, nextCreatorPayout, sortByUnclaimedDesc, sumCreatorGenerated, uniqueByMint } from "@/lib/launch/claim";
 import { clearPending, loadPending, savePending, type PendingLaunch } from "@/lib/launch/pending";
 import { hideLaunch, loadHidden } from "@/lib/launch/hidden";
 import { PadPitch } from "@/components/PadPitch";
@@ -1211,11 +1211,10 @@ export default function LaunchPage() {
       }
       let listed = j;
       if (j.needsSign && j.transaction) {
+        if (j.claim && !(Number(j.claimSol) > 0)) throw new Error("This claim pays nothing on-chain.");
         setMsg(
           j.claim
-            ? Number(j.claimSol) > 0
-              ? `Sign ${fmtClaimSol(Number(j.claimSol))} SOL in Phantom…`
-              : "Sign the claim in Phantom…"
+            ? `Sign ${fmtClaimSol(Number(j.claimSol))} SOL in Phantom…`
             : "Sign the swap in Phantom…",
         );
         const sig = await signPhantomAndSend(j.transaction, undefined, {
@@ -1309,15 +1308,12 @@ export default function LaunchPage() {
   const pool = isSwap ? coins : mine;
   const board = useMemo(() => {
     if (!isSwap) {
-      const rows = mine
-        .slice()
-        .sort((a, b) => {
-          const au = Number(a.creatorUnclaimedSol) || 0;
-          const bu = Number(b.creatorUnclaimedSol) || 0;
-          if (bu !== au) return bu - au;
-          return (b.createdAt || 0) - (a.createdAt || 0);
-        })
-        .map((coin) => ({ coin, rank: 0, audit: undefined as undefined, boost: undefined as undefined }));
+      const rows = sortByUnclaimedDesc(mine).map((coin) => ({
+        coin,
+        rank: 0,
+        audit: undefined as undefined,
+        boost: undefined as undefined,
+      }));
       return rows;
     }
     const sourced =
@@ -1896,7 +1892,7 @@ export default function LaunchPage() {
                 <p className="font-mono text-[11px] tracking-[0.28em] text-acid">DEV REWARDS</p>
                 <h2 className="mt-1 text-[22px] font-semibold tracking-tight text-white">Claim fees</h2>
                 <p className="mt-1 text-[14px] leading-snug text-white/45">
-                  Swaps on the curve pay 1%. Half is yours. The unclaimed number is what Phantom will credit.
+                  Swaps on the curve pay 1%. Half is yours. Each Phantom signature pays the first token on this list. Phantom shows the exact SOL before you approve.
                 </p>
                 <div className="mt-4 grid grid-cols-2 gap-3">
                   <div>
@@ -1914,12 +1910,12 @@ export default function LaunchPage() {
                     disabled={busy || claimable.length === 0}
                     onClick={() => {
                       const first = payout.next;
-                      if (!first) return;
+                      if (!first?.mint) return;
                       act({
                         action: "withdraw_dev",
                         id: first.id,
                         mint: first.mint,
-                        mints: claimable.map((c) => c.mint).filter(Boolean),
+                        mints: [first.mint],
                       });
                     }}
                     className="rounded-full bg-[#14f195] px-4 py-2 text-[14px] font-semibold text-[#04000a] disabled:opacity-40"

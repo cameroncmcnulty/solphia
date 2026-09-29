@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { b58dec, b58enc, decryptBox, encryptBox, isPhJob, newDappKey, slimAfter } from "../lib/wallet/phantomBox";
-import { isPhantomUnauthorized, phantomAppUrl, phantomSignError } from "../lib/wallet/phantomConnect";
+import { isPhantomUnauthorized, phantomAppUrl, phantomSignError, signerPage } from "../lib/wallet/phantomConnect";
 
 describe("phantom box", () => {
   it("round-trips base58", () => {
@@ -29,6 +29,12 @@ describe("phantom box", () => {
     assert.equal(after?.image, undefined);
     assert.equal(after?.mint, "Mint111");
     assert.equal(isPhJob({ id: "abcdefghijk", dappSk: "1".repeat(32) }), true);
+  });
+
+  it("treats Shill as a Phantom return page so connect persists there", () => {
+    assert.equal(signerPage("/shill"), true);
+    assert.equal(signerPage("/launch"), true);
+    assert.equal(signerPage("/admin"), false);
   });
 
   it("maps Phantom 4001 unauthorized into a connect-again prompt", () => {
