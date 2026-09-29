@@ -46,6 +46,7 @@ import { BoostBuy, BoostRail, fmtLeft } from "@/components/BoostBuy";
 
 import { TokenImageCrop, readLaunchImage, type CropSource } from "@/components/TokenImageCrop";
 import { yourLaunches } from "@/lib/launch/yours";
+import { claimableCreator, fmtClaimSol, sumCreatorUnclaimed, uniqueByMint } from "@/lib/launch/claim";
 import { clearPending, loadPending, savePending, type PendingLaunch } from "@/lib/launch/pending";
 import { hideLaunch, loadHidden } from "@/lib/launch/hidden";
 import { PadPitch } from "@/components/PadPitch";
@@ -400,6 +401,7 @@ export default function LaunchPage() {
         return;
       }
       if (!j.signature || !j.after) return;
+      if (j.after.kind === "jup_swap") return;
       setBusy(true);
       setErr("");
       setMsg("Finishing on Solana…");
@@ -505,9 +507,11 @@ export default function LaunchPage() {
           ...c,
           name: /solphia\.io\/og/i.test(c.image || "") && old.name ? old.name : c.name,
           image: /solphia\.io\/og/i.test(c.image || "") && old.image ? old.image : c.image,
-          creatorFeesSol: Math.max(Number(c.creatorFeesSol) || 0, Number(old.creatorFeesSol) || 0, Number(old.devRewardsSol) || 0),
+          creatorFeesSol: typeof c.creatorFeesSol === "number" ? c.creatorFeesSol : Number(old.creatorFeesSol) || Number(old.devRewardsSol) || 0,
           creatorUnclaimedSol: typeof c.creatorUnclaimedSol === "number" ? c.creatorUnclaimedSol : old.creatorUnclaimedSol,
-          devRewardsSol: Math.max(Number(c.devRewardsSol) || 0, Number(old.devRewardsSol) || 0),
+          partnerFeesSol: typeof c.partnerFeesSol === "number" ? c.partnerFeesSol : old.partnerFeesSol,
+          partnerUnclaimedSol: typeof c.partnerUnclaimedSol === "number" ? c.partnerUnclaimedSol : old.partnerUnclaimedSol,
+          devRewardsSol: typeof c.creatorFeesSol === "number" ? c.creatorFeesSol : Math.max(Number(c.devRewardsSol) || 0, Number(old.devRewardsSol) || 0),
           marketCapUsd: Math.max(Number(c.marketCapUsd) || 0, Number(old.marketCapUsd) || 0),
         };
       });
@@ -633,11 +637,11 @@ export default function LaunchPage() {
 
   useEffect(() => {
     refreshPad(false)
-      .then(() => {
-        setPadLoading(false);
-        if (!isSwap) return new Promise((r) => window.setTimeout(r, 800)).then(() => refreshPad(true));
-      })
+      .then(() => setPadLoading(false))
       .catch(() => setPadLoading(false));
+    if (!isSwap && owner) {
+      void refreshPad(true).catch(() => {});
+    }
     refreshTape().catch(() => setTapeLoading(false));
     refreshBoosts().catch(() => {});
     const padT = setInterval(() => refreshPad(false).catch(() => {}), 20_000);
@@ -1139,7 +1143,11 @@ export default function LaunchPage() {
     }
     if (after.kind === "claim") {
       setMsg(after.partner ? "Protocol fees claimed into this wallet." : "Creator fees claimed into this wallet.");
-      await Promise.all([refreshPad(), refreshTape()]).catch(() => {});
+      await Promise.all([refreshPad(true), refreshTape()]).catch(() => {});
+      setBusy(false);
+      return;
+    }
+    if (after.kind === "jup_swap") {
       setBusy(false);
       return;
     }
@@ -1203,7 +1211,13 @@ export default function LaunchPage() {
       }
       let listed = j;
       if (j.needsSign && j.transaction) {
-        setMsg(j.claim ? "Sign the claim in Phantom…" : "Sign the swap in Phantom…");
+        setMsg(
+          j.claim
+            ? Number(j.claimSol) > 0
+              ? `Sign ${fmtClaimSol(Number(j.claimSol))} SOL in Phantom…`
+              : "Sign the claim in Phantom…"
+            : "Sign the swap in Phantom…",
+        );
         const sig = await signPhantomAndSend(j.transaction, undefined, {
           kind: j.claim ? "claim" : "swap",
           owner,
@@ -1216,8 +1230,18 @@ export default function LaunchPage() {
           tokens: body.action === "sell" ? Number(body.tokens) || 0 : Number(j.tokensOut) || 0,
         });
         if (j.claim) {
-          setMsg(j.partner ? "Protocol fees claimed into this wallet." : "Creator fees claimed into this wallet.");
-          await Promise.all([refreshPad(), refreshTape()]);
+          const amt = Number(j.claimSol) || 0;
+          const more = Number(j.remaining) || 0;
+          setMsg(
+            j.partner
+              ? "Protocol fees claimed into this wallet."
+              : more
+                ? `Claimed ${fmtClaimSol(amt)} SOL. Tap claim again for ${fmtClaimSol(Number(j.remainingSol) || 0)} SOL more.`
+                : amt
+                  ? `Claimed ${fmtClaimSol(amt)} SOL into this wallet.`
+                  : "Creator fees claimed into this wallet.",
+          );
+          await Promise.all([refreshPad(true), refreshTape()]);
           return;
         }
         const conf = await fetch("/api/launch", {
@@ -1272,13 +1296,15 @@ export default function LaunchPage() {
     }
   }
 
-  const mine = (owner && treasuryWallet && owner === treasuryWallet
-    ? coins.filter((c) => c.born)
-    : yourLaunches(coins, owner)
-  ).filter((c) => !hidden.includes(c.mint || ""));
-  const claimable = mine.filter((c) => (c.creatorUnclaimedSol || 0) > 1e-6);
+  const mine = uniqueByMint(
+    (owner && treasuryWallet && owner === treasuryWallet
+      ? coins.filter((c) => c.born)
+      : yourLaunches(coins, owner)
+    ).filter((c) => !hidden.includes(c.mint || "")),
+  );
+  const claimable = claimableCreator(mine);
   const generatedSol = mine.reduce((s, c) => s + (c.creatorFeesSol || c.devRewardsSol || 0), 0);
-  const unclaimedSol = mine.reduce((s, c) => s + (c.creatorUnclaimedSol || 0), 0);
+  const unclaimedSol = sumCreatorUnclaimed(mine);
   const pool = isSwap ? coins : mine;
   const board = useMemo(() => {
     if (!isSwap) {
@@ -1864,16 +1890,16 @@ export default function LaunchPage() {
                 <p className="font-mono text-[11px] tracking-[0.28em] text-acid">DEV REWARDS</p>
                 <h2 className="mt-1 text-[22px] font-semibold tracking-tight text-white">Claim fees</h2>
                 <p className="mt-1 text-[14px] leading-snug text-white/45">
-                  Swaps on the curve pay 1%. Half is yours. Claim into this wallet.
+                  Swaps on the curve pay 1%. Half is yours. The unclaimed number is what Phantom will credit.
                 </p>
                 <div className="mt-4 grid grid-cols-2 gap-3">
                   <div>
                     <p className="font-mono text-[10px] text-white/40">GENERATED</p>
-                    <p className="stat-num text-[18px] text-acid">{fmtSol(generatedSol, 4)} SOL</p>
+                    <p className="stat-num text-[18px] text-acid">{fmtClaimSol(generatedSol)} SOL</p>
                   </div>
                   <div>
                     <p className="font-mono text-[10px] text-white/40">UNCLAIMED</p>
-                    <p className="stat-num text-[18px] text-white">{fmtSol(unclaimedSol, 4)} SOL</p>
+                    <p className="stat-num text-[18px] text-white">{fmtClaimSol(unclaimedSol)} SOL</p>
                   </div>
                 </div>
                 <div className="mt-4 flex flex-wrap gap-2">
@@ -1882,16 +1908,26 @@ export default function LaunchPage() {
                     disabled={busy || claimable.length === 0}
                     onClick={() => {
                       const first = claimable[0];
-                      if (first) act({ action: "withdraw_dev", id: first.id, mint: first.mint });
+                      if (!first) return;
+                      act({
+                        action: "withdraw_dev",
+                        id: first.id,
+                        mint: first.mint,
+                        mints: claimable.map((c) => c.mint).filter(Boolean),
+                      });
                     }}
                     className="rounded-full bg-[#14f195] px-4 py-2 text-[14px] font-semibold text-[#04000a] disabled:opacity-40"
                   >
-                    {claimable.length > 1 ? `Claim ${fmtSol(unclaimedSol, 4)} SOL` : "Claim creator fees"}
+                    {unclaimedSol > 0 ? `Claim ${fmtClaimSol(unclaimedSol)} SOL` : "Claim creator fees"}
                   </button>
                 </div>
-                {claimable.length > 1 && (
-                  <p className="mt-2 text-[12px] text-white/40">Signs one token at a time. After it lands, tap claim again for the next.</p>
-                )}
+                {claimable.length > 1 ? (
+                  <p className="mt-2 text-[12px] text-white/40">
+                    {claimable.length} tokens. One signature. Phantom must show {fmtClaimSol(unclaimedSol)} SOL (plus a tiny network fee).
+                  </p>
+                ) : unclaimedSol > 0 ? (
+                  <p className="mt-2 text-[12px] text-white/40">Phantom will credit {fmtClaimSol(unclaimedSol)} SOL, minus the network fee.</p>
+                ) : null}
               </div>
             )}
             <div className="mt-3 space-y-2">
@@ -1978,7 +2014,7 @@ export default function LaunchPage() {
                       <p className="text-[13px] text-white/45">
                         {owner === treasuryWallet
                           ? `${fmtSol(row.coin.partnerFeesSol || 0, 4)} SOL protocol generated · ${fmtSol(row.coin.partnerUnclaimedSol || 0, 4)} SOL unclaimed`
-                          : `${fmtSol(row.coin.creatorFeesSol || row.coin.devRewardsSol || 0, 4)} SOL generated · ${fmtSol(row.coin.creatorUnclaimedSol || 0, 4)} SOL unclaimed`}
+                          : `${fmtClaimSol(row.coin.creatorFeesSol || row.coin.devRewardsSol || 0)} SOL generated · ${fmtClaimSol(row.coin.creatorUnclaimedSol || 0)} SOL unclaimed`}
                       </p>
                       <div className="flex items-center gap-2">
                         <button

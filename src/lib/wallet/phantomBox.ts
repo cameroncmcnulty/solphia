@@ -12,7 +12,7 @@ export const PHANTOM_PARAMS = [
 ] as const;
 
 export type PhAfter = {
-  kind: "launch_config" | "launch_pool" | "claim" | "swap" | "generic";
+  kind: "launch_config" | "launch_pool" | "claim" | "swap" | "jup_swap" | "generic";
   owner?: string;
   mint?: string;
   mintSecret?: string;

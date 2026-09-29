@@ -1,6 +1,13 @@
 import { PublicKey, Transaction, VersionedTransaction } from "@solana/web3.js";
-import { persistOwner } from "@/lib/wallet/owner";
-import { injectedProvider, phantomSignError } from "@/lib/wallet/phantomConnect";
+import { loadOwner, persistOwner } from "@/lib/wallet/owner";
+import {
+  inPhantomWebView,
+  injectedProvider,
+  openPhantomUl,
+  PHANTOM_REDIRECT,
+  phantomSignError,
+  waitForInjected,
+} from "@/lib/wallet/phantomConnect";
 import { phantomProvider, signPhantomAndSend } from "@/lib/wallet/trading";
 import { bytesToB64 } from "@/lib/solana/wire";
 
@@ -29,13 +36,34 @@ async function ensureConnect(): Promise<void> {
 
 async function signOne(tx: unknown) {
   await ensureConnect();
-  const provider = phantomProvider();
-  if (!provider) throw new Error("Connect Phantom first.");
+  let provider = phantomProvider();
+  if (!provider) {
+    await waitForInjected(inPhantomWebView() ? 8000 : 600);
+    provider = phantomProvider();
+  }
+  if (provider) {
+    try {
+      return await provider.signTransaction(tx as Transaction | VersionedTransaction);
+    } catch (e) {
+      throw phantomSignError(e);
+    }
+  }
+  if (inPhantomWebView()) {
+    throw new Error("Pull down to refresh this tab, then swap again.");
+  }
   try {
-    return await provider.signTransaction(tx as Transaction | VersionedTransaction);
+    await openPhantomUl({
+      packed: txToB64(tx as Transaction | VersionedTransaction),
+      after: { kind: "jup_swap", owner: loadOwner() || undefined },
+      pubkey: loadOwner(),
+    });
   } catch (e) {
+    if (e instanceof Error && e.message === PHANTOM_REDIRECT) {
+      throw new Error("Approve in Phantom. The swap lands when you come back.");
+    }
     throw phantomSignError(e);
   }
+  throw new Error("Approve in Phantom. The swap lands when you come back.");
 }
 
 /**

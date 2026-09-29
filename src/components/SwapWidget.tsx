@@ -16,9 +16,11 @@ import {
   inPhantomWebView,
   injectedProvider,
   openPhantomUl,
+  PHANTOM_EVENT,
   phantomSignError,
   waitForInjected,
 } from "@/lib/wallet/phantomConnect";
+import type { PhAfter } from "@/lib/wallet/phantomBox";
 import { PhantomMark } from "./PhantomMark";
 
 export function SwapShell({
@@ -162,6 +164,7 @@ export function SwapWidget({
   const pk = owner || siteOwner || (typeof window !== "undefined" ? loadOwner() : null);
   const [ready, setReady] = useState(false);
   const [err, setErr] = useState("");
+  const [ok, setOk] = useState("");
   const [busy, setBusy] = useState(false);
   const connectRef = useRef<() => Promise<void>>(async () => undefined);
   const pkRef = useRef(pk);
@@ -204,6 +207,25 @@ export function SwapWidget({
       setBusy(false);
     }
   };
+
+  useEffect(() => {
+    const onPh = (e: Event) => {
+      const j = (e as CustomEvent<{ signature?: string; after?: PhAfter; error?: string }>).detail;
+      if (!j) return;
+      if (j.after?.kind !== "jup_swap") return;
+      if (j.error) {
+        setErr(j.error);
+        setOk("");
+        return;
+      }
+      if (j.signature) {
+        setErr("");
+        setOk("Swap landed.");
+      }
+    };
+    window.addEventListener(PHANTOM_EVENT, onPh as EventListener);
+    return () => window.removeEventListener(PHANTOM_EVENT, onPh as EventListener);
+  }, []);
 
   useEffect(() => {
     if (!ready) return;
@@ -288,6 +310,7 @@ export function SwapWidget({
         className="h-[min(22.5rem,calc(100svh-12.5rem))] max-h-full min-h-[16rem] w-full flex-1 overflow-visible rounded-2xl sm:h-[min(28rem,calc(100svh-10rem))]"
       />
       {!ready && !err ? <p className="mt-2 shrink-0 text-center text-[13px] text-white/40">Loading Jupiter…</p> : null}
+      {ok ? <p className="mt-2 shrink-0 text-center text-[13px] text-acid">{ok}</p> : null}
       {err ? <p className="mt-2 shrink-0 text-center text-[13px] text-blood">{err}</p> : null}
     </div>
   );
