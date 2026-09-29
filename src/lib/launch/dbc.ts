@@ -8,13 +8,7 @@ import * as DbcMod from "@meteora-ag/dynamic-bonding-curve-sdk";
 import BN from "bn.js";
 
 import { connection } from "../solana/connection";
-import { Keypair, PublicKey, Transaction, TransactionInstruction, VersionedTransaction } from "@solana/web3.js";
-import {
-  NATIVE_MINT,
-  TOKEN_PROGRAM_ID,
-  createCloseAccountInstruction,
-  getAssociatedTokenAddressSync,
-} from "@solana/spl-token";
+import { Keypair, PublicKey, Transaction, VersionedTransaction } from "@solana/web3.js";
 import { encodeTx } from "../token/mint";
 import { bytesToB64 } from "../solana/wire";
 import { treasuryAddress } from "../treasury";
@@ -406,26 +400,7 @@ export type DbcClaimBatch = {
   remainingMints: string[];
 };
 
-/** Phantom / Blowfish choke past ~1110 bytes. Pack every unpaid pool that still simulates. */
-const CLAIM_TX_MAX_BYTES = 1110;
-
-function isCloseAccountIx(ix: TransactionInstruction): boolean {
-  return ix.programId.equals(TOKEN_PROGRAM_ID) && ix.data.length >= 1 && ix.data[0] === 9;
-}
-
-function assembleClaimTx(owner: PublicKey, parts: { tx: Transaction }[]): Transaction {
-  const packed = new Transaction();
-  for (const part of parts) {
-    for (const ix of part.tx.instructions) {
-      if (isCloseAccountIx(ix)) continue;
-      packed.add(ix);
-    }
-  }
-  const wsolAta = getAssociatedTokenAddressSync(NATIVE_MINT, owner, true);
-  packed.add(createCloseAccountInstruction(wsolAta, owner, owner, [], TOKEN_PROGRAM_ID));
-  return packed;
-}
-
+/** Phantom Blowfish flags restitched / multi-pool claims as malicious. One SDK claim, unchanged. */
 async function simulateClaim(tx: Transaction): Promise<boolean> {
   try {
     const vtx = new VersionedTransaction(tx.compileMessage());
@@ -438,49 +413,6 @@ async function simulateClaim(tx: Transaction): Promise<boolean> {
   } catch {
     return false;
   }
-}
-
-function txBytes(tx: Transaction): number {
-  try {
-    return tx.serialize({ requireAllSignatures: false, verifySignatures: false }).length;
-  } catch {
-    return CLAIM_TX_MAX_BYTES + 1;
-  }
-}
-
-async function mergeClaimTxs(
-  owner: PublicKey,
-  parts: { mint: string; unclaimedSol: number; tx: Transaction }[],
-): Promise<DbcClaimBatch | { ok: false; error: string }> {
-  if (!parts.length) return { ok: false, error: "empty" };
-  const chosen: { mint: string; unclaimedSol: number; tx: Transaction }[] = [];
-  let lastGood: Transaction | null = null;
-  for (const part of parts) {
-    const trial = [...chosen, part];
-    const ready = await readyTx(assembleClaimTx(owner, trial), owner);
-    if (txBytes(ready) > CLAIM_TX_MAX_BYTES) {
-      if (chosen.length) break;
-      continue;
-    }
-    if (!(await simulateClaim(ready))) {
-      if (!chosen.length) continue;
-      break;
-    }
-    chosen.push(part);
-    lastGood = ready;
-  }
-  if (!lastGood || !chosen.length) return { ok: false, error: "Claim would fail simulation. Phantom would block it." };
-  const packedMints = new Set(chosen.map((p) => p.mint));
-  const rest = parts.filter((p) => !packedMints.has(p.mint));
-  return {
-    ok: true,
-    transaction: encodeTx(lastGood),
-    claimSol: chosen.reduce((s, p) => s + p.unclaimedSol, 0),
-    mints: chosen.map((p) => p.mint),
-    remaining: rest.length,
-    remainingSol: rest.reduce((s, p) => s + p.unclaimedSol, 0),
-    remainingMints: rest.map((p) => p.mint),
-  };
 }
 
 export async function buildDbcClaimCreatorTx(opts: {
@@ -499,9 +431,8 @@ export async function buildDbcClaimCreatorBatch(opts: {
   const dbc = client();
   const creator = new PublicKey(opts.owner);
   const max = new BN("1000000000000000");
-  const want = [...new Set((opts.mints || []).map((m) => String(m || "").trim()).filter(Boolean))];
-  if (!want.length) return { ok: false, error: "empty" };
-  const wantSet = new Set(want);
+  const target = (opts.mints || []).map((m) => String(m || "").trim()).find(Boolean) || "";
+  if (!target) return { ok: false, error: "empty" };
   clearDbcCreatorCache(opts.owner);
   let pools: { publicKey: PublicKey; account: any }[] = [];
   try {
@@ -509,43 +440,55 @@ export async function buildDbcClaimCreatorBatch(opts: {
   } catch {
     pools = [];
   }
-  const byMint = new Map<string, { mint: string; unclaimedSol: number; pool: PublicKey }>();
+  const unpaid: { mint: string; unclaimedSol: number; pool: PublicKey }[] = [];
+  const seen = new Set<string>();
   for (const row of pools) {
     const mint = mintOfPool(row);
-    if (!mint || !wantSet.has(mint) || byMint.has(mint)) continue;
+    if (!mint || seen.has(mint)) continue;
     const unclaimedSol = feesFromPoolAccount(poolInner(row)).creatorUnclaimedSol;
     if (unclaimedSol <= CLAIM_DUST_SOL) continue;
-    byMint.set(mint, { mint, unclaimedSol, pool: row.publicKey });
+    seen.add(mint);
+    unpaid.push({ mint, unclaimedSol, pool: row.publicKey });
   }
-  for (const mint of want) {
-    if (byMint.has(mint)) continue;
+  let hit = unpaid.find((p) => p.mint === target);
+  if (!hit) {
     try {
-      const row = await dbc.state.getPoolByBaseMint(mint);
-      if (!row) continue;
-      const unclaimedSol = feesFromPoolAccount(poolInner(row)).creatorUnclaimedSol;
-      if (unclaimedSol <= CLAIM_DUST_SOL) continue;
-      byMint.set(mint, { mint, unclaimedSol, pool: row.publicKey });
+      const row = await dbc.state.getPoolByBaseMint(target);
+      if (row) {
+        const unclaimedSol = feesFromPoolAccount(poolInner(row)).creatorUnclaimedSol;
+        if (unclaimedSol > CLAIM_DUST_SOL) hit = { mint: target, unclaimedSol, pool: row.publicKey };
+      }
     } catch {
-      /* skip */
+      /* missing */
     }
   }
-  const ordered = [...byMint.values()].sort((a, b) => b.unclaimedSol - a.unclaimedSol);
-  const parts: { mint: string; unclaimedSol: number; tx: Transaction }[] = [];
-  for (const hit of ordered) {
-    try {
-      const raw = (await dbc.creator.claimCreatorTradingFee({
-        creator,
-        payer: creator,
-        pool: hit.pool,
-        maxBaseAmount: max,
-        maxQuoteAmount: max,
-      })) as Transaction;
-      parts.push({ mint: hit.mint, unclaimedSol: hit.unclaimedSol, tx: raw });
-    } catch {
-      /* skip empty pool */
-    }
+  if (!hit) return { ok: false, error: "empty" };
+  let raw: Transaction;
+  try {
+    raw = (await dbc.creator.claimCreatorTradingFee({
+      creator,
+      payer: creator,
+      pool: hit.pool,
+      maxBaseAmount: max,
+      maxQuoteAmount: max,
+    })) as Transaction;
+  } catch {
+    return { ok: false, error: "empty" };
   }
-  return mergeClaimTxs(creator, parts);
+  const ready = await readyTx(raw, creator);
+  if (!(await simulateClaim(ready))) {
+    return { ok: false, error: "Claim would fail simulation. Phantom would block it." };
+  }
+  const rest = unpaid.filter((p) => p.mint !== hit.mint);
+  return {
+    ok: true,
+    transaction: encodeTx(ready),
+    claimSol: hit.unclaimedSol,
+    mints: [hit.mint],
+    remaining: rest.length,
+    remainingSol: rest.reduce((s, p) => s + p.unclaimedSol, 0),
+    remainingMints: rest.map((p) => p.mint),
+  };
 }
 
 export async function buildDbcClaimPartnerTx(opts: {

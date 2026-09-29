@@ -1230,22 +1230,17 @@ export default function LaunchPage() {
         });
         if (j.claim) {
           const amt = Number(j.claimSol) || 0;
-          const rest = (Array.isArray(j.remainingMints) ? j.remainingMints : []).filter(
-            (m: unknown) => typeof m === "string" && m && !(j.claimMints || []).includes(m),
-          );
-          await Promise.all([refreshPad(true), refreshTape()]);
-          if (!j.partner && rest.length) {
-            setMsg(`Claimed ${fmtClaimSol(amt)} SOL. Claiming the rest…`);
-            await act({ action: "withdraw_dev", mint: rest[0], mints: rest });
-            return;
-          }
+          const more = Number(j.remaining) || 0;
           setMsg(
             j.partner
               ? "Protocol fees claimed into this wallet."
-              : amt
-                ? `Claimed ${fmtClaimSol(amt)} SOL into this wallet.`
-                : "Creator fees claimed into this wallet.",
+              : more
+                ? `Claimed ${fmtClaimSol(amt)} SOL. Claim again for the next token.`
+                : amt
+                  ? `Claimed ${fmtClaimSol(amt)} SOL into this wallet.`
+                  : "Creator fees claimed into this wallet.",
           );
+          await Promise.all([refreshPad(true), refreshTape()]);
           return;
         }
         const conf = await fetch("/api/launch", {
@@ -1309,7 +1304,7 @@ export default function LaunchPage() {
   const claimable = claimableCreator(mine);
   const generatedSol = sumCreatorGenerated(mine);
   const payout = nextCreatorPayout(mine);
-  const unclaimedSol = payout.totalUnclaimed;
+  const unclaimedSol = payout.nextSol;
   const pool = isSwap ? coins : mine;
   const board = useMemo(() => {
     if (!isSwap) {
@@ -1897,7 +1892,7 @@ export default function LaunchPage() {
                 <p className="font-mono text-[11px] tracking-[0.28em] text-acid">DEV REWARDS</p>
                 <h2 className="mt-1 text-[22px] font-semibold tracking-tight text-white">Claim fees</h2>
                 <p className="mt-1 text-[14px] leading-snug text-white/45">
-                  Swaps on the curve pay 1%. Half is yours. Unclaimed is what you can withdraw. This button pays that amount.
+                  Swaps on the curve pay 1%. Half is yours. Unclaimed is what this claim pays into Phantom.
                 </p>
                 <div className="mt-4 grid grid-cols-2 gap-3">
                   <div>
@@ -1914,11 +1909,13 @@ export default function LaunchPage() {
                     type="button"
                     disabled={busy || claimable.length === 0}
                     onClick={() => {
-                      if (!payout.mints.length) return;
+                      const mint = payout.next?.mint;
+                      if (!mint) return;
                       act({
                         action: "withdraw_dev",
-                        mint: payout.mints[0],
-                        mints: payout.mints,
+                        id: payout.next?.id,
+                        mint,
+                        mints: [mint],
                       });
                     }}
                     className="rounded-full bg-[#14f195] px-4 py-2 text-[14px] font-semibold text-[#04000a] disabled:opacity-40"
@@ -1928,7 +1925,9 @@ export default function LaunchPage() {
                 </div>
                 {unclaimedSol > 0 ? (
                   <p className="mt-2 text-[12px] text-white/40">
-                    {fmtClaimSol(unclaimedSol)} SOL unclaimed. Phantom will credit that amount, minus the network fee.
+                    {payout.restCount > 0
+                      ? `This claim pays ${fmtClaimSol(unclaimedSol)} SOL. Claim again after it lands for the next token.`
+                      : `Phantom will credit ${fmtClaimSol(unclaimedSol)} SOL, minus the network fee.`}
                   </p>
                 ) : null}
               </div>

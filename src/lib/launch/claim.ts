@@ -67,19 +67,25 @@ export function sumCreatorGenerated(rows: { mint?: string; creatorFeesSol?: numb
   return uniqueByMint(rows).reduce((s, row) => s + Math.max(0, Number(row.creatorFeesSol) || 0), 0);
 }
 
-/** Unclaimed is withdrawable. The claim button is that same number. */
-export function nextCreatorPayout<T extends { mint?: string; creatorUnclaimedSol?: number }>(
+/**
+ * Card UNCLAIMED and the Claim button are this one pool.
+ * Phantom can only simulate one claim ix; the wallet sum is not this tap.
+ */
+export function nextCreatorPayout<T extends { mint?: string; creatorUnclaimedSol?: number; id?: string }>(
   rows: T[],
 ): { next: T | null; nextSol: number; restCount: number; restSol: number; totalUnclaimed: number; mints: string[] } {
   const list = claimableCreator(rows);
-  const totalUnclaimed = sumCreatorUnclaimed(list);
+  const next = list[0] || null;
+  const nextSol = next ? Number(next.creatorUnclaimedSol) || 0 : 0;
+  const rest = list.slice(1);
+  const restSol = rest.reduce((s, row) => s + (Number(row.creatorUnclaimedSol) || 0), 0);
   return {
-    next: list[0] || null,
-    nextSol: totalUnclaimed,
-    restCount: 0,
-    restSol: 0,
-    totalUnclaimed,
-    mints: list.map((row) => String(row.mint || "").trim()).filter(Boolean),
+    next,
+    nextSol,
+    restCount: rest.length,
+    restSol,
+    totalUnclaimed: nextSol,
+    mints: next?.mint ? [String(next.mint).trim()] : [],
   };
 }
 

@@ -647,13 +647,12 @@ async function postLaunch(req: NextRequest) {
     const book = bookOf(snap);
     const coin = book.coins.find((c) => c.id === b.id || (b.mint && c.mint === b.mint));
     if (coin && coin.creator !== b.pubkey) return fail("not_creator");
-    const mints = [
-      ...((b.mints || []).filter((m) => isSolanaAddress(m))),
-      ...(b.mint && isSolanaAddress(b.mint) ? [b.mint] : []),
-      ...(coin?.mint && isSolanaAddress(coin.mint) ? [coin.mint] : []),
-    ].filter((m, i, all) => all.indexOf(m) === i);
-    if (!mints.length || !dbcEnabled()) return fail("not_found", 404);
-    const built = await (await dbcApi()).buildDbcClaimCreatorBatch({ mints, owner: b.pubkey });
+    const mint =
+      (b.mint && isSolanaAddress(b.mint) ? b.mint : "") ||
+      (b.mints || []).find((m) => isSolanaAddress(m)) ||
+      (coin?.mint && isSolanaAddress(coin.mint) ? coin.mint : "");
+    if (!mint || !dbcEnabled()) return fail("not_found", 404);
+    const built = await (await dbcApi()).buildDbcClaimCreatorBatch({ mints: [mint], owner: b.pubkey });
     if (!built.ok) return fail(built.error);
     return NextResponse.json({
       ok: true,
