@@ -37,12 +37,18 @@ declare global {
           referralFee?: number;
         };
         branding?: { logoUri?: string; name?: string };
-        onSuccess?: (args: { txid?: string }) => void;
-        onSwapError?: (args: { error?: unknown }) => void;
+        onSuccess?: (args: { txid?: string; swapResult?: unknown }) => void;
+        onSwapError?: (args: { error?: unknown; quoteResponseMeta?: unknown }) => void;
+        onFormUpdate?: (form: unknown) => void;
+        onScreenUpdate?: (screen: string) => void;
       }) => void;
       close?: () => void;
       enableWalletPassthrough?: boolean;
       onRequestConnectWallet?: () => void | Promise<void>;
+      onSuccess?: (args: { txid?: string; swapResult?: unknown }) => void;
+      onSwapError?: (args: { error?: unknown; quoteResponseMeta?: unknown }) => void;
+      onFormUpdate?: (form: unknown) => void;
+      onScreenUpdate?: (screen: string) => void;
       syncProps?: (props: { passthroughWalletContextState?: JupWalletState }) => void;
     };
   }

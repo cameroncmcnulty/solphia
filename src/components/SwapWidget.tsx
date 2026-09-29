@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { ArrowDownUp } from "lucide-react";
+import { ArrowDownUp, X } from "lucide-react";
 import {
   JUP_PLUGIN_ACCOUNT,
   JUP_PLUGIN_FEE_BPS,
@@ -10,6 +10,14 @@ import {
   JUP_PLUGIN_USDC,
 } from "@/lib/jup/plugin";
 import { jupWalletState, syncJupiterWallet } from "@/lib/jup/passthrough";
+import {
+  clearSwapNotice,
+  loadSwapNotice,
+  noticeFromSwapError,
+  saveSwapNotice,
+  SWAP_NOTICE_EVENT,
+  type SwapNotice,
+} from "@/lib/jup/swapNotice";
 import { useOwner } from "@/lib/hooks";
 import { loadOwner, persistOwner, OWNER_EVENT } from "@/lib/wallet/owner";
 import {
@@ -122,6 +130,8 @@ function bootPlugin(
   height: number,
   onRequestConnectWallet: () => void | Promise<void>,
   pubkey: string | null,
+  onSwapError: (args: { error?: unknown }) => void,
+  onSuccess: (args: { txid?: string }) => void,
 ) {
   const el = document.getElementById(targetId);
   if (!el || !window.Jupiter?.init) return false;
@@ -138,6 +148,8 @@ function bootPlugin(
     enableWalletPassthrough: true,
     passthroughWalletContextState: jupWalletState(pubkey),
     onRequestConnectWallet,
+    onSwapError,
+    onSuccess,
     containerStyles: { width: "100%", height: `${height}px`, overflow: "visible" },
     formProps: {
       initialInputMint: JUP_PLUGIN_SOL,
@@ -147,6 +159,8 @@ function bootPlugin(
     },
     branding: { logoUri: "https://solphia.io/favicon.png", name: "Solphia" },
   });
+  window.Jupiter.onSwapError = onSwapError;
+  window.Jupiter.onSuccess = onSuccess;
   return true;
 }
 
@@ -163,21 +177,38 @@ export function SwapWidget({
   const siteOwner = useOwner();
   const pk = owner || siteOwner || (typeof window !== "undefined" ? loadOwner() : null);
   const [ready, setReady] = useState(false);
-  const [err, setErr] = useState("");
-  const [ok, setOk] = useState("");
+  const [notice, setNotice] = useState<SwapNotice | null>(() => (typeof window !== "undefined" ? loadSwapNotice() : null));
   const [busy, setBusy] = useState(false);
   const connectRef = useRef<() => Promise<void>>(async () => undefined);
   const pkRef = useRef(pk);
   pkRef.current = pk;
+  const noticeRef = useRef<(n: SwapNotice) => void>(() => undefined);
   const outMint = defaultMint && defaultMint.length > 30 ? defaultMint : JUP_PLUGIN_USDC;
 
   const livePk = () => pkRef.current || loadOwner();
+
+  const showNotice = (n: SwapNotice) => {
+    setNotice(saveSwapNotice(n));
+  };
+  noticeRef.current = showNotice;
+
+  const onPluginError = (args: { error?: unknown }) => {
+    noticeRef.current(noticeFromSwapError(args?.error));
+  };
+
+  const onPluginSuccess = (args: { txid?: string }) => {
+    const sig = typeof args?.txid === "string" ? args.txid.trim() : "";
+    noticeRef.current({
+      kind: "ok",
+      text: sig ? `Swap landed. ${sig}` : "Swap landed.",
+      at: Date.now(),
+    });
+  };
 
   connectRef.current = async () => {
     const existing = livePk();
     if (existing) syncJupiterWallet(existing);
     setBusy(true);
-    setErr("");
     try {
       let found = injectedProvider();
       if (!found) {
@@ -196,13 +227,13 @@ export function SwapWidget({
         return;
       }
       if (inPhantomWebView()) {
-        setErr("Pull down to refresh this tab, then tap Connect Phantom.");
+        showNotice({ kind: "error", text: "Pull down to refresh this tab, then tap Connect Phantom.", at: Date.now() });
         return;
       }
       await openPhantomUl({ pubkey: loadOwner() });
     } catch (e) {
       if (e instanceof Error && e.message === "PHANTOM_REDIRECT") return;
-      setErr(phantomSignError(e).message);
+      showNotice({ kind: "error", text: phantomSignError(e).message, at: Date.now() });
     } finally {
       setBusy(false);
     }
@@ -214,17 +245,23 @@ export function SwapWidget({
       if (!j) return;
       if (j.after?.kind !== "jup_swap") return;
       if (j.error) {
-        setErr(j.error);
-        setOk("");
+        noticeRef.current(noticeFromSwapError(j.error));
         return;
       }
       if (j.signature) {
-        setErr("");
-        setOk("Swap landed.");
+        noticeRef.current({ kind: "ok", text: `Swap landed. ${j.signature}`, at: Date.now() });
       }
     };
+    const onStored = (e: Event) => {
+      const detail = (e as CustomEvent<SwapNotice | null>).detail;
+      setNotice(detail ?? loadSwapNotice());
+    };
     window.addEventListener(PHANTOM_EVENT, onPh as EventListener);
-    return () => window.removeEventListener(PHANTOM_EVENT, onPh as EventListener);
+    window.addEventListener(SWAP_NOTICE_EVENT, onStored as EventListener);
+    return () => {
+      window.removeEventListener(PHANTOM_EVENT, onPh as EventListener);
+      window.removeEventListener(SWAP_NOTICE_EVENT, onStored as EventListener);
+    };
   }, []);
 
   useEffect(() => {
@@ -262,11 +299,19 @@ export function SwapWidget({
         el.style.height = `${height}px`;
         const pubkey = livePk();
         if (
-          !bootPlugin(target, outMint, height, () => {
-            void connectRef.current();
-          }, pubkey)
+          !bootPlugin(
+            target,
+            outMint,
+            height,
+            () => {
+              void connectRef.current();
+            },
+            pubkey,
+            onPluginError,
+            onPluginSuccess,
+          )
         ) {
-          setErr("Jupiter did not mount.");
+          setNotice({ kind: "error", text: "Jupiter did not mount.", at: Date.now() });
           return;
         }
         if (window.Jupiter) {
@@ -274,12 +319,13 @@ export function SwapWidget({
           window.Jupiter.onRequestConnectWallet = () => {
             void connectRef.current();
           };
+          window.Jupiter.onSwapError = onPluginError;
+          window.Jupiter.onSuccess = onPluginSuccess;
         }
         syncJupiterWallet(pubkey);
         setReady(true);
-        setErr("");
       } catch {
-        if (!gone) setErr("Jupiter did not load.");
+        if (!gone) setNotice({ kind: "error", text: "Jupiter did not load.", at: Date.now() });
       }
     })();
     return () => {
@@ -305,13 +351,36 @@ export function SwapWidget({
           {busy ? "Connecting…" : "Connect Phantom"}
         </button>
       ) : null}
+      {notice ? (
+        <div
+          className={`mb-2 flex shrink-0 items-start gap-2 rounded-2xl border px-3 py-2 ${
+            notice.kind === "error"
+              ? "border-blood/40 bg-blood/10 text-blood"
+              : notice.kind === "ok"
+                ? "border-acid/40 bg-acid/10 text-acid"
+                : "border-white/20 bg-white/5 text-white/80"
+          }`}
+          role="status"
+        >
+          <p className="min-w-0 flex-1 break-all text-left text-[13px] leading-snug">{notice.text}</p>
+          <button
+            type="button"
+            onClick={() => {
+              clearSwapNotice();
+              setNotice(null);
+            }}
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-current opacity-70"
+            aria-label="Dismiss"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      ) : null}
       <div
         id={target}
         className="h-[min(22.5rem,calc(100svh-12.5rem))] max-h-full min-h-[16rem] w-full flex-1 overflow-visible rounded-2xl sm:h-[min(28rem,calc(100svh-10rem))]"
       />
-      {!ready && !err ? <p className="mt-2 shrink-0 text-center text-[13px] text-white/40">Loading Jupiter…</p> : null}
-      {ok ? <p className="mt-2 shrink-0 text-center text-[13px] text-acid">{ok}</p> : null}
-      {err ? <p className="mt-2 shrink-0 text-center text-[13px] text-blood">{err}</p> : null}
+      {!ready && !notice ? <p className="mt-2 shrink-0 text-center text-[13px] text-white/40">Loading Jupiter…</p> : null}
     </div>
   );
 }

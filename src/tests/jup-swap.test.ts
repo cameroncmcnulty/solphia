@@ -3,6 +3,15 @@ import { describe, it } from "node:test";
 import { executeUrls, JUP_FEE_BPS, jupFeeStatus, orderUrls } from "../lib/jup/swapV2";
 import { JUP_PLUGIN_ACCOUNT, JUP_PLUGIN_FEE_BPS, JUP_PLUGIN_SRC } from "../lib/jup/plugin";
 import { jupWalletState } from "../lib/jup/passthrough";
+import {
+  clearSwapNotice,
+  formatSwapError,
+  isPhantomSwapPending,
+  loadSwapNotice,
+  noticeFromSwapError,
+  PHANTOM_SWAP_PENDING,
+  saveSwapNotice,
+} from "../lib/jup/swapNotice";
 
 const OWNER = "D4uCNcBKAbG9NAkmhQg7pBiztuejNzbWrZDcZmFGut81";
 
@@ -54,5 +63,46 @@ describe("jupiter swap v2", () => {
     const s = jupWalletState("not-a-wallet");
     assert.equal(s.connected, false);
     assert.equal(s.publicKey, null);
+  });
+});
+
+describe("jupiter swap notice", () => {
+  it("pulls the real message out of Jupiter error shapes", () => {
+    assert.equal(formatSwapError("slippage exceeded"), "slippage exceeded");
+    assert.equal(formatSwapError(new Error("no route")), "no route");
+    assert.equal(formatSwapError({ message: "Transaction simulation failed" }), "Transaction simulation failed");
+    assert.equal(formatSwapError({ error: { message: "0x1771" } }), "0x1771");
+    assert.equal(formatSwapError(null), "Swap failed.");
+  });
+
+  it("does not treat Phantom UL as a swap failure", () => {
+    assert.equal(isPhantomSwapPending("Approve in Phantom. The swap lands when you come back."), true);
+    assert.equal(isPhantomSwapPending(PHANTOM_SWAP_PENDING), true);
+    const n = noticeFromSwapError(new Error("Approve in Phantom. The swap lands when you come back."));
+    assert.equal(n.kind, "pending");
+    assert.equal(n.text, PHANTOM_SWAP_PENDING);
+    const real = noticeFromSwapError({ message: "Slippage tolerance exceeded" });
+    assert.equal(real.kind, "error");
+    assert.equal(real.text, "Slippage tolerance exceeded");
+  });
+
+  it("round-trips the last error through sessionStorage", () => {
+    const mem = new Map<string, string>();
+    const fake = {
+      getItem: (k: string) => (mem.has(k) ? mem.get(k)! : null),
+      setItem: (k: string, v: string) => {
+        mem.set(k, String(v));
+      },
+      removeItem: (k: string) => {
+        mem.delete(k);
+      },
+    };
+    Object.defineProperty(globalThis, "sessionStorage", { value: fake, configurable: true });
+    saveSwapNotice({ kind: "error", text: "Custom program error: 0x1", at: 1 });
+    const got = loadSwapNotice();
+    assert.equal(got?.kind, "error");
+    assert.equal(got?.text, "Custom program error: 0x1");
+    clearSwapNotice();
+    assert.equal(loadSwapNotice(), null);
   });
 });

@@ -10,6 +10,7 @@ import {
 } from "@/lib/wallet/phantomConnect";
 import { phantomProvider, signPhantomAndSend } from "@/lib/wallet/trading";
 import { bytesToB64 } from "@/lib/solana/wire";
+import { markPhantomSwapPending } from "@/lib/jup/swapNotice";
 
 function txToB64(tx: Transaction | VersionedTransaction): string {
   if ("instructions" in tx && Array.isArray(tx.instructions)) {
@@ -51,6 +52,7 @@ async function signOne(tx: unknown) {
   if (inPhantomWebView()) {
     throw new Error("Pull down to refresh this tab, then swap again.");
   }
+  markPhantomSwapPending();
   try {
     await openPhantomUl({
       packed: txToB64(tx as Transaction | VersionedTransaction),
@@ -59,11 +61,12 @@ async function signOne(tx: unknown) {
     });
   } catch (e) {
     if (e instanceof Error && e.message === PHANTOM_REDIRECT) {
-      throw new Error("Approve in Phantom. The swap lands when you come back.");
+      // Jupiter treats a thrown sign as Swap Failed. Stay pending while Phantom opens.
+      await new Promise<never>(() => undefined);
     }
     throw phantomSignError(e);
   }
-  throw new Error("Approve in Phantom. The swap lands when you come back.");
+  await new Promise<never>(() => undefined);
 }
 
 /**
