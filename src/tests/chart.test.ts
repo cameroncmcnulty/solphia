@@ -13,7 +13,7 @@ import {
   sparkUp,
   syntheticSpark,
 } from "../lib/launch/chart";
-import { artCandidates, displayArtSrc, rewriteImageUrl } from "../lib/token/art";
+import { artCandidates, browserArtUrls, publicImage, rewriteImageUrl } from "../lib/token/art";
 
 describe("token sparks", () => {
   it("builds a 5-print path from windowed % so each coin is not the same sine wave", () => {
@@ -118,14 +118,17 @@ describe("token art urls", () => {
     assert.ok(urls.some((u) => u.includes("dd.dexscreener.com")));
   });
 
-  it("points the browser at the same-origin art proxy", () => {
+  it("gives the browser pump.mypinata first, not the serverless proxy", () => {
     const mint = "So11111111111111111111111111111111111111112";
-    const src = "https://ipfs.io/ipfs/bafybeibi5456odfpboswifv75btyarpbh3qpvjtai5q4k6r737jpmaczuu";
-    const href = displayArtSrc(src, mint);
-    assert.match(href, /^\/api\/token-art\?/);
-    assert.ok(href.includes(mint));
-    assert.ok(href.includes(encodeURIComponent(src)));
-    assert.equal(displayArtSrc("data:image/png;base64,abc"), "data:image/png;base64,abc");
-    assert.equal(displayArtSrc("/api/token-art?m=abc"), "/api/token-art?m=abc");
+    const cid = "bafybeibi5456odfpboswifv75btyarpbh3qpvjtai5q4k6r737jpmaczuu";
+    const src = `https://ipfs.io/ipfs/${cid}`;
+    const urls = browserArtUrls(src, mint);
+    assert.equal(urls[0], `https://pump.mypinata.cloud/ipfs/${cid}`);
+    assert.equal(urls.some((u) => u.startsWith("https://ipfs.io")), false);
+    assert.equal(urls.some((u) => u.includes("gateway.pinata.cloud")), false);
+    assert.ok(urls[urls.length - 1]!.startsWith("/api/token-art"));
+    assert.equal(publicImage(src), `https://pump.mypinata.cloud/ipfs/${cid}`);
+    assert.equal(publicImage(`/api/token-art?m=${mint}&u=${encodeURIComponent(src)}`), `https://pump.mypinata.cloud/ipfs/${cid}`);
+    assert.equal(browserArtUrls("data:image/png;base64,abc")[0], "data:image/png;base64,abc");
   });
 });

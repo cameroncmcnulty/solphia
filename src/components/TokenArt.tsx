@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { artCandidates, displayArtSrc, rewriteImageUrl } from "@/lib/token/art";
+import { artCandidates, browserArtUrls, rewriteImageUrl } from "@/lib/token/art";
 
 export { artCandidates, rewriteImageUrl };
 
@@ -18,13 +18,12 @@ export function TokenArt({
   className?: string;
   eager?: boolean;
 }) {
-  const href = useMemo(() => displayArtSrc(src, mint), [src, mint]);
-  const [shown, setShown] = useState(false);
-  const [dead, setDead] = useState(false);
+  const urls = useMemo(() => browserArtUrls(src, mint), [src, mint]);
+  const [i, setI] = useState(0);
   useEffect(() => {
-    setShown(false);
-    setDead(false);
-  }, [href]);
+    setI(0);
+  }, [urls]);
+  const href = urls[i] || "";
   const letter = (label || "").replace(/^\$+/, "").trim().slice(0, 1).toUpperCase() || "•";
 
   return (
@@ -32,17 +31,17 @@ export function TokenArt({
       <span className="absolute inset-0 flex items-center justify-center font-display text-sm text-ghost/75" aria-hidden>
         {letter}
       </span>
-      {href && !dead ? (
+      {href ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={href}
           alt=""
+          referrerPolicy="no-referrer"
           loading={eager ? "eager" : "lazy"}
           decoding="async"
           fetchPriority={eager ? "high" : "low"}
-          onLoad={() => setShown(true)}
-          onError={() => setDead(true)}
-          className={`relative z-[1] h-full w-full object-cover ${shown ? "opacity-100" : "opacity-0"}`}
+          onError={() => setI((n) => n + 1)}
+          className="relative z-[1] h-full w-full object-cover"
         />
       ) : null}
     </span>

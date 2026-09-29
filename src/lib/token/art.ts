@@ -96,18 +96,54 @@ export function artCandidates(src?: string, mint?: string): string[] {
   return unique(out);
 }
 
-/** Same-origin so the list is one cached request per token, not 4 hanging gateways. */
-export function displayArtSrc(src?: string, mint?: string): string {
+export function unwrapArtSrc(src?: string): { src: string; mint?: string } {
   const raw = (src || "").trim();
-  if (!raw && !(mint && mint.length >= 32)) return "";
+  if (!raw.startsWith("/api/token-art") && !raw.startsWith("/api/media")) return { src: raw };
+  try {
+    const u = new URL(raw, "https://solphia.io");
+    return {
+      src: u.searchParams.get("u") || "",
+      mint: u.searchParams.get("m") || u.searchParams.get("mint") || undefined,
+    };
+  } catch {
+    return { src: raw };
+  }
+}
+
+/** Same-origin fallback for hosts that hotlink-block. Not the first src — 80 lambdas stall the list. */
+export function displayArtSrc(src?: string, mint?: string): string {
+  const got = unwrapArtSrc(src);
+  const raw = got.src;
+  const m = mint || got.mint;
+  if (!raw && !(m && m.length >= 32)) return "";
   if (raw.startsWith("data:") || raw.startsWith("blob:")) return raw;
-  if (raw.startsWith("/api/token-art") || raw.startsWith("/api/media")) return raw;
-  if (raw.startsWith("/") && !raw.startsWith("//")) return raw;
+  if (raw.startsWith("/") && !raw.startsWith("/api/") && !raw.startsWith("//")) return raw;
   const q = new URLSearchParams();
-  if (mint && mint.length >= 32) q.set("m", mint);
+  if (m && m.length >= 32) q.set("m", m);
   if (raw && raw.length < 1500 && /^https:\/\//i.test(raw)) q.set("u", raw);
   if (![...q.keys()].length) return "";
   return `/api/token-art?${q.toString()}`;
+}
+
+/** JSON/img src: IPFS becomes pump.mypinata. Never our proxy. */
+export function publicImage(src?: string): string {
+  const raw = unwrapArtSrc(src).src || (src || "").trim();
+  if (!raw) return "";
+  if (raw.startsWith("data:") || raw.startsWith("blob:")) return raw;
+  return rewriteImageUrl(raw) || raw;
+}
+
+/** What the <img> should actually request. Fast public hosts first. Never ipfs.io / public Pinata. */
+export function browserArtUrls(src?: string, mint?: string): string[] {
+  const got = unwrapArtSrc(src);
+  const raw = got.src;
+  const m = mint && mint.length >= 32 ? mint : got.mint;
+  if (raw.startsWith("data:") || raw.startsWith("blob:")) return [raw];
+  if (raw.startsWith("/") && !raw.startsWith("/api/") && !raw.startsWith("//")) return [raw];
+  const out = artCandidates(raw, m).filter((u) => u.startsWith("https:") && !slowIpfsHost(u));
+  const proxy = displayArtSrc(raw, m);
+  if (proxy.startsWith("/api/") && !out.includes(proxy)) out.push(proxy);
+  return unique(out);
 }
 
 const FETCH_HEADERS = {
@@ -146,7 +182,7 @@ export async function fetchFirstImage(urls: string[], timeoutMs = 2200): Promise
         signal: ctrls[i]!.signal,
         headers: FETCH_HEADERS,
         redirect: "follow",
-        cache: "force-cache",
+        cache: "no-store",
       })
         .then(async (r) => {
           if (!r.ok) throw new Error("no");
@@ -167,9 +203,14 @@ export async function fetchFirstImage(urls: string[], timeoutMs = 2200): Promise
 }
 
 export function artCacheHeaders(hit: boolean): Record<string, string> {
-  const ttl = hit ? 604800 : 60;
-  const swr = hit ? 604800 : 120;
-  const value = `public, max-age=${hit ? 3600 : 30}, s-maxage=${ttl}, stale-while-revalidate=${swr}`;
+  if (!hit) {
+    return {
+      "cache-control": "no-store",
+      "cdn-cache-control": "no-store",
+      "vercel-cdn-cache-control": "no-store",
+    };
+  }
+  const value = "public, max-age=3600, s-maxage=604800, stale-while-revalidate=604800";
   return {
     "cache-control": value,
     "cdn-cache-control": value,

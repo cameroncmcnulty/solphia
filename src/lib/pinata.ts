@@ -3,28 +3,34 @@
  * Prefer PINATA_JWT. PINATA_API_KEY + PINATA_API_SECRET is the header pair fallback.
  */
 
+import { publicImage, rewriteImageUrl } from "./token/art";
+
 const PIN_URL = "https://api.pinata.cloud/pinning/pinFileToIPFS";
 const USAGE_URL = "https://api.pinata.cloud/data/userPinnedDataTotal";
 const GATEWAY = (process.env.PINATA_GATEWAY || "https://gateway.pinata.cloud/ipfs").replace(/\/$/, "");
 
-const DIRECT_IMG = ["dd.dexscreener.com", "cdn.dexscreener.com"];
+const DIRECT_IMG = ["dd.dexscreener.com", "cdn.dexscreener.com", "pump.mypinata.cloud", "pbs.twimg.com"];
 
 function directImage(raw: string): boolean {
   try {
     const host = new URL(raw).hostname.toLowerCase();
+    if (host.endsWith(".mypinata.cloud")) return true;
     return DIRECT_IMG.some((d) => host === d || host.endsWith(`.${d}`));
   } catch {
     return false;
   }
 }
 
-/** Same-origin proxy. IPFS/Pinata/Twitter must not load from the browser — they 403 or hang. */
+/** IPFS → pump.mypinata. Dex/Twitter stay direct. Proxy only for unknown hosts. */
 export function displayMedia(url?: string | null): string {
   const raw = (url || "").trim();
   if (!raw) return "";
   if (raw.startsWith("data:image/")) return raw;
-  if (raw.startsWith("/api/media") || raw.startsWith("/api/token-art")) return raw;
+  if (raw.startsWith("/api/media") || raw.startsWith("/api/token-art")) return publicImage(raw) || raw;
   if (!/^https?:\/\//i.test(raw)) return raw;
+  if (/\/ipfs\//i.test(raw) || raw.startsWith("ipfs://")) {
+    return rewriteImageUrl(raw) || raw;
+  }
   if (directImage(raw)) return raw;
   return `/api/media?u=${encodeURIComponent(raw)}`;
 }
