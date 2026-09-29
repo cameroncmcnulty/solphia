@@ -51,6 +51,28 @@ export function sumCreatorUnclaimed(rows: { mint?: string; creatorUnclaimedSol?:
   return claimableCreator(rows).reduce((s, row) => s + (Number(row.creatorUnclaimedSol) || 0), 0);
 }
 
+/** Lifetime generated from chain creator fees only — never paper devRewardsSol. */
+export function sumCreatorGenerated(rows: { mint?: string; creatorFeesSol?: number }[]): number {
+  return uniqueByMint(rows).reduce((s, row) => s + Math.max(0, Number(row.creatorFeesSol) || 0), 0);
+}
+
+/** Next Phantom signature pays one pool. Button must show this, not the wallet total. */
+export function nextCreatorPayout<T extends { mint?: string; creatorUnclaimedSol?: number }>(
+  rows: T[],
+): { next: T | null; nextSol: number; restCount: number; restSol: number; totalUnclaimed: number } {
+  const list = claimableCreator(rows);
+  const next = list[0] || null;
+  const nextSol = next ? Number(next.creatorUnclaimedSol) || 0 : 0;
+  const totalUnclaimed = sumCreatorUnclaimed(list);
+  return {
+    next,
+    nextSol,
+    restCount: Math.max(0, list.length - 1),
+    restSol: Math.max(0, totalUnclaimed - nextSol),
+    totalUnclaimed,
+  };
+}
+
 export function claimablePartner<T extends { mint?: string; partnerUnclaimedSol?: number }>(rows: T[]): T[] {
   return uniqueByMint(rows).filter((row) => (Number(row.partnerUnclaimedSol) || 0) > CLAIM_DUST_SOL);
 }

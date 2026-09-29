@@ -46,7 +46,7 @@ import { BoostBuy, BoostRail, fmtLeft } from "@/components/BoostBuy";
 
 import { TokenImageCrop, readLaunchImage, type CropSource } from "@/components/TokenImageCrop";
 import { yourLaunches } from "@/lib/launch/yours";
-import { claimableCreator, fmtClaimSol, sumCreatorUnclaimed, uniqueByMint } from "@/lib/launch/claim";
+import { claimableCreator, fmtClaimSol, nextCreatorPayout, sumCreatorGenerated, uniqueByMint } from "@/lib/launch/claim";
 import { clearPending, loadPending, savePending, type PendingLaunch } from "@/lib/launch/pending";
 import { hideLaunch, loadHidden } from "@/lib/launch/hidden";
 import { PadPitch } from "@/components/PadPitch";
@@ -1303,14 +1303,20 @@ export default function LaunchPage() {
     ).filter((c) => !hidden.includes(c.mint || "")),
   );
   const claimable = claimableCreator(mine);
-  const generatedSol = mine.reduce((s, c) => s + (c.creatorFeesSol || c.devRewardsSol || 0), 0);
-  const unclaimedSol = sumCreatorUnclaimed(mine);
+  const generatedSol = sumCreatorGenerated(mine);
+  const payout = nextCreatorPayout(mine);
+  const unclaimedSol = payout.totalUnclaimed;
   const pool = isSwap ? coins : mine;
   const board = useMemo(() => {
     if (!isSwap) {
       const rows = mine
         .slice()
-        .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
+        .sort((a, b) => {
+          const au = Number(a.creatorUnclaimedSol) || 0;
+          const bu = Number(b.creatorUnclaimedSol) || 0;
+          if (bu !== au) return bu - au;
+          return (b.createdAt || 0) - (a.createdAt || 0);
+        })
         .map((coin) => ({ coin, rank: 0, audit: undefined as undefined, boost: undefined as undefined }));
       return rows;
     }
@@ -1907,7 +1913,7 @@ export default function LaunchPage() {
                     type="button"
                     disabled={busy || claimable.length === 0}
                     onClick={() => {
-                      const first = claimable[0];
+                      const first = payout.next;
                       if (!first) return;
                       act({
                         action: "withdraw_dev",
@@ -1918,15 +1924,16 @@ export default function LaunchPage() {
                     }}
                     className="rounded-full bg-[#14f195] px-4 py-2 text-[14px] font-semibold text-[#04000a] disabled:opacity-40"
                   >
-                    {unclaimedSol > 0 ? `Claim ${fmtClaimSol(unclaimedSol)} SOL` : "Claim creator fees"}
+                    {payout.nextSol > 0 ? `Claim ${fmtClaimSol(payout.nextSol)} SOL` : "Claim creator fees"}
                   </button>
                 </div>
-                {claimable.length > 1 ? (
+                {payout.restCount > 0 ? (
                   <p className="mt-2 text-[12px] text-white/40">
-                    {claimable.length} tokens. One signature. Phantom must show {fmtClaimSol(unclaimedSol)} SOL (plus a tiny network fee).
+                    {claimable.length} tokens hold {fmtClaimSol(unclaimedSol)} SOL. This signature pays {fmtClaimSol(payout.nextSol)} SOL.
+                    Then {fmtClaimSol(payout.restSol)} SOL on the others — tap claim again after Phantom.
                   </p>
-                ) : unclaimedSol > 0 ? (
-                  <p className="mt-2 text-[12px] text-white/40">Phantom will credit {fmtClaimSol(unclaimedSol)} SOL, minus the network fee.</p>
+                ) : payout.nextSol > 0 ? (
+                  <p className="mt-2 text-[12px] text-white/40">Phantom will credit {fmtClaimSol(payout.nextSol)} SOL, minus the network fee.</p>
                 ) : null}
               </div>
             )}
@@ -2014,7 +2021,7 @@ export default function LaunchPage() {
                       <p className="text-[13px] text-white/45">
                         {owner === treasuryWallet
                           ? `${fmtSol(row.coin.partnerFeesSol || 0, 4)} SOL protocol generated · ${fmtSol(row.coin.partnerUnclaimedSol || 0, 4)} SOL unclaimed`
-                          : `${fmtClaimSol(row.coin.creatorFeesSol || row.coin.devRewardsSol || 0)} SOL generated · ${fmtClaimSol(row.coin.creatorUnclaimedSol || 0)} SOL unclaimed`}
+                          : `${fmtClaimSol(row.coin.creatorFeesSol || 0)} SOL generated · ${fmtClaimSol(row.coin.creatorUnclaimedSol || 0)} SOL unclaimed`}
                       </p>
                       <div className="flex items-center gap-2">
                         <button
@@ -2023,7 +2030,7 @@ export default function LaunchPage() {
                             busy ||
                             (owner === treasuryWallet
                               ? !((row.coin.partnerUnclaimedSol || 0) > 1e-6)
-                              : !((row.coin.creatorUnclaimedSol || 0) > 1e-6 || row.coin.devRewardsSol > 0))
+                              : !((row.coin.creatorUnclaimedSol || 0) > 1e-6))
                           }
                           onClick={() =>
                             act({
@@ -2271,11 +2278,11 @@ function CoinDesk({
             {creator && (
               <button
                 type="button"
-                disabled={busy || !((open.creatorUnclaimedSol || 0) > 1e-6 || open.devRewardsSol > 0)}
+                disabled={busy || !((open.creatorUnclaimedSol || 0) > 1e-6)}
                 onClick={() => onAct({ action: "withdraw_dev", id: open.id, mint: open.mint })}
                 className="mt-3 min-h-[44px] w-full rounded-full border border-acid/40 py-2 text-sm text-acid disabled:opacity-40"
               >
-                Claim {fmtSol(open.creatorUnclaimedSol || open.devRewardsSol || 0, 4)} SOL
+                Claim {fmtClaimSol(open.creatorUnclaimedSol || 0)} SOL
               </button>
             )}
           </div>
@@ -2380,11 +2387,11 @@ function CoinDesk({
                   {creator && (
                     <button
                       type="button"
-                      disabled={busy || !((open.creatorUnclaimedSol || 0) > 1e-6 || open.devRewardsSol > 0)}
+                      disabled={busy || !((open.creatorUnclaimedSol || 0) > 1e-6)}
                       onClick={() => onAct({ action: "withdraw_dev", id: open.id, mint: open.mint })}
                       className="mt-3 w-full rounded-full border border-acid/40 py-2 text-sm text-acid disabled:opacity-40"
                     >
-                      Claim {fmtSol(open.creatorUnclaimedSol || open.devRewardsSol || 0, 4)} SOL
+                      Claim {fmtClaimSol(open.creatorUnclaimedSol || 0)} SOL
                     </button>
                   )}
                 </>

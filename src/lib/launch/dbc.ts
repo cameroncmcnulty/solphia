@@ -8,7 +8,7 @@ import * as DbcMod from "@meteora-ag/dynamic-bonding-curve-sdk";
 import BN from "bn.js";
 
 import { connection } from "../solana/connection";
-import { Keypair, PublicKey, Transaction } from "@solana/web3.js";
+import { Keypair, PublicKey, Transaction, VersionedTransaction } from "@solana/web3.js";
 import { encodeTx } from "../token/mint";
 import { bytesToB64 } from "../solana/wire";
 import { treasuryAddress } from "../treasury";
@@ -390,16 +390,6 @@ export async function chainPartnerTotals(config: string): Promise<{
   return { unclaimedSol, totalSol, byMint };
 }
 
-const CLAIM_TX_MAX_BYTES = 1110;
-
-function txSize(tx: Transaction): number {
-  try {
-    return tx.serialize({ requireAllSignatures: false, verifySignatures: false }).length;
-  } catch {
-    return 9_999;
-  }
-}
-
 export type DbcClaimBatch = {
   ok: true;
   transaction: string;
@@ -409,12 +399,19 @@ export type DbcClaimBatch = {
   remainingSol: number;
 };
 
-function sizedBytes(ixs: Transaction["instructions"], owner: PublicKey): number {
-  const tx = new Transaction();
-  for (const ix of ixs) tx.add(ix);
-  tx.feePayer = owner;
-  tx.recentBlockhash = "11111111111111111111111111111111";
-  return txSize(tx);
+/** Phantom flags unsizable / unsimmable claim batches as "this dApp could be malicious". One pool per signature. */
+async function simulateClaim(tx: Transaction): Promise<boolean> {
+  try {
+    const vtx = new VersionedTransaction(tx.compileMessage());
+    const sim = await connection().simulateTransaction(vtx, {
+      sigVerify: false,
+      replaceRecentBlockhash: true,
+      commitment: "confirmed",
+    });
+    return !sim.value.err;
+  } catch {
+    return false;
+  }
 }
 
 async function mergeClaimTxs(
@@ -422,32 +419,23 @@ async function mergeClaimTxs(
   parts: { mint: string; unclaimedSol: number; tx: Transaction }[],
 ): Promise<DbcClaimBatch | { ok: false; error: string }> {
   if (!parts.length) return { ok: false, error: "empty" };
-  const included: { mint: string; unclaimedSol: number }[] = [];
-  let ixs: Transaction["instructions"] = [];
-  let remaining = 0;
-  let remainingSol = 0;
-  for (const part of parts) {
-    const next = [...ixs, ...part.tx.instructions];
-    if (included.length > 0 && sizedBytes(next, owner) > CLAIM_TX_MAX_BYTES) {
-      remaining += 1;
-      remainingSol += part.unclaimedSol;
-      continue;
-    }
-    ixs = next;
-    included.push({ mint: part.mint, unclaimedSol: part.unclaimedSol });
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i];
+    const packed = new Transaction();
+    for (const ix of part.tx.instructions) packed.add(ix);
+    const ready = await readyTx(packed, owner);
+    if (!(await simulateClaim(ready))) continue;
+    const rest = parts.slice(i + 1);
+    return {
+      ok: true,
+      transaction: encodeTx(ready),
+      claimSol: part.unclaimedSol,
+      mints: [part.mint],
+      remaining: rest.length,
+      remainingSol: rest.reduce((s, p) => s + p.unclaimedSol, 0),
+    };
   }
-  if (!included.length) return { ok: false, error: "empty" };
-  const packed = new Transaction();
-  for (const ix of ixs) packed.add(ix);
-  const ready = await readyTx(packed, owner);
-  return {
-    ok: true,
-    transaction: encodeTx(ready),
-    claimSol: included.reduce((s, p) => s + p.unclaimedSol, 0),
-    mints: included.map((p) => p.mint),
-    remaining,
-    remainingSol,
-  };
+  return { ok: false, error: "Claim would fail simulation. Phantom would block it." };
 }
 
 export async function buildDbcClaimCreatorTx(opts: {

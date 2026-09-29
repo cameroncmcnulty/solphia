@@ -4,6 +4,8 @@ import {
   CLAIM_DUST_SOL,
   claimableCreator,
   fmtClaimSol,
+  nextCreatorPayout,
+  sumCreatorGenerated,
   sumCreatorUnclaimed,
   uniqueByMint,
 } from "../lib/launch/claim";
@@ -34,6 +36,21 @@ describe("creator claim amounts", () => {
     assert.equal(fmtClaimSol(0.0192), "0.0192");
     assert.equal(fmtClaimSol(0.003982), "0.003982");
     assert.equal(fmtClaimSol(0), "0");
+  });
+
+  it("the claim button pays one pool, not the wallet total", () => {
+    const rows = [
+      { mint: "Mint111111111111111111111111111111111111111", creatorFeesSol: 0.01, creatorUnclaimedSol: 0.003982 },
+      { mint: "Mint222222222222222222222222222222222222222", creatorFeesSol: 0.072, creatorUnclaimedSol: 0.073338 },
+      { mint: "Mint333333333333333333333333333333333333333", creatorFeesSol: 0, creatorUnclaimedSol: 0 },
+    ];
+    const p = nextCreatorPayout(rows);
+    assert.equal(fmtClaimSol(p.nextSol), "0.003982");
+    assert.equal(p.restCount, 1);
+    assert.equal(fmtClaimSol(p.totalUnclaimed), "0.07732");
+    assert.equal(fmtClaimSol(p.restSol), "0.073338");
+    assert.equal(fmtClaimSol(sumCreatorGenerated(rows)), "0.082");
+    assert.notEqual(fmtClaimSol(p.nextSol), fmtClaimSol(p.totalUnclaimed));
   });
 
   it("treats pool.creatorQuoteFee as unclaimed, not total trading volume", () => {
