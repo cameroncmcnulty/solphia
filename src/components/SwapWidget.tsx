@@ -2,7 +2,6 @@
 
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { ArrowDownUp } from "lucide-react";
-import { PublicKey, Transaction, VersionedTransaction } from "@solana/web3.js";
 import {
   JUP_PLUGIN_ACCOUNT,
   JUP_PLUGIN_FEE_BPS,
@@ -10,6 +9,8 @@ import {
   JUP_PLUGIN_SRC,
   JUP_PLUGIN_USDC,
 } from "@/lib/jup/plugin";
+import { jupWalletState, syncJupiterWallet } from "@/lib/jup/passthrough";
+import { useOwner } from "@/lib/hooks";
 import { loadOwner, persistOwner, OWNER_EVENT } from "@/lib/wallet/owner";
 import {
   inPhantomWebView,
@@ -18,8 +19,6 @@ import {
   phantomSignError,
   waitForInjected,
 } from "@/lib/wallet/phantomConnect";
-import { phantomProvider, signPhantomAndSend } from "@/lib/wallet/trading";
-import { bytesToB64 } from "@/lib/solana/wire";
 import { PhantomMark } from "./PhantomMark";
 
 export function SwapShell({
@@ -115,83 +114,6 @@ function boxHeight(el: HTMLElement) {
   return Math.max(280, Math.min(400, Math.round(vh - 240)));
 }
 
-function txToB64(tx: Transaction | VersionedTransaction): string {
-  if ("instructions" in tx && Array.isArray(tx.instructions)) {
-    return bytesToB64(Uint8Array.from(tx.serialize({ requireAllSignatures: false, verifySignatures: false })));
-  }
-  return bytesToB64((tx as VersionedTransaction).serialize());
-}
-
-function jupWalletState(pubkey: string | null) {
-  const inj = injectedProvider();
-  const pkStr = inj?.publicKey?.toString() || pubkey || "";
-  let publicKey: PublicKey | null = null;
-  try {
-    if (pkStr) publicKey = new PublicKey(pkStr);
-  } catch {
-    publicKey = null;
-  }
-  const canSign = Boolean(inj && typeof inj.signTransaction === "function" && publicKey);
-  return {
-    autoConnect: false,
-    wallets: [] as unknown[],
-    wallet: canSign
-      ? {
-          adapter: {
-            name: "Phantom",
-            url: "https://phantom.app",
-            icon: "https://solphia.io/favicon.png",
-            readyState: "Installed",
-            publicKey,
-            connecting: false,
-            connected: true,
-          },
-        }
-      : null,
-    publicKey,
-    connecting: false,
-    connected: canSign,
-    disconnecting: false,
-    select: () => undefined,
-    connect: async () => {
-      const found = injectedProvider();
-      if (!found?.connect) throw new Error("Connect Phantom first.");
-      const res = await found.connect();
-      persistOwner(res.publicKey.toString());
-    },
-    disconnect: async () => undefined,
-    signTransaction: async (tx: unknown) => {
-      const found = injectedProvider();
-      if (found?.connect) {
-        try {
-          await found.connect();
-        } catch (e) {
-          throw phantomSignError(e);
-        }
-      }
-      const provider = phantomProvider();
-      if (!provider) throw new Error("Connect Phantom first.");
-      try {
-        return await provider.signTransaction(tx as Transaction | VersionedTransaction);
-      } catch (e) {
-        throw phantomSignError(e);
-      }
-    },
-    signAllTransactions: async (txs: unknown[]) => {
-      const out: unknown[] = [];
-      for (const tx of txs) {
-        const found = injectedProvider();
-        if (found?.connect) await found.connect();
-        const provider = phantomProvider();
-        if (!provider) throw new Error("Connect Phantom first.");
-        out.push(await provider.signTransaction(tx as Transaction | VersionedTransaction));
-      }
-      return out;
-    },
-    sendTransaction: async (tx: unknown) => signPhantomAndSend(txToB64(tx as Transaction | VersionedTransaction)),
-  };
-}
-
 function bootPlugin(
   targetId: string,
   outputMint: string,
@@ -236,29 +158,38 @@ export function SwapWidget({
 }) {
   const uid = useId().replace(/:/g, "");
   const target = `jup-${uid}`;
+  const siteOwner = useOwner();
+  const pk = owner || siteOwner || (typeof window !== "undefined" ? loadOwner() : null);
   const [ready, setReady] = useState(false);
   const [err, setErr] = useState("");
-  const [pk, setPk] = useState<string | null>(owner ?? null);
   const [busy, setBusy] = useState(false);
-  const [canSign, setCanSign] = useState(false);
   const connectRef = useRef<() => Promise<void>>(async () => undefined);
+  const pkRef = useRef(pk);
+  pkRef.current = pk;
   const outMint = defaultMint && defaultMint.length > 30 ? defaultMint : JUP_PLUGIN_USDC;
 
+  const livePk = () => pkRef.current || loadOwner();
+
   connectRef.current = async () => {
+    const existing = livePk();
+    if (existing) syncJupiterWallet(existing);
     setBusy(true);
     setErr("");
     try {
       let found = injectedProvider();
       if (!found) {
-        await waitForInjected(inPhantomWebView() ? 8000 : 1200);
+        await waitForInjected(inPhantomWebView() ? 8000 : 4000);
         found = injectedProvider();
       }
       if (found?.connect) {
         const res = await found.connect();
         const pubkey = res.publicKey.toString();
         persistOwner(pubkey);
-        setPk(pubkey);
-        window.Jupiter?.syncProps?.({ passthroughWalletContextState: jupWalletState(pubkey) });
+        syncJupiterWallet(pubkey);
+        return;
+      }
+      if (existing) {
+        syncJupiterWallet(existing);
         return;
       }
       if (inPhantomWebView()) {
@@ -275,35 +206,25 @@ export function SwapWidget({
   };
 
   useEffect(() => {
-    setPk(owner || loadOwner());
-  }, [owner]);
-
-  useEffect(() => {
-    const tick = () => {
-      const inj = injectedProvider();
-      setCanSign(Boolean((inj?.publicKey?.toString() || pk) && inj && typeof inj.signTransaction === "function"));
-    };
-    tick();
-    window.addEventListener("phantom#initialized", tick);
-    const t = window.setInterval(tick, 800);
-    return () => {
-      window.removeEventListener("phantom#initialized", tick);
-      window.clearInterval(t);
-    };
-  }, [pk]);
-
-  useEffect(() => {
+    if (!ready) return;
+    const push = () => syncJupiterWallet(livePk());
+    push();
     const onOwner = (e: Event) => {
-      const next = (e as CustomEvent<string | null>).detail || loadOwner();
-      if (next) setPk(next);
+      const detail = (e as CustomEvent<string | null>).detail;
+      syncJupiterWallet(detail || livePk());
     };
     window.addEventListener(OWNER_EVENT, onOwner as EventListener);
-    return () => window.removeEventListener(OWNER_EVENT, onOwner as EventListener);
-  }, []);
-
-  useEffect(() => {
-    if (!ready) return;
-    window.Jupiter?.syncProps?.({ passthroughWalletContextState: jupWalletState(pk) });
+    window.addEventListener("phantom#initialized", push);
+    window.addEventListener("focus", push);
+    window.addEventListener("pageshow", push);
+    const t = window.setInterval(push, 600);
+    return () => {
+      window.removeEventListener(OWNER_EVENT, onOwner as EventListener);
+      window.removeEventListener("phantom#initialized", push);
+      window.removeEventListener("focus", push);
+      window.removeEventListener("pageshow", push);
+      window.clearInterval(t);
+    };
   }, [pk, ready]);
 
   useEffect(() => {
@@ -317,14 +238,22 @@ export function SwapWidget({
         if (gone || !el) return;
         const height = boxHeight(el);
         el.style.height = `${height}px`;
+        const pubkey = livePk();
         if (
           !bootPlugin(target, outMint, height, () => {
             void connectRef.current();
-          }, loadOwner())
+          }, pubkey)
         ) {
           setErr("Jupiter did not mount.");
           return;
         }
+        if (window.Jupiter) {
+          window.Jupiter.enableWalletPassthrough = true;
+          window.Jupiter.onRequestConnectWallet = () => {
+            void connectRef.current();
+          };
+        }
+        syncJupiterWallet(pubkey);
         setReady(true);
         setErr("");
       } catch {
@@ -343,7 +272,7 @@ export function SwapWidget({
 
   return (
     <div className="relative z-20 flex min-h-0 w-full flex-1 flex-col">
-      {!canSign ? (
+      {!pk ? (
         <button
           type="button"
           disabled={busy}

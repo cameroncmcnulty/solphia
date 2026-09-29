@@ -41,6 +41,8 @@ declare global {
         onSwapError?: (args: { error?: unknown }) => void;
       }) => void;
       close?: () => void;
+      enableWalletPassthrough?: boolean;
+      onRequestConnectWallet?: () => void | Promise<void>;
       syncProps?: (props: { passthroughWalletContextState?: JupWalletState }) => void;
     };
   }
