@@ -28,6 +28,10 @@ export function useMarket(pollMs = 15000) {
   }, []);
 
   useEffect(() => {
+    if (!pollMs || pollMs < 1000) {
+      setLoading(false);
+      return;
+    }
     refresh();
     const id = setInterval(refresh, pollMs);
     return () => clearInterval(id);

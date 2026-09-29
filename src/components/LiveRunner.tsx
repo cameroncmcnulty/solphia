@@ -16,13 +16,13 @@ export function LiveRunner() {
   const desk = path.startsWith("/trading") || path.startsWith("/auto") || path.startsWith("/terminal") || path.startsWith("/account");
   const connected = useOwner();
   const owner = connected || (typeof window !== "undefined" ? loadOwner() : null);
-  const { data } = useMarket(desk ? 20_000 : 180_000);
+  const { data } = useMarket(desk ? 20_000 : 0);
   const lock = useRef(false);
   const lastSig = useRef("");
   const delegated = useRef(false);
 
   useEffect(() => {
-    if (!owner) return;
+    if (!desk || !owner) return;
     let stop = false;
     async function arm() {
       if (stop || delegated.current) return;
@@ -79,7 +79,7 @@ export function LiveRunner() {
       stop = true;
       clearInterval(id);
     };
-  }, [owner, data?.pair?.solUsd, data?.solUsd, data?.treasury, data?.pair?.spyxUsd, data?.pair?.qqqxUsd, data?.pair?.gldxUsd, data?.spyxUsd, data?.qqqxUsd, data?.gldxUsd]);
+  }, [desk, owner, data?.pair?.solUsd, data?.solUsd, data?.treasury, data?.pair?.spyxUsd, data?.pair?.qqqxUsd, data?.pair?.gldxUsd, data?.spyxUsd, data?.qqqxUsd, data?.gldxUsd]);
 
   return null;
 }

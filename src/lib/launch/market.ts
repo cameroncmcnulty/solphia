@@ -4,6 +4,7 @@ import { scoreToken } from "../risk/engine";
 import type { TokenSnapshot } from "../types";
 import { smoothSpark } from "./chart";
 import type { TapeCoin } from "./tape";
+import { displayArtSrc } from "../token/art";
 
 /** Preferred safety floor. The board still fills to MARKET_CAP with the next-best live names. */
 export const MARKET_MIN_SCORE = 45;
@@ -49,7 +50,7 @@ export function snapshotToTape(t: TokenSnapshot, solUsd: number): TapeCoin {
     pairUrl: pairUrlOf(t),
     name: t.name,
     symbol: t.symbol,
-    image: t.image,
+    image: displayArtSrc(t.image, t.mint) || t.image,
     links: {
       website: t.socials.website,
       x: t.socials.twitter,

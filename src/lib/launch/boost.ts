@@ -1,4 +1,5 @@
 import { isSolanaAddress } from "../security";
+import { displayArtSrc } from "../token/art";
 import type { LaunchBook } from "./engine";
 
 /** One pack is 24h of rank. More rockets = higher on the rail. */
@@ -126,7 +127,7 @@ export function rankedBoosts(book: LaunchBook, now = Date.now(), sort: BoostSort
         endsAt: b.endsAt || 0,
         leftMs,
         lastBoostAt: b.boughtAt || b.liveAt || now,
-        image: b.image || coin?.image,
+        image: displayArtSrc(b.image || coin?.image, b.mint) || b.image || coin?.image,
         mega: rockets >= MEGA_ROCKETS,
       });
     } else {
@@ -137,7 +138,7 @@ export function rankedBoosts(book: LaunchBook, now = Date.now(), sort: BoostSort
         prev.endsAt = b.endsAt || 0;
         prev.leftMs = leftMs;
       }
-      if (!prev.image && (b.image || coin?.image)) prev.image = b.image || coin?.image;
+      if (!prev.image && (b.image || coin?.image)) prev.image = displayArtSrc(b.image || coin?.image, b.mint) || b.image || coin?.image;
       if (!prev.name && (b.name || coin?.name)) prev.name = b.name || coin?.name;
     }
   }
@@ -270,7 +271,7 @@ export function publicLiveBoost(b: LaunchBoost, now = Date.now()) {
     mint: b.mint,
     symbol: b.symbol,
     name: b.name,
-    image: b.image,
+    image: displayArtSrc(b.image, b.mint) || b.image,
     rockets: b.rockets,
     mega: b.rockets >= MEGA_ROCKETS,
     endsAt: b.endsAt || 0,

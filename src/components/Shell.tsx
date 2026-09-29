@@ -19,7 +19,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const isAdmin = path.startsWith("/admin");
   const isShill = path === "/shill" || path.startsWith("/shill/");
   const isSwap = path === "/swap" || path.startsWith("/swap/");
-  const skipHuman = isAdmin || path === "/launch" || isSwap || path.startsWith("/launch/");
+  const isLaunch = path === "/launch" || path.startsWith("/launch/");
+  const skipHuman = isAdmin || isLaunch || isSwap;
 
   useEffect(() => {
     if (isShill) {
@@ -55,7 +56,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className={`relative min-h-screen overflow-x-hidden ${isAdmin ? "" : "pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:pb-8"}`}>
-      {!isAdmin && !isSwap && <ParticleField />}
+      {!isAdmin && !isSwap && !isLaunch && <ParticleField />}
       {!isAdmin && <div className="vignette" />}
       {!isAdmin && (
         <Suspense fallback={null}>

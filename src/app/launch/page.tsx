@@ -1922,13 +1922,14 @@ export default function LaunchPage() {
                   </p>
                 </div>
               )}
-              {board.map((row) => (
+              {board.map((row, i) => (
                 <div key={row.coin.id}>
                   <PumpCoinRow
                     name={row.coin.name}
                     symbol={row.coin.symbol}
                     image={row.coin.image}
                     mint={row.coin.mint}
+                    eager={i < 16}
                     marketCapUsd={row.coin.marketCapUsd || (solUsd > 0 ? (row.coin.marketCapSol || 0) * solUsd : 0)}
                     marketCapSol={row.coin.marketCapSol}
                     change={row.coin.change24h ?? row.coin.change1h}

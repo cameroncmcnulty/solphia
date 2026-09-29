@@ -22,6 +22,7 @@ import {
 } from "./curve";
 import { socialHref } from "./links";
 import { imageOk, storedImage, validateLaunchCreate } from "./validate";
+import { displayArtSrc } from "../token/art";
 import type { LaunchBoost } from "./boost";
 import { ensureBoosts, tickBoosts } from "./boost";
 
@@ -459,7 +460,7 @@ export function publicCoin(c: LaunchCoin, solUsd = 0, viewer?: string, book?: La
     venue: c.venue === "solphia" ? ("solphia" as const) : c.venue === "pump" ? ("pumpfun" as const) : ("launchlab" as const),
     name: c.name,
     symbol: c.symbol,
-    image: c.image || "",
+    image: displayArtSrc(c.image, c.mint) || c.image || "",
     blurb: c.blurb,
     links: c.links || {},
     mintAuthority: "revoked" as const,
