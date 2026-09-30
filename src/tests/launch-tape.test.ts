@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 import { buyCoin, createCoin, emptyLaunchBook, publicCoin } from "../lib/launch/engine";
 import { auditLaunchCoin, rankTape } from "../lib/launch/audit";
 import { filterTape, sortTape, volumeIn } from "../lib/launch/tape";
-import { marketPasses, MARKET_MIN_SCORE, filterMarketSnapshots, snapshotToTape } from "../lib/launch/market";
+import { marketPasses, MARKET_MIN_SCORE, filterMarketSnapshots, snapshotToTape, mixByMcap, isBrowseStable } from "../lib/launch/market";
 import { isNativeSolSnapshot, WSOL_MINT } from "../lib/feeds/normalize";
 import type { TokenSnapshot } from "../lib/types";
 
@@ -213,5 +213,26 @@ describe("market tape gate", () => {
     assert.equal(row.mint, dust.mint);
     assert.equal(row.symbol, "DUST");
     assert.equal(row.born, false);
+  });
+
+  it("drops USDC/USDT from the browse tape so swap is not a stablecoin wall", () => {
+    assert.equal(isBrowseStable({ mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", symbol: "USDC" }), true);
+    assert.equal(isBrowseStable({ mint: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB", symbol: "USDT" }), true);
+    assert.equal(isBrowseStable({ mint: "PepeMintxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx1", symbol: "PEPE" }), false);
+  });
+});
+
+describe("swap tape mix", () => {
+  it("interleaves mega names with mid/micro so browse is not billions then 3k dust", () => {
+    const mega = Array.from({ length: 20 }, (_, i) => ({ id: `mega${i}`, marketCapUsd: 2_000_000_000 - i }));
+    const micro = Array.from({ length: 60 }, (_, i) => ({ id: `dust${i}`, marketCapUsd: 3_500 + i }));
+    const mid = Array.from({ length: 20 }, (_, i) => ({ id: `mid${i}`, marketCapUsd: 80_000 + i * 100 }));
+    const mixed = mixByMcap([...mega, ...micro, ...mid], 80);
+    assert.equal(mixed.length, 80);
+    const first12 = mixed.slice(0, 12);
+    const kinds = first12.map((r) => (r.marketCapUsd >= 1_000_000 ? "L" : r.marketCapUsd >= 50_000 ? "M" : "S"));
+    assert.ok(kinds.includes("L") && kinds.includes("M") && kinds.includes("S"));
+    assert.ok(kinds.filter((k) => k === "L").length <= 4);
+    assert.equal(mixed.filter((r) => r.marketCapUsd >= 1_000_000).length, 8);
   });
 });

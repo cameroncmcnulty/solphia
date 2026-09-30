@@ -378,9 +378,12 @@ export async function ingestPublicTape(): Promise<{ tokens: TokenSnapshot[]; sol
     }),
     getJson<{ pairs?: DexPair[] }>("https://api.dexscreener.com/latest/dex/search?q=solana", 3500).then((r) => {
       const pairs = (r.data?.pairs || []).filter((p) => p.chainId === "solana");
-      pairs.slice(0, 50).forEach((p) => put(fromDex(p)));
+      pairs.slice(0, 24).forEach((p) => put(fromDex(p)));
     }),
     getJson<{ data?: GeckoPool[] }>("https://api.geckoterminal.com/api/v2/networks/solana/new_pools?page=1", 3500).then((r) => {
+      (r.data?.data || []).forEach((p) => put(fromGecko(p)));
+    }),
+    getJson<{ data?: GeckoPool[] }>("https://api.geckoterminal.com/api/v2/networks/solana/trending_pools?page=1", 3500).then((r) => {
       (r.data?.data || []).forEach((p) => put(fromGecko(p)));
     }),
   ];

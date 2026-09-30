@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   CLAIM_DUST_SOL,
+  claimButtonSol,
+  claimHint,
   claimSolFromBalances,
   claimableCreator,
   fmtClaimSol,
@@ -71,6 +73,22 @@ describe("creator claim amounts", () => {
     assert.equal(p.mints.length, 1);
     assert.equal(fmtClaimSol(p.nextSol), "0.061849");
     assert.equal(fmtClaimSol(p.totalUnclaimed), fmtClaimSol(0.0029993 + 0.001 + 0.061849));
+  });
+
+  it("button matches Phantom credit for this pool, not the wallet unclaimed sum", () => {
+    const rows = [
+      { mint: "MintTest11111111111111111111111111111111111", creatorUnclaimedSol: 0.061849, createdAt: 1 },
+      { mint: "MintRest11111111111111111111111111111111111", creatorUnclaimedSol: 0.021962, createdAt: 2 },
+    ];
+    const p = nextCreatorPayout(rows);
+    assert.equal(fmtClaimSol(p.totalUnclaimed), "0.083811");
+    assert.equal(fmtClaimSol(claimButtonSol(p)), "0.061849");
+    assert.notEqual(fmtClaimSol(claimButtonSol(p)), fmtClaimSol(p.totalUnclaimed));
+    assert.match(claimHint(p), /0\.061849 SOL in Phantom/);
+    assert.match(claimHint(p), /0\.021962 SOL left on 1 more token/);
+    const last = nextCreatorPayout([rows[1]!]);
+    assert.equal(fmtClaimSol(claimButtonSol(last)), fmtClaimSol(last.totalUnclaimed));
+    assert.match(claimHint(last), /Phantom will credit 0\.021962 SOL/);
   });
 
   it("advertises the simulated SOL credit Phantom shows, not a stale pool field", () => {

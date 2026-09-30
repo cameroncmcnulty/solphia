@@ -438,6 +438,10 @@ describe("launch create validation", () => {
     assert.match(src, /killNativeValidity/);
     assert.match(src, /PadPitch/);
     assert.match(src, /setTab\("tape"\)/);
+    assert.match(src, /claimButtonSol/);
+    assert.match(src, /writeLaunchTab\("mine"\)/);
+    assert.match(src, /mixByMcap/);
+    assert.match(src, /Approve this claim in Phantom/);
   });
 
   it("rejects a 1-character name or ticker with an explicit too-short message", () => {

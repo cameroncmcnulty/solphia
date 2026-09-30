@@ -10,6 +10,71 @@ import { publicImage } from "../token/art";
 export const MARKET_MIN_SCORE = 45;
 export const MARKET_MIN_MCAP_USD = 400;
 export const MARKET_CAP = 80;
+export const MCAP_LARGE_USD = 1_000_000;
+export const MCAP_MID_USD = 50_000;
+export const MCAP_SMALL_USD = 8_000;
+const MIX_SLOTS = { large: 8, mid: 24, small: 24, micro: 24 } as const;
+const USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+const USDT_MINT = "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB";
+const STABLE_TICKER = /^(usdc|usdt|usd1|dai|pyusd|usds)$/i;
+
+export function isBrowseStable(t: { mint?: string; symbol?: string }): boolean {
+  const mint = (t.mint || "").trim();
+  if (mint === USDC_MINT || mint === USDT_MINT) return true;
+  const sym = (t.symbol || "").replace(/^\$+/g, "").trim();
+  return STABLE_TICKER.test(sym);
+}
+
+type McapBucket = keyof typeof MIX_SLOTS;
+
+function mcapBucket(mcap: number): McapBucket {
+  if (mcap >= MCAP_LARGE_USD) return "large";
+  if (mcap >= MCAP_MID_USD) return "mid";
+  if (mcap >= MCAP_SMALL_USD) return "small";
+  return "micro";
+}
+
+/** Interleave mega / mid / small / micro so browse is not 3 billion-MC names plus a wall of 3k dust. */
+export function mixByMcap<T>(
+  rows: T[],
+  cap = MARKET_CAP,
+  mcapOf: (row: T) => number = (row) => Number((row as { marketCapUsd?: number }).marketCapUsd) || 0,
+): T[] {
+  const bins: Record<McapBucket, T[]> = { large: [], mid: [], small: [], micro: [] };
+  for (const row of rows) bins[mcapBucket(mcapOf(row) || 0)].push(row);
+  const take: Record<McapBucket, T[]> = {
+    large: bins.large.slice(0, MIX_SLOTS.large),
+    mid: bins.mid.slice(0, MIX_SLOTS.mid),
+    small: bins.small.slice(0, MIX_SLOTS.small),
+    micro: bins.micro.slice(0, MIX_SLOTS.micro),
+  };
+  const order: McapBucket[] = ["mid", "small", "micro", "large"];
+  const idx: Record<McapBucket, number> = { large: 0, mid: 0, small: 0, micro: 0 };
+  const out: T[] = [];
+  while (out.length < cap) {
+    let added = false;
+    for (const k of order) {
+      if (out.length >= cap) break;
+      if (idx[k] < take[k].length) {
+        out.push(take[k][idx[k]++]!);
+        added = true;
+      }
+    }
+    if (!added) break;
+  }
+  if (out.length < cap) {
+    const used = new Set(out);
+    for (const k of ["mid", "small", "micro", "large"] as McapBucket[]) {
+      for (const row of bins[k]) {
+        if (out.length >= cap) break;
+        if (used.has(row)) continue;
+        out.push(row);
+        used.add(row);
+      }
+    }
+  }
+  return out;
+}
 
 export function marketPasses(opts: {
   born?: boolean;
@@ -105,6 +170,7 @@ export function filterMarketSnapshots(tokens: TokenSnapshot[], solUsd: number): 
   for (const t of tokens) {
     if (!t.mint || t.mint.length < 32) continue;
     if (isNativeSolSnapshot(t)) continue;
+    if (isBrowseStable(t)) continue;
     if (!t.symbol || t.symbol === "???" || !t.name) continue;
     if (
       !marketPasses({
@@ -129,7 +195,7 @@ export function filterMarketSnapshots(tokens: TokenSnapshot[], solUsd: number): 
   });
   const preferred = scored.filter((r) => r.score >= MARKET_MIN_SCORE);
   const rest = scored.filter((r) => r.score < MARKET_MIN_SCORE);
-  const rows = [...preferred, ...rest].slice(0, MARKET_CAP);
+  const rows = mixByMcap([...preferred, ...rest], MARKET_CAP, (r) => r.coin.marketCapUsd || 0);
   return { rows, scanned: tokens.length };
 }
 

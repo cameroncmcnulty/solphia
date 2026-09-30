@@ -32,8 +32,10 @@ describe("phantom box", () => {
   });
 
   it("keeps claim-all remaining mints and drops an empty list", () => {
-    const kept = slimAfter({ kind: "claim", claimAll: true, remainingMints: ["MintA", "MintB"] });
+    const kept = slimAfter({ kind: "claim", claimAll: true, remainingMints: ["MintA", "MintB"], claimSol: 0.061849, remainingSol: 0.021962 });
     assert.deepEqual(kept?.remainingMints, ["MintA", "MintB"]);
+    assert.equal(kept?.claimSol, 0.061849);
+    assert.equal(kept?.remainingSol, 0.021962);
     const empty = slimAfter({ kind: "claim", remainingMints: [] });
     assert.equal(empty?.remainingMints, undefined);
   });

@@ -36,6 +36,8 @@ export type PhAfter = {
   tokens?: number;
   claimAll?: boolean;
   remainingMints?: string[];
+  claimSol?: number;
+  remainingSol?: number;
 };
 
 export type PhSession = { dappSk: string; phantomPk: string; session: string };

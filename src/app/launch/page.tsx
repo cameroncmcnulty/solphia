@@ -46,7 +46,8 @@ import { BoostBuy, BoostRail, fmtLeft } from "@/components/BoostBuy";
 
 import { TokenImageCrop, readLaunchImage, type CropSource } from "@/components/TokenImageCrop";
 import { yourLaunches } from "@/lib/launch/yours";
-import { claimableCreator, fmtClaimSol, nextCreatorPayout, sortByNewest, sumCreatorGenerated, uniqueByMint } from "@/lib/launch/claim";
+import { claimableCreator, claimButtonSol, claimHint, fmtClaimSol, nextCreatorPayout, sortByNewest, sumCreatorGenerated, uniqueByMint } from "@/lib/launch/claim";
+import { mixByMcap } from "@/lib/launch/market";
 import { preferLiveLabel } from "@/lib/launch/labels";
 import { clearPending, loadPending, savePending, type PendingLaunch } from "@/lib/launch/pending";
 import { hideLaunch, loadHidden } from "@/lib/launch/hidden";
@@ -63,6 +64,23 @@ import { peekRef } from "@/components/ReferralCapture";
 const PRESETS = [0.1, 0.25, 0.5, 1];
 const DEV_CAP = launchDevBuyCap();
 const CLAIM_ALL_MAX = 40;
+const LAUNCH_TAB_KEY = "solphia:launch-tab";
+
+function readLaunchTab(): "tape" | "mine" {
+  try {
+    return sessionStorage.getItem(LAUNCH_TAB_KEY) === "mine" ? "mine" : "tape";
+  } catch {
+    return "tape";
+  }
+}
+
+function writeLaunchTab(tab: "tape" | "mine") {
+  try {
+    sessionStorage.setItem(LAUNCH_TAB_KEY, tab);
+  } catch {
+    /* private mode */
+  }
+}
 
 type Spark = { t: number; o: number; h: number; l: number; c: number };
 type Coin = {
@@ -338,8 +356,9 @@ export default function LaunchPage() {
   const [err, setErr] = useState("");
   const createErr = useConfirmErrors<LaunchField>();
   const [busy, setBusy] = useState(false);
+  const [work, setWork] = useState<"launch" | "claim" | "swap" | "">("");
   const [solUsd, setSolUsd] = useState(0);
-  const [tab, setTab] = useState<"tape" | "mine">("tape");
+  const [tab, setTab] = useState<"tape" | "mine">(() => (typeof window === "undefined" ? "tape" : readLaunchTab()));
   const [age, setAge] = useState<AgeFilter>("newest");
   const [vol, setVol] = useState<VolWindow | null>(null);
   const [ranked, setRanked] = useState(false);
@@ -369,6 +388,7 @@ export default function LaunchPage() {
   const finishPhantomRef = useRef<(sig: string, after: PhAfter) => Promise<void>>(async () => {});
   const cropUrlRef = useRef<string>("");
   const claimSeqRef = useRef(0);
+  const claimNextAt = useRef(0);
   const isSwapRef = useRef(isSwap);
   isSwapRef.current = isSwap;
   const devPct = buySupplyPct(emptyCurve(), devBuy);
@@ -405,16 +425,37 @@ export default function LaunchPage() {
       if (j.error) {
         setErr(j.error);
         setBusy(false);
+        setWork("");
         setMsg("");
+        if (after?.kind === "claim") {
+          setTab("mine");
+          writeLaunchTab("mine");
+        }
         return;
       }
       if (!j.signature || !after) return;
-      setBusy(true);
-      setErr("");
-      setMsg("Finishing on Solana…");
+      const claiming = after.kind === "claim";
+      if (claiming) {
+        setTab("mine");
+        writeLaunchTab("mine");
+        setWork("claim");
+        setBusy(true);
+        setErr("");
+        setMsg("Confirming claim…");
+      } else {
+        setWork(after.kind === "swap" || after.kind === "jup_swap" ? "swap" : "launch");
+        setBusy(true);
+        setErr("");
+        setMsg("Finishing on Solana…");
+      }
       void finishPhantomRef.current(j.signature, after).catch((err) => {
-        setErr(err instanceof Error ? err.message : "Launch failed after Phantom.");
+        setErr(err instanceof Error ? err.message : claiming ? "Claim failed after Phantom." : "Launch failed after Phantom.");
         setBusy(false);
+        setWork("");
+        if (claiming) {
+          setTab("mine");
+          writeLaunchTab("mine");
+        }
       });
     };
     window.addEventListener(PHANTOM_EVENT, onPh);
@@ -426,8 +467,13 @@ export default function LaunchPage() {
         if (!phantomWaitingAt()) return;
         clearPhantomWaiting();
         setBusy(false);
+        setWork("");
         setMsg("");
-        setErr("Phantom closed without a signature. Tap Launch again.");
+        setErr(
+          readLaunchTab() === "mine"
+            ? "Phantom closed without a signature. Tap Claim again."
+            : "Phantom closed without a signature. Tap Launch again.",
+        );
       }, 1800);
     };
     const onVis = () => {
@@ -561,7 +607,12 @@ export default function LaunchPage() {
   }
 
   useEffect(() => {
-    setTab("tape");
+    if (isSwap) {
+      setTab("tape");
+      return;
+    }
+    const saved = readLaunchTab();
+    setTab(saved);
   }, [isSwap]);
 
   useEffect(() => killNativeValidity(), []);
@@ -809,6 +860,7 @@ export default function LaunchPage() {
       await waitForInjected(inside ? 8000 : /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ? 1200 : 200);
     }
     setBusy(true);
+    setWork("launch");
     setMsg("");
     setErr("");
     try {
@@ -956,6 +1008,7 @@ export default function LaunchPage() {
         launchBuySol: 0,
       }).catch(() => {});
       setBusy(false);
+      setWork("");
       setSnapAt(Date.now());
       window.setTimeout(() => {
         document.getElementById("your-tokens")?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -983,6 +1036,7 @@ export default function LaunchPage() {
         setErr(timed ? "Launch timed out building the curve. Try again." : busy ? "Solana is busy right now. Wait a few seconds and tap Launch again." : raw);
       }
       setBusy(false);
+      setWork("");
     }
   }
 
@@ -1142,6 +1196,7 @@ export default function LaunchPage() {
         }).catch(() => {});
       }
       setBusy(false);
+      setWork("");
       setSnapAt(Date.now());
       window.setTimeout(() => {
         document.getElementById("your-tokens")?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -1156,11 +1211,21 @@ export default function LaunchPage() {
       return;
     }
     if (after.kind === "claim") {
+      setTab("mine");
+      writeLaunchTab("mine");
+      setWork("claim");
       await Promise.all([refreshPad(true), refreshTape()]).catch(() => {});
+      const paid = Number(after.claimSol) || 0;
       const nextMint = after.claimAll && !after.partner ? (after.remainingMints || []).find((m) => m && m !== after.mint) : "";
-      if (nextMint && claimSeqRef.current < CLAIM_ALL_MAX) {
+      const now = Date.now();
+      if (nextMint && claimSeqRef.current < CLAIM_ALL_MAX && now - claimNextAt.current > 1200) {
+        claimNextAt.current = now;
         claimSeqRef.current += 1;
-        setMsg("Claimed. Signing the next unpaid pool…");
+        setMsg(
+          paid
+            ? `Claimed ${fmtClaimSol(paid)} SOL. Approve the next unpaid token in Phantom…`
+            : "Claimed. Approve the next unpaid token in Phantom…",
+        );
         await act({ action: "withdraw_dev", mint: nextMint, mints: [nextMint], claimAll: true });
         return;
       }
@@ -1168,10 +1233,15 @@ export default function LaunchPage() {
         after.partner
           ? "Protocol fees claimed into this wallet."
           : nextMint
-            ? "Claimed. Tap Claim again for the rest."
-            : "All creator fees claimed into this wallet.",
+            ? paid
+              ? `Claimed ${fmtClaimSol(paid)} SOL. ${fmtClaimSol(Number(after.remainingSol) || 0)} SOL still unclaimed — tap Claim.`
+              : "Claimed. Tap Claim for the rest."
+            : paid
+              ? `Claimed ${fmtClaimSol(paid)} SOL into this wallet.`
+              : "All creator fees claimed into this wallet.",
       );
       setBusy(false);
+      setWork("");
       return;
     }
     if (after.kind === "jup_swap") {
@@ -1216,6 +1286,11 @@ export default function LaunchPage() {
       return;
     }
     setBusy(true);
+    setWork(body.action === "withdraw_dev" || body.action === "withdraw_partner" ? "claim" : body.action === "create" ? "launch" : "swap");
+    if (body.action === "withdraw_dev" || body.action === "withdraw_partner") {
+      setTab("mine");
+      writeLaunchTab("mine");
+    }
     setMsg("");
     setErr("");
     let redirected = false;
@@ -1246,6 +1321,8 @@ export default function LaunchPage() {
         );
         const remainingMints = Array.isArray(j.remainingMints) ? j.remainingMints.filter((m: unknown) => typeof m === "string") : [];
         const claimAll = Boolean(body.claimAll) || Boolean(j.claim && !j.partner);
+        const amt = Number(j.claimSol) || 0;
+        const leftSol = Number(j.remainingSol) || 0;
         const sig = await signPhantomAndSend(j.transaction, undefined, {
           kind: j.claim ? "claim" : "swap",
           owner,
@@ -1255,17 +1332,22 @@ export default function LaunchPage() {
           partner: Boolean(j.partner),
           claimAll,
           remainingMints,
+          claimSol: amt,
+          remainingSol: leftSol,
           side: body.action === "sell" ? "sell" : "buy",
           sol: body.action === "sell" ? Number(j.solOut) || 0 : Number(body.sol) || 0,
           tokens: body.action === "sell" ? Number(body.tokens) || 0 : Number(j.tokensOut) || 0,
         });
         if (j.claim) {
-          const amt = Number(j.claimSol) || 0;
           const more = Number(j.remaining) || 0;
           const nextMint = claimAll && !j.partner ? remainingMints[0] : "";
-          if (nextMint && claimSeqRef.current < CLAIM_ALL_MAX) {
+          const now = Date.now();
+          if (nextMint && claimSeqRef.current < CLAIM_ALL_MAX && now - claimNextAt.current > 1200) {
+            claimNextAt.current = now;
             claimSeqRef.current += 1;
-            setMsg(`Claimed ${fmtClaimSol(amt)} SOL. Signing the next unpaid pool…`);
+            setTab("mine");
+            writeLaunchTab("mine");
+            setMsg(`Claimed ${fmtClaimSol(amt)} SOL. Approve the next unpaid token in Phantom…`);
             await Promise.all([refreshPad(true), refreshTape()]);
             await act({ action: "withdraw_dev", mint: nextMint, mints: [nextMint], claimAll: true });
             return;
@@ -1274,9 +1356,9 @@ export default function LaunchPage() {
             j.partner
               ? "Protocol fees claimed into this wallet."
               : nextMint || more
-                ? `Claimed ${fmtClaimSol(amt)} SOL. ${more} pools left. Tap Claim again for the rest.`
+                ? `Claimed ${fmtClaimSol(amt)} SOL. ${fmtClaimSol(leftSol)} SOL still unclaimed — tap Claim.`
                 : amt
-                  ? `All creator fees claimed · ${fmtClaimSol(amt)} SOL into this wallet.`
+                  ? `Claimed ${fmtClaimSol(amt)} SOL into this wallet.`
                   : "All creator fees claimed into this wallet.",
           );
           await Promise.all([refreshPad(true), refreshTape()]);
@@ -1327,10 +1409,19 @@ export default function LaunchPage() {
     } catch (e) {
       if (isPhantomRedirect(e)) {
         redirected = true;
-        setMsg("Approve in Phantom. You'll come back here.");
+        if (body.action === "withdraw_dev" || body.action === "withdraw_partner") {
+          setTab("mine");
+          writeLaunchTab("mine");
+          setMsg("Approve this claim in Phantom. You'll come back to Your tokens.");
+        } else {
+          setMsg("Approve in Phantom. You'll come back here.");
+        }
       } else if (body.action !== "create") setErr(e instanceof Error ? e.message : "failed");
     } finally {
-      if (!redirected) setBusy(false);
+      if (!redirected) {
+        setBusy(false);
+        setWork("");
+      }
     }
   }
 
@@ -1385,7 +1476,9 @@ export default function LaunchPage() {
               aged.slice().sort((a, b) => (b.marketCapUsd || 0) - (a.marketCapUsd || 0) || b.createdAt - a.createdAt),
               solUsd,
             )
-          : scoreTape(sortTape(aged, vol), solUsd);
+          : isSwap && tapeSort === "newest"
+            ? scoreTape(mixByMcap(aged, 80, (c) => c.marketCapUsd || 0), solUsd)
+            : scoreTape(sortTape(aged, vol), solUsd);
     const boosted = [];
     const rest = [];
     for (const row of rows) {
@@ -1394,7 +1487,10 @@ export default function LaunchPage() {
       else rest.push({ ...row, boost: undefined as undefined });
     }
     boosted.sort((a, b) => (b.boost?.rockets || 0) - (a.boost?.rockets || 0));
-    let next = [...boosted, ...rest];
+    let next = isSwap ? rows.map((row) => {
+      const b = boostRank.find((x) => x.coinId === row.coin.id || (x.mint && x.mint === row.coin.mint));
+      return { ...row, boost: b };
+    }) : [...boosted, ...rest];
     if (lookedMint) {
       const pinned = coins.find((c) => c.mint === lookedMint || c.id === lookedMint);
       if (pinned) {
@@ -1426,10 +1522,11 @@ export default function LaunchPage() {
               defaultSymbol={open?.symbol || ""}
               defaultName={open?.name || ""}
               defaultImage={open?.image || ""}
-              tokens={coins
-                .filter((c) => c.mint)
-                .slice(0, 40)
-                .map((c) => ({ mint: c.mint || "", symbol: c.symbol, name: c.name, image: c.image }))}
+              tokens={mixByMcap(
+                coins.filter((c) => c.mint),
+                40,
+                (c) => c.marketCapUsd || 0,
+              ).map((c) => ({ mint: c.mint || "", symbol: c.symbol, name: c.name, image: c.image }))}
               onMint={(mint) => {
                 setLookedMint(mint);
               }}
@@ -1493,6 +1590,7 @@ export default function LaunchPage() {
               type="button"
               onClick={() => {
                 setTab("tape");
+                writeLaunchTab("tape");
                 setOpen(null);
               }}
               className={`inline-flex items-center gap-1.5 pb-2 ${tab === "tape" ? "border-b-2 border-white font-medium text-white" : "text-white/40"}`}
@@ -1503,7 +1601,10 @@ export default function LaunchPage() {
             <button
               type="button"
               id="your-tokens"
-              onClick={() => setTab("mine")}
+              onClick={() => {
+                setTab("mine");
+                writeLaunchTab("mine");
+              }}
               className={`pb-2 ${tab === "mine" ? "border-b-2 border-white font-medium text-white" : "text-white/40"}`}
             >
               Your tokens
@@ -1776,7 +1877,7 @@ export default function LaunchPage() {
                     onClick={() => launchToken().catch(() => {})}
                     className="btn-acid min-h-[48px] rounded-full px-6 disabled:opacity-40"
                   >
-                    {busy ? "Launching…" : "Launch on Solana"}
+                    {busy && work === "launch" ? "Launching…" : "Launch on Solana"}
                   </button>
                 </div>
                 <p className="mt-2 text-xs text-mute">One Phantom prompt. 1% total. Half of that fee hits the creator on-chain.</p>
@@ -1920,7 +2021,7 @@ export default function LaunchPage() {
                 <p className="font-mono text-[11px] tracking-[0.28em] text-acid">DEV REWARDS</p>
                 <h2 className="mt-1 text-[22px] font-semibold tracking-tight text-white">Claim fees</h2>
                 <p className="mt-1 text-[14px] leading-snug text-white/45">
-                  Swaps on the curve pay 1%. Half is yours. Unclaimed is the total of every unpaid pool. Claim takes it all.
+                  Swaps on the curve pay 1%. Half is yours. Unclaimed is the wallet total. Each Phantom approval pays one unpaid token — the button is that credit.
                 </p>
                 <div className="mt-4 grid grid-cols-2 gap-3">
                   <div>
@@ -1940,6 +2041,9 @@ export default function LaunchPage() {
                       const mint = payout.next?.mint;
                       if (!mint) return;
                       claimSeqRef.current = 0;
+                      claimNextAt.current = 0;
+                      setTab("mine");
+                      writeLaunchTab("mine");
                       act({
                         action: "withdraw_dev",
                         id: payout.next?.id,
@@ -1950,15 +2054,14 @@ export default function LaunchPage() {
                     }}
                     className="rounded-full bg-[#14f195] px-4 py-2 text-[14px] font-semibold text-[#04000a] disabled:opacity-40"
                   >
-                    {unclaimedSol > 0 ? `Claim ${fmtClaimSol(unclaimedSol)} SOL` : "Claim creator fees"}
+                    {claimButtonSol(payout) > 0 ? `Claim ${fmtClaimSol(claimButtonSol(payout))} SOL` : "Claim creator fees"}
                   </button>
                 </div>
                 {unclaimedSol > 0 ? (
-                  <p className="mt-2 text-[12px] text-white/40">
-                    {payout.restCount > 0
-                      ? `Claim pays the full ${fmtClaimSol(unclaimedSol)} SOL. Approve each unpaid token in Phantom until Unclaimed is 0.`
-                      : `Phantom will credit ${fmtClaimSol(unclaimedSol)} SOL, minus the network fee.`}
-                  </p>
+                  <p className="mt-2 text-[12px] text-white/40">{claimHint(payout)}</p>
+                ) : null}
+                {tab === "mine" && (msg || err) ? (
+                  <p className={`mt-2 font-mono text-[13px] ${err ? "text-blood" : "text-acid"}`}>{err || msg}</p>
                 ) : null}
                 <p className="mt-2 text-[12px] text-white/35">
                   If Phantom hides a new token: Manage Tokens, toggle it on, Report as not spam.
@@ -2103,7 +2206,7 @@ export default function LaunchPage() {
           )}
         </div>
 
-        {err && (
+        {err && tab !== "mine" && (
           <div id="launch-status" className="relative z-10 mt-4 rounded-2xl border border-blood/50 bg-blood/10 px-4 py-3 text-sm text-blood">
             <p className="font-mono">{err}</p>
             {pending[0]?.mint ? (
@@ -2114,7 +2217,7 @@ export default function LaunchPage() {
             ) : null}
           </div>
         )}
-        {msg && !err && <p className="relative z-10 mt-4 font-mono text-sm text-acid">{msg}</p>}
+        {msg && !err && tab !== "mine" && <p className="relative z-10 mt-4 font-mono text-sm text-acid">{msg}</p>}
       </div>
     </main>
   );
