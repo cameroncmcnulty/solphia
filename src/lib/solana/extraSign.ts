@@ -2,8 +2,15 @@ import { Keypair, Transaction, VersionedTransaction } from "@solana/web3.js";
 import { b64ToBytes, bytesToB64 } from "./wire";
 
 export function parseTx(raw: Uint8Array): Transaction | VersionedTransaction {
-  if (raw.length > 0 && (raw[0] & 0x80) !== 0) return VersionedTransaction.deserialize(raw);
-  return Transaction.from(raw);
+  if (!raw.length) throw new Error("Transaction missing from the server. Try again.");
+  // Byte 0 is compact-u16 signature count. The version bit is on the message
+  // after the signatures, so a Jupiter v0 swap starts with 0x01, not 0x80.
+  // Transaction.from() then throws "Versioned messages must be deserialized…".
+  try {
+    return VersionedTransaction.deserialize(raw);
+  } catch {
+    return Transaction.from(raw);
+  }
 }
 
 export function extraKeys(extra?: Keypair | Keypair[]): Keypair[] {
