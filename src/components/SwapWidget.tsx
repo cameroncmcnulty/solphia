@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ArrowDown, ChevronDown, X } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronDown, X } from "lucide-react";
 import { TokenArt } from "./TokenArt";
 import { PhantomMark } from "./PhantomMark";
 import { SphaMark } from "./SphaMark";
@@ -13,7 +13,7 @@ import { isPhantomRedirect, PHANTOM_EVENT } from "@/lib/wallet/phantomConnect";
 import type { PhAfter } from "@/lib/wallet/phantomBox";
 import { isSolanaAddress } from "@/lib/wallet/addr";
 import { MIN_TRADE_SOL } from "@/lib/launch/curve";
-import { SOL_MINT } from "@/lib/pair/mints";
+import { SOL_MINT, USDC_MINT } from "@/lib/pair/mints";
 import {
   clearSwapNotice,
   loadSwapNotice,
@@ -127,15 +127,11 @@ export function SwapBox({
   );
 }
 
-function TokenChip({
-  token,
-  sol,
-  onClick,
-}: {
-  token?: SwapToken | null;
-  sol?: boolean;
-  onClick?: () => void;
-}) {
+const SOL_TOKEN: SwapToken = { mint: SOL_MINT, symbol: "SOL", name: "Solana" };
+const USDC_TOKEN: SwapToken = { mint: USDC_MINT, symbol: "USDC", name: "USD Coin" };
+
+function TokenChip({ token, onClick }: { token?: SwapToken | null; onClick?: () => void }) {
+  const sol = token?.mint === SOL_MINT;
   const inner = sol ? (
     <>
       <SolMark className="h-7 w-7 shrink-0" />
@@ -149,14 +145,11 @@ function TokenChip({
   ) : (
     <span className="text-[15px] font-semibold text-white">Select</span>
   );
-  if (!onClick) {
-    return <div className="inline-flex items-center gap-2 rounded-full bg-white/10 py-1.5 pl-1.5 pr-3">{inner}</div>;
-  }
   return (
     <button
       type="button"
       onClick={onClick}
-      className="inline-flex min-h-11 items-center gap-2 rounded-full bg-white/10 py-1.5 pl-1.5 pr-2.5"
+      className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-full bg-white/10 py-1.5 pl-1.5 pr-2.5"
     >
       {inner}
       <ChevronDown className="h-4 w-4 text-white/50" />
@@ -186,27 +179,24 @@ export function SwapWidget({
 }) {
   const siteOwner = useOwner();
   const pk = owner || siteOwner || (typeof window !== "undefined" ? loadOwner() : null);
-  const [side, setSide] = useState<"buy" | "sell">("buy");
+  const seeded = defaultMint && defaultMint.length > 30
+    ? { mint: defaultMint, symbol: defaultSymbol || "TOKEN", name: defaultName, image: defaultImage }
+    : USDC_TOKEN;
+  const [pay, setPay] = useState<SwapToken>(SOL_TOKEN);
+  const [recv, setRecv] = useState<SwapToken>(seeded);
   const [amount, setAmount] = useState("0.25");
-  const [token, setToken] = useState<SwapToken | null>(() =>
-    defaultMint && defaultMint.length > 30
-      ? { mint: defaultMint, symbol: defaultSymbol || "TOKEN", name: defaultName, image: defaultImage }
-      : null,
-  );
-  const [picker, setPicker] = useState(false);
+  const [picker, setPicker] = useState<"pay" | "recv" | null>(null);
   const [ca, setCa] = useState("");
   const [caBusy, setCaBusy] = useState(false);
-  const [held, setHeld] = useState(0);
-  const [solBal, setSolBal] = useState(0);
+  const [bals, setBals] = useState<Record<string, number>>({});
   const [out, setOut] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<SwapNotice | null>(() => (typeof window !== "undefined" ? loadSwapNotice() : null));
   const noticeRef = useRef<(n: SwapNotice) => void>(() => undefined);
 
-  const mint = token?.mint || "";
-  const paySol = side === "buy";
   const payNum = Number(String(amount).replace(",", "."));
-  const payOk = Number.isFinite(payNum) && payNum > 0;
+  const payBal = pay.mint === SOL_MINT ? bals[SOL_MINT] || 0 : bals[pay.mint] || 0;
+  const recvBal = recv.mint === SOL_MINT ? bals[SOL_MINT] || 0 : bals[recv.mint] || 0;
 
   const showNotice = useCallback((n: SwapNotice) => {
     setNotice(saveSwapNotice(n));
@@ -215,18 +205,9 @@ export function SwapWidget({
 
   useEffect(() => {
     if (!defaultMint || defaultMint.length < 32) return;
-    setToken((cur) => {
-      if (cur?.mint === defaultMint) {
-        return {
-          mint: defaultMint,
-          symbol: defaultSymbol || cur.symbol,
-          name: defaultName || cur.name,
-          image: defaultImage || cur.image,
-        };
-      }
-      return { mint: defaultMint, symbol: defaultSymbol || "TOKEN", name: defaultName, image: defaultImage };
-    });
-    setSide("buy");
+    const next = { mint: defaultMint, symbol: defaultSymbol || "TOKEN", name: defaultName, image: defaultImage };
+    setRecv((cur) => (cur.mint === defaultMint ? { ...cur, ...next } : next));
+    setPay((cur) => (cur.mint === defaultMint ? SOL_TOKEN : cur));
   }, [defaultMint, defaultSymbol, defaultName, defaultImage]);
 
   useEffect(() => {
@@ -257,37 +238,34 @@ export function SwapWidget({
 
   useEffect(() => {
     if (!pk) {
-      setSolBal(0);
+      setBals({});
       return;
     }
     const ctrl = new AbortController();
-    fetch(`/api/sol/balance?pubkey=${encodeURIComponent(pk)}`, { signal: ctrl.signal })
-      .then((r) => r.json())
-      .then((j) => setSolBal(Number(j.sol) || 0))
-      .catch(() => setSolBal(0));
+    const mints = [...new Set([pay.mint, recv.mint, SOL_MINT])];
+    void (async () => {
+      const next: Record<string, number> = {};
+      const sol = await fetch(`/api/sol/balance?pubkey=${encodeURIComponent(pk)}`, { signal: ctrl.signal })
+        .then((r) => r.json())
+        .catch(() => null);
+      next[SOL_MINT] = Number(sol?.sol) || 0;
+      await Promise.all(
+        mints
+          .filter((m) => m !== SOL_MINT)
+          .map(async (m) => {
+            const j = await fetch(`/api/sol/token?owner=${encodeURIComponent(pk)}&mint=${encodeURIComponent(m)}`, { signal: ctrl.signal })
+              .then((r) => r.json())
+              .catch(() => null);
+            next[m] = Number(j?.amount) || 0;
+          }),
+      );
+      if (!ctrl.signal.aborted) setBals(next);
+    })();
     return () => ctrl.abort();
-  }, [pk, notice?.kind]);
+  }, [pk, pay.mint, recv.mint, notice?.kind]);
 
   useEffect(() => {
-    if (!pk || !mint) {
-      setHeld(0);
-      return;
-    }
-    const ctrl = new AbortController();
-    fetch(`/api/sol/token?owner=${encodeURIComponent(pk)}&mint=${encodeURIComponent(mint)}`, { signal: ctrl.signal })
-      .then((r) => r.json())
-      .then((j) => setHeld(Number(j.amount) || 0))
-      .catch(() => setHeld(0));
-    return () => ctrl.abort();
-  }, [pk, mint, notice?.kind]);
-
-  const quoteAmount = side === "buy" ? payNum : held;
-  useEffect(() => {
-    if (!mint || !(quoteAmount > 0) || (side === "buy" && !(payNum > 0))) {
-      setOut(null);
-      return;
-    }
-    if (side === "sell" && !(held > 0)) {
+    if (!(payNum > 0) || !pay.mint || !recv.mint || pay.mint === recv.mint) {
       setOut(null);
       return;
     }
@@ -297,9 +275,9 @@ export function SwapWidget({
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          mint,
-          side,
-          amount: side === "buy" ? payNum : held,
+          inputMint: pay.mint,
+          outputMint: recv.mint,
+          amount: payNum,
           slippageBps: 100,
         }),
         signal: ctrl.signal,
@@ -315,45 +293,69 @@ export function SwapWidget({
       window.clearTimeout(t);
       ctrl.abort();
     };
-  }, [mint, side, payNum, held, quoteAmount]);
+  }, [pay.mint, recv.mint, payNum]);
 
   const catalog = useMemo(() => {
     const rows: SwapToken[] = [];
     const seen = new Set<string>();
     const push = (row?: SwapToken | null) => {
       const m = (row?.mint || "").trim();
-      if (!m || seen.has(m) || m === SOL_MINT) return;
+      if (!m || seen.has(m)) return;
       seen.add(m);
       rows.push(row!);
     };
-    push(token);
+    push(SOL_TOKEN);
+    push(USDC_TOKEN);
+    push(pay);
+    push(recv);
     for (const row of tokens || []) push(row);
     return rows;
-  }, [token, tokens]);
+  }, [pay, recv, tokens]);
+
+  function applyPick(next: SwapToken) {
+    const slot = picker;
+    setPicker(null);
+    setCa("");
+    if (!slot) return;
+    if (slot === "pay") {
+      if (next.mint === recv.mint) setRecv(pay);
+      setPay(next);
+    } else {
+      if (next.mint === pay.mint) setPay(recv);
+      setRecv(next);
+    }
+    if (next.mint !== SOL_MINT) onMint?.(next.mint);
+  }
 
   async function pickCa(raw: string) {
     const q = raw.trim();
-    if (!isSolanaAddress(q) || q === SOL_MINT) return;
+    if (!isSolanaAddress(q)) return;
+    if (q === SOL_MINT) {
+      applyPick(SOL_TOKEN);
+      return;
+    }
     setCaBusy(true);
     try {
       const r = await fetch(`/api/launch/lookup?mint=${encodeURIComponent(q)}`, { cache: "no-store" });
-      const j = await r.json();
-      const coin = j.coin as { mint?: string; symbol?: string; name?: string; image?: string } | undefined;
-      const next: SwapToken = {
+      const j = await r.json().catch(() => null);
+      const coin = j?.coin as { mint?: string; symbol?: string; name?: string; image?: string } | undefined;
+      applyPick({
         mint: coin?.mint || q,
         symbol: coin?.symbol || q.slice(0, 4).toUpperCase(),
-        name: coin?.name,
+        name: coin?.name || "Token",
         image: coin?.image,
-      };
-      setToken(next);
-      setPicker(false);
-      setCa("");
-      onMint?.(next.mint);
+      });
     } catch {
-      showNotice({ kind: "error", text: "Could not find that mint.", at: Date.now() });
+      applyPick({ mint: q, symbol: q.slice(0, 4).toUpperCase(), name: "Token" });
     } finally {
       setCaBusy(false);
     }
+  }
+
+  function flip() {
+    setPay(recv);
+    setRecv(pay);
+    if (out != null && out > 0) setAmount(String(out));
   }
 
   async function go() {
@@ -361,16 +363,16 @@ export function SwapWidget({
       showNotice({ kind: "error", text: "Connect Phantom to swap.", at: Date.now() });
       return;
     }
-    if (!mint) {
-      showNotice({ kind: "error", text: "Pick a token.", at: Date.now() });
+    if (!pay.mint || !recv.mint || pay.mint === recv.mint) {
+      showNotice({ kind: "error", text: "Pick two different tokens.", at: Date.now() });
       return;
     }
-    if (side === "buy" && !(payNum >= MIN_TRADE_SOL)) {
+    if (pay.mint === SOL_MINT && !(payNum >= MIN_TRADE_SOL)) {
       showNotice({ kind: "error", text: `Min ${MIN_TRADE_SOL} SOL.`, at: Date.now() });
       return;
     }
-    if (side === "sell" && !(held > 0)) {
-      showNotice({ kind: "error", text: "You have none of this token in this wallet.", at: Date.now() });
+    if (!(payNum > 0)) {
+      showNotice({ kind: "error", text: "Enter an amount.", at: Date.now() });
       return;
     }
     setBusy(true);
@@ -380,9 +382,9 @@ export function SwapWidget({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           owner: pk,
-          mint,
-          side,
-          amount: side === "buy" ? payNum : held,
+          inputMint: pay.mint,
+          outputMint: recv.mint,
+          amount: payNum,
           slippageBps: 100,
         }),
       });
@@ -391,10 +393,10 @@ export function SwapWidget({
       const sig = await signPhantomAndSend(j.transaction, undefined, {
         kind: "swap",
         owner: pk,
-        mint,
-        side,
-        sol: side === "buy" ? payNum : undefined,
-        tokens: side === "sell" ? held : undefined,
+        mint: recv.mint,
+        side: pay.mint === SOL_MINT ? "buy" : "sell",
+        sol: pay.mint === SOL_MINT ? payNum : undefined,
+        tokens: pay.mint === SOL_MINT ? undefined : payNum,
       });
       showNotice({ kind: "ok", text: `Swap landed. ${sig}`, at: Date.now() });
       onDone?.();
@@ -413,24 +415,16 @@ export function SwapWidget({
     }
   }
 
-  const payBal = paySol ? solBal : held;
-  const getBal = paySol ? held : solBal;
-  const cta = !pk
-    ? "Connect Phantom"
-    : !mint
-      ? "Select a token"
-      : busy
-        ? "Swapping…"
-        : side === "buy"
-          ? `Buy ${tick(token?.symbol) || "token"}`
-          : `Sell ${tick(token?.symbol) || "token"}`;
+  const cta = !pk ? "Connect Phantom" : busy ? "Swapping…" : `Swap ${tick(pay.symbol) || pay.symbol} → ${tick(recv.symbol) || recv.symbol}`;
+  const payIsSol = pay.mint === SOL_MINT;
+  const recvIsSol = recv.mint === SOL_MINT;
 
   return (
     <div className="relative z-20 w-full min-w-0">
       <div className="overflow-hidden rounded-[28px] border border-white/10 bg-[#0b0714] shadow-[0_20px_60px_rgba(0,0,0,0.45)]">
         <div className="flex items-center justify-between gap-3 px-4 pb-1 pt-4 sm:px-5">
           <p className="text-[18px] font-semibold tracking-tight text-white">Swap</p>
-          <p className="font-mono text-[10px] tracking-[0.18em] text-white/35">SOLPHIA CURVE</p>
+          <p className="font-mono text-[10px] tracking-[0.18em] text-white/35">ANY SOLANA TOKEN</p>
         </div>
 
         {notice ? (
@@ -464,7 +458,7 @@ export function SwapWidget({
             <div className="flex items-center justify-between gap-2">
               <p className="font-mono text-[10px] tracking-[0.16em] text-white/40">YOU PAY</p>
               <p className="font-mono text-[11px] text-white/35">
-                {paySol ? `${fmtSol(payBal, 4)} SOL` : `${fmtTok(payBal)} ${token?.symbol.replace(/^\$+/, "") || ""}`}
+                {payIsSol ? `${fmtSol(payBal, 4)} SOL` : `${fmtTok(payBal)} ${pay.symbol.replace(/^\$+/, "")}`}
               </p>
             </div>
             <div className="mt-2 flex items-center gap-2">
@@ -472,48 +466,56 @@ export function SwapWidget({
                 type="text"
                 inputMode="decimal"
                 autoComplete="off"
-                value={side === "sell" ? fmtTok(held) : amount}
-                readOnly={side === "sell"}
-                onChange={(e) => {
-                  if (side === "sell") return;
-                  setAmount(e.target.value.replace(/[^\d.,]/g, ""));
-                }}
+                value={amount}
+                onChange={(e) => setAmount(e.target.value.replace(/[^\d.,]/g, ""))}
                 className="min-w-0 flex-1 bg-transparent text-[28px] font-semibold tracking-tight text-white outline-none sm:text-[32px]"
                 placeholder="0.00"
               />
-              <TokenChip sol={paySol} token={paySol ? null : token} onClick={paySol ? undefined : () => setPicker(true)} />
+              <TokenChip token={pay} onClick={() => setPicker("pay")} />
             </div>
-            {side === "buy" ? (
-              <div className="mt-3 flex flex-wrap gap-1.5">
-                {PRESETS.map((p) => (
-                  <button
-                    key={p}
-                    type="button"
-                    onClick={() => setAmount(String(p))}
-                    className={`rounded-full px-3 py-1 font-mono text-[11px] ${
-                      Math.abs(payNum - p) < 1e-9 ? "bg-acid text-void" : "bg-white/8 text-white/55"
-                    }`}
-                  >
-                    {p}
-                  </button>
-                ))}
-                <button
-                  type="button"
-                  onClick={() => setAmount(fmtSol(Math.max(MIN_TRADE_SOL, Math.max(0, solBal - 0.02)), 4))}
-                  className="rounded-full bg-white/8 px-3 py-1 font-mono text-[11px] text-white/55"
-                >
-                  MAX
-                </button>
-              </div>
-            ) : null}
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {payIsSol
+                ? PRESETS.map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setAmount(String(p))}
+                      className={`rounded-full px-3 py-1 font-mono text-[11px] ${
+                        Math.abs(payNum - p) < 1e-9 ? "bg-acid text-void" : "bg-white/8 text-white/55"
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  ))
+                : [0.25, 0.5, 0.75].map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setAmount(fmtTok(payBal * p))}
+                      className="rounded-full bg-white/8 px-3 py-1 font-mono text-[11px] text-white/55"
+                    >
+                      {Math.round(p * 100)}%
+                    </button>
+                  ))}
+              <button
+                type="button"
+                onClick={() =>
+                  setAmount(payIsSol ? fmtSol(Math.max(0, payBal - 0.02), 4) : fmtTok(payBal))
+                }
+                className="rounded-full bg-white/8 px-3 py-1 font-mono text-[11px] text-white/55"
+              >
+                MAX
+              </button>
+            </div>
           </div>
 
           <button
             type="button"
-            onClick={() => setSide((s) => (s === "buy" ? "sell" : "buy"))}
-            className="absolute left-1/2 top-[50%] z-10 flex h-11 w-11 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-4 border-[#0b0714] bg-white/10 text-white"
-            aria-label="Flip direction"
+            onClick={flip}
+            className="absolute left-1/2 top-1/2 z-10 flex h-11 -translate-x-1/2 -translate-y-1/2 items-center justify-center gap-0.5 rounded-full border-4 border-[#0b0714] bg-white/10 px-2.5 text-white"
+            aria-label="Flip tokens"
           >
+            <ArrowUp className="h-4 w-4" />
             <ArrowDown className="h-4 w-4" />
           </button>
 
@@ -521,14 +523,14 @@ export function SwapWidget({
             <div className="flex items-center justify-between gap-2">
               <p className="font-mono text-[10px] tracking-[0.16em] text-white/40">YOU RECEIVE</p>
               <p className="font-mono text-[11px] text-white/35">
-                {paySol ? `${fmtTok(getBal)} ${token?.symbol.replace(/^\$+/, "") || ""}` : `${fmtSol(getBal, 4)} SOL`}
+                {recvIsSol ? `${fmtSol(recvBal, 4)} SOL` : `${fmtTok(recvBal)} ${recv.symbol.replace(/^\$+/, "")}`}
               </p>
             </div>
             <div className="mt-2 flex items-center gap-2">
               <p className="min-w-0 flex-1 text-[28px] font-semibold tracking-tight text-white sm:text-[32px]">
-                {out == null ? "—" : paySol ? fmtTok(out) : fmtSol(out, 4)}
+                {out == null ? "—" : recvIsSol ? fmtSol(out, 4) : fmtTok(out)}
               </p>
-              <TokenChip sol={!paySol} token={paySol ? token : null} onClick={paySol ? () => setPicker(true) : undefined} />
+              <TokenChip token={recv} onClick={() => setPicker("recv")} />
             </div>
           </div>
         </div>
@@ -541,7 +543,7 @@ export function SwapWidget({
           ) : (
             <button
               type="button"
-              disabled={busy || !mint}
+              disabled={busy || pay.mint === recv.mint}
               onClick={() => void go()}
               className="flex min-h-[52px] w-full items-center justify-center gap-2 rounded-full bg-[#14f195] text-[16px] font-semibold text-[#04000a] disabled:opacity-40"
             >
@@ -549,15 +551,7 @@ export function SwapWidget({
               {cta}
             </button>
           )}
-          {token ? (
-            <p className="mt-3 text-center font-mono text-[11px] text-white/35">
-              {out != null && side === "buy" && payNum > 0
-                ? `1 SOL ≈ ${fmtTok(out / payNum)} ${token.symbol.replace(/^\$+/, "")}`
-                : "You sign. Tokens land in this Phantom."}
-            </p>
-          ) : (
-            <p className="mt-3 text-center text-[13px] text-white/40">Pick a Solphia token or paste a CA.</p>
-          )}
+          <p className="mt-3 text-center text-[13px] text-white/45">Tokens land in your connected wallet.</p>
           <div className="mt-4 flex items-center justify-center gap-2 text-white/35">
             <SphaMark className="h-5 w-5 opacity-80" />
             <p className="font-mono text-[10px] tracking-[0.18em]">POWERED BY SOLPHIA</p>
@@ -566,14 +560,14 @@ export function SwapWidget({
       </div>
 
       {picker ? (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-3 sm:items-center" onClick={() => setPicker(false)}>
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-3 sm:items-center" onClick={() => setPicker(null)}>
           <div
             className="max-h-[min(32rem,80svh)] w-full max-w-md overflow-hidden rounded-[24px] border border-white/10 bg-[#0b0714] p-4"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between gap-3">
               <p className="text-[16px] font-semibold text-white">Select token</p>
-              <button type="button" onClick={() => setPicker(false)} className="rounded-full bg-white/10 px-3 py-1.5 text-[13px] text-white">
+              <button type="button" onClick={() => setPicker(null)} className="rounded-full bg-white/10 px-3 py-1.5 text-[13px] text-white">
                 Close
               </button>
             </div>
@@ -587,7 +581,7 @@ export function SwapWidget({
               <input
                 value={ca}
                 onChange={(e) => setCa(e.target.value.trim())}
-                placeholder="Search by CA"
+                placeholder="Paste any Solana CA"
                 className="w-full rounded-2xl border border-white/10 bg-white/[0.06] px-3 py-3 font-mono text-[13px] text-white outline-none"
               />
             </form>
@@ -604,21 +598,20 @@ export function SwapWidget({
                 <button
                   key={row.mint}
                   type="button"
-                  onClick={() => {
-                    setToken(row);
-                    setPicker(false);
-                    onMint?.(row.mint);
-                  }}
+                  onClick={() => applyPick(row)}
                   className="flex w-full items-center gap-3 rounded-2xl px-2 py-2.5 text-left hover:bg-white/5"
                 >
-                  <TokenArt src={row.image} mint={row.mint} label={row.symbol} eager className="h-9 w-9 rounded-full" />
+                  {row.mint === SOL_MINT ? (
+                    <SolMark className="h-9 w-9" />
+                  ) : (
+                    <TokenArt src={row.image} mint={row.mint} label={row.symbol} eager className="h-9 w-9 rounded-full" />
+                  )}
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-[15px] font-medium text-white">{row.symbol.replace(/^\$+/, "")}</p>
                     <p className="truncate font-mono text-[11px] text-white/35">{row.name || row.mint.slice(0, 8) + "…"}</p>
                   </div>
                 </button>
               ))}
-              {catalog.length === 0 ? <p className="py-6 text-center text-[13px] text-white/40">Paste a CA to trade a Solphia token.</p> : null}
             </div>
           </div>
         </div>

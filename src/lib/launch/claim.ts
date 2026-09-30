@@ -74,7 +74,8 @@ export function sumCreatorGenerated(rows: { mint?: string; creatorFeesSol?: numb
 
 /**
  * Card UNCLAIMED is the wallet sum of unpaid pools.
- * The Claim button still pays one pool (Phantom can only simulate one claim ix).
+ * One Phantom signature still pays one pool (packing flags malicious).
+ * The UI drains every unpaid mint in sequence until the sum is 0.
  */
 export function nextCreatorPayout<T extends { mint?: string; creatorUnclaimedSol?: number; id?: string }>(
   rows: T[],

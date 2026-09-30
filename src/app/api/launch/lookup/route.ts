@@ -81,10 +81,38 @@ export async function GET(req: NextRequest) {
       });
     }
     const row = await lookupMarketMint(mint);
-    if (!row) return NextResponse.json({ error: "not_found" }, { status: 404 });
+    if (row) {
+      return NextResponse.json({
+        coin: { ...row.coin, score: row.score, grade: row.grade },
+        solUsd: row.solUsd,
+      });
+    }
+    const { readSplMeta } = await import("@/lib/token/onchainMeta");
+    const meta = await readSplMeta(mint).catch(() => null);
+    const label = (meta?.symbol || meta?.name || mint.slice(0, 4)).replace(/^\$+/, "").toUpperCase() || mint.slice(0, 4).toUpperCase();
     return NextResponse.json({
-      coin: { ...row.coin, score: row.score, grade: row.grade },
-      solUsd: row.solUsd,
+      coin: {
+        id: mint,
+        mint,
+        born: false,
+        venue: "market",
+        name: meta?.name || label,
+        symbol: meta?.symbol || label,
+        image: meta?.image || "",
+        blurb: "",
+        creator: "",
+        createdAt: Date.now(),
+        status: "curve",
+        priceSol: 0,
+        marketCapSol: 0,
+        marketCapUsd: 0,
+        progress: 0,
+        realSol: 0,
+        holders: 0,
+        fills: [],
+        devRewardsSol: 0,
+      },
+      solUsd,
     });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "lookup failed" }, { status: 502 });

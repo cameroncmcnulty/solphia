@@ -31,6 +31,13 @@ describe("phantom box", () => {
     assert.equal(isPhJob({ id: "abcdefghijk", dappSk: "1".repeat(32) }), true);
   });
 
+  it("keeps claim-all remaining mints and drops an empty list", () => {
+    const kept = slimAfter({ kind: "claim", claimAll: true, remainingMints: ["MintA", "MintB"] });
+    assert.deepEqual(kept?.remainingMints, ["MintA", "MintB"]);
+    const empty = slimAfter({ kind: "claim", remainingMints: [] });
+    assert.equal(empty?.remainingMints, undefined);
+  });
+
   it("treats Shill as a Phantom return page so connect persists there", () => {
     assert.equal(signerPage("/shill"), true);
     assert.equal(signerPage("/launch"), true);

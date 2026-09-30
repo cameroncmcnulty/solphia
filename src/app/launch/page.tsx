@@ -62,6 +62,7 @@ import { peekRef } from "@/components/ReferralCapture";
 
 const PRESETS = [0.1, 0.25, 0.5, 1];
 const DEV_CAP = launchDevBuyCap();
+const CLAIM_ALL_MAX = 40;
 
 type Spark = { t: number; o: number; h: number; l: number; c: number };
 type Coin = {
@@ -367,6 +368,7 @@ export default function LaunchPage() {
   const lastMintRef = useRef("");
   const finishPhantomRef = useRef<(sig: string, after: PhAfter) => Promise<void>>(async () => {});
   const cropUrlRef = useRef<string>("");
+  const claimSeqRef = useRef(0);
   const devPct = buySupplyPct(emptyCurve(), devBuy);
 
   useEffect(() => {
@@ -1147,8 +1149,21 @@ export default function LaunchPage() {
       return;
     }
     if (after.kind === "claim") {
-      setMsg(after.partner ? "Protocol fees claimed into this wallet." : "Creator fees claimed into this wallet.");
       await Promise.all([refreshPad(true), refreshTape()]).catch(() => {});
+      const nextMint = after.claimAll && !after.partner ? (after.remainingMints || []).find((m) => m && m !== after.mint) : "";
+      if (nextMint && claimSeqRef.current < CLAIM_ALL_MAX) {
+        claimSeqRef.current += 1;
+        setMsg("Claimed. Signing the next unpaid pool…");
+        await act({ action: "withdraw_dev", mint: nextMint, mints: [nextMint], claimAll: true });
+        return;
+      }
+      setMsg(
+        after.partner
+          ? "Protocol fees claimed into this wallet."
+          : nextMint
+            ? "Claimed. Tap Claim again for the rest."
+            : "All creator fees claimed into this wallet.",
+      );
       setBusy(false);
       return;
     }
@@ -1222,13 +1237,17 @@ export default function LaunchPage() {
             ? `Sign ${fmtClaimSol(Number(j.claimSol))} SOL in Phantom…`
             : "Sign the swap in Phantom…",
         );
+        const remainingMints = Array.isArray(j.remainingMints) ? j.remainingMints.filter((m: unknown) => typeof m === "string") : [];
+        const claimAll = Boolean(body.claimAll) || Boolean(j.claim && !j.partner);
         const sig = await signPhantomAndSend(j.transaction, undefined, {
           kind: j.claim ? "claim" : "swap",
           owner,
-          mint: j.coin?.mint,
+          mint: j.coin?.mint || (typeof body.mint === "string" ? body.mint : undefined),
           id: typeof body.id === "string" ? body.id : undefined,
           claim: Boolean(j.claim),
           partner: Boolean(j.partner),
+          claimAll,
+          remainingMints,
           side: body.action === "sell" ? "sell" : "buy",
           sol: body.action === "sell" ? Number(j.solOut) || 0 : Number(body.sol) || 0,
           tokens: body.action === "sell" ? Number(body.tokens) || 0 : Number(j.tokensOut) || 0,
@@ -1236,14 +1255,22 @@ export default function LaunchPage() {
         if (j.claim) {
           const amt = Number(j.claimSol) || 0;
           const more = Number(j.remaining) || 0;
+          const nextMint = claimAll && !j.partner ? remainingMints[0] : "";
+          if (nextMint && claimSeqRef.current < CLAIM_ALL_MAX) {
+            claimSeqRef.current += 1;
+            setMsg(`Claimed ${fmtClaimSol(amt)} SOL. Signing the next unpaid pool…`);
+            await Promise.all([refreshPad(true), refreshTape()]);
+            await act({ action: "withdraw_dev", mint: nextMint, mints: [nextMint], claimAll: true });
+            return;
+          }
           setMsg(
             j.partner
               ? "Protocol fees claimed into this wallet."
-              : more
-                ? `Claimed ${fmtClaimSol(amt)} SOL. Claim again for the next token.`
+              : nextMint || more
+                ? `Claimed ${fmtClaimSol(amt)} SOL. ${more} pools left. Tap Claim again for the rest.`
                 : amt
-                  ? `Claimed ${fmtClaimSol(amt)} SOL into this wallet.`
-                  : "Creator fees claimed into this wallet.",
+                  ? `All creator fees claimed · ${fmtClaimSol(amt)} SOL into this wallet.`
+                  : "All creator fees claimed into this wallet.",
           );
           await Promise.all([refreshPad(true), refreshTape()]);
           return;
@@ -1310,7 +1337,6 @@ export default function LaunchPage() {
   const generatedSol = sumCreatorGenerated(mine);
   const payout = nextCreatorPayout(mine);
   const unclaimedSol = payout.totalUnclaimed;
-  const claimSol = payout.nextSol;
   const pool = isSwap ? coins : mine;
   const board = useMemo(() => {
     if (!isSwap) {
@@ -1894,7 +1920,7 @@ export default function LaunchPage() {
                 <p className="font-mono text-[11px] tracking-[0.28em] text-acid">DEV REWARDS</p>
                 <h2 className="mt-1 text-[22px] font-semibold tracking-tight text-white">Claim fees</h2>
                 <p className="mt-1 text-[14px] leading-snug text-white/45">
-                  Swaps on the curve pay 1%. Half is yours. Unclaimed is every unpaid pool. Each Phantom signature pays one token.
+                  Swaps on the curve pay 1%. Half is yours. Unclaimed is the total of every unpaid pool. Claim takes it all.
                 </p>
                 <div className="mt-4 grid grid-cols-2 gap-3">
                   <div>
@@ -1913,23 +1939,25 @@ export default function LaunchPage() {
                     onClick={() => {
                       const mint = payout.next?.mint;
                       if (!mint) return;
+                      claimSeqRef.current = 0;
                       act({
                         action: "withdraw_dev",
                         id: payout.next?.id,
                         mint,
                         mints: [mint],
+                        claimAll: true,
                       });
                     }}
                     className="rounded-full bg-[#14f195] px-4 py-2 text-[14px] font-semibold text-[#04000a] disabled:opacity-40"
                   >
-                    {claimSol > 0 ? `Claim ${fmtClaimSol(claimSol)} SOL` : "Claim creator fees"}
+                    {unclaimedSol > 0 ? `Claim ${fmtClaimSol(unclaimedSol)} SOL` : "Claim creator fees"}
                   </button>
                 </div>
                 {unclaimedSol > 0 ? (
                   <p className="mt-2 text-[12px] text-white/40">
                     {payout.restCount > 0
-                      ? `This claim pays ${fmtClaimSol(claimSol)} SOL of ${fmtClaimSol(unclaimedSol)} unclaimed. Claim again after it lands for the next token.`
-                      : `Phantom will credit ${fmtClaimSol(claimSol)} SOL, minus the network fee.`}
+                      ? `Claim pays the full ${fmtClaimSol(unclaimedSol)} SOL. Approve each unpaid token in Phantom until Unclaimed is 0.`
+                      : `Phantom will credit ${fmtClaimSol(unclaimedSol)} SOL, minus the network fee.`}
                   </p>
                 ) : null}
                 <p className="mt-2 text-[12px] text-white/35">

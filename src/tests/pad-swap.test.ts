@@ -7,6 +7,7 @@ import { liveClipFeeSol, liveSwapFeeSol, protocolFeeSol } from "../lib/swap/rout
 import { clipHoldingUsd, HOLDING_CLIP_MAX } from "../lib/pair/engine";
 import { isDeskMint } from "../lib/tx/venue";
 import { SOL_MINT, USDC_MINT } from "../lib/pair/mints";
+import { padPair } from "../lib/swap/open";
 import { launchError } from "../lib/launch/errors";
 
 describe("pad swap fee", () => {
@@ -51,6 +52,16 @@ describe("in-house pad venue", () => {
   it("explains a mint that is not on our program", () => {
     assert.match(launchError("not_on_curve"), /Solphia curve/);
     assert.match(launchError("desk_mint"), /live desk/);
+  });
+
+  it("routes SOL paired with a pad mint onto the curve, anything else off-curve", () => {
+    const padMint = "So1phiaFakeMint111111111111111111111111111";
+    assert.deepEqual(padPair(SOL_MINT, padMint), { mint: padMint, side: "buy" });
+    assert.deepEqual(padPair(padMint, SOL_MINT), { mint: padMint, side: "sell" });
+    assert.equal(padPair(USDC_MINT, padMint), null);
+    assert.equal(padPair(padMint, USDC_MINT), null);
+    assert.equal(padPair(SOL_MINT, SOL_MINT), null);
+    assert.equal(padPair("nope", SOL_MINT), null);
   });
 });
 

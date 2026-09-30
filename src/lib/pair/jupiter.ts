@@ -122,6 +122,7 @@ export async function quoteOnce(opts: {
   extra?: string;
   open?: boolean;
   inDecimals?: number;
+  outDecimals?: number;
 }): Promise<QuoteResult> {
   if (!opts.open) {
     if (!isAllowedMint(opts.inputMint) || !isAllowedMint(opts.outputMint)) {
@@ -162,7 +163,8 @@ export async function quoteOnce(opts: {
       continue;
     }
     const outDec =
-      opts.open && quote.outputMint !== SOL_MINT && quote.outputMint !== USDC_MINT ? 6 : decimals(quote.outputMint);
+      opts.outDecimals ??
+      (opts.open && quote.outputMint !== SOL_MINT && quote.outputMint !== USDC_MINT ? 6 : decimals(quote.outputMint));
     const impactPct = Math.abs(quote.priceImpactPct) > 1 ? Math.abs(quote.priceImpactPct) / 100 : Math.abs(quote.priceImpactPct);
     return {
       ok: true,
@@ -181,6 +183,7 @@ export async function quoteOpenSwap(opts: {
   amount: number;
   slippageBps: number;
   inDecimals?: number;
+  outDecimals?: number;
 }): Promise<QuoteResult> {
   return quoteOnce({ ...opts, open: true });
 }

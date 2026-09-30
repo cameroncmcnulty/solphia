@@ -34,6 +34,8 @@ export type PhAfter = {
   side?: string;
   sol?: number;
   tokens?: number;
+  claimAll?: boolean;
+  remainingMints?: string[];
 };
 
 export type PhSession = { dappSk: string; phantomPk: string; session: string };
@@ -56,7 +58,8 @@ export type PhJob = {
 export function slimAfter(after?: PhAfter): PhAfter | undefined {
   if (!after) return undefined;
   const image = after.image && after.image.startsWith("data:") ? undefined : after.image;
-  return { ...after, image };
+  const remainingMints = (after.remainingMints || []).filter(Boolean).slice(0, 24);
+  return { ...after, image, remainingMints: remainingMints.length ? remainingMints : undefined };
 }
 
 export function slimJob(job: PhJob): PhJob {

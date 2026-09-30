@@ -41,7 +41,7 @@ describe("creator claim amounts", () => {
     assert.equal(fmtClaimSol(0), "0");
   });
 
-  it("card unclaimed is the wallet sum; the button still pays one pool", () => {
+  it("card unclaimed is the wallet sum; one signature still pays one pool", () => {
     const rows = [
       { mint: "Mint111111111111111111111111111111111111111", creatorFeesSol: 0.01, creatorUnclaimedSol: 0.003982, createdAt: 3 },
       { mint: "Mint222222222222222222222222222222222222222", creatorFeesSol: 0.072, creatorUnclaimedSol: 0.073338, createdAt: 1 },
