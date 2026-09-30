@@ -163,7 +163,12 @@ async function connectInjected(): Promise<void> {
   }
 }
 
-export async function signPhantomAndSend(transactionB64: string, extra?: Keypair | Keypair[], after?: PhAfter): Promise<string> {
+export async function signPhantomAndSend(
+  transactionB64: string,
+  extra?: Keypair | Keypair[],
+  after?: PhAfter,
+  opts?: { skipPreflight?: boolean },
+): Promise<string> {
   const packed = asTxB64(transactionB64);
   const extras = extraKeys(extra);
   const provider = await waitForPhantomProvider();
@@ -178,7 +183,7 @@ export async function signPhantomAndSend(transactionB64: string, extra?: Keypair
       throw phantomSignError(e);
     }
     applyExtras(fromPhantom, extras);
-    return sendSignedB64(toB64(serializeTx(fromPhantom)));
+    return sendSignedB64(toB64(serializeTx(fromPhantom)), opts);
   }
   if (inPhantomWebView()) {
     throw new Error("Phantom is open but isn't ready to sign. Pull down to refresh this tab, then tap Launch again.");
@@ -211,11 +216,11 @@ export async function signPhantomTxB64(transactionB64: string): Promise<string> 
   return toB64((signed as VersionedTransaction).serialize());
 }
 
-async function sendViaApi(b64: string): Promise<string> {
+async function sendViaApi(b64: string, opts?: { skipPreflight?: boolean }): Promise<string> {
   const r = await fetch("/api/sol/send", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ transaction: b64 }),
+    body: JSON.stringify({ transaction: b64, skipPreflight: opts?.skipPreflight !== false }),
     signal: AbortSignal.timeout(10_000),
   });
   const text = await r.text();
@@ -230,11 +235,11 @@ async function sendViaApi(b64: string): Promise<string> {
   return j.signature;
 }
 
-async function sendSignedB64(b64: string): Promise<string> {
+async function sendSignedB64(b64: string, opts?: { skipPreflight?: boolean }): Promise<string> {
   let last = "send failed";
   for (let i = 0; i < 3; i++) {
     try {
-      return await sendViaApi(b64);
+      return await sendViaApi(b64, opts);
     } catch (e) {
       last = e instanceof Error ? e.message : "send failed";
       if (/Access forbidden|403/.test(last)) break;

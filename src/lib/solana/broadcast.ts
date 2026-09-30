@@ -1,6 +1,7 @@
 import { rpcUrl } from "../config";
 
-export async function broadcastB64(b64: string): Promise<string> {
+export async function broadcastB64(b64: string, opts?: { skipPreflight?: boolean }): Promise<string> {
+  const skipPreflight = opts?.skipPreflight !== false;
   const r = await fetch(rpcUrl(), {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -8,7 +9,7 @@ export async function broadcastB64(b64: string): Promise<string> {
       jsonrpc: "2.0",
       id: 1,
       method: "sendTransaction",
-      params: [b64, { encoding: "base64", skipPreflight: true, preflightCommitment: "confirmed", maxRetries: 3 }],
+      params: [b64, { encoding: "base64", skipPreflight, preflightCommitment: "confirmed", maxRetries: 3 }],
     }),
     signal: AbortSignal.timeout(8_000),
   });

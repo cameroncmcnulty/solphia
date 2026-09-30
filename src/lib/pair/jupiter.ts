@@ -137,8 +137,7 @@ export async function quoteOnce(opts: {
   const amount = toUnits(opts.amount, dec);
   const qs =
     `inputMint=${opts.inputMint}&outputMint=${opts.outputMint}&amount=${amount}` +
-    `&slippageBps=${opts.slippageBps}` +
-    (opts.open ? "" : "&restrictIntermediateTokens=true") +
+    `&slippageBps=${opts.slippageBps}&restrictIntermediateTokens=true` +
     (opts.extra ? `&${opts.extra}` : "");
   let last = "Swap quote failed.";
   for (const base of QUOTE_URLS) {
@@ -324,7 +323,18 @@ export async function buildSwapTx(quote: JupiterQuote, userPublicKey: string): P
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body),
       });
-      if (r.ok && r.data?.swapTransaction) return { ok: true, transaction: r.data.swapTransaction };
+      if (r.ok && r.data?.swapTransaction) {
+        const sim = r.data.simulationError;
+        if (sim) {
+          last =
+            (typeof sim === "string" && sim) ||
+            (typeof sim?.error === "string" && sim.error) ||
+            (typeof sim?.message === "string" && sim.message) ||
+            "Swap simulation failed.";
+          continue;
+        }
+        return { ok: true, transaction: r.data.swapTransaction };
+      }
       last =
         (typeof r.data?.error === "string" && r.data.error) ||
         (typeof r.data?.message === "string" && r.data.message) ||

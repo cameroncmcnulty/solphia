@@ -369,6 +369,8 @@ export default function LaunchPage() {
   const finishPhantomRef = useRef<(sig: string, after: PhAfter) => Promise<void>>(async () => {});
   const cropUrlRef = useRef<string>("");
   const claimSeqRef = useRef(0);
+  const isSwapRef = useRef(isSwap);
+  isSwapRef.current = isSwap;
   const devPct = buySupplyPct(emptyCurve(), devBuy);
 
   useEffect(() => {
@@ -396,18 +398,21 @@ export default function LaunchPage() {
     const onPh = (e: Event) => {
       const j = (e as CustomEvent<{ signature?: string; after?: PhAfter; error?: string }>).detail;
       if (!j) return;
+      const after = j.after;
+      const openSwap = after?.kind === "jup_swap" || (after?.kind === "swap" && !after.id);
+      if (isSwapRef.current && (openSwap || (!after && j.error))) return;
+      if (openSwap) return;
       if (j.error) {
         setErr(j.error);
         setBusy(false);
         setMsg("");
         return;
       }
-      if (!j.signature || !j.after) return;
-      if (j.after.kind === "jup_swap") return;
+      if (!j.signature || !after) return;
       setBusy(true);
       setErr("");
       setMsg("Finishing on Solana…");
-      void finishPhantomRef.current(j.signature, j.after).catch((err) => {
+      void finishPhantomRef.current(j.signature, after).catch((err) => {
         setErr(err instanceof Error ? err.message : "Launch failed after Phantom.");
         setBusy(false);
       });
@@ -438,6 +443,7 @@ export default function LaunchPage() {
   }, []);
 
   useEffect(() => {
+    if (isSwap) return;
     if (tab !== "tape") return;
     if (!busy && !msg && !err && !createErr.banner) return;
     const id = err ? "launch-status" : "launch-form-status";
@@ -445,9 +451,10 @@ export default function LaunchPage() {
       document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "center" });
     }, 60);
     return () => window.clearTimeout(t);
-  }, [busy, msg, err, createErr.banner, tab]);
+  }, [busy, msg, err, createErr.banner, tab, isSwap]);
 
   useEffect(() => {
+    if (isSwap) return;
     if (!open || !snapAt) return;
     const id = `desk-${open.id}`;
     let n = 0;
@@ -460,7 +467,7 @@ export default function LaunchPage() {
       if (n++ < 16) requestAnimationFrame(go);
     };
     requestAnimationFrame(go);
-  }, [open?.id, snapAt]);
+  }, [open?.id, snapAt, isSwap]);
 
   async function refreshPad(sync = false) {
     const q = owner ? `pubkey=${encodeURIComponent(owner)}` : "";
@@ -1424,14 +1431,7 @@ export default function LaunchPage() {
                 .slice(0, 40)
                 .map((c) => ({ mint: c.mint || "", symbol: c.symbol, name: c.name, image: c.image }))}
               onMint={(mint) => {
-                const hit = coins.find((c) => c.mint === mint);
-                if (hit) {
-                  setOpen(hit);
-                  setLookedMint(hit.mint || hit.id);
-                  setSnapAt(Date.now());
-                } else {
-                  setLookedMint(mint);
-                }
+                setLookedMint(mint);
               }}
               onDone={() => {
                 void Promise.all([refreshPad(), refreshTape()]).catch(() => {});

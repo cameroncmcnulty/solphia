@@ -125,13 +125,13 @@ async function completeJob(req: NextRequest, body: Record<string, unknown>) {
         ...packLink(connectUrl(req, job), { mode: "connect", job: slimJob(job) }),
       });
     }
-    return NextResponse.json({ error: message, declined: /user rejected|4001/i.test(message + err) });
+    return NextResponse.json({ error: message, declined: /user rejected|4001/i.test(message + err), after: job.after });
   }
   const nonce = typeof body.nonce === "string" ? body.nonce : "";
   const data = typeof body.data === "string" ? body.data : "";
   const phantomPk = (typeof body.phantom_encryption_public_key === "string" && body.phantom_encryption_public_key) || job.phantomPk || "";
   if (!nonce || !data || !phantomPk) {
-    return NextResponse.json({ error: "Phantom came back empty. Tap Launch again." }, { status: 400 });
+    return NextResponse.json({ error: "Phantom came back empty. Tap Launch again.", after: job.after }, { status: 400 });
   }
   const json = decryptBox(job.dappSk, phantomPk, nonce, data);
   if (!json) {
@@ -157,13 +157,13 @@ async function completeJob(req: NextRequest, body: Record<string, unknown>) {
     return NextResponse.json({ id: job.id, pubkey: json.public_key, mode: "connect", session: sess });
   }
   if (!json.transaction) {
-    return NextResponse.json({ error: "Phantom did not return a signed transaction." }, { status: 400 });
+    return NextResponse.json({ error: "Phantom did not return a signed transaction.", after: job.after }, { status: 400 });
   }
   let signed: Uint8Array;
   try {
     signed = b58dec(json.transaction);
   } catch {
-    return NextResponse.json({ error: "Phantom's signature was unreadable." }, { status: 400 });
+    return NextResponse.json({ error: "Phantom's signature was unreadable.", after: job.after }, { status: 400 });
   }
   const extras = extrasFromSecrets(job.extraSecrets);
   let b64: string;
@@ -171,15 +171,16 @@ async function completeJob(req: NextRequest, body: Record<string, unknown>) {
     b64 = signedTxB64(signed, extras.length ? extras : undefined);
   } catch (e) {
     return NextResponse.json(
-      { error: e instanceof Error ? e.message : "Could not attach the mint signature." },
+      { error: e instanceof Error ? e.message : "Could not attach the mint signature.", after: job.after },
       { status: 400 },
     );
   }
   let signature: string;
   try {
-    signature = await broadcastB64(b64);
+    const openSwap = job.after?.kind === "swap" && !job.after.id;
+    signature = await broadcastB64(b64, { skipPreflight: !openSwap });
   } catch (e) {
-    return NextResponse.json({ error: e instanceof Error ? e.message : "Broadcast failed." }, { status: 400 });
+    return NextResponse.json({ error: e instanceof Error ? e.message : "Broadcast failed.", after: job.after }, { status: 400 });
   }
   job.done = true;
   job.signature = signature;

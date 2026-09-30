@@ -193,6 +193,12 @@ export function SwapWidget({
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<SwapNotice | null>(() => (typeof window !== "undefined" ? loadSwapNotice() : null));
   const noticeRef = useRef<(n: SwapNotice) => void>(() => undefined);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const liveRef = useRef(false);
+
+  function stayOnCard() {
+    rootRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 
   const payNum = Number(String(amount).replace(",", "."));
   const payBal = pay.mint === SOL_MINT ? bals[SOL_MINT] || 0 : bals[pay.mint] || 0;
@@ -214,7 +220,10 @@ export function SwapWidget({
     const onPh = (e: Event) => {
       const j = (e as CustomEvent<{ signature?: string; after?: PhAfter; error?: string }>).detail;
       if (!j) return;
-      if (j.after?.kind !== "swap" && j.after?.kind !== "jup_swap") return;
+      const ours = j.after?.kind === "swap" || j.after?.kind === "jup_swap" || (!j.after && liveRef.current);
+      if (!ours) return;
+      liveRef.current = false;
+      stayOnCard();
       if (j.error) {
         noticeRef.current(noticeFromSwapError(j.error));
         return;
@@ -376,6 +385,8 @@ export function SwapWidget({
       return;
     }
     setBusy(true);
+    liveRef.current = true;
+    stayOnCard();
     try {
       const r = await fetch("/api/swap/build", {
         method: "POST",
@@ -390,14 +401,21 @@ export function SwapWidget({
       });
       const j = await r.json();
       if (!r.ok) throw new Error(typeof j.error === "string" ? j.error : "Could not build the swap.");
-      const sig = await signPhantomAndSend(j.transaction, undefined, {
-        kind: "swap",
-        owner: pk,
-        mint: recv.mint,
-        side: pay.mint === SOL_MINT ? "buy" : "sell",
-        sol: pay.mint === SOL_MINT ? payNum : undefined,
-        tokens: pay.mint === SOL_MINT ? undefined : payNum,
-      });
+      const sig = await signPhantomAndSend(
+        j.transaction,
+        undefined,
+        {
+          kind: "swap",
+          owner: pk,
+          mint: recv.mint,
+          side: pay.mint === SOL_MINT ? "buy" : "sell",
+          sol: pay.mint === SOL_MINT ? payNum : undefined,
+          tokens: pay.mint === SOL_MINT ? undefined : payNum,
+        },
+        { skipPreflight: false },
+      );
+      liveRef.current = false;
+      stayOnCard();
       showNotice({ kind: "ok", text: `Swap landed. ${sig}`, at: Date.now() });
       onDone?.();
     } catch (e) {
@@ -409,6 +427,8 @@ export function SwapWidget({
         });
         return;
       }
+      liveRef.current = false;
+      stayOnCard();
       showNotice(noticeFromSwapError(e));
     } finally {
       setBusy(false);
@@ -420,7 +440,7 @@ export function SwapWidget({
   const recvIsSol = recv.mint === SOL_MINT;
 
   return (
-    <div className="relative z-20 w-full min-w-0">
+    <div ref={rootRef} className="relative z-20 w-full min-w-0 scroll-mt-20">
       <div className="overflow-hidden rounded-[28px] border border-white/10 bg-[#0b0714] shadow-[0_20px_60px_rgba(0,0,0,0.45)]">
         <div className="flex items-center justify-between gap-3 px-4 pb-1 pt-4 sm:px-5">
           <p className="text-[18px] font-semibold tracking-tight text-white">Swap</p>

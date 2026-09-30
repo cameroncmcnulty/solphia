@@ -14,8 +14,9 @@ export async function POST(req: NextRequest) {
     }
     const body = await req.json().catch(() => null);
     const b64 = typeof body?.transaction === "string" ? body.transaction : "";
-    if (!b64 || b64.length > 24_000) return NextResponse.json({ error: "bad_tx" }, { status: 400 });
-    const signature = await broadcastB64(b64);
+    if (!b64 || b64.length > 80_000) return NextResponse.json({ error: "bad_tx" }, { status: 400 });
+    const skipPreflight = body?.skipPreflight !== false;
+    const signature = await broadcastB64(b64, { skipPreflight });
     return NextResponse.json({ signature });
   } catch (e) {
     const message = e instanceof Error ? e.message : "send failed";
