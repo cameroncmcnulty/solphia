@@ -3,17 +3,18 @@ import { isNativeSolSnapshot } from "../feeds/normalize";
 import { scoreToken } from "../risk/engine";
 import type { TokenSnapshot } from "../types";
 import { smoothSpark } from "./chart";
-import type { TapeCoin } from "./tape";
+import { trendingScoreH1, type TapeCoin } from "./tape";
 import { publicImage } from "../token/art";
 
 /** Preferred safety floor. The board still fills to MARKET_CAP with the next-best live names. */
 export const MARKET_MIN_SCORE = 45;
 export const MARKET_MIN_MCAP_USD = 400;
-export const MARKET_CAP = 80;
+export const MARKET_CAP = 120;
 export const MCAP_LARGE_USD = 1_000_000;
+export const MEGA_MCAP_USD = 10_000_000;
 export const MCAP_MID_USD = 50_000;
 export const MCAP_SMALL_USD = 8_000;
-const MIX_SLOTS = { large: 8, mid: 24, small: 24, micro: 24 } as const;
+const MIX_SLOTS = { large: 12, mid: 36, small: 36, micro: 36 } as const;
 const USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 const USDT_MINT = "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB";
 const STABLE_TICKER = /^(usdc|usdt|usd1|dai|pyusd|usds)$/i;
@@ -71,6 +72,40 @@ export function mixByMcap<T>(
         out.push(row);
         used.add(row);
       }
+    }
+  }
+  return out;
+}
+
+/**
+ * DexScreener Trending board: hottest 1h first, but only ~20% of rows may be $10M+ names
+ * so idle BONK/JUP/TRUMP cannot eat the list.
+ */
+export function rankLikeDex<T>(
+  rows: T[],
+  cap = MARKET_CAP,
+  scoreOf: (row: T) => number,
+  mcapOf: (row: T) => number,
+): T[] {
+  const ranked = rows.slice().sort((a, b) => scoreOf(b) - scoreOf(a));
+  const maxMega = Math.max(8, Math.floor(cap * 0.2));
+  const out: T[] = [];
+  let mega = 0;
+  for (const row of ranked) {
+    if (out.length >= cap) break;
+    const isMega = mcapOf(row) >= MEGA_MCAP_USD;
+    if (isMega && mega >= maxMega) continue;
+    out.push(row);
+    if (isMega) mega += 1;
+  }
+  if (out.length < cap) {
+    const used = new Set(out);
+    for (const row of ranked) {
+      if (out.length >= cap) break;
+      if (used.has(row)) continue;
+      if (mcapOf(row) >= MEGA_MCAP_USD) continue;
+      out.push(row);
+      used.add(row);
     }
   }
   return out;
@@ -189,13 +224,12 @@ export function filterMarketSnapshots(tokens: TokenSnapshot[], solUsd: number): 
     const report = scoreToken(t);
     scored.push({ coin: snapshotToTape(t, solUsd), score: report.score, grade: report.grade });
   }
-  scored.sort((a, b) => {
-    if (b.score !== a.score) return b.score - a.score;
-    return (b.coin.vol1h || 0) - (a.coin.vol1h || 0);
-  });
-  const preferred = scored.filter((r) => r.score >= MARKET_MIN_SCORE);
-  const rest = scored.filter((r) => r.score < MARKET_MIN_SCORE);
-  const rows = mixByMcap([...preferred, ...rest], MARKET_CAP, (r) => r.coin.marketCapUsd || 0);
+  const rows = rankLikeDex(
+    scored,
+    MARKET_CAP,
+    (r) => trendingScoreH1(r.coin, solUsd) * (r.score >= MARKET_MIN_SCORE ? 1.05 : 1),
+    (r) => r.coin.marketCapUsd || 0,
+  );
   return { rows, scanned: tokens.length };
 }
 

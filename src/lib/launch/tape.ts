@@ -15,8 +15,28 @@ export const VOL_MS: Record<VolWindow, number> = {
   "24h": 24 * 60 * 60_000,
 };
 
-/** Ranked board: enough rows to fill Swap without looking empty. */
-export const TAPE_BOARD = 80;
+/** Ranked board: enough rows to fill Swap without looking empty. DexScreener-length list. */
+export const TAPE_BOARD = 120;
+
+/** DexScreener-style Trending 1H: volume, txns, liquidity, and move — idle mega caps sink. */
+export function trendingScoreH1(coin: TapeCoin, solUsd = 150): number {
+  const px = solUsd > 0 ? solUsd : 150;
+  const volUsd = Math.max(0, Number(coin.vol1h) || 0) * px + 0.4 * Math.max(0, Number(coin.vol5m) || 0) * px;
+  const tx = Math.max(0, Number(coin.txns1h) || 0) + 0.4 * Math.max(0, Number(coin.txns5m) || 0);
+  const liq = Math.max(0, Number(coin.liqUsd) || 0);
+  const ch = Math.abs(Number(coin.change1h) || 0) + 0.3 * Math.abs(Number(coin.change5m) || 0);
+  const mcap = Math.max(0, Number(coin.marketCapUsd) || 0);
+  const idleMega = mcap >= 10_000_000 && volUsd < 25_000 ? 0.12 : 1;
+  return (Math.log1p(volUsd) * 2.2 + Math.log1p(tx) * 1.6 + Math.log1p(liq) * 0.7 + ch * 12) * idleMega;
+}
+
+export function sortByTrending<T extends TapeCoin>(coins: T[], solUsd = 150): T[] {
+  return coins.slice().sort((a, b) => {
+    const d = trendingScoreH1(b, solUsd) - trendingScoreH1(a, solUsd);
+    if (d) return d;
+    return (Number(b.vol1h) || 0) - (Number(a.vol1h) || 0);
+  });
+}
 
 export type TapeCoin = {
   id: string;

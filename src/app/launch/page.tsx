@@ -47,7 +47,6 @@ import { BoostBuy, BoostRail, fmtLeft } from "@/components/BoostBuy";
 import { TokenImageCrop, readLaunchImage, type CropSource } from "@/components/TokenImageCrop";
 import { yourLaunches } from "@/lib/launch/yours";
 import { claimableCreator, claimButtonSol, claimHint, fmtClaimSol, nextCreatorPayout, sortByNewest, sumCreatorGenerated, uniqueByMint } from "@/lib/launch/claim";
-import { mixByMcap } from "@/lib/launch/market";
 import { preferLiveLabel } from "@/lib/launch/labels";
 import { clearPending, loadPending, savePending, type PendingLaunch } from "@/lib/launch/pending";
 import { hideLaunch, loadHidden } from "@/lib/launch/hidden";
@@ -56,7 +55,7 @@ import { killNativeValidity } from "@/lib/killNativeValidity";
 
 import { SwapBox, SwapShell, SwapTabs, SwapWidget } from "@/components/SwapWidget";
 import type { BoostRank } from "@/lib/launch/boost";
-import { filterTape, sortTape, volumeIn, type AgeFilter, type VolWindow } from "@/lib/launch/tape";
+import { filterTape, sortByTrending, sortTape, type AgeFilter, type VolWindow } from "@/lib/launch/tape";
 import { isSolanaAddress } from "@/lib/wallet/addr";
 import { peekRef } from "@/components/ReferralCapture";
 
@@ -363,7 +362,9 @@ export default function LaunchPage() {
   const [vol, setVol] = useState<VolWindow | null>(null);
   const [ranked, setRanked] = useState(false);
   const [phase, setPhase] = useState<"all" | "live" | "graduated">("all");
-  const [tapeSort, setTapeSort] = useState<"newest" | "mcap" | "vol5m" | "vol1h" | "rank">("newest");
+  const [tapeSort, setTapeSort] = useState<"trending" | "newest" | "mcap" | "vol5m" | "vol1h" | "rank">(
+    isSwap ? "trending" : "newest",
+  );
   const [boostOpen, setBoostOpen] = useState(false);
   const [boostRank, setBoostRank] = useState<BoostRank[]>([]);
   const [boostMine, setBoostMine] = useState<{
@@ -1476,8 +1477,8 @@ export default function LaunchPage() {
               aged.slice().sort((a, b) => (b.marketCapUsd || 0) - (a.marketCapUsd || 0) || b.createdAt - a.createdAt),
               solUsd,
             )
-          : isSwap && tapeSort === "newest"
-            ? scoreTape(mixByMcap(aged, 80, (c) => c.marketCapUsd || 0), solUsd)
+          : tapeSort === "trending"
+            ? scoreTape(sortByTrending(aged, solUsd), solUsd)
             : scoreTape(sortTape(aged, vol), solUsd);
     const boosted = [];
     const rest = [];
@@ -1512,7 +1513,9 @@ export default function LaunchPage() {
       <div className={`relative z-10 mx-auto px-4 pt-5 md:pt-8 ${isSwap ? "max-w-lg md:max-w-2xl lg:max-w-3xl" : "max-w-lg md:max-w-2xl"}`}>
         <div>
           <p className="text-[32px] font-semibold tracking-tight text-white">{isSwap ? "Swap" : "Launch"}</p>
-          {isSwap ? <p className="mt-1 text-[15px] text-white/45">Pick a token below, or tap Swap to search.</p> : null}
+          {isSwap ? (
+            <p className="mt-1 text-[15px] text-white/45">Trending on Solana. Pick one below, or paste a CA.</p>
+          ) : null}
         </div>
         {isSwap && (
           <div className="mt-4">
@@ -1522,11 +1525,9 @@ export default function LaunchPage() {
               defaultSymbol={open?.symbol || ""}
               defaultName={open?.name || ""}
               defaultImage={open?.image || ""}
-              tokens={mixByMcap(
-                coins.filter((c) => c.mint),
-                40,
-                (c) => c.marketCapUsd || 0,
-              ).map((c) => ({ mint: c.mint || "", symbol: c.symbol, name: c.name, image: c.image }))}
+              tokens={sortByTrending(coins.filter((c) => c.mint), solUsd)
+                .slice(0, 48)
+                .map((c) => ({ mint: c.mint || "", symbol: c.symbol, name: c.name, image: c.image }))}
               onMint={(mint) => {
                 setLookedMint(mint);
               }}
@@ -1934,7 +1935,8 @@ export default function LaunchPage() {
               <div className="flex gap-1 overflow-x-auto pb-1">
                 {(
                   [
-                    ["newest", "Newest"],
+                    ["trending", "Trending"],
+                    ["newest", "New"],
                     ["mcap", "Mcap"],
                     ["vol5m", "5m vol"],
                     ["vol1h", "1h vol"],

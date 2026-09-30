@@ -3,7 +3,8 @@ import { describe, it } from "node:test";
 import { buyCoin, createCoin, emptyLaunchBook, publicCoin } from "../lib/launch/engine";
 import { auditLaunchCoin, rankTape } from "../lib/launch/audit";
 import { filterTape, sortTape, volumeIn } from "../lib/launch/tape";
-import { marketPasses, MARKET_MIN_SCORE, filterMarketSnapshots, snapshotToTape, mixByMcap, isBrowseStable } from "../lib/launch/market";
+import { marketPasses, MARKET_MIN_SCORE, filterMarketSnapshots, snapshotToTape, mixByMcap, rankLikeDex, isBrowseStable } from "../lib/launch/market";
+import { trendingScoreH1 } from "../lib/launch/tape";
 import { isNativeSolSnapshot, WSOL_MINT } from "../lib/feeds/normalize";
 import type { TokenSnapshot } from "../lib/types";
 
@@ -233,6 +234,56 @@ describe("swap tape mix", () => {
     const kinds = first12.map((r) => (r.marketCapUsd >= 1_000_000 ? "L" : r.marketCapUsd >= 50_000 ? "M" : "S"));
     assert.ok(kinds.includes("L") && kinds.includes("M") && kinds.includes("S"));
     assert.ok(kinds.filter((k) => k === "L").length <= 4);
-    assert.equal(mixed.filter((r) => r.marketCapUsd >= 1_000_000).length, 8);
+    assert.ok(mixed.filter((r) => r.marketCapUsd >= 1_000_000).length <= 12);
+  });
+
+  it("DexScreener trending ranks a hot mid-cap above an idle billion-MC name", () => {
+    const hot = {
+      id: "hot",
+      mint: "HotMintxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx1",
+      name: "Hot",
+      symbol: "HOT",
+      creator: "",
+      createdAt: NOW,
+      status: "graduated" as const,
+      priceSol: 0,
+      marketCapSol: 0,
+      marketCapUsd: 180_000,
+      progress: 1,
+      realSol: 0,
+      liqUsd: 40_000,
+      vol1h: 80,
+      vol5m: 12,
+      txns1h: 420,
+      change1h: 0.18,
+    };
+    const idle = {
+      ...hot,
+      id: "idle",
+      mint: "IdleMintxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx1",
+      name: "Idle",
+      symbol: "IDLE",
+      marketCapUsd: 2_000_000_000,
+      liqUsd: 80_000_000,
+      vol1h: 2,
+      vol5m: 0,
+      txns1h: 8,
+      change1h: 0.002,
+    };
+    assert.ok(trendingScoreH1(hot, 150) > trendingScoreH1(idle, 150));
+    const mids = Array.from({ length: 40 }, (_, i) => ({
+      ...hot,
+      id: `mid${i}`,
+      mint: `MidMint${i}xxxxxxxxxxxxxxxxxxxxxxxxxxxxx`.slice(0, 44),
+      marketCapUsd: 80_000,
+      vol1h: 12,
+      txns1h: 40,
+      change1h: 0.03,
+    }));
+    const megas = Array.from({ length: 30 }, (_, i) => ({ ...idle, id: `mega${i}`, marketCapUsd: 1_500_000_000 }));
+    const board = rankLikeDex([hot, ...mids, ...megas], 40, (r) => trendingScoreH1(r, 150), (r) => r.marketCapUsd);
+    assert.equal(board[0]?.id, "hot");
+    assert.equal(board.length, 40);
+    assert.ok(board.filter((r) => r.marketCapUsd >= 10_000_000).length <= 8);
   });
 });

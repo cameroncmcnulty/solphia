@@ -196,6 +196,40 @@ function fromGecko(pool: GeckoPool): TokenSnapshot | null {
   });
 }
 
+type DexListItem = { chainId?: string; tokenAddress?: string };
+
+async function dexSolanaMints(url: string, limit: number): Promise<string[]> {
+  const r = await getJson<DexListItem[] | { pairs?: DexListItem[] }>(url, 3500);
+  const rows = Array.isArray(r.data) ? r.data : [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const row of rows) {
+    if (row.chainId && row.chainId !== "solana") continue;
+    const mint = (row.tokenAddress || "").trim();
+    if (mint.length < 32 || seen.has(mint)) continue;
+    seen.add(mint);
+    out.push(mint);
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
+async function hydrateDexMints(mints: string[], put: (t: TokenSnapshot | null) => void): Promise<void> {
+  const uniq = [...new Set(mints.filter((m) => m.length >= 32))].slice(0, 90);
+  const chunks: string[][] = [];
+  for (let i = 0; i < uniq.length; i += 30) chunks.push(uniq.slice(i, i + 30));
+  await Promise.allSettled(
+    chunks.map(async (chunk) => {
+      const r = await getJson<DexPair[] | { pairs?: DexPair[] }>(
+        `https://api.dexscreener.com/tokens/v1/solana/${chunk.join(",")}`,
+        3500,
+      );
+      const pairs = Array.isArray(r.data) ? r.data : r.data?.pairs || [];
+      pairs.filter((p) => p.chainId === "solana").forEach((p) => put(fromDex(p)));
+    }),
+  );
+}
+
 function fromLaunch(row: LaunchRow): TokenSnapshot {
   const finishing = num(row.finishingRate);
   const progress = finishing > 1 ? finishing / 100 : finishing;
@@ -374,9 +408,13 @@ export async function ingestPublicTape(): Promise<{ tokens: TokenSnapshot[]; sol
     ).then((r) => (r.data?.data?.rows || []).forEach((row) => put(fromLaunch(row)))),
     getJson<{ pairs?: DexPair[] }>("https://api.dexscreener.com/latest/dex/search?q=pump", 3500).then((r) => {
       const pairs = (r.data?.pairs || []).filter((p) => p.chainId === "solana");
-      pairs.slice(0, 50).forEach((p) => put(fromDex(p)));
+      pairs.slice(0, 40).forEach((p) => put(fromDex(p)));
     }),
-    getJson<{ pairs?: DexPair[] }>("https://api.dexscreener.com/latest/dex/search?q=solana", 3500).then((r) => {
+    getJson<{ pairs?: DexPair[] }>("https://api.dexscreener.com/latest/dex/search?q=SOL", 3500).then((r) => {
+      const pairs = (r.data?.pairs || []).filter((p) => p.chainId === "solana" && num(p.volume?.h1) > 0);
+      pairs.slice(0, 30).forEach((p) => put(fromDex(p)));
+    }),
+    getJson<{ pairs?: DexPair[] }>("https://api.dexscreener.com/latest/dex/search?q=raydium", 3500).then((r) => {
       const pairs = (r.data?.pairs || []).filter((p) => p.chainId === "solana");
       pairs.slice(0, 24).forEach((p) => put(fromDex(p)));
     }),
@@ -386,6 +424,14 @@ export async function ingestPublicTape(): Promise<{ tokens: TokenSnapshot[]; sol
     getJson<{ data?: GeckoPool[] }>("https://api.geckoterminal.com/api/v2/networks/solana/trending_pools?page=1", 3500).then((r) => {
       (r.data?.data || []).forEach((p) => put(fromGecko(p)));
     }),
+    (async () => {
+      const lists = await Promise.all([
+        dexSolanaMints("https://api.dexscreener.com/token-boosts/top/v1", 40),
+        dexSolanaMints("https://api.dexscreener.com/token-boosts/latest/v1", 24),
+        dexSolanaMints("https://api.dexscreener.com/token-profiles/latest/v1", 24),
+      ]);
+      await hydrateDexMints(lists.flat(), put);
+    })(),
   ];
   const [solUsd] = await Promise.all([solPriceUsd().catch(() => 100), Promise.allSettled(jobs)]);
   const named = [...map.values()].filter((t) => t.symbol && t.symbol !== "???" && t.name).length;

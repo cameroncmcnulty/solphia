@@ -440,7 +440,8 @@ describe("launch create validation", () => {
     assert.match(src, /setTab\("tape"\)/);
     assert.match(src, /claimButtonSol/);
     assert.match(src, /writeLaunchTab\("mine"\)/);
-    assert.match(src, /mixByMcap/);
+    assert.match(src, /sortByTrending/);
+    assert.match(src, /Trending/);
     assert.match(src, /Approve this claim in Phantom/);
   });
 
