@@ -23,9 +23,14 @@ describe("spha metadata", () => {
     assert.equal(j.name, "Solphia");
     assert.equal(j.image, "https://example.com/spha.jpg?ext=jpg");
     assert.equal(j.external_url, "https://solphia.io");
-    const files = (j.properties as { files: { uri: string; type: string }[] }).files;
+    assert.equal(j.showName, true);
+    assert.equal(j.createdOn, "https://solphia.io");
+    assert.equal("attributes" in j, false);
+    assert.equal("seller_fee_basis_points" in j, false);
+    const files = (j.properties as { files: { uri: string; type: string; cdn?: boolean }[] }).files;
     assert.equal(files[0].type, "image/jpeg");
     assert.equal(files[0].uri, "https://example.com/spha.jpg?ext=jpg");
+    assert.equal(files[0].cdn, undefined);
   });
 
   it("tags IPFS URLs with ?ext= so Phantom does not assume PNG", () => {

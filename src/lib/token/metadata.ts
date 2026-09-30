@@ -135,21 +135,20 @@ export function tokenMetadataJson(opts: {
   const image = withImageExt(opts.image, opts.mime);
   const type = imageMime(ext);
   const site = opts.website || "https://solphia.io";
+  /** Same shape Pump.fun uses for fungibles. NFT fields (attributes, seller fee) make scanners treat a mint like spam. */
   return {
     name: opts.name,
     symbol: opts.symbol,
     description: opts.description || `${opts.name} on Solphia`,
     image,
+    showName: true,
+    createdOn: "https://solphia.io",
     external_url: site,
     website: site,
     twitter: opts.x || undefined,
     telegram: opts.telegram || undefined,
-    createdOn: "https://solphia.io",
-    seller_fee_basis_points: 0,
-    token_standard: "Fungible",
-    attributes: [],
     properties: {
-      files: image ? [{ uri: image, type, cdn: true }] : [],
+      files: image ? [{ uri: image, type }] : [],
       category: "image",
     },
   };

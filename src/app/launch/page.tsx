@@ -954,8 +954,8 @@ export default function LaunchPage() {
       }, 80);
       setMsg(
         devBuy > 0
-          ? `Live on the Solphia curve. CA ${mintPk}. First buy is in this wallet.`
-          : `Live on the Solphia curve. CA ${mintPk}.`,
+          ? `Live on the Solphia curve. CA ${mintPk}. First buy is in this wallet. If Phantom hides it: Manage Tokens, toggle on, Report as not spam.`
+          : `Live on the Solphia curve. CA ${mintPk}. If Phantom hides it: Manage Tokens, toggle on, Report as not spam.`,
       );
       const routed = await waitForPhantomRoute(mintPk);
       setMsg(
@@ -1138,7 +1138,11 @@ export default function LaunchPage() {
       window.setTimeout(() => {
         document.getElementById("your-tokens")?.scrollIntoView({ behavior: "smooth", block: "start" });
       }, 80);
-      setMsg((after.launchBuySol || 0) > 0 ? `Live on the Solphia curve. CA ${mintPk}. First buy is in this wallet.` : `Live on the Solphia curve. CA ${mintPk}.`);
+      setMsg(
+        (after.launchBuySol || 0) > 0
+          ? `Live on the Solphia curve. CA ${mintPk}. First buy is in this wallet. If Phantom hides it: Manage Tokens, toggle on, Report as not spam.`
+          : `Live on the Solphia curve. CA ${mintPk}. If Phantom hides it: Manage Tokens, toggle on, Report as not spam.`,
+      );
       const routed = await waitForPhantomRoute(mintPk);
       setMsg(routed.ok ? `Live. CA ${mintPk}` : `Live on the curve. CA ${mintPk}`);
       return;
@@ -1284,7 +1288,7 @@ export default function LaunchPage() {
         setDiscord("");
         setDevBuy(0);
         setTab("mine");
-        setMsg("Live on the Solphia curve.");
+        setMsg("Live on the Solphia curve. If Phantom hides it: Manage Tokens, toggle on, Report as not spam.");
       } else if (body.action === "withdraw_dev" || body.action === "withdraw_partner") setMsg("Fees claimed.");
       else setMsg("Filled. Tokens are in your wallet.");
     } catch (e) {
