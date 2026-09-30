@@ -902,13 +902,17 @@ body {
 .rank-1 .rank-num { color: #ffd24a; }
 .rank-2 .rank-num { color: #d5dde6; }
 .rank-3 .rank-num { color: #e0a06a; }
-.boost-tile.gold .boost-tile-art {
+.boost-tile.gold .boost-tile-art,
+.boost-card-art {
+  display: inline-flex;
+  border-radius: 999px;
   box-shadow: 0 0 0 2px #ffd24a, 0 0 18px rgba(255, 210, 74, 0.75);
   animation: gold-shine 1.8s ease-in-out infinite;
 }
 .boost-gold {
-  background: linear-gradient(180deg, rgba(255, 210, 74, 0.18), rgba(11, 6, 20, 0.9));
+  background: linear-gradient(180deg, rgba(255, 210, 74, 0.2), rgba(11, 6, 20, 0.92));
   border: 1px solid rgba(255, 210, 74, 0.55);
+  box-shadow: 0 0 22px rgba(255, 210, 74, 0.18);
 }
 @keyframes gold-shine {
   0%, 100% { box-shadow: 0 0 0 2px #ffd24a, 0 0 12px rgba(255, 210, 74, 0.45); }

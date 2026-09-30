@@ -1,5 +1,6 @@
 "use client";
 
+import { Rocket } from "lucide-react";
 import { TokenArt } from "@/components/TokenArt";
 
 function fmtMc(usd?: number) {
@@ -30,6 +31,7 @@ export function PumpCoinRow({
   active,
   badge,
   place,
+  rockets,
   eager,
   onOpen,
 }: {
@@ -43,6 +45,7 @@ export function PumpCoinRow({
   active?: boolean;
   badge?: string;
   place?: number;
+  rockets?: number;
   eager?: boolean;
   onOpen: () => void;
 }) {
@@ -63,7 +66,19 @@ export function PumpCoinRow({
           <p className="truncate text-[17px] font-semibold tracking-tight text-white">{name || ticker}</p>
           {badge ? <span className="shrink-0 text-[15px] text-[#14f195]">{badge}</span> : null}
         </div>
-        <p className="mt-0.5 truncate text-[15px] text-white/45">{ticker}</p>
+        <div className="mt-0.5 flex items-center gap-1.5">
+          <p className="truncate text-[15px] text-white/45">{ticker}</p>
+          {rockets ? (
+            <span
+              className={`inline-flex shrink-0 items-center gap-0.5 font-mono text-[11px] ${
+                rockets >= 500 ? "text-[#ffd24a]" : "text-acid"
+              }`}
+            >
+              <Rocket className="h-3 w-3" fill="currentColor" />
+              {rockets}
+            </span>
+          ) : null}
+        </div>
       </div>
       <div className="shrink-0 text-right">
         <p className="text-[17px] font-semibold tabular-nums tracking-tight text-white">{fmtMc(marketCapUsd)}</p>

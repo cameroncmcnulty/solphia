@@ -361,7 +361,6 @@ export default function LaunchPage() {
   const [age, setAge] = useState<AgeFilter>("newest");
   const [vol, setVol] = useState<VolWindow | null>(null);
   const [ranked, setRanked] = useState(false);
-  const [phase, setPhase] = useState<"all" | "live" | "graduated">("all");
   const [tapeSort, setTapeSort] = useState<"trending" | "newest" | "mcap" | "vol5m" | "vol1h" | "rank">(
     isSwap ? "trending" : "newest",
   );
@@ -1453,21 +1452,15 @@ export default function LaunchPage() {
         : source === "market"
           ? pool.filter((c) => !c.born)
           : pool;
-    const staged =
-      phase === "graduated"
-        ? sourced.filter((c) => c.status === "graduated")
-        : phase === "live"
-          ? sourced.filter((c) => c.status !== "graduated")
-          : sourced;
     const q = caQuery.trim().toLowerCase().replace(/^\$+/, "");
     const searched = q
-      ? staged.filter((c) => {
+      ? sourced.filter((c) => {
           const sym = (c.symbol || "").toLowerCase().replace(/^\$+/, "");
           const name = (c.name || "").toLowerCase();
           const mint = (c.mint || "").toLowerCase();
           return sym.includes(q) || name.includes(q) || mint.includes(q);
         })
-      : staged;
+      : sourced;
     const aged = filterTape(searched, age);
     const rows =
       tapeSort === "rank" || ranked
@@ -1504,7 +1497,7 @@ export default function LaunchPage() {
       }
     }
     return next;
-  }, [isSwap, mine, pool, age, vol, ranked, tapeSort, phase, solUsd, source, boostRank, lookedMint, coins, caQuery]);
+  }, [isSwap, mine, pool, age, vol, ranked, tapeSort, solUsd, source, boostRank, lookedMint, coins, caQuery]);
   const rows = board.map((r) => r.coin);
 
   return (
@@ -1538,15 +1531,26 @@ export default function LaunchPage() {
           </div>
         )}
         {isSwap && (
-          <div className="mt-4">
-            <div className="mb-2 flex items-center justify-between gap-3">
-              <p className="text-[13px] font-medium text-white/50">Boosted</p>
+          <div className="mt-4 overflow-hidden rounded-[28px] border border-white/10 bg-[#0b0714] shadow-[0_20px_60px_rgba(0,0,0,0.45)]">
+            <div className="flex items-center justify-between gap-3 px-4 pt-4 sm:px-5">
+              <div className="flex items-center gap-2.5">
+                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-acid/15 text-acid">
+                  <Rocket className="h-4 w-4" fill="currentColor" />
+                </span>
+                <div>
+                  <p className="text-[18px] font-semibold tracking-tight text-white">Boost</p>
+                  <p className="font-mono text-[10px] tracking-[0.18em] text-white/35">24H ON THE RAIL</p>
+                </div>
+              </div>
               <button
                 type="button"
                 onClick={() => setBoostOpen((v) => !v)}
-                className={`rounded-full px-3 py-1.5 text-[13px] font-medium ${boostOpen ? "bg-acid text-void" : "bg-white/10 text-white"}`}
+                className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[13px] font-semibold ${
+                  boostOpen ? "bg-white/10 text-white" : "bg-[#14f195] text-[#04000a]"
+                }`}
               >
-                Boost a coin
+                <Rocket className="h-3.5 w-3.5" fill="currentColor" />
+                {boostOpen ? "Close" : "Boost a coin"}
               </button>
             </div>
             <BoostRail
@@ -1569,16 +1573,21 @@ export default function LaunchPage() {
               }}
             />
             {boostOpen && (
-              <div className="mt-3">
-                {owner && (open || coins[0]) ? (
+              <div className="border-t border-white/10 px-3 pb-4 pt-3 sm:px-4">
+                {owner && open ? (
                   <BoostBuy
                     owner={owner}
-                    coinId={(open || coins[0]).id}
-                    symbol={(open || coins[0]).symbol}
+                    coinId={open.id}
+                    symbol={open.symbol}
+                    name={open.name}
+                    image={open.image}
+                    mint={open.mint}
                     onDone={() => refreshBoosts().catch(() => {})}
                   />
                 ) : (
-                  <p className="text-[13px] text-white/45">{owner ? "Open a token, then boost it." : "Connect Phantom to boost."}</p>
+                  <p className="px-1 py-2 text-center text-[13px] text-white/45">
+                    {owner ? "Open a token below, then boost it." : "Connect Phantom to boost."}
+                  </p>
                 )}
               </div>
             )}
@@ -1898,20 +1907,6 @@ export default function LaunchPage() {
           <section className="mt-2">
             {isSwap && (
             <div className="space-y-3">
-              <div className="flex gap-1 rounded-full bg-white/[0.06] p-1">
-                {(["all", "live", "graduated"] as const).map((k) => (
-                  <button
-                    key={k}
-                    type="button"
-                    onClick={() => setPhase(k)}
-                    className={`flex-1 rounded-full py-2 text-[14px] font-medium ${
-                      phase === k ? "bg-white text-void" : "text-white/45"
-                    }`}
-                  >
-                    {k === "all" ? "All" : k === "live" ? "Curve" : "Graduated"}
-                  </button>
-                ))}
-              </div>
               <div className="relative">
                 <SafeField
                   value={caQuery}
@@ -1936,11 +1931,11 @@ export default function LaunchPage() {
                 {(
                   [
                     ["trending", "Trending"],
+                    ["rank", "Rank"],
                     ["newest", "New"],
                     ["mcap", "Mcap"],
                     ["vol5m", "5m vol"],
                     ["vol1h", "1h vol"],
-                    ["rank", "Rank"],
                   ] as const
                 ).map(([k, label]) => (
                   <button
@@ -2074,8 +2069,9 @@ export default function LaunchPage() {
               {!isSwap && tab === "mine" && boostMine.live.length > 0 && (
                 <div className="space-y-1 text-[12px] text-mute">
                   {boostMine.live.map((b) => (
-                    <div key={`l-${b.symbol}`} className="text-acid">
-                      ${b.symbol} · {b.rockets} rockets
+                    <div key={`l-${b.symbol}`} className="inline-flex items-center gap-1.5 text-acid">
+                      <Rocket className="h-3.5 w-3.5" fill="currentColor" />
+                      ${b.symbol} · {b.rockets} · {fmtLeft(b.leftMs)} left
                     </div>
                   ))}
                 </div>
@@ -2139,6 +2135,7 @@ export default function LaunchPage() {
                     change={row.coin.change24h ?? row.coin.change1h}
                     active={open?.id === row.coin.id}
                     place={isSwap && tapeSort === "rank" && row.rank >= 1 && row.rank <= 3 ? row.rank : undefined}
+                    rockets={row.boost?.rockets}
                     badge={row.coin.born ? "✓" : undefined}
                     onOpen={() => {
                       setOpen((cur) => {

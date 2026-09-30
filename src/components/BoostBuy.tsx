@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Rocket } from "lucide-react";
 import { TokenArt } from "@/components/TokenArt";
 import { paySeatFromPhantom } from "@/lib/wallet/trading";
 import { MEGA_ROCKETS, ROCKET_PACKS, rocketSol, type BoostRank, type BoostSort } from "@/lib/launch/boost";
@@ -9,11 +10,17 @@ export function BoostBuy({
   owner,
   coinId,
   symbol,
+  name,
+  image,
+  mint,
   onDone,
 }: {
   owner: string;
   coinId: string;
   symbol: string;
+  name?: string;
+  image?: string;
+  mint?: string;
   onDone?: () => void;
 }) {
   const [rockets, setRockets] = useState(10);
@@ -21,6 +28,7 @@ export function BoostBuy({
   const [err, setErr] = useState("");
   const [note, setNote] = useState("");
   const pack = ROCKET_PACKS.find((p) => p.rockets === rockets) || ROCKET_PACKS[0];
+  const ticker = (symbol || "").replace(/^\$/, "");
 
   async function buy() {
     setErr("");
@@ -52,9 +60,16 @@ export function BoostBuy({
   }
 
   return (
-    <div className="rounded-2xl border border-acid/25 bg-acid/[0.04] p-3">
-      <div className="font-mono text-[10px] tracking-[0.18em] text-acid">BOOST · ${symbol.replace(/^\$/, "")}</div>
-      <div className="mt-2 grid grid-cols-2 gap-1.5">
+    <div className="rounded-[22px] bg-white/[0.04] p-3 sm:p-4">
+      <div className="flex items-center gap-3">
+        <TokenArt src={image} mint={mint} label={ticker} className="h-12 w-12 rounded-[16px]" />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[16px] font-semibold tracking-tight text-white">{name || ticker || "Token"}</p>
+          <p className="font-mono text-[11px] tracking-[0.14em] text-white/40">${ticker || "TOKEN"} · 24H ON THE RAIL</p>
+        </div>
+      </div>
+
+      <div className="mt-3 grid grid-cols-2 gap-2">
         {ROCKET_PACKS.map((p) => {
           const gold = p.rockets === MEGA_ROCKETS;
           const on = rockets === p.rockets;
@@ -63,25 +78,43 @@ export function BoostBuy({
               key={p.rockets}
               type="button"
               onClick={() => setRockets(p.rockets)}
-              className={`rounded-2xl px-3 py-2 text-left ${
+              className={`rounded-[20px] px-3 py-3 text-left transition ${
                 gold
-                  ? `col-span-2 ${on ? "ring-1 ring-[#ffd24a]" : ""} boost-gold`
+                  ? `boost-gold ${on ? "ring-2 ring-[#ffd24a]" : ""}`
                   : on
-                    ? "bg-acid/20 text-acid ring-1 ring-acid/50"
-                    : "border border-violet/30 text-mute"
+                    ? "bg-acid/15 text-acid ring-1 ring-acid/50"
+                    : "border border-white/10 bg-black/20 text-white/50"
               }`}
             >
-              <div className={`stat-num text-sm ${gold ? "text-[#ffd24a]" : "text-ghost"}`}>{p.rockets} rockets</div>
-              <div className={`font-mono text-[11px] ${gold ? "text-[#ffd24a]" : "text-acid"}`}>{p.sol} SOL</div>
+              <div className="flex items-center justify-between gap-2">
+                <span className={`inline-flex items-center gap-1.5 ${gold ? "text-[#ffd24a]" : on ? "text-acid" : "text-white/70"}`}>
+                  <Rocket className="h-4 w-4" fill="currentColor" />
+                  <span className="stat-num text-[18px] leading-none">{p.rockets}</span>
+                </span>
+                {gold ? (
+                  <span className="rounded-full bg-[#ffd24a]/15 px-2 py-0.5 font-mono text-[9px] tracking-[0.16em] text-[#ffd24a]">
+                    MEGA
+                  </span>
+                ) : null}
+              </div>
+              <p className={`mt-2 font-mono text-[12px] ${gold ? "text-[#ffd24a]" : "text-acid"}`}>{p.sol} SOL</p>
             </button>
           );
         })}
       </div>
-      <button type="button" disabled={busy} onClick={buy} className="btn-acid mt-3 w-full rounded-full py-2 text-sm disabled:opacity-40">
-        {busy ? "Paying…" : `Boost · ${rocketSol(pack.rockets)} SOL · ${pack.rockets} rockets`}
+
+      <button
+        type="button"
+        disabled={busy}
+        onClick={buy}
+        className="mt-3 flex min-h-[52px] w-full items-center justify-center gap-2 rounded-full bg-[#14f195] text-[16px] font-semibold text-[#04000a] disabled:opacity-40"
+      >
+        <Rocket className="h-4 w-4" fill="currentColor" />
+        {busy ? "Paying…" : `Boost · ${rocketSol(pack.rockets)} SOL`}
       </button>
-      {note && <p className="mt-2 text-[12px] text-acid">{note}</p>}
-      {err && <p className="mt-2 text-[12px] text-blood">{err}</p>}
+      <p className="mt-2 text-center text-[12px] text-white/40">Live 24 hours. More rockets rank higher.</p>
+      {note && <p className="mt-2 text-center text-[13px] text-acid">{note}</p>}
+      {err && <p className="mt-2 text-center text-[13px] text-blood">{err}</p>}
     </div>
   );
 }
@@ -95,46 +128,83 @@ export function BoostRail({
 }) {
   const [sort, setSort] = useState<BoostSort>("top");
   if (!rows.length) {
-    return <p className="py-2 text-[13px] text-white/40">Boost a coin to take the rail.</p>;
+    return (
+      <div className="px-4 pb-5 pt-3 sm:px-5">
+        <div className="flex flex-col items-center rounded-[22px] bg-white/[0.04] px-4 py-8 text-center">
+          <span className="flex h-12 w-12 items-center justify-center rounded-full bg-acid/15 text-acid">
+            <Rocket className="h-5 w-5" fill="currentColor" />
+          </span>
+          <p className="mt-3 text-[16px] font-semibold text-white">Take the rail</p>
+          <p className="mt-1 max-w-[16rem] text-[13px] leading-snug text-white/45">
+            Boost a coin. More rockets = higher rank for 24 hours.
+          </p>
+        </div>
+      </div>
+    );
   }
   const ordered =
     sort === "latest"
       ? [...rows].sort((a, b) => (b.lastBoostAt || 0) - (a.lastBoostAt || 0) || b.rockets - a.rockets)
       : [...rows].sort((a, b) => b.rockets - a.rockets || a.leftMs - b.leftMs);
   return (
-    <div className="py-1">
-      <div className="mb-2 flex gap-5 border-b border-white/10 text-[15px]">
-        <button
-          type="button"
-          onClick={() => setSort("latest")}
-          className={`pb-2 ${sort === "latest" ? "border-b-2 border-white font-medium text-white" : "text-white/40"}`}
-        >
-          Latest
-        </button>
-        <button
-          type="button"
-          onClick={() => setSort("top")}
-          className={`pb-2 ${sort === "top" ? "border-b-2 border-white font-medium text-white" : "text-white/40"}`}
-        >
-          Top
-        </button>
+    <div className="pt-3">
+      <div className="mb-2 flex gap-1 px-4 sm:px-5">
+        {(
+          [
+            ["top", "Top"],
+            ["latest", "Latest"],
+          ] as const
+        ).map(([k, label]) => (
+          <button
+            key={k}
+            type="button"
+            onClick={() => setSort(k)}
+            className={`rounded-full px-3.5 py-1.5 text-[13px] font-medium ${
+              sort === k ? "bg-acid/20 text-acid" : "bg-white/[0.06] text-white/45"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
       </div>
-      <div className="boost-rail">
+      <div className="flex gap-3 overflow-x-auto px-4 pb-4 pt-1 sm:px-5" style={{ scrollbarWidth: "thin" }}>
         {ordered.map((b, i) => {
           const ticker = (b.symbol || "").replace(/^\$/, "");
           const gold = Boolean(b.mega) || b.rockets >= MEGA_ROCKETS;
+          const place = sort === "top" && i < 3 ? i + 1 : 0;
           return (
             <button
               key={`${b.mint || b.coinId}-${i}`}
               type="button"
               onClick={() => onOpen(b.mint, b.coinId)}
-              className={`boost-tile ${gold ? "gold" : ""}`}
+              className={`flex w-[7.6rem] shrink-0 flex-col items-center rounded-[22px] px-3 py-3 text-center ${
+                gold ? "boost-gold" : "border border-white/10 bg-white/[0.04]"
+              }`}
             >
-              <TokenArt src={b.image} mint={b.mint} label={ticker} className="boost-tile-art" />
-              <span className="mt-1 block w-full truncate text-center text-[12px] font-semibold text-ghost">
+              <div
+                className={
+                  place === 1
+                    ? "rank-wrap rank-1"
+                    : place === 2
+                      ? "rank-wrap rank-2"
+                      : place === 3
+                        ? "rank-wrap rank-3"
+                        : gold
+                          ? "boost-card-art"
+                          : ""
+                }
+              >
+                <TokenArt src={b.image} mint={b.mint} label={ticker} className="h-14 w-14 rounded-full" />
+                {place ? <span className="rank-num">{place}</span> : null}
+              </div>
+              <span className="mt-2 block w-full truncate text-[13px] font-semibold text-white">
                 ${ticker || "TOKEN"}
               </span>
-              <span className={`stat-num block text-center text-[12px] ${gold ? "text-[#ffd24a]" : "text-acid"}`}>{b.rockets}</span>
+              <span className={`mt-1 inline-flex items-center gap-1 font-mono text-[12px] ${gold ? "text-[#ffd24a]" : "text-acid"}`}>
+                <Rocket className="h-3.5 w-3.5" fill="currentColor" />
+                {b.rockets}
+              </span>
+              <span className="mt-0.5 font-mono text-[10px] text-white/35">{fmtLeft(b.leftMs)} left</span>
             </button>
           );
         })}
