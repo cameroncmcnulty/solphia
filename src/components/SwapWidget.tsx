@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ArrowDown, ArrowUp, ChevronDown, X } from "lucide-react";
+import { ArrowDown, ArrowUpDown, ChevronDown, X } from "lucide-react";
 import { TokenArt } from "./TokenArt";
 import { PhantomMark } from "./PhantomMark";
 import { SphaMark } from "./SphaMark";
@@ -453,7 +453,7 @@ export function SwapWidget({
           </div>
         ) : null}
 
-        <div className="relative px-3 pb-2 pt-3 sm:px-4">
+        <div className="px-3 pb-2 pt-3 sm:px-4">
           <div className="rounded-[22px] bg-white/[0.04] p-3 sm:p-4">
             <div className="flex items-center justify-between gap-2">
               <p className="font-mono text-[10px] tracking-[0.16em] text-white/40">YOU PAY</p>
@@ -473,53 +473,20 @@ export function SwapWidget({
               />
               <TokenChip token={pay} onClick={() => setPicker("pay")} />
             </div>
-            <div className="mt-3 flex flex-wrap gap-1.5">
-              {payIsSol
-                ? PRESETS.map((p) => (
-                    <button
-                      key={p}
-                      type="button"
-                      onClick={() => setAmount(String(p))}
-                      className={`rounded-full px-3 py-1 font-mono text-[11px] ${
-                        Math.abs(payNum - p) < 1e-9 ? "bg-acid text-void" : "bg-white/8 text-white/55"
-                      }`}
-                    >
-                      {p}
-                    </button>
-                  ))
-                : [0.25, 0.5, 0.75].map((p) => (
-                    <button
-                      key={p}
-                      type="button"
-                      onClick={() => setAmount(fmtTok(payBal * p))}
-                      className="rounded-full bg-white/8 px-3 py-1 font-mono text-[11px] text-white/55"
-                    >
-                      {Math.round(p * 100)}%
-                    </button>
-                  ))}
-              <button
-                type="button"
-                onClick={() =>
-                  setAmount(payIsSol ? fmtSol(Math.max(0, payBal - 0.02), 4) : fmtTok(payBal))
-                }
-                className="rounded-full bg-white/8 px-3 py-1 font-mono text-[11px] text-white/55"
-              >
-                MAX
-              </button>
-            </div>
           </div>
 
-          <button
-            type="button"
-            onClick={flip}
-            className="absolute left-1/2 top-1/2 z-10 flex h-11 -translate-x-1/2 -translate-y-1/2 items-center justify-center gap-0.5 rounded-full border-4 border-[#0b0714] bg-white/10 px-2.5 text-white"
-            aria-label="Flip tokens"
-          >
-            <ArrowUp className="h-4 w-4" />
-            <ArrowDown className="h-4 w-4" />
-          </button>
+          <div className="relative z-10 -my-3 flex justify-center">
+            <button
+              type="button"
+              onClick={flip}
+              className="flex h-11 w-11 items-center justify-center rounded-full border-[5px] border-[#0b0714] bg-[#1c152c] text-white shadow-[0_8px_20px_rgba(0,0,0,0.45)] transition hover:bg-acid hover:text-void active:rotate-180"
+              aria-label="Flip tokens"
+            >
+              <ArrowUpDown className="h-5 w-5" strokeWidth={2.4} />
+            </button>
+          </div>
 
-          <div className="mt-2 rounded-[22px] bg-white/[0.04] p-3 sm:p-4">
+          <div className="rounded-[22px] bg-white/[0.04] p-3 sm:p-4">
             <div className="flex items-center justify-between gap-2">
               <p className="font-mono text-[10px] tracking-[0.16em] text-white/40">YOU RECEIVE</p>
               <p className="font-mono text-[11px] text-white/35">
@@ -532,6 +499,41 @@ export function SwapWidget({
               </p>
               <TokenChip token={recv} onClick={() => setPicker("recv")} />
             </div>
+          </div>
+
+          <div className="mt-3 flex flex-wrap justify-center gap-1.5">
+            {payIsSol
+              ? PRESETS.map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => setAmount(String(p))}
+                    className={`rounded-full px-3 py-1.5 font-mono text-[11px] ${
+                      Math.abs(payNum - p) < 1e-9 ? "bg-acid text-void" : "bg-white/8 text-white/55"
+                    }`}
+                  >
+                    {p}
+                  </button>
+                ))
+              : [0.25, 0.5, 0.75].map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => setAmount(fmtTok(payBal * p))}
+                    className="rounded-full bg-white/8 px-3 py-1.5 font-mono text-[11px] text-white/55"
+                  >
+                    {Math.round(p * 100)}%
+                  </button>
+                ))}
+            <button
+              type="button"
+              onClick={() =>
+                setAmount(payIsSol ? fmtSol(Math.max(0, payBal - 0.02), 4) : fmtTok(payBal))
+              }
+              className="rounded-full bg-white/8 px-3 py-1.5 font-mono text-[11px] text-white/55"
+            >
+              MAX
+            </button>
           </div>
         </div>
 

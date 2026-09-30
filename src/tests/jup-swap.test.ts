@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { executeUrls, JUP_FEE_BPS, jupFeeStatus, orderUrls } from "../lib/jup/swapV2";
+import { parseQuote } from "../lib/pair/jupiter";
+import { SOL_MINT, USDC_MINT } from "../lib/pair/mints";
 import { JUP_PLUGIN_ACCOUNT, JUP_PLUGIN_FEE_BPS, JUP_PLUGIN_SRC } from "../lib/jup/plugin";
 import { jupWalletState } from "../lib/jup/passthrough";
 import {
@@ -104,5 +106,26 @@ describe("jupiter swap notice", () => {
     assert.equal(got?.text, "Custom program error: 0x1");
     clearSwapNotice();
     assert.equal(loadSwapNotice(), null);
+  });
+});
+
+describe("jupiter quote payload", () => {
+  it("keeps swapMode so /swap can deserialize the quote", () => {
+    const q = parseQuote({
+      inputMint: SOL_MINT,
+      inAmount: "250000000",
+      outputMint: USDC_MINT,
+      outAmount: "1",
+      otherAmountThreshold: "1",
+      swapMode: "ExactIn",
+      slippageBps: 100,
+      priceImpactPct: "0.0001",
+      routePlan: [{ swapInfo: { ammKey: "x", inputMint: SOL_MINT, outputMint: USDC_MINT, label: "Raydium" } }],
+      contextSlot: 1,
+    });
+    assert.ok(q);
+    assert.equal(q?.swapMode, "ExactIn");
+    assert.equal(q?.contextSlot, 1);
+    assert.equal((q?.routePlan?.[0] as { swapInfo?: { ammKey?: string } })?.swapInfo?.ammKey, "x");
   });
 });

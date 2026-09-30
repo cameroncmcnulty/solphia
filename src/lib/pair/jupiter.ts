@@ -21,10 +21,12 @@ export type JupiterQuote = {
   inAmount: string;
   outAmount: string;
   otherAmountThreshold?: string;
+  swapMode?: string;
   priceImpactPct: number;
   slippageBps: number;
   routePlan?: { swapInfo?: { inputMint?: string; outputMint?: string; label?: string } }[];
   swapUsdValue?: number;
+  [key: string]: unknown;
 };
 
 export type QuoteResult =
@@ -80,25 +82,22 @@ function decimals(mint: string): number {
   return 9;
 }
 
-function parseQuote(raw: Record<string, unknown>): JupiterQuote | null {
+/** Keep the full Jupiter quote. /swap 422s if swapMode / routePlan fields are stripped. */
+export function parseQuote(raw: Record<string, unknown>): JupiterQuote | null {
   if (raw.error) return null;
   const inputMint = String(raw.inputMint || "");
   const outputMint = String(raw.outputMint || "");
   const inAmount = String(raw.inAmount || "");
   const outAmount = String(raw.outAmount || "");
   if (!inputMint || !outputMint || !inAmount || !outAmount) return null;
-  const impact = Number(raw.priceImpactPct);
   return {
+    ...raw,
     inputMint,
     outputMint,
     inAmount,
     outAmount,
-    otherAmountThreshold: raw.otherAmountThreshold ? String(raw.otherAmountThreshold) : undefined,
-    priceImpactPct: Number.isFinite(impact) ? impact : 0,
-    slippageBps: Number(raw.slippageBps) || 50,
-    routePlan: Array.isArray(raw.routePlan) ? (raw.routePlan as JupiterQuote["routePlan"]) : [],
-    swapUsdValue: Number(raw.swapUsdValue) || undefined,
-  };
+    swapMode: raw.swapMode ? String(raw.swapMode) : "ExactIn",
+  } as JupiterQuote;
 }
 
 function routeMints(quote: JupiterQuote): string[] {
@@ -300,19 +299,38 @@ export async function quoteFromUsdc(outputMint: string, usdcAmount: number, slip
 export type SwapTxResult = { ok: true; transaction: string } | { ok: false; reason: string };
 
 export async function buildSwapTx(quote: JupiterQuote, userPublicKey: string): Promise<SwapTxResult> {
+  let last = "Could not build the swap.";
+  const bodies = [
+    {
+      quoteResponse: quote,
+      userPublicKey,
+      wrapAndUnwrapSol: true,
+      dynamicComputeUnitLimit: true,
+      prioritizationFeeLamports: {
+        priorityLevelWithMaxLamports: { maxLamports: 1_000_000, priorityLevel: "high" },
+      },
+    },
+    {
+      quoteResponse: quote,
+      userPublicKey,
+      wrapAndUnwrapSol: true,
+      dynamicComputeUnitLimit: true,
+    },
+  ];
   for (const url of SWAP_URLS) {
-    const r = await jupFetch(url, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        quoteResponse: quote,
-        userPublicKey,
-        wrapAndUnwrapSol: true,
-        dynamicComputeUnitLimit: true,
-        prioritizationFeeLamports: "auto",
-      }),
-    });
-    if (r.ok && r.data?.swapTransaction) return { ok: true, transaction: r.data.swapTransaction };
+    for (const body of bodies) {
+      const r = await jupFetch(url, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (r.ok && r.data?.swapTransaction) return { ok: true, transaction: r.data.swapTransaction };
+      last =
+        (typeof r.data?.error === "string" && r.data.error) ||
+        (typeof r.data?.message === "string" && r.data.message) ||
+        r.error ||
+        last;
+    }
   }
-  return { ok: false, reason: "Could not build the swap." };
+  return { ok: false, reason: last };
 }
