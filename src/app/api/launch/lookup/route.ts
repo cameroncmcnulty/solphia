@@ -26,14 +26,17 @@ export async function GET(req: NextRequest) {
     }
     const dbc = dbcEnabled() ? await (await import("@/lib/launch/dbc")).dbcPoolByMint(mint) : null;
     if (dbc) {
+      const { readSplMeta } = await import("@/lib/token/onchainMeta");
+      const meta = await readSplMeta(mint).catch(() => null);
       return NextResponse.json({
         coin: {
           id: mint,
           mint,
           born: true,
           venue: "solphia",
-          name: "Solphia curve",
-          symbol: mint.slice(0, 4).toUpperCase(),
+          name: meta?.name || "Solphia curve",
+          symbol: meta?.symbol || mint.slice(0, 4).toUpperCase(),
+          image: meta?.image || "",
           blurb: "",
           creator: String((dbc.account as any).poolState?.creator || (dbc.account as any).creator || ""),
           createdAt: Date.now(),

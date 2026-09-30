@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ArrowDownUp, Rocket } from "lucide-react";
+import { Rocket } from "lucide-react";
 import { Keypair } from "@solana/web3.js";
 import { usePathname } from "next/navigation";
 import { CopyCa } from "@/components/CopyCa";
@@ -46,7 +46,7 @@ import { BoostBuy, BoostRail, fmtLeft } from "@/components/BoostBuy";
 
 import { TokenImageCrop, readLaunchImage, type CropSource } from "@/components/TokenImageCrop";
 import { yourLaunches } from "@/lib/launch/yours";
-import { claimableCreator, fmtClaimSol, nextCreatorPayout, sortByUnclaimedDesc, sumCreatorGenerated, uniqueByMint } from "@/lib/launch/claim";
+import { claimableCreator, fmtClaimSol, nextCreatorPayout, sortByNewest, sumCreatorGenerated, uniqueByMint } from "@/lib/launch/claim";
 import { preferLiveLabel } from "@/lib/launch/labels";
 import { clearPending, loadPending, savePending, type PendingLaunch } from "@/lib/launch/pending";
 import { hideLaunch, loadHidden } from "@/lib/launch/hidden";
@@ -319,7 +319,6 @@ export default function LaunchPage() {
   const owner = connected || (typeof window !== "undefined" ? loadOwner() : null);
   const [coins, setCoins] = useState<Coin[]>([]);
   const [open, setOpen] = useState<Coin | null>(null);
-  const [jupOpen, setJupOpen] = useState(false);
   const [name, setName] = useState("");
   const [symbol, setSymbol] = useState("");
   const [blurb, setBlurb] = useState("");
@@ -1310,11 +1309,12 @@ export default function LaunchPage() {
   const claimable = claimableCreator(mine);
   const generatedSol = sumCreatorGenerated(mine);
   const payout = nextCreatorPayout(mine);
-  const unclaimedSol = payout.nextSol;
+  const unclaimedSol = payout.totalUnclaimed;
+  const claimSol = payout.nextSol;
   const pool = isSwap ? coins : mine;
   const board = useMemo(() => {
     if (!isSwap) {
-      const rows = sortByUnclaimedDesc(mine).map((coin) => ({
+      const rows = sortByNewest(mine).map((coin) => ({
         coin,
         rank: 0,
         audit: undefined as undefined,
@@ -1387,33 +1387,30 @@ export default function LaunchPage() {
         </div>
         {isSwap && (
           <div className="mt-4">
-            {!jupOpen ? (
-              <button
-                type="button"
-                onClick={() => {
-                  setOpen(null);
-                  setJupOpen(true);
-                }}
-                className="btn-acid flex min-h-[52px] w-full items-center justify-center gap-2 rounded-full text-[16px] font-semibold"
-              >
-                <ArrowDownUp className="h-5 w-5" />
-                Swap
-              </button>
-            ) : (
-              <div>
-                <div className="mb-2 flex items-center justify-between gap-3">
-                  <p className="text-[13px] font-medium text-white/50">Jupiter</p>
-                  <button
-                    type="button"
-                    onClick={() => setJupOpen(false)}
-                    className="rounded-full bg-white/10 px-3 py-1.5 text-[13px] font-medium text-white"
-                  >
-                    Close
-                  </button>
-                </div>
-                <SwapWidget owner={owner} />
-              </div>
-            )}
+            <SwapWidget
+              owner={owner}
+              defaultMint={open?.mint || lookedMint || ""}
+              defaultSymbol={open?.symbol || ""}
+              defaultName={open?.name || ""}
+              defaultImage={open?.image || ""}
+              tokens={coins
+                .filter((c) => c.mint)
+                .slice(0, 40)
+                .map((c) => ({ mint: c.mint || "", symbol: c.symbol, name: c.name, image: c.image }))}
+              onMint={(mint) => {
+                const hit = coins.find((c) => c.mint === mint);
+                if (hit) {
+                  setOpen(hit);
+                  setLookedMint(hit.mint || hit.id);
+                  setSnapAt(Date.now());
+                } else {
+                  setLookedMint(mint);
+                }
+              }}
+              onDone={() => {
+                void Promise.all([refreshPad(), refreshTape()]).catch(() => {});
+              }}
+            />
           </div>
         )}
         {isSwap && (
@@ -1441,7 +1438,6 @@ export default function LaunchPage() {
               onOpen={(mint, coinId) => {
                 const hit = coins.find((c) => c.mint === mint || c.id === coinId || c.id === mint);
                 if (hit) {
-                  setJupOpen(false);
                   setOpen(hit);
                   setLookedMint(hit.mint || hit.id);
                   setSnapAt(Date.now());
@@ -1898,7 +1894,7 @@ export default function LaunchPage() {
                 <p className="font-mono text-[11px] tracking-[0.28em] text-acid">DEV REWARDS</p>
                 <h2 className="mt-1 text-[22px] font-semibold tracking-tight text-white">Claim fees</h2>
                 <p className="mt-1 text-[14px] leading-snug text-white/45">
-                  Swaps on the curve pay 1%. Half is yours. Unclaimed is what this claim pays into Phantom.
+                  Swaps on the curve pay 1%. Half is yours. Unclaimed is every unpaid pool. Each Phantom signature pays one token.
                 </p>
                 <div className="mt-4 grid grid-cols-2 gap-3">
                   <div>
@@ -1926,16 +1922,19 @@ export default function LaunchPage() {
                     }}
                     className="rounded-full bg-[#14f195] px-4 py-2 text-[14px] font-semibold text-[#04000a] disabled:opacity-40"
                   >
-                    {unclaimedSol > 0 ? `Claim ${fmtClaimSol(unclaimedSol)} SOL` : "Claim creator fees"}
+                    {claimSol > 0 ? `Claim ${fmtClaimSol(claimSol)} SOL` : "Claim creator fees"}
                   </button>
                 </div>
                 {unclaimedSol > 0 ? (
                   <p className="mt-2 text-[12px] text-white/40">
                     {payout.restCount > 0
-                      ? `This claim pays ${fmtClaimSol(unclaimedSol)} SOL. Claim again after it lands for the next token.`
-                      : `Phantom will credit ${fmtClaimSol(unclaimedSol)} SOL, minus the network fee.`}
+                      ? `This claim pays ${fmtClaimSol(claimSol)} SOL of ${fmtClaimSol(unclaimedSol)} unclaimed. Claim again after it lands for the next token.`
+                      : `Phantom will credit ${fmtClaimSol(claimSol)} SOL, minus the network fee.`}
                   </p>
                 ) : null}
+                <p className="mt-2 text-[12px] text-white/35">
+                  If Phantom hides a new token: Manage Tokens, toggle it on, Report as not spam.
+                </p>
               </div>
             )}
             <div className="mt-3 space-y-2">
@@ -2009,10 +2008,10 @@ export default function LaunchPage() {
                     place={isSwap && tapeSort === "rank" && row.rank >= 1 && row.rank <= 3 ? row.rank : undefined}
                     badge={row.coin.born ? "✓" : undefined}
                     onOpen={() => {
-                      setJupOpen(false);
                       setOpen((cur) => {
                         if (cur?.id === row.coin.id) return null;
                         setSnapAt(Date.now());
+                        setLookedMint(row.coin.mint || row.coin.id);
                         return row.coin;
                       });
                     }}
@@ -2063,7 +2062,7 @@ export default function LaunchPage() {
                         setSol={setSol}
                         solUsd={solUsd}
                         busy={busy}
-                        jupiter={isSwap}
+                        hideTrade={isSwap}
                         onClose={() => setOpen(null)}
                         onAct={act}
                       />
@@ -2100,7 +2099,7 @@ function CoinDesk({
   setSol,
   solUsd,
   busy,
-  jupiter,
+  hideTrade,
   onClose,
   onAct,
 }: {
@@ -2110,7 +2109,7 @@ function CoinDesk({
   setSol: (n: number) => void;
   solUsd: number;
   busy: boolean;
-  jupiter?: boolean;
+  hideTrade?: boolean;
   onClose: () => void;
   onAct: (body: Record<string, unknown>) => void;
 }) {
@@ -2273,10 +2272,10 @@ function CoinDesk({
           </div>
         </div>
 
-        {jupiter ? (
-          <div className="min-w-0">
-            <SwapWidget key={open.mint || open.id} owner={owner} defaultMint={open.mint || ""} />
-            {creator && (
+        {hideTrade ? (
+          <div className="min-w-0 rounded-2xl border border-white/10 bg-void/40 p-4">
+            <p className="text-[14px] text-white/55">Use the swap card above. This token is loaded there.</p>
+            {creator ? (
               <button
                 type="button"
                 disabled={busy || !((open.creatorUnclaimedSol || 0) > 1e-6)}
@@ -2285,7 +2284,7 @@ function CoinDesk({
               >
                 Claim {fmtClaimSol(open.creatorUnclaimedSol || 0)} SOL
               </button>
-            )}
+            ) : null}
           </div>
         ) : (
         <SwapShell title={`Trade ${tick(open.symbol)}`} subtitle="On the Solphia curve until it graduates.">

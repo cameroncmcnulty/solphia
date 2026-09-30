@@ -43,7 +43,12 @@ export function uniqueByMint<T extends { mint?: string }>(rows: T[]): T[] {
   return out;
 }
 
-/** Highest unclaimed first so the button, first row, and POST mint are the same pool. */
+/** Newest launch first. Claim target is nextCreatorPayout, not list order. */
+export function sortByNewest<T extends { createdAt?: number }>(rows: T[]): T[] {
+  return rows.slice().sort((a, b) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0));
+}
+
+/** Highest unclaimed first so the Claim button and POST mint are the same pool. */
 export function sortByUnclaimedDesc<T extends { creatorUnclaimedSol?: number; createdAt?: number }>(rows: T[]): T[] {
   return rows.slice().sort((a, b) => {
     const d = (Number(b.creatorUnclaimedSol) || 0) - (Number(a.creatorUnclaimedSol) || 0);
@@ -68,8 +73,8 @@ export function sumCreatorGenerated(rows: { mint?: string; creatorFeesSol?: numb
 }
 
 /**
- * Card UNCLAIMED and the Claim button are this one pool.
- * Phantom can only simulate one claim ix; the wallet sum is not this tap.
+ * Card UNCLAIMED is the wallet sum of unpaid pools.
+ * The Claim button still pays one pool (Phantom can only simulate one claim ix).
  */
 export function nextCreatorPayout<T extends { mint?: string; creatorUnclaimedSol?: number; id?: string }>(
   rows: T[],
@@ -84,7 +89,7 @@ export function nextCreatorPayout<T extends { mint?: string; creatorUnclaimedSol
     nextSol,
     restCount: rest.length,
     restSol,
-    totalUnclaimed: nextSol,
+    totalUnclaimed: nextSol + restSol,
     mints: next?.mint ? [String(next.mint).trim()] : [],
   };
 }

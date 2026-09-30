@@ -16,7 +16,9 @@ import {
   withdrawDev,
   withdrawOwner,
   withdrawReferral,
+  type LaunchCoin,
 } from "@/lib/launch/engine";
+import { emptyCurve } from "@/lib/launch/curve";
 import { lastPairPrices } from "@/lib/tick";
 import { treasuryAddress } from "@/lib/treasury";
 import { DEFAULT_OWNER } from "@/lib/protocolWallets";
@@ -370,9 +372,8 @@ async function hydrateViewerFromChain(viewer: string) {
     for (const p of missing) {
       if (!p.mint || b.coins.some((c) => c.mint === p.mint)) continue;
       const meta = metas[p.mint];
-      const name = meta?.name || "";
-      const symbol = meta?.symbol || "";
-      if (!name || !symbol || isPlaceholderLabel(name) || isPlaceholderLabel(symbol)) continue;
+      const name = meta?.name && !isPlaceholderLabel(meta.name) ? meta.name : p.mint.slice(0, 8);
+      const symbol = meta?.symbol && !isPlaceholderLabel(meta.symbol) ? meta.symbol : p.mint.slice(0, 4).toUpperCase();
       const made = createCoin(b, {
         creator: p.creator || viewer,
         name,
@@ -414,7 +415,9 @@ async function getLaunch(req: NextRequest) {
     }
   }
   const fresh = await withLaunch((st) => bookOf(st), false);
-  const listed = listAll || !viewer || isProtocol ? fresh.coins : fresh.coins.filter((c) => c.creator === viewer);
+  const listed = (listAll || !viewer || isProtocol ? fresh.coins : fresh.coins.filter((c) => c.creator === viewer))
+    .slice()
+    .sort((a, b) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0));
   const rows = listed.slice(0, 80).map((c) => publicCoin(c, solUsd, viewer, fresh));
   if (chainFees.length) {
     const byMint = Object.fromEntries(chainFees.filter((p) => p.mint).map((p) => [p.mint, p]));
@@ -427,6 +430,39 @@ async function getLaunch(req: NextRequest) {
         partnerFeesSol: f.partnerFeesSol,
         partnerUnclaimedSol: f.partnerUnclaimedSol,
       });
+    }
+    for (const f of chainFees) {
+      if (!f.mint || rows.some((row) => row.mint === f.mint)) continue;
+      if (!(f.creatorUnclaimedSol > 0) && !(f.creatorFeesSol > 0)) continue;
+      const stub: LaunchCoin = {
+        id: f.mint,
+        mint: f.mint,
+        name: f.mint.slice(0, 8),
+        symbol: f.mint.slice(0, 4).toUpperCase(),
+        blurb: "",
+        links: {},
+        mintAuthority: "revoked",
+        freezeAuthority: "revoked",
+        creator: f.creator || viewer,
+        createdAt: Date.now(),
+        curve: { ...emptyCurve(), realSol: f.quoteSol || 0 },
+        status: "curve",
+        holders: {},
+        fills: [],
+        devRewardsSol: f.creatorFeesSol,
+        ownerFeesSol: 0,
+        treasuryFeesSol: 0,
+        referralFeesSol: 0,
+        venue: "solphia",
+      };
+      const extra = publicCoin(stub, solUsd, viewer, fresh);
+      Object.assign(extra, {
+        creatorFeesSol: f.creatorFeesSol,
+        creatorUnclaimedSol: f.creatorUnclaimedSol,
+        partnerFeesSol: f.partnerFeesSol,
+        partnerUnclaimedSol: f.partnerUnclaimedSol,
+      });
+      rows.push(extra);
     }
   }
   let protocol: { treasury: string; partnerUnclaimedSol: number; partnerFeesSol: number } | null = null;
