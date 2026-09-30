@@ -22,6 +22,8 @@ import { treasuryAddress } from "@/lib/treasury";
 import { DEFAULT_OWNER } from "@/lib/protocolWallets";
 import { liveBoosts, publicLiveBoost, tickBoosts } from "@/lib/launch/boost";
 import { storedImage, validateLaunchCreate } from "@/lib/launch/validate";
+import { isPlaceholderLabel } from "@/lib/launch/labels";
+import { isPlaceholderMeta, readSplMetas } from "@/lib/token/onchainMeta";
 import { ipfsMetadataUrl, pinDataUrl, pinJson } from "@/lib/pinata";
 import { creditRank } from "@/lib/rank/engine";
 import { tokenMetadataJson } from "@/lib/token/metadata";
@@ -335,6 +337,56 @@ export async function GET(req: NextRequest) {
   }
 }
 
+async function hydrateViewerFromChain(viewer: string) {
+  const dbc = await dbcApi();
+  let chainFees: Awaited<ReturnType<(typeof dbc)["chainCoinsForCreator"]>> = [];
+  try {
+    chainFees = await dbc.chainCoinsForCreator(viewer);
+  } catch {
+    chainFees = [];
+  }
+  if (!chainFees.length) return chainFees;
+  const snap = await withLaunch((st) => bookOf(st), false);
+  const known = new Set(snap.coins.map((c) => c.mint).filter(Boolean));
+  const placeholders = snap.coins.filter(
+    (c) => c.mint && c.creator === viewer && isPlaceholderMeta(c.name, c.image || "", c.mint, c.symbol),
+  );
+  const missing = chainFees.filter((p) => p.mint && !known.has(p.mint)).slice(0, 16);
+  const need = [...new Set([...placeholders.map((c) => c.mint), ...missing.map((p) => p.mint)])].filter(Boolean) as string[];
+  const metas = need.length ? await readSplMetas(need) : {};
+  await withLaunch((st) => {
+    const b = bookOf(st);
+    for (const c of b.coins) {
+      if (!c.mint) continue;
+      const meta = metas[c.mint];
+      if (meta) {
+        if (isPlaceholderLabel(c.name) && meta.name) c.name = meta.name;
+        if (isPlaceholderLabel(c.symbol) && meta.symbol) c.symbol = meta.symbol;
+        if ((!c.image || /solphia\.io\/og/i.test(c.image)) && meta.image) c.image = meta.image;
+      }
+      const f = chainFees.find((p) => p.mint === c.mint);
+      if (f && f.quoteSol > (c.curve?.realSol || 0)) c.curve = { ...c.curve, realSol: f.quoteSol };
+    }
+    for (const p of missing) {
+      if (!p.mint || b.coins.some((c) => c.mint === p.mint)) continue;
+      const meta = metas[p.mint];
+      const name = meta?.name || "";
+      const symbol = meta?.symbol || "";
+      if (!name || !symbol || isPlaceholderLabel(name) || isPlaceholderLabel(symbol)) continue;
+      const made = createCoin(b, {
+        creator: p.creator || viewer,
+        name,
+        symbol,
+        image: meta?.image || "",
+        mint: p.mint,
+        venue: "solphia",
+      });
+      if (made.ok && p.quoteSol > 0) made.coin.curve = { ...made.coin.curve, realSol: p.quoteSol };
+    }
+  }, true);
+  return chainFees;
+}
+
 async function getLaunch(req: NextRequest) {
   const id = req.nextUrl.searchParams.get("id") || "";
   const viewer = req.nextUrl.searchParams.get("pubkey") || "";
@@ -352,52 +404,13 @@ async function getLaunch(req: NextRequest) {
   tickBoosts(book);
   const treas = treasuryAddress();
   const isProtocol = Boolean(viewer && (viewer === treas || viewer === book.ownerWallet || viewer === DEFAULT_OWNER));
-  if (!sync) {
-    const listed = listAll || !viewer || isProtocol ? book.coins : book.coins.filter((c) => c.creator === viewer);
-    return NextResponse.json({
-      coins: listed.slice(0, 80).map((c) => publicCoin(c, solUsd, viewer, book)),
-      solUsd,
-      ownerWallet: book.ownerWallet || null,
-      ownerEarningsSol: book.ownerEarningsSol,
-      treasuryWallet: treas,
-      boosts: liveBoosts(book).map((b) => publicLiveBoost(b)),
-      dbcConfig: liveDbcConfig(book.dbcConfig),
-      needsNewCurve: dbcEnabled() && !liveDbcConfig(book.dbcConfig),
-      protocol: null,
-      draft: viewer && isSolanaAddress(viewer) ? book.accounts?.[viewer]?.draft || null : null,
-    });
-  }
-  const dbc = await dbcApi();
-  let chainFees: Awaited<ReturnType<(typeof dbc)["chainCoinsForCreator"]>> = [];
-  if (dbcEnabled() && viewer && isSolanaAddress(viewer)) {
+  const wantChain = dbcEnabled() && Boolean(viewer && isSolanaAddress(viewer) && (!listAll || sync));
+  let chainFees: Awaited<ReturnType<typeof hydrateViewerFromChain>> = [];
+  if (wantChain) {
     try {
-      chainFees = await dbc.chainCoinsForCreator(viewer);
+      chainFees = await hydrateViewerFromChain(viewer);
     } catch {
       chainFees = [];
-    }
-    if (chainFees.length) {
-      const bookNow = await withLaunch((st) => bookOf(st), false);
-      const known = new Set(bookNow.coins.map((c) => c.mint).filter(Boolean));
-      const missing = chainFees.filter((p) => p.mint && !known.has(p.mint)).slice(0, 16);
-      if (missing.length) {
-        await withLaunch((st) => {
-          const b = bookOf(st);
-          for (const p of missing) {
-            if (!p.mint || b.coins.some((c) => c.mint === p.mint)) continue;
-            const made = createCoin(b, {
-              creator: p.creator || viewer,
-              name: "Token",
-              symbol: "TOKEN",
-              image: "",
-              mint: p.mint,
-              venue: "solphia",
-            });
-            if (made.ok && p.quoteSol > 0) {
-              made.coin.curve = { ...made.coin.curve, virtualSol: 40, virtualTokens: 1_000_000_000, realSol: p.quoteSol };
-            }
-          }
-        }, true);
-      }
     }
   }
   const fresh = await withLaunch((st) => bookOf(st), false);
@@ -418,7 +431,8 @@ async function getLaunch(req: NextRequest) {
   }
   let protocol: { treasury: string; partnerUnclaimedSol: number; partnerFeesSol: number } | null = null;
   if (sync && isProtocol && dbcEnabled()) {
-    const cfg = dbc.liveDbcConfig(fresh.dbcConfig);
+    const dbc = await dbcApi();
+    const cfg = liveDbcConfig(fresh.dbcConfig);
     try {
       const tot = cfg ? await dbc.chainPartnerTotals(cfg) : { unclaimedSol: 0, totalSol: 0, byMint: {} };
       for (const row of rows) {
@@ -437,8 +451,8 @@ async function getLaunch(req: NextRequest) {
     ownerEarningsSol: fresh.ownerEarningsSol,
     treasuryWallet: treas,
     boosts: liveBoosts(fresh).map((b) => publicLiveBoost(b)),
-    dbcConfig: dbc.liveDbcConfig(fresh.dbcConfig),
-    needsNewCurve: dbcEnabled() && dbc.curveNeedsInstall(fresh.dbcConfig),
+    dbcConfig: liveDbcConfig(fresh.dbcConfig),
+    needsNewCurve: dbcEnabled() && !liveDbcConfig(fresh.dbcConfig),
     protocol,
     draft: viewer && isSolanaAddress(viewer) ? fresh.accounts?.[viewer]?.draft || null : null,
   });
@@ -604,12 +618,20 @@ async function postLaunch(req: NextRequest) {
     const info = await connection().getAccountInfo(new PublicKey(mint));
     if (!pool && !info) return fail("not_found", 404);
     const image = storedImage(b.image) || "https://solphia.io/og.jpg";
+    let name = sanitizeText(b.name || "", 24);
+    let symbol = sanitizeText(b.symbol || "", 10).toUpperCase();
+    if (isPlaceholderLabel(name) || isPlaceholderLabel(symbol)) {
+      const meta = await readSplMetas([mint]).then((m) => m[mint]);
+      if (meta?.name) name = meta.name;
+      if (meta?.symbol) symbol = meta.symbol;
+    }
+    if (isPlaceholderLabel(name) || isPlaceholderLabel(symbol)) return fail("bad_name");
     const out = await withLaunch((st) => {
       const book = bookOf(st);
       return createCoin(book, {
         creator: b.pubkey,
-        name: (b.name || "Token").slice(0, 24),
-        symbol: (b.symbol || "TKN").slice(0, 10),
+        name,
+        symbol,
         blurb: b.blurb,
         image,
         website: b.website,
@@ -709,6 +731,11 @@ async function postLaunch(req: NextRequest) {
       if (rec.ok) {
         creditRank(book, b.pubkey, "swap", { sol: side === "buy" ? sol : 0 });
         await hydratePadCoins([rec.coin]);
+        try {
+          (await dbcApi()).clearDbcCreatorCache(b.pubkey);
+        } catch {
+          /* fees refresh on next Your tokens */
+        }
       }
       return rec;
     }, true);

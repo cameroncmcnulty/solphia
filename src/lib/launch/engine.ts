@@ -22,6 +22,7 @@ import {
 } from "./curve";
 import { socialHref } from "./links";
 import { imageOk, storedImage, validateLaunchCreate } from "./validate";
+import { isPlaceholderLabel } from "./labels";
 import { publicImage } from "../token/art";
 import type { LaunchBoost } from "./boost";
 import { ensureBoosts, tickBoosts } from "./boost";
@@ -531,6 +532,37 @@ export function publicCoin(c: LaunchCoin, solUsd = 0, viewer?: string, book?: La
   };
 }
 
+function applyLaunchIdentity(
+  coin: LaunchCoin,
+  opts: {
+    name?: string;
+    symbol?: string;
+    blurb?: string;
+    image?: string;
+    website?: string;
+    x?: string;
+    telegram?: string;
+    discord?: string;
+  },
+) {
+  const name = (opts.name || "").trim();
+  const symbol = (opts.symbol || "").trim().toUpperCase();
+  const img = storedImage(opts.image);
+  if (isPlaceholderLabel(coin.name) && name && !isPlaceholderLabel(name)) coin.name = name;
+  if (isPlaceholderLabel(coin.symbol) && symbol && !isPlaceholderLabel(symbol)) coin.symbol = symbol;
+  if ((!coin.image || /solphia\.io\/og/i.test(coin.image)) && img) coin.image = img;
+  if (!(coin.blurb || "").trim() && opts.blurb) coin.blurb = String(opts.blurb).slice(0, 280);
+  coin.links = coin.links || {};
+  const website = cleanLink(opts.website, "website");
+  const x = cleanLink(opts.x, "x");
+  const telegram = cleanLink(opts.telegram, "telegram");
+  const discord = cleanLink(opts.discord, "discord");
+  if (website && !coin.links.website) coin.links.website = website;
+  if (x && !coin.links.x) coin.links.x = x;
+  if (telegram && !coin.links.telegram) coin.links.telegram = telegram;
+  if (discord && !coin.links.discord) coin.links.discord = discord;
+}
+
 export function createCoin(
   book: LaunchBook,
   opts: {
@@ -550,6 +582,15 @@ export function createCoin(
     referrer?: string;
   },
 ): { ok: true; coin: LaunchCoin } | { ok: false; error: string } {
+  const givenMint = opts.mint && isSolanaAddress(opts.mint) ? opts.mint : "";
+  if (givenMint) {
+    const existing = book.coins.find((c) => c.mint === givenMint);
+    if (existing) {
+      if (existing.creator !== opts.creator) return { ok: false, error: "mint_taken" };
+      applyLaunchIdentity(existing, opts);
+      return { ok: true, coin: existing };
+    }
+  }
   const issues = validateLaunchCreate(opts);
   if (issues.wallet) return { ok: false, error: "bad_wallet" };
   if (issues.name) return { ok: false, error: "bad_name" };
@@ -563,12 +604,7 @@ export function createCoin(
   if (opts.image && !img) return { ok: false, error: "bad_image" };
   const launchBuy = Math.min(launchDevBuyCap(), Math.max(0, Number(opts.launchBuySol) || 0));
   const now = opts.now || Date.now();
-  const mint = opts.mint && isSolanaAddress(opts.mint) ? opts.mint : `curve:${symbol}:${now.toString(36)}`;
-  const existing = book.coins.find((c) => c.mint === mint);
-  if (existing) {
-    if (existing.creator !== opts.creator) return { ok: false, error: "mint_taken" };
-    return { ok: true, coin: existing };
-  }
+  const mint = givenMint || `curve:${symbol}:${now.toString(36)}`;
   if (book.coins.some((c) => c.symbol === symbol && c.status === "curve" && c.mint !== mint)) {
     if (!(opts.mint && isSolanaAddress(opts.mint))) return { ok: false, error: "ticker_taken" };
   }

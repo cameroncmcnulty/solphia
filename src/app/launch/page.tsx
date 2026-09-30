@@ -47,6 +47,7 @@ import { BoostBuy, BoostRail, fmtLeft } from "@/components/BoostBuy";
 import { TokenImageCrop, readLaunchImage, type CropSource } from "@/components/TokenImageCrop";
 import { yourLaunches } from "@/lib/launch/yours";
 import { claimableCreator, fmtClaimSol, nextCreatorPayout, sortByUnclaimedDesc, sumCreatorGenerated, uniqueByMint } from "@/lib/launch/claim";
+import { preferLiveLabel } from "@/lib/launch/labels";
 import { clearPending, loadPending, savePending, type PendingLaunch } from "@/lib/launch/pending";
 import { hideLaunch, loadHidden } from "@/lib/launch/hidden";
 import { PadPitch } from "@/components/PadPitch";
@@ -505,8 +506,9 @@ export default function LaunchPage() {
         if (!old) return c;
         return {
           ...c,
-          name: /solphia\.io\/og/i.test(c.image || "") && old.name ? old.name : c.name,
-          image: /solphia\.io\/og/i.test(c.image || "") && old.image ? old.image : c.image,
+          name: preferLiveLabel(c.name, old.name),
+          symbol: preferLiveLabel(c.symbol, old.symbol),
+          image: /solphia\.io\/og/i.test(c.image || "") && old.image ? old.image : c.image || old.image,
           creatorFeesSol: typeof c.creatorFeesSol === "number" ? c.creatorFeesSol : Number(old.creatorFeesSol) || Number(old.devRewardsSol) || 0,
           creatorUnclaimedSol: typeof c.creatorUnclaimedSol === "number" ? c.creatorUnclaimedSol : old.creatorUnclaimedSol,
           partnerFeesSol: typeof c.partnerFeesSol === "number" ? c.partnerFeesSol : old.partnerFeesSol,

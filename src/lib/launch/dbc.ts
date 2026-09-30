@@ -302,9 +302,26 @@ export type ChainPadCoin = {
   quoteSol: number;
 };
 
+function pkStr(v: unknown): string {
+  if (!v) return "";
+  if (typeof v === "string") return v;
+  if (typeof v === "object" && typeof (v as { toBase58?: () => string }).toBase58 === "function") {
+    return (v as { toBase58: () => string }).toBase58();
+  }
+  return "";
+}
+
 function mintOfPool(row: { publicKey: PublicKey; account: any }): string {
   const inner = poolInner(row);
-  return String(inner.baseMint || inner.base_mint || "");
+  return pkStr(inner.baseMint) || pkStr(inner.base_mint);
+}
+
+function quoteSolOf(inner: Record<string, unknown>): number {
+  for (const k of ["quoteReserve", "quote_reserve", "quoteReserveAmount", "quote_reserve_amount"]) {
+    const n = lamportsToSol(inner?.[k] as { toString(): string } | number | null | undefined);
+    if (n > 0) return n;
+  }
+  return 0;
 }
 
 export function clearDbcCreatorCache(creator?: string) {
@@ -337,7 +354,7 @@ function cached<T>(key: string, ms: number, fn: () => Promise<T>): Promise<T> {
 
 export async function chainCoinsForCreator(creator: string): Promise<ChainPadCoin[]> {
   if (!dbcEnabled() || !creator) return [];
-  return cached("pools:" + creator, 45_000, async () => {
+  return cached("pools:" + creator, 8_000, async () => {
     const dbc = client();
     let pools: { publicKey: PublicKey; account: any }[] = [];
     try {
@@ -355,7 +372,7 @@ export async function chainCoinsForCreator(creator: string): Promise<ChainPadCoi
           pool: row.publicKey.toBase58(),
           creator: String(inner.creator || creator),
           ...fees,
-          quoteSol: lamportsToSol(inner.quoteReserve),
+          quoteSol: quoteSolOf(inner),
         };
       })
       .filter((p) => p.mint);

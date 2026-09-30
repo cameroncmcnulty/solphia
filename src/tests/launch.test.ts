@@ -29,6 +29,7 @@ import { buyCoin, createCoin, emptyLaunchBook, mergeLaunch, publicCoin, sellCoin
 import { launchError } from "../lib/launch/errors";
 import { yourLaunches } from "../lib/launch/yours";
 import { IMAGE_DATA_MAX, firstErrorKey, validateLaunchCreate } from "../lib/launch/validate";
+import { isPlaceholderLabel, preferLiveLabel } from "../lib/launch/labels";
 
 const A = "CyaE1VxvBrahnPWkqm5VsdCvyS2QmNht2UFrKJHga54o";
 const B = "D4uCNcBKAbG9NAkmhQg7pBiztuejNzbWrZDcZmFGut81";
@@ -357,6 +358,33 @@ describe("launch create validation", () => {
     assert.ok(heavy.image);
   });
 
+  it("replaces a Token/TOKEN stub with the real name on the same mint", () => {
+    const book = emptyLaunchBook();
+    const mint = "CkjBiD6M61YHUbGtp9QA2UVrBKz3r56P2AB3sxJuh3F";
+    const stub = createCoin(book, { creator: A, name: "Token", symbol: "TOKEN", mint, venue: "solphia" });
+    assert.equal(stub.ok, true);
+    const real = createCoin(book, { creator: A, name: "Window", symbol: "WINDOW", mint, venue: "solphia" });
+    assert.equal(real.ok, true);
+    if (stub.ok && real.ok) {
+      assert.equal(real.coin.id, stub.coin.id);
+      assert.equal(real.coin.name, "Window");
+      assert.equal(real.coin.symbol, "WINDOW");
+    }
+  });
+
+  it("does not let a Token stub overwrite a real name", () => {
+    const book = emptyLaunchBook();
+    const mint = "CkjBiD6M61YHUbGtp9QA2UVrBKz3r56P2AB3sxJuh3F";
+    const first = createCoin(book, { creator: A, name: "Window", symbol: "WINDOW", mint, venue: "solphia" });
+    assert.equal(first.ok, true);
+    const stub = createCoin(book, { creator: A, name: "Token", symbol: "TOKEN", mint, venue: "solphia" });
+    assert.equal(stub.ok, true);
+    if (first.ok && stub.ok) {
+      assert.equal(stub.coin.name, "Window");
+      assert.equal(stub.coin.symbol, "WINDOW");
+    }
+  });
+
   it("relists an already-confirmed mint instead of erroring image/mint taken", () => {
     const book = emptyLaunchBook();
     const mint = "CkjBiD6M61YHUbGtp9QA2UVrBKz3r56P2AB3sxJuh3F";
@@ -430,5 +458,21 @@ describe("yours list", () => {
       yourLaunches(rows, A).map((c) => c.symbol),
       ["MINE"],
     );
+  });
+});
+
+describe("launch labels", () => {
+  it("treats Token/TOKEN as a stub, not a real ticker", () => {
+    assert.equal(isPlaceholderLabel("Token"), true);
+    assert.equal(isPlaceholderLabel("TOKEN"), true);
+    assert.equal(isPlaceholderLabel("$TOKEN"), true);
+    assert.equal(isPlaceholderLabel("Window"), false);
+    assert.equal(isPlaceholderLabel("WINDOW"), false);
+  });
+
+  it("keeps Window when the server later sends Token", () => {
+    assert.equal(preferLiveLabel("Token", "Window"), "Window");
+    assert.equal(preferLiveLabel("WINDOW", "Token"), "WINDOW");
+    assert.equal(preferLiveLabel("Window", "Window"), "Window");
   });
 });
