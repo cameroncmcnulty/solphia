@@ -7,6 +7,8 @@ import { assembleSwapTx } from "./build";
 import { liveSwapFeeSol } from "./route";
 import { buildPadSwapTx, quotePadSwap } from "./pad";
 import { isDeskMint } from "../tx/venue";
+import { tokenUiAmount } from "../solana/tokenBalance";
+import { simulateUnsignedB64 } from "../solana/simulate";
 
 export type AnyQuote =
   | {
@@ -124,6 +126,16 @@ export async function buildAnySwapTx(opts: {
   slippageBps?: number;
 }): Promise<{ ok: true; transaction: string; via: "curve" | "jupiter"; outAmount: number; feeSol: number } | { ok: false; reason: string }> {
   if (!isSolanaAddress(opts.owner)) return { ok: false, reason: "Connect Phantom first." };
+  if (opts.inputMint !== SOL_MINT) {
+    try {
+      const have = await tokenUiAmount(connection(), opts.owner, opts.inputMint);
+      if (opts.amount > have.amount + 1e-9) {
+        return { ok: false, reason: "Not enough of that token in this wallet. Try a smaller amount." };
+      }
+    } catch {
+      /* sim below still catches a short bag */
+    }
+  }
   const q = await quoteAnySwap(opts);
   if (!q.ok) return q;
   const slip = opts.slippageBps ?? 100;
@@ -137,6 +149,8 @@ export async function buildAnySwapTx(opts: {
       amount: opts.amount,
     });
     if (!tx.ok) return { ok: false, reason: tx.reason };
+    const sim = await simulateUnsignedB64(tx.transaction);
+    if (!sim.ok) return sim;
     return { ok: true, transaction: tx.transaction, via: "curve", outAmount: q.outAmount, feeSol: q.feeSol };
   }
   const buyFee = opts.inputMint === SOL_MINT ? liveSwapFeeSol(opts.amount) : 0;
@@ -159,6 +173,8 @@ export async function buildAnySwapTx(opts: {
     feeAfter,
   });
   if (!built.ok) return built;
+  const sim = await simulateUnsignedB64(built.transaction);
+  if (!sim.ok) return sim;
   const outAmount = feeAfter && feeSol > 0 ? Math.max(0, jup.outAmount - feeSol) : jup.outAmount;
   return { ok: true, transaction: built.transaction, via: "jupiter", outAmount, feeSol };
 }

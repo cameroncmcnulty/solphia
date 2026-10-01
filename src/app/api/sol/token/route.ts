@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Connection, PublicKey } from "@solana/web3.js";
+import { Connection } from "@solana/web3.js";
 import { clientIp, isSolanaAddress, rateLimit } from "@/lib/security";
 import { rpcUrl } from "@/lib/config";
+import { tokenUiAmount } from "@/lib/solana/tokenBalance";
 
 export const dynamic = "force-dynamic";
 
@@ -16,22 +17,7 @@ export async function GET(req: NextRequest) {
   }
   try {
     const conn = new Connection(rpcUrl(), { commitment: "confirmed" });
-    const ownerPk = new PublicKey(owner);
-    const mintPk = new PublicKey(mint);
-    const TOKEN_2022 = new PublicKey("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
-    const [legacy, t22] = await Promise.all([
-      conn.getParsedTokenAccountsByOwner(ownerPk, { mint: mintPk }),
-      conn.getParsedTokenAccountsByOwner(ownerPk, { mint: mintPk, programId: TOKEN_2022 }),
-    ]);
-    const rows = [...legacy.value, ...t22.value];
-    let amount = 0;
-    let decimals = 6;
-    for (const row of rows) {
-      const info = row.account.data.parsed?.info?.tokenAmount;
-      if (!info) continue;
-      decimals = Number(info.decimals) || decimals;
-      amount += Number(info.uiAmount) || 0;
-    }
+    const { amount, decimals } = await tokenUiAmount(conn, owner, mint);
     return NextResponse.json({ owner, mint, amount, decimals });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "rpc" }, { status: 502 });

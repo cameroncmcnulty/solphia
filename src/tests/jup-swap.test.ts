@@ -73,7 +73,8 @@ describe("jupiter swap notice", () => {
     assert.equal(formatSwapError("slippage exceeded"), "slippage exceeded");
     assert.equal(formatSwapError(new Error("no route")), "no route");
     assert.equal(formatSwapError({ message: "Transaction simulation failed" }), "Transaction simulation failed");
-    assert.equal(formatSwapError({ error: { message: "0x1771" } }), "0x1771");
+    assert.equal(formatSwapError({ error: { message: "0x1771" } }), "Price moved. Try again.");
+    assert.match(formatSwapError("Transaction simulation failed: custom program error: 0x1788"), /Not enough/);
     assert.equal(formatSwapError(null), "Swap failed.");
   });
 

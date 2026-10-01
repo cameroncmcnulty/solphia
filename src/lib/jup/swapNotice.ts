@@ -16,22 +16,31 @@ function store(): Storage | null {
   }
 }
 
+function friendlySwapText(text: string): string {
+  if (/0x1788|InsufficientFunds/i.test(text)) return "Not enough of that token in this wallet. Try a smaller amount.";
+  if (/0x1771|SlippageToleranceExceeded/i.test(text)) return "Price moved. Try again.";
+  if (/malicious|transaction simulation failed/i.test(text) && /0x1788|insufficient/i.test(text)) {
+    return "Not enough of that token in this wallet. Try a smaller amount.";
+  }
+  return text;
+}
+
 export function formatSwapError(err: unknown): string {
   if (err == null) return "Swap failed.";
   if (typeof err === "string") {
     const t = err.trim();
-    return t || "Swap failed.";
+    return friendlySwapText(t || "Swap failed.");
   }
   if (err instanceof Error) {
     const t = err.message.trim();
-    return t || "Swap failed.";
+    return friendlySwapText(t || "Swap failed.");
   }
   if (typeof err === "object") {
     const rec = err as { message?: unknown; error?: unknown; err?: unknown; msg?: unknown };
-    if (typeof rec.message === "string" && rec.message.trim()) return rec.message.trim();
+    if (typeof rec.message === "string" && rec.message.trim()) return friendlySwapText(rec.message.trim());
     if (rec.error != null) return formatSwapError(rec.error);
     if (rec.err != null) return formatSwapError(rec.err);
-    if (typeof rec.msg === "string" && rec.msg.trim()) return rec.msg.trim();
+    if (typeof rec.msg === "string" && rec.msg.trim()) return friendlySwapText(rec.msg.trim());
   }
   return "Swap failed.";
 }

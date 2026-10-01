@@ -38,7 +38,7 @@ export const SERVICES: ServiceDef[] = [
         label: "Pro",
         price: "$20/mo",
         limits: { cronPerDay: 1440, fnSeconds: 60, bandwidthGb: 1024 },
-        notes: "Minute cron, longer functions, 1 TB bandwidth. Floor for live. At 50-100k users raise Fluid concurrency so Shill polls stay fast.",
+        notes: "Minute cron, longer functions, 1 TB bandwidth. Floor for the whole site. At 50-100k users raise Fluid concurrency so swap, tape, and Shill stay fast.",
       },
     ],
   },
@@ -92,7 +92,7 @@ export const SERVICES: ServiceDef[] = [
         label: "Developer",
         price: "$49/mo",
         limits: { creditsPerMonth: 10_000_000 },
-        notes: "Headroom for live desks and the tape.",
+        notes: "Headroom for swaps, launches, boosts, balances, and the tape.",
         next: "business",
       },
       {
