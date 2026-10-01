@@ -254,18 +254,24 @@ function pxAt(fills: LaunchFill[], before: number, fallback: number): number {
   return fills[0]?.priceSol || fallback;
 }
 
+/** Compact one account for Redis. Never drops xp, username, referrer, or rewards. */
+export function slimAccount(a: LaunchAccount, key: string): LaunchAccount {
+  const pfp = a.pfp || "";
+  const banner = a.banner || "";
+  const events = Array.isArray(a.rankEvents) ? a.rankEvents.slice(-12) : undefined;
+  return {
+    ...a,
+    pubkey: a.pubkey || key,
+    pfp: pfp.startsWith("data:") && pfp.length > 90_000 ? "" : pfp,
+    banner: banner.startsWith("data:") && banner.length > 90_000 ? "" : banner,
+    rankEvents: events && events.length ? events : undefined,
+  };
+}
+
 export function slimLaunch(book: LaunchBook): LaunchBook {
   const accounts: Record<string, LaunchAccount> = {};
   for (const [k, a] of Object.entries(book.accounts || {})) {
-    const pfp = a.pfp || "";
-    const banner = a.banner || "";
-    const events = Array.isArray(a.rankEvents) ? a.rankEvents.slice(-12) : undefined;
-    accounts[k] = {
-      ...a,
-      pfp: pfp.startsWith("data:") && pfp.length > 90_000 ? "" : pfp,
-      banner: banner.startsWith("data:") && banner.length > 90_000 ? "" : banner,
-      rankEvents: events && events.length ? events : undefined,
-    };
+    accounts[k] = slimAccount(a, k);
   }
   tickBoosts(book);
   const all = ensureBoosts(book);
@@ -305,15 +311,7 @@ export function mergeLaunch(local: LaunchBook, remote: LaunchBook): LaunchBook {
     if (localF > remoteF || (localF === remoteF && localSol >= remoteSol)) map.set(c.id, c);
   }
   const coins = [...map.values()].sort((a, b) => b.createdAt - a.createdAt).slice(0, 120);
-  const accounts: Record<string, LaunchAccount> = { ...(remote.accounts || {}) };
-  for (const [k, a] of Object.entries(local.accounts || {})) {
-    const r = accounts[k];
-    if (!r) {
-      accounts[k] = a;
-      continue;
-    }
-    accounts[k] = mergeAccount(r, a, k);
-  }
+  const accounts = mergeAccountMaps(remote.accounts, local.accounts);
   const boostMap = new Map<string, NonNullable<LaunchBook["boosts"]>[number]>();
   for (const b of remote.boosts || []) boostMap.set(b.id, b);
   for (const b of local.boosts || []) boostMap.set(b.id, b);
@@ -337,6 +335,23 @@ export function mergeLaunch(local: LaunchBook, remote: LaunchBook): LaunchBook {
     dbcConfig: local.dbcConfig || remote.dbcConfig,
     phJobs: Object.keys(phJobs).length ? phJobs : undefined,
   };
+}
+
+/** Union two account maps. Empty remote cannot wipe local xp / usernames / referrals. */
+export function mergeAccountMaps(
+  remote?: Record<string, LaunchAccount> | null,
+  local?: Record<string, LaunchAccount> | null,
+): Record<string, LaunchAccount> {
+  const accounts: Record<string, LaunchAccount> = { ...(remote || {}) };
+  for (const [k, a] of Object.entries(local || {})) {
+    const r = accounts[k];
+    if (!r) {
+      accounts[k] = a;
+      continue;
+    }
+    accounts[k] = mergeAccount(r, a, k);
+  }
+  return accounts;
 }
 
 export function mergeAccount(remote: LaunchAccount, local: LaunchAccount, key: string): LaunchAccount {

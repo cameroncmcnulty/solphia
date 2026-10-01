@@ -92,7 +92,7 @@ export function mergeShill(local: ShillBook, remote: ShillBook): ShillBook {
 export function slimShill(book?: ShillBook | null): ShillBook {
   const b = ensureShill(book);
   return {
-    messages: b.messages.slice(-80),
+    messages: b.messages.slice(-SHILL_MSG_MAX),
     pins: b.pins.slice(-16),
     members: b.members,
     typing: {},
@@ -132,6 +132,7 @@ export function ensureShill(book?: ShillBook | null): ShillBook {
 
 export function pruneShill(book: ShillBook, now = Date.now()) {
   const cut = now - SHILL_KEEP_MS;
+  // Chat only. Rank (xp / rankEvents) lives on LaunchBook. Votes use their own endsAt clock.
   if (book.messages.length) book.messages = book.messages.filter((m) => m.at >= cut);
   if (book.messages.length > SHILL_MSG_MAX) book.messages.splice(0, book.messages.length - SHILL_MSG_MAX);
   const pins = book.pins || [];
@@ -142,6 +143,13 @@ export function pruneShill(book: ShillBook, now = Date.now()) {
   }
   book.votes = (book.votes || []).filter((v) => v.endsAt > now);
   if ((book.votes || []).length > SHILL_VOTE_MAX) book.votes = book.votes.slice(-SHILL_VOTE_MAX);
+  const liveVoters = new Set((book.votes || []).map((v) => v.owner));
+  const lastVoteAt = book.lastVoteAt || {};
+  for (const [pk, at] of Object.entries(lastVoteAt)) {
+    if (liveVoters.has(pk)) continue;
+    if (now - (Number(at) || 0) > SHILL_VOTE_COOLDOWN_MS) delete lastVoteAt[pk];
+  }
+  book.lastVoteAt = lastVoteAt;
   const expiredHouse = pins.filter((p) => p.house && p.endsAt <= now).length;
   book.pins = pins.filter((p) => p.endsAt > now);
   if (expiredHouse > 0) {
@@ -155,8 +163,9 @@ export function pruneShill(book: ShillBook, now = Date.now()) {
   for (const m of book.messages) {
     if (!m.reactions) m.reactions = {};
   }
+  const house = housePubkeySet(book);
   for (const [pk, m] of Object.entries(book.members || {})) {
-    if (m.banned || (m.mutedUntil && m.mutedUntil > now)) continue;
+    if (m.banned || (m.mutedUntil && m.mutedUntil > now) || house.has(pk)) continue;
     const last = Math.max(m.lastReadAt || 0, m.lastCaAt || 0);
     if (last < cut) delete book.members[pk];
   }
@@ -422,9 +431,7 @@ export function voteBoard(book: ShillBook, now = Date.now()): VoteBoardRow[] {
   pruneShill(book, now);
   const meta = new Map<string, { symbol: string; name: string; image?: string }>();
   for (const p of book.pins) meta.set(p.mint, { symbol: p.symbol, name: p.name, image: p.image });
-  for (const m of book.messages) {
-    if (m.token?.mint) meta.set(m.token.mint, { symbol: m.token.symbol, name: m.token.name, image: m.token.image });
-  }
+  // Vote rows carry their own symbol/name/image. Chat wipe must not blank the board.
   const tally = new Map<string, VoteBoardRow>();
   for (const v of book.votes || []) {
     if (v.endsAt <= now) continue;

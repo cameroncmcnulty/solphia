@@ -28,7 +28,7 @@ import {
   votesOnMint,
   type VoteBoardRow,
 } from "@/lib/shill/engine";
-import { SHILL_HOUSE_PIN_MIN, SHILL_PIN_SOL, SHILL_REACTS, SHILL_STICKERS, type ShillMessage, type ShillPin, type ShillToken } from "@/lib/shill/types";
+import { SHILL_HOUSE_PIN_MIN, SHILL_MSG_MAX, SHILL_PIN_SOL, SHILL_REACTS, SHILL_STICKERS, type ShillMessage, type ShillPin, type ShillToken } from "@/lib/shill/types";
 import { emptyLaunchBook } from "@/lib/launch/engine";
 import { creditRank, leaderboard, publicCard } from "@/lib/rank/engine";
 import { canModerateChat, staffRole } from "@/lib/access";
@@ -120,7 +120,7 @@ async function shillSnap(force = false): Promise<LightSnap> {
   const pins = livePins(book, now).map((p) => paintPin({ ...p, votes: votesOnMint(book, p.mint, now) }));
   lightSnap = {
     at: now,
-    messages: book.messages.slice(-120).map(paintMsg),
+    messages: book.messages.slice(-SHILL_MSG_MAX).map(paintMsg),
     pins,
     voteBoard: voteBoard(book, now).map(paintVote),
     members: liveRoomCount(book, now),

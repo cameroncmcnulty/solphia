@@ -22,6 +22,9 @@ describe("health catalog", () => {
     assert.equal(tierOf(pin, "picnic").limits.storageGb, 1024);
     const nxt = nextTier(pin, "free");
     assert.equal(nxt?.id, "picnic");
+    const upstash = SERVICES.find((s) => s.id === "upstash")!;
+    assert.equal(nextTier(upstash, "payg")?.id, "scale");
+    assert.ok((tierOf(upstash, "scale").limits.storageMb || 0) >= 5120);
   });
 
   it("lets a saved Picnic plan raise the Pinata ceiling", () => {

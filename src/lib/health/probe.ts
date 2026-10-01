@@ -124,7 +124,7 @@ export async function probeHealth(state: AppState): Promise<{
         })()
       : Promise.resolve({ ok: false, ms: 0 }),
     durableKind() === "upstash"
-      ? kvMemoryBytes([KEYS.ops, KEYS.launch, KEYS.traders, KEYS.state, KEYS.circle, KEYS.shill, KEYS.mail])
+      ? kvMemoryBytes([KEYS.ops, KEYS.launch, KEYS.launchAccounts, KEYS.traders, KEYS.state, KEYS.circle, KEYS.shill, KEYS.mail])
       : Promise.resolve(0),
   ]);
   const storeBytes = Math.max(estimateStoreBytes(state), redisBytes || 0);

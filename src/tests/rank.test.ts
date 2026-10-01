@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { emptyLaunchBook, mergeLaunch } from "../lib/launch/engine";
+import { emptyLaunchBook, mergeAccountMaps, mergeLaunch, slimLaunch } from "../lib/launch/engine";
 import {
   RANK_MAX,
   creditRank,
@@ -116,5 +116,26 @@ describe("rank engine", () => {
     assert.equal(acc.favSymbol, "BAG");
     assert.equal(acc.xp, 5000);
     assert.equal(acc.referralRewardsSol, 1);
+  });
+
+  it("never drops wallets when slimming or merging an empty isolate", () => {
+    const book = emptyLaunchBook();
+    const now = Date.parse("2026-09-15T12:00:00Z");
+    creditRank(book, A, "chat", { now });
+    creditRank(book, B, "launch", { now });
+    const xpA = book.accounts[A].xp || 0;
+    const xpB = book.accounts[B].xp || 0;
+    assert.ok(xpA > 0);
+    assert.ok(xpB > 0);
+    const slim = slimLaunch(book);
+    assert.equal(Object.keys(slim.accounts).length, 2);
+    assert.equal(slim.accounts[A].xp, xpA);
+    assert.equal(slim.accounts[B].xp, xpB);
+    const wiped = mergeLaunch(book, emptyLaunchBook());
+    assert.equal(wiped.accounts[A].xp, xpA);
+    assert.equal(wiped.accounts[B].xp, xpB);
+    const fromCopy = mergeAccountMaps({}, slim.accounts);
+    assert.equal(fromCopy[A].xp, xpA);
+    assert.equal(fromCopy[B].xp, xpB);
   });
 });

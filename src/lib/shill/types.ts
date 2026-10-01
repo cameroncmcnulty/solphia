@@ -88,8 +88,10 @@ export type ShillBook = {
   houseBootedAt?: number;
 };
 
-export const SHILL_MSG_MAX = 240;
-export const SHILL_KEEP_MS = 14 * 24 * 3600_000;
+/** Live room only. Oldest chat drops first so Redis stays small. Rank/votes do not live here. */
+export const SHILL_MSG_MAX = 120;
+/** 18h of idle history. Cap hits first in a busy room. */
+export const SHILL_KEEP_MS = 18 * 3600_000;
 export const SHILL_CA_COOLDOWN_MS = 30_000;
 export const SHILL_PIN_SLOTS = 5;
 export const SHILL_PIN_MS = 3 * 3600_000;

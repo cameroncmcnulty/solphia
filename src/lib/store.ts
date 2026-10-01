@@ -3,7 +3,7 @@ import path from "path";
 import { DEFAULT_SETTINGS } from "./config";
 import { DEFAULT_FUND, DEFAULT_OWNER, DEFAULT_TREASURY } from "./protocolWallets";
 import { emptyBook, emptyTrader, lockedAuto } from "./auto";
-import { emptyLaunchBook, mergeLaunch, slimLaunch, type LaunchBook } from "./launch/engine";
+import { emptyLaunchBook, mergeAccountMaps, mergeLaunch, slimLaunch, type LaunchAccount, type LaunchBook } from "./launch/engine";
 import { emptyLab, mergeLab } from "./desk/shadow";
 import { emptyMind, mergeMind } from "./mind/engine";
 import {
@@ -213,6 +213,12 @@ async function overlayLaunch(state: AppState) {
     if (raw && typeof raw === "object" && Array.isArray((raw as LaunchBook).coins)) {
       state.launch = mergeLaunch(state.launch || emptyLaunchBook(), raw as LaunchBook);
     }
+    const extra = await kvGetJson(KEYS.launchAccounts);
+    if (extra && typeof extra === "object") {
+      const book = state.launch || emptyLaunchBook();
+      book.accounts = mergeAccountMaps(extra as Record<string, LaunchAccount>, book.accounts);
+      state.launch = book;
+    }
   } catch {
     /* keep mem */
   }
@@ -220,7 +226,10 @@ async function overlayLaunch(state: AppState) {
 
 async function persistLaunch(state: AppState) {
   if (!durableConfigured()) return;
-  await kvSetJson(KEYS.launch, slimLaunch(state.launch || emptyLaunchBook()));
+  const slim = slimLaunch(state.launch || emptyLaunchBook());
+  // Accounts first so a fat tape write cannot be the only copy of rank / usernames.
+  await kvSetJson(KEYS.launchAccounts, slim.accounts || {});
+  await kvSetJson(KEYS.launch, slim);
 }
 
 async function overlayCircle(state: AppState) {
@@ -264,7 +273,7 @@ async function persistShill(state: AppState) {
   const remote = raw && typeof raw === "object" ? ensureShill(raw as ShillBook) : null;
   const merged = remote ? mergeShill(local, remote) : local;
   state.shill = merged;
-  await kvSetJson(KEYS.shill, merged);
+  await kvSetJson(KEYS.shill, slimShill(merged));
 }
 
 async function overlayMail(state: AppState) {

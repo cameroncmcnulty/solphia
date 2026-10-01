@@ -37,6 +37,8 @@ describe("scale store", () => {
     assert.ok(hot.length <= MAX_TICK_TRADERS);
     assert.equal(KEYS.trader("abc").startsWith("solphia:trader:"), true);
     assert.equal(KEYS.backtest(2), "solphia:backtest:2");
+    assert.equal(KEYS.launchAccounts, "solphia:launch-accounts");
+    assert.equal(KEYS.account("abc"), "solphia:account:abc");
   });
 
   it("keeps a SOL-PERP sleeve across hydrate and does not resize it away", () => {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { banShill, emptyShill, extractCas, fillHousePins, mergeShill, muteShill, pinToken, postShill, pruneShill, touchMember, voteBoard, voteShill } from "../lib/shill/engine";
+import { banShill, emptyShill, extractCas, fillHousePins, mergeShill, muteShill, pinToken, postShill, pruneShill, slimShill, touchMember, voteBoard, voteShill } from "../lib/shill/engine";
 import {
   SHILL_CA_COOLDOWN_MS,
   SHILL_HOUSE_PIN_MAX,
@@ -8,6 +8,8 @@ import {
   SHILL_HOUSE_REPLACE_MS,
   SHILL_HOUSE_STAGGER_MS,
   SHILL_HOUSE_SPREAD_MS,
+  SHILL_KEEP_MS,
+  SHILL_MSG_MAX,
   SHILL_PIN_MS,
   SHILL_PIN_SOL,
   SHILL_PIN_SLOTS,
@@ -188,5 +190,56 @@ describe("shill zone", () => {
     assert.equal(board[0].votes, 2);
     pruneShill(book, t0 + SHILL_VOTE_COOLDOWN_MS + SHILL_VOTE_MS + 1);
     assert.equal(voteBoard(book, t0 + SHILL_VOTE_COOLDOWN_MS + SHILL_VOTE_MS + 1).length, 0);
+  });
+
+  it("wipes oldest chat without touching live votes or their cooldown clock", () => {
+    const book = emptyShill();
+    const t0 = 2_000_000;
+    postShill(book, { owner: A, text: "old line", now: t0 });
+    const voted = voteShill(book, {
+      owner: A,
+      mint: CA,
+      token: { mint: CA, symbol: "SOL", name: "Solana" },
+      now: t0,
+    });
+    assert.equal(voted.ok, true);
+    book.messages = book.messages.filter((m) => m.at < t0);
+    pruneShill(book, t0 + SHILL_KEEP_MS + 1);
+    assert.equal(book.messages.length, 0);
+    const board = voteBoard(book, t0 + SHILL_KEEP_MS + 1);
+    assert.equal(board.length, 1);
+    assert.equal(board[0].mint, CA);
+    assert.equal(board[0].votes, 1);
+    assert.equal(board[0].symbol, "SOL");
+    const cooled = voteShill(book, { owner: A, mint: CA, now: t0 + SHILL_VOTE_COOLDOWN_MS - 1 });
+    assert.equal(cooled.ok, false);
+    if (!cooled.ok) assert.equal(cooled.error, "cooldown");
+  });
+
+  it("caps stored chat and keeps the newest lines", () => {
+    const book = emptyShill();
+    const t0 = Date.now() - SHILL_MSG_MAX * 1000;
+    for (let i = 0; i < SHILL_MSG_MAX + 40; i++) {
+      const r = postShill(book, { owner: A, text: `line ${i}`, now: t0 + i });
+      assert.equal(r.ok, true);
+    }
+    assert.equal(book.messages.length, SHILL_MSG_MAX);
+    assert.equal(book.messages[0].text, `line 40`);
+    assert.equal(book.messages[book.messages.length - 1].text, `line ${SHILL_MSG_MAX + 39}`);
+    const slim = slimShill(book);
+    assert.equal(slim.messages.length, SHILL_MSG_MAX);
+    assert.ok(slim.votes);
+  });
+
+  it("keeps banned wallets and house actors when idle members drop", () => {
+    const book = emptyShill();
+    const t0 = 10_000;
+    book.houseActors = [{ i: 0, pubkey: B, named: true, nextShareAt: 0, nextVoteAt: 0, shareEveryMs: 1, voteEveryMs: 1, voteP: 0 }];
+    touchMember(book, A, t0);
+    touchMember(book, B, t0);
+    banShill(book, A, true, t0);
+    pruneShill(book, t0 + SHILL_KEEP_MS + 1);
+    assert.ok(book.members[A]?.banned);
+    assert.ok(book.members[B]);
   });
 });
