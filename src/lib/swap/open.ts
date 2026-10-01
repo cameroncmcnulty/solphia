@@ -3,7 +3,7 @@ import { connection } from "../solana/connection";
 import { isSolanaAddress } from "../security";
 import { SOL_MINT, USDC_MINT, SOL_DECIMALS, USDC_DECIMALS } from "../pair/mints";
 import { quoteOpenSwap } from "../pair/jupiter";
-import { assembleSwapTx } from "./build";
+import { assemblePhantomSwapTx } from "./build";
 import { liveSwapFeeSol } from "./route";
 import { buildPadSwapTx, quotePadSwap } from "./pad";
 import { isDeskMint } from "../tx/venue";
@@ -166,7 +166,7 @@ export async function buildAnySwapTx(opts: {
   if (!jup.ok) return { ok: false, reason: jup.reason };
   const feeAfter = opts.outputMint === SOL_MINT && opts.inputMint !== SOL_MINT;
   const feeSol = buyFee > 0 ? buyFee : feeAfter ? liveSwapFeeSol(jup.outAmount) : 0;
-  const built = await assembleSwapTx({
+  const built = await assemblePhantomSwapTx({
     owner: opts.owner,
     quote: jup.quote,
     feeSol,

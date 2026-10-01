@@ -297,24 +297,28 @@ export async function quoteFromUsdc(outputMint: string, usdcAmount: number, slip
 
 export type SwapTxResult = { ok: true; transaction: string } | { ok: false; reason: string };
 
-export async function buildSwapTx(quote: JupiterQuote, userPublicKey: string): Promise<SwapTxResult> {
+export async function buildSwapTx(
+  quote: JupiterQuote,
+  userPublicKey: string,
+  opts?: { asLegacy?: boolean },
+): Promise<SwapTxResult> {
   let last = "Could not build the swap.";
+  const asLegacy = Boolean(opts?.asLegacy);
+  const base = {
+    quoteResponse: quote,
+    userPublicKey,
+    wrapAndUnwrapSol: true,
+    dynamicComputeUnitLimit: true,
+    ...(asLegacy ? { asLegacyTransaction: true } : {}),
+  };
   const bodies = [
     {
-      quoteResponse: quote,
-      userPublicKey,
-      wrapAndUnwrapSol: true,
-      dynamicComputeUnitLimit: true,
+      ...base,
       prioritizationFeeLamports: {
         priorityLevelWithMaxLamports: { maxLamports: 1_000_000, priorityLevel: "high" },
       },
     },
-    {
-      quoteResponse: quote,
-      userPublicKey,
-      wrapAndUnwrapSol: true,
-      dynamicComputeUnitLimit: true,
-    },
+    { ...base },
   ];
   for (const url of SWAP_URLS) {
     for (const body of bodies) {

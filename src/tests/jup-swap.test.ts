@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { ComputeBudgetProgram, PublicKey, SystemProgram, Transaction, TransactionMessage, VersionedTransaction } from "@solana/web3.js";
 import { executeUrls, JUP_FEE_BPS, jupFeeStatus, orderUrls } from "../lib/jup/swapV2";
+import { appendLegacyFee } from "../lib/swap/build";
 import { parseQuote } from "../lib/pair/jupiter";
 import { SOL_MINT, USDC_MINT } from "../lib/pair/mints";
 import { JUP_PLUGIN_ACCOUNT, JUP_PLUGIN_FEE_BPS, JUP_PLUGIN_SRC } from "../lib/jup/plugin";
@@ -128,5 +130,45 @@ describe("jupiter quote payload", () => {
     assert.equal(q?.swapMode, "ExactIn");
     assert.equal(q?.contextSlot, 1);
     assert.equal((q?.routePlan?.[0] as { swapInfo?: { ammKey?: string } })?.swapInfo?.ammKey, "x");
+  });
+});
+
+describe("phantom-safe jupiter fee", () => {
+  it("inserts the treasury skim on a legacy tx and refuses to restitch versioned bytes", () => {
+    const tx = new Transaction();
+    tx.feePayer = new PublicKey(OWNER);
+    tx.recentBlockhash = new PublicKey(OWNER).toBase58();
+    tx.add(ComputeBudgetProgram.setComputeUnitLimit({ units: 200_000 }));
+    tx.add(
+      SystemProgram.transfer({
+        fromPubkey: new PublicKey(OWNER),
+        toPubkey: new PublicKey(OWNER),
+        lamports: 1,
+      }),
+    );
+    const b64 = Buffer.from(tx.serialize({ requireAllSignatures: false, verifySignatures: false })).toString("base64");
+    const fee = SystemProgram.transfer({
+      fromPubkey: new PublicKey(OWNER),
+      toPubkey: new PublicKey("BobXWqFWhRwyBS3Wra3fornbmnwpmN1Ctp5brN1RZ9y3"),
+      lamports: 10_000,
+    });
+    const before = appendLegacyFee(b64, fee, false);
+    assert.ok(before);
+    const got = Transaction.from(Buffer.from(before!, "base64"));
+    assert.equal(got.instructions.length, 3);
+    assert.equal(got.instructions[1]!.programId.equals(SystemProgram.programId), true);
+    const after = appendLegacyFee(b64, fee, true);
+    assert.ok(after);
+    const gotAfter = Transaction.from(Buffer.from(after!, "base64"));
+    assert.equal(gotAfter.instructions[gotAfter.instructions.length - 1]!.programId.equals(SystemProgram.programId), true);
+    assert.equal(appendLegacyFee("not-a-tx", fee, false), null);
+    const v0 = new VersionedTransaction(
+      new TransactionMessage({
+        payerKey: new PublicKey(OWNER),
+        recentBlockhash: new PublicKey(OWNER).toBase58(),
+        instructions: tx.instructions,
+      }).compileToV0Message(),
+    );
+    assert.equal(appendLegacyFee(Buffer.from(v0.serialize()).toString("base64"), fee, false), null);
   });
 });

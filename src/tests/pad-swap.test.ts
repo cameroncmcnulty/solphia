@@ -70,9 +70,13 @@ describe("in-house pad venue", () => {
 describe("open market swap fees", () => {
   it("skims 1% SOL to treasury on the native swap path", () => {
     const src = readFileSync(path.join(process.cwd(), "src/lib/swap/open.ts"), "utf8");
-    assert.match(src, /assembleSwapTx/);
+    assert.match(src, /assemblePhantomSwapTx/);
+    assert.equal(/assembleSwapTx/.test(src), false);
     assert.match(src, /liveSwapFeeSol/);
     assert.equal(liveSwapFeeSol(1), 0.01);
+    const pair = readFileSync(path.join(process.cwd(), "src/app/api/pair/swap/route.ts"), "utf8");
+    assert.match(pair, /assembleSwapTx/);
+    assert.equal(/assemblePhantomSwapTx/.test(pair), false);
   });
 });
 

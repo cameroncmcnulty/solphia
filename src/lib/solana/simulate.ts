@@ -28,6 +28,7 @@ export async function simulateUnsignedB64(b64: string): Promise<{ ok: true } | {
     const sim = await connection().simulateTransaction(vtx, {
       sigVerify: false,
       replaceRecentBlockhash: true,
+      innerInstructions: true,
       commitment: "confirmed",
     });
     if (sim.value.err) return { ok: false, reason: swapSimReason(sim.value.err, sim.value.logs) };
