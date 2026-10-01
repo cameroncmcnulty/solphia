@@ -173,8 +173,8 @@ export async function probeHealth(state: AppState): Promise<{
 export function inferredTiers(): HealthTiers {
   return {
     vercel: "pro",
-    upstash: durableKind() === "upstash" ? "free" : durableKind() === "blob" ? "payg" : "free",
-    helius: HELIUS_API_KEY ? "free" : "free",
+    upstash: durableKind() === "fs" ? "free" : "payg",
+    helius: HELIUS_API_KEY ? "developer" : "free",
     pinata: pinataConfigured() ? "free" : "free",
     xai: XAI_API_KEY ? "grok" : "none",
     smtp: process.env.SMTP_HOST ? "set" : "none",
@@ -182,8 +182,17 @@ export function inferredTiers(): HealthTiers {
   };
 }
 
+/** Paid floors win over a leftover "free" save. Higher picks (scale / business / picnic) stay. */
+export function floorPaidTiers(inferred: HealthTiers, saved?: HealthTiers | null): HealthTiers {
+  const out: HealthTiers = { ...inferred, ...(saved || {}) };
+  if (inferred.upstash === "payg" && (!out.upstash || out.upstash === "free")) out.upstash = "payg";
+  if (inferred.helius === "developer" && (!out.helius || out.helius === "free")) out.helius = "developer";
+  if (inferred.vercel === "pro" && (!out.vercel || out.vercel === "hobby")) out.vercel = "pro";
+  return out;
+}
+
 export function mergeTiers(saved?: HealthTiers | null): HealthTiers {
-  return { ...inferredTiers(), ...(saved || {}) };
+  return floorPaidTiers(inferredTiers(), saved);
 }
 
 export function windowSamples(log: HealthSample[], ms: number): HealthSample[] {

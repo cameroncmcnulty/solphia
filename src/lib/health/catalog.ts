@@ -61,7 +61,7 @@ export const SERVICES: ServiceDef[] = [
         label: "Pay as you go",
         price: "usage",
         limits: { storageMb: 1024, commandsPerDay: 1_000_000 },
-        notes: "Paid Redis. Need this before a few thousand wallets. Chat is capped; rank and votes are not stored in chat.",
+        notes: "Paid Redis. First 1 GB free, pay per command. Chat is capped; rank and votes are not stored in chat.",
         next: "scale",
       },
       {
@@ -92,7 +92,7 @@ export const SERVICES: ServiceDef[] = [
         label: "Developer",
         price: "$49/mo",
         limits: { creditsPerMonth: 10_000_000 },
-        notes: "Headroom for swaps, launches, boosts, balances, and the tape.",
+        notes: "10M credits, 50 RPC/s, 5 sends/s. Floor for swaps, launches, balances, and the tape.",
         next: "business",
       },
       {

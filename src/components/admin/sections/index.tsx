@@ -8,7 +8,6 @@ import { DeskSection } from "./Desk";
 import { TradersSection } from "./Traders";
 import { LaunchSection } from "./Launch";
 import { BacktestSection } from "./Backtest";
-import { SystemSection } from "./System";
 import { WalletsSection } from "./Wallets";
 import { UsersSection } from "./Users";
 import { HealthSection } from "./Health";
@@ -24,7 +23,6 @@ export const ADMIN_SECTIONS: Record<AdminSectionId, ComponentType> = {
   traders: TradersSection,
   launch: LaunchSection,
   backtest: BacktestSection,
-  system: SystemSection,
   wallets: WalletsSection,
   users: UsersSection,
   health: HealthSection,

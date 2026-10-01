@@ -51,8 +51,7 @@ export function OverviewSection() {
           <div>
             <div className="font-mono text-[10px] tracking-[0.3em] text-mute">HER LIVE WALLET</div>
             <p className="mt-1 max-w-xl text-sm text-mute">
-              Real trading-wallet marks, not a paper session. Arm live 3× from the desk with a founder Phantom. Toggle
-              whether this book shows on the public site.
+              Same live xStock book the public site can show. Toggle whether those stats are on the homepage.
             </p>
           </div>
           <button
@@ -72,7 +71,7 @@ export function OverviewSection() {
             <Mini k="Sleeve" v={shown.leverage > 1 ? `SOL ${shown.leverage}×` : "Spot 1×"} />
           </div>
         ) : (
-          <p className="mt-4 text-sm text-mute">No live book yet. Connect the trading wallet, set SOL 3×, and arm live.</p>
+          <p className="mt-4 text-sm text-mute">No live book yet. Arm a founder trading wallet from Bots.</p>
         )}
         {shown?.lastAction && <p className="mt-3 text-sm text-mute">{shown.lastAction}</p>}
         <p className="mt-1 font-mono text-[11px] text-mute">

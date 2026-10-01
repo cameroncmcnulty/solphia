@@ -10,10 +10,10 @@ import type { AdminDesk } from "./types";
  * (#overview, #spha, …) deep-link a tool after login.
  */
 export const ADMIN_GROUPS = [
-  { id: "ops", label: "Ops", blurb: "Watch the desk" },
-  { id: "protocol", label: "Protocol", blurb: "Token, pad, posts" },
-  { id: "engine", label: "Engine", blurb: "Replay and locks" },
-  { id: "access", label: "Access", blurb: "Keys and logs" },
+  { id: "ops", label: "Ops", blurb: "Desk, bots, and health" },
+  { id: "site", label: "Site", blurb: "Same pages as solphia.io" },
+  { id: "people", label: "People", blurb: "Accounts, ranks, mail" },
+  { id: "engine", label: "Engine", blurb: "Replay the live book" },
 ] as const;
 
 export type AdminGroupId = (typeof ADMIN_GROUPS)[number]["id"];
@@ -46,24 +46,76 @@ export const ADMIN_NAV = [
     id: "desk",
     group: "ops",
     label: "Live desk",
-    hint: "Public book, tape, and price feeds",
+    hint: "Public xStock book, tape, and feeds",
     icon: "desk" as const,
   },
   {
     id: "traders",
     group: "ops",
-    label: "Bots & seats",
-    hint: "Personal books and paid seats",
+    label: "Bots",
+    hint: "Personal books and 24/7 live clips",
     icon: "traders" as const,
     badge: (d: AdminDesk) => d.traders.length || null,
   },
   {
+    id: "health",
+    group: "ops",
+    label: "Health",
+    hint: "Plans, speed, locked defaults, audit",
+    icon: "health" as const,
+  },
+  {
     id: "launch",
-    group: "protocol",
+    group: "site",
     label: "Launch pad",
-    hint: "Bonding curve, same as the site",
+    hint: "Same bonding curve as /launch",
     icon: "launch" as const,
     badge: (d: AdminDesk) => d.launchCount || null,
+  },
+  {
+    id: "shill",
+    group: "site",
+    label: "Shill Zone",
+    hint: "Same room as /shill — pins and chat",
+    icon: "shill" as const,
+    badge: (d: AdminDesk) => d.shill?.messages || null,
+  },
+  {
+    id: "circle",
+    group: "site",
+    label: "Founders Circle",
+    hint: "Same hangout as /circle",
+    icon: "circle" as const,
+    badge: (d: AdminDesk) => d.circle?.members || null,
+  },
+  {
+    id: "wallets",
+    group: "site",
+    label: "Project",
+    hint: "Wallets, SPHA launch, tokenomics",
+    icon: "wallets" as const,
+  },
+  {
+    id: "users",
+    group: "people",
+    label: "Users",
+    hint: "Search, seats, mods, and delete",
+    icon: "users" as const,
+    badge: (d: AdminDesk) => d.users?.length || null,
+  },
+  {
+    id: "ranks",
+    group: "people",
+    label: "Ranks",
+    hint: "XP, badges, intros, favourite CAs",
+    icon: "ranks" as const,
+  },
+  {
+    id: "mail",
+    group: "people",
+    label: "Mail",
+    hint: "admin@solphia.io identities",
+    icon: "mail" as const,
   },
   {
     id: "backtest",
@@ -71,65 +123,6 @@ export const ADMIN_NAV = [
     label: "Backtest",
     hint: "Replay spot 1× plus SOL 2× / 3×",
     icon: "backtest" as const,
-  },
-  {
-    id: "health",
-    group: "ops",
-    label: "Health",
-    hint: "Storage, speed, and plan ceilings",
-    icon: "health" as const,
-  },
-  {
-    id: "system",
-    group: "engine",
-    label: "System",
-    hint: "Locked defaults and the audit log",
-    icon: "system" as const,
-  },
-  {
-    id: "users",
-    group: "access",
-    label: "Users",
-    hint: "Search, edit, and delete accounts",
-    icon: "users" as const,
-    badge: (d: AdminDesk) => d.users?.length || null,
-  },
-  {
-    id: "wallets",
-    group: "protocol",
-    label: "Project",
-    hint: "Wallets, SPHA launch, tokenomics",
-    icon: "wallets" as const,
-  },
-  {
-    id: "circle",
-    group: "protocol",
-    label: "Founders Circle",
-    hint: "Hangout, jobs, members, airdrops",
-    icon: "circle" as const,
-    badge: (d: AdminDesk) => d.circle?.members || null,
-  },
-  {
-    id: "mail",
-    group: "access",
-    label: "Mail",
-    hint: "admin@solphia.io and @solphia.io identities",
-    icon: "mail" as const,
-  },
-  {
-    id: "shill",
-    group: "protocol",
-    label: "Shill Zone",
-    hint: "Chat, pins, and the pump loop room",
-    icon: "shill" as const,
-    badge: (d: AdminDesk) => d.shill?.messages || null,
-  },
-  {
-    id: "ranks",
-    group: "access",
-    label: "Ranks",
-    hint: "XP, badges, intros, favourite CAs",
-    icon: "ranks" as const,
   },
 ] as const;
 
@@ -139,11 +132,12 @@ export type AdminNavItem = (typeof ADMIN_NAV)[number];
 export const ADMIN_SECTION_IDS: readonly AdminSectionId[] = ADMIN_NAV.map((n) => n.id);
 
 export function isAdminSection(id: string): boolean {
-  return id === "spha" || (ADMIN_SECTION_IDS as readonly string[]).includes(id);
+  return id === "spha" || id === "system" || (ADMIN_SECTION_IDS as readonly string[]).includes(id);
 }
 
 export function resolveAdminSection(id: string): AdminSectionId {
   if (id === "spha") return "wallets";
+  if (id === "system") return "health";
   if ((ADMIN_SECTION_IDS as readonly string[]).includes(id)) return id as AdminSectionId;
   return "overview";
 }

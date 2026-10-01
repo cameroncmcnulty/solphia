@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { SERVICES, nextTier, tierOf } from "../lib/health/catalog";
-import { lastKnownPinata, mergeTiers, recordHealthSample, windowSamples, type HealthSample } from "../lib/health/probe";
+import { floorPaidTiers, lastKnownPinata, mergeTiers, recordHealthSample, windowSamples, type HealthSample } from "../lib/health/probe";
 import { pinataConfigured } from "../lib/pinata";
 import type { AppState } from "../lib/types";
 
@@ -25,6 +25,23 @@ describe("health catalog", () => {
     const upstash = SERVICES.find((s) => s.id === "upstash")!;
     assert.equal(nextTier(upstash, "payg")?.id, "scale");
     assert.ok((tierOf(upstash, "scale").limits.storageMb || 0) >= 5120);
+  });
+
+  it("floors leftover free gauges onto the paid plans", () => {
+    const floored = floorPaidTiers(
+      { vercel: "pro", upstash: "payg", helius: "developer", pinata: "free" },
+      { vercel: "hobby", upstash: "free", helius: "free", pinata: "picnic" },
+    );
+    assert.equal(floored.vercel, "pro");
+    assert.equal(floored.upstash, "payg");
+    assert.equal(floored.helius, "developer");
+    assert.equal(floored.pinata, "picnic");
+    const kept = floorPaidTiers(
+      { vercel: "pro", upstash: "payg", helius: "developer" },
+      { upstash: "scale", helius: "business" },
+    );
+    assert.equal(kept.upstash, "scale");
+    assert.equal(kept.helius, "business");
   });
 
   it("lets a saved Picnic plan raise the Pinata ceiling", () => {

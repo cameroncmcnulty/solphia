@@ -42,9 +42,11 @@ export async function GET(req: NextRequest) {
         last.pinataFiles = probed.pinata.files;
       }
     }
+    s.healthTiers = mergeTiers(s.healthTiers);
   });
-  const log = (await readyState()).healthLog || [];
-  const tiers = mergeTiers(state.healthTiers);
+  const fresh = await readyState();
+  const log = fresh.healthLog || [];
+  const tiers = mergeTiers(fresh.healthTiers);
   return NextResponse.json({
     ok: true,
     at: Date.now(),

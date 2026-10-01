@@ -147,8 +147,8 @@ export function AdminShell({ children }: { children: ReactNode }) {
             <div className="flex flex-wrap items-center justify-end gap-2">
               <span className={`h-2 w-2 rounded-full ${streamOn || ticking ? "bg-acid shadow-[0_0_10px_#14F195]" : "bg-mute"}`} />
               <span className="hidden font-mono text-[10px] text-mute sm:inline">STREAM {streamOn ? "ON" : "POLL"}</span>
-              <span className={`rounded-full px-3 py-1.5 font-mono text-[11px] ${p.killed ? "bg-blood/20 text-blood" : "bg-acid/15 text-acid"}`}>
-                {p.killed ? "STOPPED" : "PAPER"}
+              <span className={`rounded-full px-3 py-1.5 font-mono text-[11px] ${p.killed ? "bg-blood/20 text-blood" : data.liveTrading ? "bg-acid/15 text-acid" : "border border-line text-mute"}`}>
+                {p.killed ? "STOPPED" : data.liveTrading ? "LIVE" : "PAUSED"}
               </span>
               <button
                 type="button"

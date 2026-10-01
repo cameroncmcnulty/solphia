@@ -47,8 +47,7 @@ export function LaunchSection() {
         <div className="font-mono text-[10px] tracking-[0.3em] text-mute">SOLPHIA BONDING CURVE</div>
         <h2 className="mt-1 font-display text-2xl text-ghost">Same pad as the website</h2>
         <p className="mt-2 max-w-2xl text-sm text-mute">
-          Mainnet program 5s26ZJDhyErFMx3ELo9CYXS3Y5BcwZvQ5EceYq8WFv4d. 1.00% total — under Pump.fun’s 1.25%.
-          Creators take 50% of that fee on-chain. $SPHA itself still launches from Project.
+          Same curve as /launch. Creators claim 50% of pad fees on-chain. $SPHA still launches from Project.
         </p>
         <div className="mt-4 flex flex-wrap gap-3">
           <a href="/launch" className="btn-acid rounded-full px-5 py-2 text-sm">

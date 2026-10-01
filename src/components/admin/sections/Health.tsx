@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import { useAdmin } from "../AdminProvider";
+import { SystemSection } from "./System";
 
 type Speed = { id: string; label: string; ms: number | null; ok: boolean; detail?: string };
 type Sample = {
@@ -286,8 +287,8 @@ export function HealthSection() {
           <div className="font-mono text-[10px] tracking-[0.28em] text-mute">SITE HEALTH</div>
           <h2 className="mt-1 font-display text-3xl text-ghost">How close we are to the ceiling</h2>
           <p className="mt-1 max-w-xl text-sm text-mute">
-            Storage, RPC, cron, and the APIs she depends on. Pick the plan you actually pay for so the gauges match
-            reality.
+            Storage, RPC, cron, and the APIs the site depends on. Gauges follow the paid floor: Vercel Pro, Upstash pay as
+            you go, Helius Developer. Flip a card only if you actually bought the next tier.
           </p>
         </div>
         <div className="flex gap-2">
@@ -354,18 +355,18 @@ export function HealthSection() {
             <span className={pack?.keys.helius ? "text-acid" : "text-blood"}>Helius {pack?.keys.helius ? "on" : "off"}</span>
             <span className={pack?.keys.pinata ? "text-acid" : "text-mute"}>Pinata {pack?.keys.pinata ? "on" : "off"}</span>
             <span className={pack?.keys.signer ? "text-acid" : "text-mute"}>Signer {pack?.keys.signer ? "on" : "off"}</span>
-            <span className={pack?.keys.xai ? "text-acid" : "text-mute"}>xAI {pack?.keys.xai ? "on" : "off"}</span>
             <span className={pack?.keys.smtp ? "text-acid" : "text-mute"}>SMTP {pack?.keys.smtp ? "on" : "off"}</span>
-            <span className={pack?.keys.jupiter ? "text-acid" : "text-mute"}>Jupiter key {pack?.keys.jupiter ? "on" : "off"}</span>
-            <span className={pack?.jup?.collecting ? "text-acid" : "text-blood"}>
-              Swap 1% {pack?.jup?.collecting ? "on" : "off"}
+            <span className={data?.treasurySet ? "text-acid" : "text-blood"}>Treasury skim {data?.treasurySet ? "on" : "off"}</span>
+            <span className={pack?.jup?.collecting ? "text-acid" : "text-mute"}>
+              Jupiter referral {pack?.jup?.collecting ? "on" : "off"}
             </span>
           </div>
           {pack?.jup && (
             <p className="mt-3 text-[12px] text-mute">
-              {pack.jup.collecting
-                ? `SOL ${pack.jup.sol ? "ready" : "missing"} · USDC ${pack.jup.usdc ? "ready" : "missing"}${pack.keys.jupiter ? "" : " · add JUPITER_API_KEY on Vercel for rate limits"}`
-                : "Create SOL and USDC referral token accounts at referral.jup.ag or the 1% silently drops."}
+              Open-market /swap skims 1% SOL to treasury. Jupiter referral ATAs are plugin-only — do not add a Jupiter API
+              key. {pack.jup.sol ? "SOL ATA ready" : "SOL ATA missing"}
+              {" · "}
+              {pack.jup.usdc ? "USDC ATA ready" : "USDC ATA missing"}.
             </p>
           )}
         </div>
@@ -448,8 +449,7 @@ export function HealthSection() {
       <div>
         <div className="font-mono text-[10px] tracking-[0.22em] text-acid">GROWTH CHEAT SHEET</div>
         <p className="mt-1 max-w-2xl text-sm text-mute">
-          What we run today, the ceiling, and the next paid step. Flip the tier when you actually upgrade so the gauges
-          move with you.
+          Paid floor is already set. Next step only if a gauge is actually full.
         </p>
         <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {(pack?.services || []).map((s) => {
@@ -508,6 +508,8 @@ export function HealthSection() {
           })}
         </div>
       </div>
+
+      <SystemSection />
     </div>
   );
 }

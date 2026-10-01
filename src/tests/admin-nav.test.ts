@@ -16,8 +16,8 @@ describe("admin nav", () => {
   it("filters by label and group", () => {
     const spha = filterAdminNav("spha");
     assert.ok(spha.some((n) => n.id === "wallets"));
-    const proto = filterAdminNav("protocol");
-    assert.ok(proto.some((n) => n.group === "protocol"));
+    const site = filterAdminNav("site");
+    assert.ok(site.some((n) => n.group === "site"));
     assert.equal(filterAdminNav("zzzz-nope").length, 0);
   });
 
@@ -27,11 +27,17 @@ describe("admin nav", () => {
     assert.equal(isAdminSection("health"), true);
     assert.equal(isAdminSection("spha"), true);
     assert.equal(resolveAdminSection("spha"), "wallets");
+    assert.equal(isAdminSection("system"), true);
+    assert.equal(resolveAdminSection("system"), "health");
     assert.equal(isAdminSection("not-a-tool"), false);
   });
 
-  it("does not list a content bot", () => {
+  it("does not list a content bot or a leftover system page", () => {
     const ids: string[] = ADMIN_NAV.map((n) => n.id);
     assert.equal(ids.includes("content"), false);
+    assert.equal(ids.includes("system"), false);
+    assert.ok(ids.includes("launch"));
+    assert.ok(ids.includes("shill"));
+    assert.ok(ids.includes("circle"));
   });
 });
