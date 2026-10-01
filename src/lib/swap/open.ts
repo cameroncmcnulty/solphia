@@ -1,4 +1,4 @@
-import { PublicKey } from "@solana/web3.js";
+import { LAMPORTS_PER_SOL, PublicKey } from "@solana/web3.js";
 import { connection } from "../solana/connection";
 import { isSolanaAddress } from "../security";
 import { SOL_MINT, USDC_MINT, SOL_DECIMALS, USDC_DECIMALS } from "../pair/mints";
@@ -126,7 +126,17 @@ export async function buildAnySwapTx(opts: {
   slippageBps?: number;
 }): Promise<{ ok: true; transaction: string; via: "curve" | "jupiter"; outAmount: number; feeSol: number } | { ok: false; reason: string }> {
   if (!isSolanaAddress(opts.owner)) return { ok: false, reason: "Connect Phantom first." };
-  if (opts.inputMint !== SOL_MINT) {
+  if (opts.inputMint === SOL_MINT) {
+    try {
+      const lamports = await connection().getBalance(new PublicKey(opts.owner));
+      const need = Math.round(opts.amount * LAMPORTS_PER_SOL);
+      if (lamports < need + 5_000) {
+        return { ok: false, reason: "Not enough SOL in this wallet. Try a smaller amount." };
+      }
+    } catch {
+      /* sim below still catches a short bag */
+    }
+  } else {
     try {
       const have = await tokenUiAmount(connection(), opts.owner, opts.inputMint);
       if (opts.amount > have.amount + 1e-9) {

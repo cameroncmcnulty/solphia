@@ -15,6 +15,7 @@ import type { PhAfter } from "@/lib/wallet/phantomBox";
 import { isSolanaAddress } from "@/lib/wallet/addr";
 import { MIN_TRADE_SOL } from "@/lib/launch/curve";
 import { SOL_MINT, USDC_MINT } from "@/lib/pair/mints";
+import { amountExceedsBalance, spendableAmount } from "@/lib/swap/spendable";
 import {
   clearSwapNotice,
   loadSwapNotice,
@@ -173,7 +174,7 @@ export function SwapWidget({
     : USDC_TOKEN;
   const [pay, setPay] = useState<SwapToken>(SOL_TOKEN);
   const [recv, setRecv] = useState<SwapToken>(seeded);
-  const [amount, setAmount] = useState("0.25");
+  const [amount, setAmount] = useState("");
   const [picker, setPicker] = useState<"pay" | "recv" | null>(null);
   const [ca, setCa] = useState("");
   const [caBusy, setCaBusy] = useState(false);
@@ -190,8 +191,13 @@ export function SwapWidget({
   }
 
   const payNum = Number(String(amount).replace(",", "."));
+  const payIsSol = pay.mint === SOL_MINT;
+  const recvIsSol = recv.mint === SOL_MINT;
   const payBal = pay.mint === SOL_MINT ? bals[SOL_MINT] || 0 : bals[pay.mint] || 0;
   const recvBal = recv.mint === SOL_MINT ? bals[SOL_MINT] || 0 : bals[recv.mint] || 0;
+  const balKnown = Boolean(pk) && Object.prototype.hasOwnProperty.call(bals, payIsSol ? SOL_MINT : pay.mint);
+  const spendable = spendableAmount(payBal, pay.mint);
+  const short = Boolean(pk && balKnown && amountExceedsBalance(payNum, spendable));
 
   const showNotice = useCallback((n: SwapNotice) => {
     setNotice(saveSwapNotice(n));
@@ -263,7 +269,7 @@ export function SwapWidget({
   }, [pk, pay.mint, recv.mint, notice?.kind]);
 
   useEffect(() => {
-    if (!(payNum > 0) || !pay.mint || !recv.mint || pay.mint === recv.mint) {
+    if (!(payNum > 0) || !pay.mint || !recv.mint || pay.mint === recv.mint || short) {
       setOut(null);
       return;
     }
@@ -291,7 +297,7 @@ export function SwapWidget({
       window.clearTimeout(t);
       ctrl.abort();
     };
-  }, [pay.mint, recv.mint, payNum]);
+  }, [pay.mint, recv.mint, payNum, short]);
 
   const catalog = useMemo(() => {
     const rows: SwapToken[] = [];
@@ -373,6 +379,16 @@ export function SwapWidget({
       showNotice({ kind: "error", text: "Enter an amount.", at: Date.now() });
       return;
     }
+    if (short) {
+      showNotice({
+        kind: "error",
+        text: payIsSol
+          ? `Not enough SOL. This wallet has ${fmtSol(payBal, 4)} SOL.`
+          : `Not enough ${pay.symbol.replace(/^\$+/, "")} in this wallet.`,
+        at: Date.now(),
+      });
+      return;
+    }
     setBusy(true);
     liveRef.current = true;
     stayOnCard();
@@ -424,9 +440,15 @@ export function SwapWidget({
     }
   }
 
-  const cta = !pk ? "Connect Phantom" : busy ? "Swapping…" : `Swap ${tick(pay.symbol) || pay.symbol} → ${tick(recv.symbol) || recv.symbol}`;
-  const payIsSol = pay.mint === SOL_MINT;
-  const recvIsSol = recv.mint === SOL_MINT;
+  const cta = !pk
+    ? "Connect Phantom"
+    : busy
+      ? "Swapping…"
+      : short
+        ? payIsSol
+          ? "Not enough SOL"
+          : `Not enough ${pay.symbol.replace(/^\$+/, "")}`
+        : `Swap ${tick(pay.symbol) || pay.symbol} → ${tick(recv.symbol) || recv.symbol}`;
 
   return (
     <div ref={rootRef} className="relative z-20 w-full min-w-0 scroll-mt-20">
@@ -467,7 +489,11 @@ export function SwapWidget({
             <div className="flex items-center justify-between gap-2">
               <p className="font-mono text-[10px] tracking-[0.16em] text-white/40">YOU PAY</p>
               <p className="font-mono text-[11px] text-white/35">
-                {payIsSol ? `${fmtSol(payBal, 4)} SOL` : `${fmtTok(payBal)} ${pay.symbol.replace(/^\$+/, "")}`}
+                {pk
+                  ? payIsSol
+                    ? `Balance ${fmtSol(payBal, 4)} SOL`
+                    : `Balance ${fmtTok(payBal)} ${pay.symbol.replace(/^\$+/, "")}`
+                  : ""}
               </p>
             </div>
             <div className="mt-2 flex items-center gap-2">
@@ -499,7 +525,11 @@ export function SwapWidget({
             <div className="flex items-center justify-between gap-2">
               <p className="font-mono text-[10px] tracking-[0.16em] text-white/40">YOU RECEIVE</p>
               <p className="font-mono text-[11px] text-white/35">
-                {recvIsSol ? `${fmtSol(recvBal, 4)} SOL` : `${fmtTok(recvBal)} ${recv.symbol.replace(/^\$+/, "")}`}
+                {pk
+                  ? recvIsSol
+                    ? `Balance ${fmtSol(recvBal, 4)} SOL`
+                    : `Balance ${fmtTok(recvBal)} ${recv.symbol.replace(/^\$+/, "")}`
+                  : ""}
               </p>
             </div>
             <div className="mt-2 flex items-center gap-2">
@@ -512,38 +542,49 @@ export function SwapWidget({
 
           <div className="mt-3 flex flex-wrap justify-center gap-1.5">
             {payIsSol
-              ? PRESETS.map((p) => (
-                  <button
-                    key={p}
-                    type="button"
-                    onClick={() => setAmount(String(p))}
-                    className={`rounded-full px-3 py-1.5 font-mono text-[11px] ${
-                      Math.abs(payNum - p) < 1e-9 ? "bg-acid text-void" : "bg-white/8 text-white/55"
-                    }`}
-                  >
-                    {p}
-                  </button>
-                ))
+              ? PRESETS.map((p) => {
+                  const tooBig = Boolean(pk && balKnown && p > spendable + 1e-9);
+                  return (
+                    <button
+                      key={p}
+                      type="button"
+                      disabled={tooBig}
+                      onClick={() => setAmount(String(p))}
+                      className={`rounded-full px-3 py-1.5 font-mono text-[11px] disabled:opacity-30 ${
+                        Math.abs(payNum - p) < 1e-9 ? "bg-acid text-void" : "bg-white/8 text-white/55"
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  );
+                })
               : [0.25, 0.5, 0.75].map((p) => (
                   <button
                     key={p}
                     type="button"
-                    onClick={() => setAmount(fmtTok(payBal * p))}
-                    className="rounded-full bg-white/8 px-3 py-1.5 font-mono text-[11px] text-white/55"
+                    disabled={!(spendable > 0)}
+                    onClick={() => setAmount(fmtTok(spendable * p))}
+                    className="rounded-full bg-white/8 px-3 py-1.5 font-mono text-[11px] text-white/55 disabled:opacity-30"
                   >
                     {Math.round(p * 100)}%
                   </button>
                 ))}
             <button
               type="button"
-              onClick={() =>
-                setAmount(payIsSol ? fmtSol(Math.max(0, payBal - 0.02), 4) : fmtTok(payBal))
-              }
-              className="rounded-full bg-white/8 px-3 py-1.5 font-mono text-[11px] text-white/55"
+              disabled={!(spendable > 0)}
+              onClick={() => setAmount(payIsSol ? fmtSol(spendable, 4) : fmtTok(spendable))}
+              className="rounded-full bg-white/8 px-3 py-1.5 font-mono text-[11px] text-white/55 disabled:opacity-30"
             >
               MAX
             </button>
           </div>
+          {short ? (
+            <p className="mt-2 text-center text-[13px] text-blood">
+              {payIsSol
+                ? `This wallet has ${fmtSol(payBal, 4)} SOL. Try MAX or a smaller amount.`
+                : `This wallet does not have ${fmtTok(payNum)} ${pay.symbol.replace(/^\$+/, "")}.`}
+            </p>
+          ) : null}
         </div>
 
         <div className="px-3 pb-4 sm:px-4">
@@ -554,7 +595,7 @@ export function SwapWidget({
           ) : (
             <button
               type="button"
-              disabled={busy || pay.mint === recv.mint}
+              disabled={busy || pay.mint === recv.mint || short || !(payNum > 0)}
               onClick={() => void go()}
               className="flex min-h-[52px] w-full items-center justify-center gap-2 rounded-full bg-[#14f195] text-[16px] font-semibold text-[#04000a] disabled:opacity-40"
             >
