@@ -5,6 +5,7 @@ import { loadState, mutateState } from "@/lib/store";
 import { queueEmail } from "@/lib/email/send";
 import { alertEmailHtml } from "@/lib/email/templates";
 import { maybeGeneratePromos } from "@/lib/admin/promo";
+import { runHouseShill } from "@/lib/shill/house";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -37,12 +38,23 @@ export async function GET(req: NextRequest) {
   } catch {
     /* tick still counts */
   }
+  let houseShares = 0;
+  let houseVotes = 0;
+  try {
+    const house = await runHouseShill();
+    houseShares = house.shares;
+    houseVotes = house.votes;
+  } catch {
+    /* tick still counts */
+  }
   return NextResponse.json({
     ok: true,
     entries: tick.entries,
     exits: tick.exits,
     equity: tick.paper?.equityUsd ?? 0,
     promos,
+    houseShares,
+    houseVotes,
     lastTickAt: Date.now(),
     liveTrading: tick.liveTrading,
     liveFills: tick.liveFills,

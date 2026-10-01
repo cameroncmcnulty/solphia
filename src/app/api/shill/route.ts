@@ -33,7 +33,7 @@ import { creditRank, leaderboard, publicCard } from "@/lib/rank/engine";
 import { canModerateChat, staffRole } from "@/lib/access";
 import type { AppState } from "@/lib/types";
 import { GLDX_MINT_OFFICIAL, QQQX_MINT_OFFICIAL, SOL_MINT, SPYX_MINT_OFFICIAL, USDC_MINT, USDT_MINT } from "@/lib/pair/mints";
-import { loadMarketTape } from "@/lib/launch/market";
+import { houseNeedsNames, houseWorkDue, loadHouseMarketCoins, paintHouseNames, plantHouseSchedules, tickHouseActions } from "@/lib/shill/house";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -111,34 +111,6 @@ function padLaunchMintsFromBook(book: ReturnType<typeof emptyLaunchBook>): Set<s
   return out;
 }
 
-async function tapePinCoins() {
-  try {
-    const out: { mint: string; symbol?: string; name?: string; image?: string; priceUsd?: number; mcUsd?: number }[] = [];
-    const seen = new Set<string>();
-    const launch = await withLaunch((st) => st, false);
-    const book = launch.launch || emptyLaunchBook();
-    const padMints = padLaunchMintsFromBook(book);
-    const pack = await loadMarketTape();
-    for (const row of pack.rows) {
-      const c = row.coin;
-      if (!c?.mint || PIN_BLOCK.has(c.mint) || seen.has(c.mint) || padMints.has(c.mint) || c.born) continue;
-      seen.add(c.mint);
-      out.push({
-        mint: c.mint,
-        symbol: c.symbol,
-        name: c.name,
-        image: c.image,
-        priceUsd: c.priceSol && pack.solUsd ? c.priceSol * pack.solUsd : undefined,
-        mcUsd: c.marketCapUsd,
-      });
-      if (out.length >= 16) break;
-    }
-    return out;
-  } catch {
-    return [];
-  }
-}
-
 async function shillSnap(force = false): Promise<LightSnap> {
   const now = Date.now();
   if (!force && lightSnap && now - lightSnap.at < LIGHT_MS) return lightSnap;
@@ -176,22 +148,47 @@ export async function GET(req: NextRequest) {
   const since = Number(req.nextUrl.searchParams.get("since") || 0);
   const light = since > 0;
   const padMints = light ? new Set<string>() : await withLaunch((st) => padLaunchMintsFromBook(st.launch || emptyLaunchBook()), false);
-  const needHouse = !light && (await withShill((st) => {
-    st.shill = ensureShill(st.shill);
-    const house = st.shill.pins.filter((p) => p.house && p.endsAt > Date.now());
-    const clean = house.filter((p) => !PIN_BLOCK.has(p.mint) && !padMints.has(p.mint));
-    return clean.length < SHILL_HOUSE_PIN_MIN || clean.length !== house.length;
-  }, false));
-  if (needHouse) {
-    const tapeCoins = await tapePinCoins();
+  const need = !light
+    ? await withShill((st) => {
+        st.shill = ensureShill(st.shill);
+        const house = st.shill.pins.filter((p) => p.house && p.endsAt > Date.now());
+        const clean = house.filter((p) => !PIN_BLOCK.has(p.mint) && !padMints.has(p.mint));
+        return {
+          pins: clean.length < SHILL_HOUSE_PIN_MIN || clean.length !== house.length,
+          actors: houseWorkDue(st.shill),
+        };
+      }, false)
+    : { pins: false, actors: false };
+  if (need.pins || need.actors) {
+    const tapeCoins = await loadHouseMarketCoins();
+    if (need.actors) {
+      const actors = await withShill((st) => {
+        st.shill = ensureShill(st.shill);
+        plantHouseSchedules(st.shill);
+        return st.shill.houseActors || [];
+      }, true);
+      const needNames = await withLaunch((st) => {
+        if (!st.launch) st.launch = emptyLaunchBook();
+        return houseNeedsNames(st.launch, actors);
+      }, false);
+      if (needNames) {
+        await withLaunch((st) => {
+          if (!st.launch) st.launch = emptyLaunchBook();
+          paintHouseNames(st.launch, actors);
+        }, true);
+      }
+    }
     await withShill((st) => {
       st.shill = ensureShill(st.shill);
-      st.shill.pins = st.shill.pins.filter((p) => !p.house || (!PIN_BLOCK.has(p.mint) && !padMints.has(p.mint)));
-      fillHousePins(st.shill, tapeCoins);
+      if (need.pins) {
+        st.shill.pins = st.shill.pins.filter((p) => !p.house || (!PIN_BLOCK.has(p.mint) && !padMints.has(p.mint)));
+        fillHousePins(st.shill, tapeCoins);
+      }
+      if (need.actors) tickHouseActions(st.shill, tapeCoins);
     }, true);
     bustShillSnap();
   }
-  const snap = await shillSnap(needHouse);
+  const snap = await shillSnap(need.pins || need.actors);
   const now = Date.now();
   const typing = [...typingMem.entries()]
     .filter(([pk, until]) => pk !== pubkey && until > now)
@@ -201,6 +198,12 @@ export async function GET(req: NextRequest) {
   const book = ensureShill(s.shill);
   const you = youCard(s, pubkey);
   const nextAt = pubkey && isSolanaAddress(pubkey) ? nextVoteAt(book, pubkey) : 0;
+  const launch = s.launch || emptyLaunchBook();
+  const people = [...new Set(messages.map((m) => String(m.owner)).concat(typing, pubkey ? [pubkey] : []))];
+  const profiles: Record<string, ReturnType<typeof publicCard> & { role: "admin" | "mod" | null }> = {};
+  for (const pk of people) {
+    profiles[pk] = { ...publicCard(launch.accounts?.[pk], pk), role: staffRole(s, pk) };
+  }
   if (light) {
     const quiet = messages.length === 0;
     return NextResponse.json({
@@ -209,14 +212,9 @@ export async function GET(req: NextRequest) {
       members: snap.members,
       nextVoteAt: nextAt,
       you,
+      profiles,
       ...(quiet ? {} : { pins: snap.pins, voteBoard: snap.voteBoard }),
     });
-  }
-  const launch = s.launch || emptyLaunchBook();
-  const people = [...new Set(messages.map((m) => String(m.owner)).concat(typing, pubkey ? [pubkey] : []))];
-  const profiles: Record<string, ReturnType<typeof publicCard> & { role: "admin" | "mod" | null }> = {};
-  for (const pk of people) {
-    profiles[pk] = { ...publicCard(launch.accounts?.[pk], pk), role: staffRole(s, pk) };
   }
   return NextResponse.json({
     members: snap.members,

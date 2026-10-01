@@ -5,6 +5,7 @@ import { ArrowDown, ArrowUpDown, ChevronDown, X } from "lucide-react";
 import { TokenArt } from "./TokenArt";
 import { PhantomMark } from "./PhantomMark";
 import { SphaMark } from "./SphaMark";
+import { SolanaMark } from "./SolanaMark";
 import { WalletConnect } from "./WalletConnect";
 import { useOwner } from "@/lib/hooks";
 import { loadOwner } from "@/lib/wallet/owner";
@@ -49,18 +50,6 @@ function fmtTok(n: number) {
 function tick(symbol?: string) {
   const s = (symbol || "").replace(/^\$+/, "").replace(/\*+$/, "").trim();
   return s ? `$${s}` : "";
-}
-
-function SolMark({ className = "h-8 w-8" }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 32 32" aria-hidden="true">
-      <circle cx="16" cy="16" r="16" fill="#000" />
-      <path
-        fill="#14F195"
-        d="M9.4 20.6c.2-.2.5-.3.8-.3h13.1c.5 0 .8.6.4 1l-2.1 2.1c-.2.2-.5.3-.8.3H7.7c-.5 0-.8-.6-.4-1l2.1-2.1zm0-6.4c.2-.2.5-.3.8-.3h13.1c.5 0 .8.6.4 1l-2.1 2.1c-.2.2-.5.3-.8.3H7.7c-.5 0-.8-.6-.4-1l2.1-2.1zm14.3-4.3-2.1-2.1c-.2-.2-.5-.3-.8-.3H7.7c-.5 0-.8.6-.4 1l2.1 2.1c.2.2.5.3.8.3h13.1c.5 0 .8-.6.4-1z"
-      />
-    </svg>
-  );
 }
 
 export function SwapShell({
@@ -134,7 +123,7 @@ function TokenChip({ token, onClick }: { token?: SwapToken | null; onClick?: () 
   const sol = token?.mint === SOL_MINT;
   const inner = sol ? (
     <>
-      <SolMark className="h-7 w-7 shrink-0" />
+      <SolanaMark className="h-7 w-7 shrink-0" />
       <span className="text-[15px] font-semibold text-white">SOL</span>
     </>
   ) : token ? (
@@ -624,7 +613,7 @@ export function SwapWidget({
                   className="flex w-full items-center gap-3 rounded-2xl px-2 py-2.5 text-left hover:bg-white/5"
                 >
                   {row.mint === SOL_MINT ? (
-                    <SolMark className="h-9 w-9" />
+                    <SolanaMark className="h-9 w-9" />
                   ) : (
                     <TokenArt src={row.image} mint={row.mint} label={row.symbol} eager className="h-9 w-9 rounded-full" />
                   )}

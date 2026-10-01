@@ -57,6 +57,17 @@ export type ShillVote = {
   image?: string;
 };
 
+export type HouseActor = {
+  i: number;
+  pubkey: string;
+  named: boolean;
+  nextShareAt: number;
+  nextVoteAt: number;
+  shareEveryMs: number;
+  voteEveryMs: number;
+  voteP: number;
+};
+
 export type ShillBook = {
   messages: ShillMessage[];
   pins: ShillPin[];
@@ -66,6 +77,8 @@ export type ShillBook = {
   lastVoteAt?: Record<string, number>;
   lastHousePinAt?: number;
   nextHousePinAt?: number;
+  houseActors?: HouseActor[];
+  lastHouseShareAt?: number;
 };
 
 export const SHILL_MSG_MAX = 240;

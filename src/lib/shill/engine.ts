@@ -15,6 +15,7 @@ import {
   SHILL_VOTE_COOLDOWN_MS,
   SHILL_VOTE_MAX,
   SHILL_VOTE_MS,
+  type HouseActor,
   type ShillBook,
   type ShillMember,
   type ShillMessage,
@@ -29,7 +30,18 @@ function pushMax<T>(arr: T[], item: T, max: number) {
 }
 
 export function emptyShill(): ShillBook {
-  return { messages: [], pins: [], members: {}, typing: {}, votes: [], lastVoteAt: {}, lastHousePinAt: 0, nextHousePinAt: 0 };
+  return {
+    messages: [],
+    pins: [],
+    members: {},
+    typing: {},
+    votes: [],
+    lastVoteAt: {},
+    lastHousePinAt: 0,
+    nextHousePinAt: 0,
+    houseActors: [],
+    lastHouseShareAt: 0,
+  };
 }
 
 /** Union two books so a empty isolate cannot wipe Redis. Local wins on the same id. */
@@ -47,6 +59,9 @@ export function mergeShill(local: ShillBook, remote: ShillBook): ShillBook {
   for (const v of b.votes || []) votes.set(v.id, v);
   for (const v of a.votes || []) votes.set(v.id, v);
   const lastVoteAt = { ...(b.lastVoteAt || {}), ...(a.lastVoteAt || {}) };
+  const actors = new Map<string, HouseActor>();
+  for (const x of b.houseActors || []) actors.set(x.pubkey, x);
+  for (const x of a.houseActors || []) actors.set(x.pubkey, x);
   const out: ShillBook = {
     messages: [...msgs.values()].sort((x, y) => x.at - y.at),
     pins: [...pins.values()].sort((x, y) => x.at - y.at),
@@ -56,6 +71,8 @@ export function mergeShill(local: ShillBook, remote: ShillBook): ShillBook {
     lastVoteAt,
     lastHousePinAt: Math.max(a.lastHousePinAt || 0, b.lastHousePinAt || 0),
     nextHousePinAt: Math.max(a.nextHousePinAt || 0, b.nextHousePinAt || 0),
+    houseActors: [...actors.values()].sort((x, y) => x.i - y.i),
+    lastHouseShareAt: Math.max(a.lastHouseShareAt || 0, b.lastHouseShareAt || 0),
   };
   pruneShill(out);
   return out;
@@ -72,6 +89,8 @@ export function slimShill(book?: ShillBook | null): ShillBook {
     lastVoteAt: b.lastVoteAt || {},
     lastHousePinAt: b.lastHousePinAt,
     nextHousePinAt: b.nextHousePinAt,
+    houseActors: b.houseActors || [],
+    lastHouseShareAt: b.lastHouseShareAt || 0,
   };
 }
 
@@ -83,6 +102,8 @@ export function ensureShill(book?: ShillBook | null): ShillBook {
   if (!b.typing) b.typing = {};
   if (!b.votes) b.votes = [];
   if (!b.lastVoteAt) b.lastVoteAt = {};
+  if (!b.houseActors) b.houseActors = [];
+  if (!b.lastHouseShareAt) b.lastHouseShareAt = 0;
   b.typing = {};
   pruneShill(b);
   return b;

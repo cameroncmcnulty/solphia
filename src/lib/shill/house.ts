@@ -1,0 +1,429 @@
+import { createHash } from "crypto";
+import { Keypair } from "@solana/web3.js";
+import { isSolanaAddress } from "../security";
+import { emptyLaunchBook, type LaunchBook } from "../launch/engine";
+import { padLaunchMints } from "../launch/boost";
+import { loadMarketTape } from "../launch/market";
+import { setUsername, usernameOk } from "../launch/username";
+import { GLDX_MINT_OFFICIAL, QQQX_MINT_OFFICIAL, SOL_MINT, SPYX_MINT_OFFICIAL, USDC_MINT, USDT_MINT } from "../pair/mints";
+import { withLaunch, withShill } from "../store";
+import { ensureShill, postShill, voteShill, type HousePinCoin } from "./engine";
+import { type HouseActor, type ShillBook } from "./types";
+
+export const HOUSE_ACTOR_N = 87;
+export const HOUSE_NAME_MIN = 0.6;
+export const HOUSE_NAME_MAX = 0.7;
+export const HOUSE_SHARE_CAP = 1;
+export const HOUSE_VOTE_CAP = 2;
+export const HOUSE_SHARE_CLUSTER_MS = 8 * 60_000;
+export const HOUSE_VOTE_CLUSTER_MS = 4 * 60_000;
+export const HOUSE_SHARE_GAP_MS = 8 * 60_000;
+export const HOUSE_SHARE_HORIZON_MS = 22 * 3600_000;
+export const HOUSE_VOTE_HORIZON_MS = 30 * 3600_000;
+export const HOUSE_MIN_LEAD_MS = 8 * 60_000;
+export const HOUSE_TOP_N = 16;
+
+const PIN_BLOCK = new Set([SOL_MINT, SPYX_MINT_OFFICIAL, QQQX_MINT_OFFICIAL, GLDX_MINT_OFFICIAL, USDC_MINT, USDT_MINT]);
+
+const PREFIX = [
+  "Moon", "Ape", "Degen", "Wagmi", "Alpha", "Based", "Pump", "Diamond", "Frog", "Whale",
+  "Anon", "Chad", "Giga", "Turbo", "Neon", "Void", "Nova", "Orbit", "Pulse", "Apex",
+  "Bag", "Hodl", "Ngmi", "Lfg", "Zen", "Pixel", "Cyber", "Rekt", "Bull", "Bear",
+  "Lazy", "Spicy", "Dusty", "Icy", "Lucky", "Silent", "Rapid", "Hyper", "Mega", "Mini",
+  "Proto", "Quantum", "Plasma", "Sonic", "Blitz", "Frost", "Ember", "Shadow", "Ninja", "Viper",
+  "Otter", "Penguin", "Mango", "Pepe", "Bonk", "Jito", "Drift", "Jup", "Ray", "Orca",
+  "Mad", "Wild", "Cool", "Dark", "Lite", "Fast", "Rich", "Early", "King", "Queen",
+  "Yolo", "Fomo", "Sats", "Gmfn", "Serx", "Bags", "Cooked", "Rugged", "Degenx", "Solfi",
+];
+
+const SUFFIX = [
+  "x", "sol", "fi", "dao", "god", "king", "lord", "wiz", "hunt", "wolf",
+  "fox", "cat", "ape", "whale", "frog", "lab", "hq", "og", "xyz", "fun",
+];
+
+const LINES = [
+  (s: string, ca: string) => `${s} ${ca}`,
+  (s: string, ca: string) => `watching ${s} ${ca}`,
+  (s: string, ca: string) => `${ca}`,
+  (s: string, ca: string) => `this ${s} ${ca}`,
+  (s: string, ca: string) => `clean ${s} ${ca}`,
+  (s: string, ca: string) => `${s} looking heavy ${ca}`,
+  (s: string, ca: string) => `still on ${s} ${ca}`,
+  (s: string, ca: string) => `size in ${s} ${ca}`,
+  (s: string, ca: string) => `${s} ${ca} lfg`,
+  (s: string, ca: string) => `don't fade ${s} ${ca}`,
+  (s: string, ca: string) => `chart on ${s} ${ca}`,
+  (s: string, ca: string) => `${s} ${ca} stays`,
+];
+
+export type Rng = () => number;
+
+export function mulberry32(seed: number): Rng {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+export function houseActorPubkey(i: number): string {
+  const seed = createHash("sha256").update(`solphia.house.shill.${i}`).digest();
+  return Keypair.fromSeed(seed).publicKey.toBase58();
+}
+
+export function namedHouseCount(n = HOUSE_ACTOR_N, rng: Rng = Math.random): number {
+  const lo = Math.ceil(n * HOUSE_NAME_MIN);
+  const hi = Math.floor(n * HOUSE_NAME_MAX);
+  return lo + Math.floor(rng() * (hi - lo + 1));
+}
+
+function lerp(a: number, b: number, t: number) {
+  return Math.floor(a + (b - a) * t);
+}
+
+function pickShareEvery(rng: Rng): number {
+  const r = rng();
+  if (r < 0.22) return lerp(45 * 60_000, 3 * 3600_000, rng());
+  if (r < 0.7) return lerp(4 * 3600_000, 14 * 3600_000, rng());
+  return lerp(16 * 3600_000, 40 * 3600_000, rng());
+}
+
+function pickVoteEvery(rng: Rng): number {
+  const r = rng();
+  if (r < 0.28) return lerp(70 * 60_000, 4 * 3600_000, rng());
+  if (r < 0.68) return lerp(5 * 3600_000, 14 * 3600_000, rng());
+  return lerp(16 * 3600_000, 36 * 3600_000, rng());
+}
+
+function pickVoteP(rng: Rng): number {
+  return 0.22 + rng() * 0.38;
+}
+
+function shuffle<T>(arr: T[], rng: Rng): T[] {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function spreadTimes(n: number, now: number, horizon: number, minGap: number, minLead: number, rng: Rng): number[] {
+  const times = Array.from({ length: n }, () => now + minLead + rng() * horizon);
+  times.sort((a, b) => a - b);
+  for (let i = 1; i < times.length; i++) {
+    const floor = times[i - 1] + minGap + Math.floor(rng() * minGap * 0.45);
+    if (times[i] < floor) times[i] = floor;
+  }
+  return shuffle(times, rng);
+}
+
+function timesClustered(times: number[], gap: number): boolean {
+  const s = times.filter((t) => t > 0).sort((a, b) => a - b);
+  for (let i = 1; i < s.length; i++) {
+    if (s[i] - s[i - 1] < gap) return true;
+  }
+  return false;
+}
+
+export function cryptoUsername(rng: Rng, taken: Set<string>): string | null {
+  for (let k = 0; k < 48; k++) {
+    const p = PREFIX[Math.floor(rng() * PREFIX.length)] || "Ape";
+    const mode = rng();
+    let u: string;
+    if (mode < 0.34) u = p + String(10 + Math.floor(rng() * 9890));
+    else if (mode < 0.58) u = `${p}_${SUFFIX[Math.floor(rng() * SUFFIX.length)]}`;
+    else if (mode < 0.8) {
+      const s = SUFFIX[Math.floor(rng() * SUFFIX.length)] || "x";
+      u = p + s + (rng() < 0.55 ? String(Math.floor(rng() * 90) + 10) : "");
+    } else u = p + String(Math.floor(rng() * 90) + 10);
+    if (u.length > 20) u = u.slice(0, 20);
+    if (!usernameOk(u)) continue;
+    const key = u.toLowerCase();
+    if (taken.has(key)) continue;
+    return u;
+  }
+  return null;
+}
+
+function newActor(i: number, named: boolean, shareAt: number, voteAt: number, rng: Rng): HouseActor {
+  return {
+    i,
+    pubkey: houseActorPubkey(i),
+    named,
+    nextShareAt: shareAt,
+    nextVoteAt: voteAt,
+    shareEveryMs: pickShareEvery(rng),
+    voteEveryMs: pickVoteEvery(rng),
+    voteP: pickVoteP(rng),
+  };
+}
+
+export function organicizeHouseActors(book: ShillBook, now = Date.now(), rng: Rng = Math.random): boolean {
+  const actors = book.houseActors || [];
+  if (actors.length < 2) return false;
+  let dirty = false;
+  const shares = actors.map((a) => a.nextShareAt);
+  if (timesClustered(shares, HOUSE_SHARE_CLUSTER_MS)) {
+    const next = spreadTimes(actors.length, now, HOUSE_SHARE_HORIZON_MS, HOUSE_SHARE_CLUSTER_MS, HOUSE_MIN_LEAD_MS, rng);
+    actors.forEach((a, i) => {
+      a.nextShareAt = next[i]!;
+    });
+    dirty = true;
+  }
+  const votes = actors.map((a) => a.nextVoteAt);
+  if (timesClustered(votes, HOUSE_VOTE_CLUSTER_MS)) {
+    const next = spreadTimes(actors.length, now, HOUSE_VOTE_HORIZON_MS, HOUSE_VOTE_CLUSTER_MS, HOUSE_MIN_LEAD_MS, rng);
+    actors.forEach((a, i) => {
+      a.nextVoteAt = next[i]!;
+    });
+    dirty = true;
+  }
+  return dirty;
+}
+
+export function plantHouseSchedules(book: ShillBook, now = Date.now(), rng: Rng = Math.random): boolean {
+  if (!book.houseActors) book.houseActors = [];
+  const have = new Map(book.houseActors.map((a) => [a.i, a]));
+  if (book.houseActors.length > HOUSE_ACTOR_N) {
+    book.houseActors = book.houseActors.filter((a) => a.i >= 0 && a.i < HOUSE_ACTOR_N).slice(0, HOUSE_ACTOR_N);
+  }
+  const missing: number[] = [];
+  for (let i = 0; i < HOUSE_ACTOR_N; i++) {
+    if (!have.has(i)) missing.push(i);
+  }
+  if (!missing.length) return false;
+
+  const existingNamed = book.houseActors.filter((a) => a.named).length;
+  const targetNamed = namedHouseCount(HOUSE_ACTOR_N, rng);
+  let stillNeed = Math.max(0, targetNamed - existingNamed);
+  const shareAt = spreadTimes(missing.length, now, HOUSE_SHARE_HORIZON_MS, HOUSE_SHARE_CLUSTER_MS, HOUSE_MIN_LEAD_MS, rng);
+  const voteAt = spreadTimes(missing.length, now, HOUSE_VOTE_HORIZON_MS, HOUSE_VOTE_CLUSTER_MS, HOUSE_MIN_LEAD_MS, rng);
+  const order = shuffle(missing.map((_, i) => i), rng);
+  const namedSlot = new Set(order.slice(0, stillNeed));
+  missing.forEach((i, k) => {
+    const named = namedSlot.has(k) && stillNeed > 0;
+    if (named) stillNeed -= 1;
+    const actor = newActor(i, named, shareAt[k]!, voteAt[k]!, rng);
+    book.houseActors!.push(actor);
+  });
+  book.houseActors.sort((a, b) => a.i - b.i);
+  organicizeHouseActors(book, now, rng);
+  return true;
+}
+
+export function houseNeedsNames(launch: LaunchBook, actors: HouseActor[]): boolean {
+  return actors.some((a) => a.named && !launch.accounts?.[a.pubkey]?.username);
+}
+
+export function paintHouseNames(launch: LaunchBook, actors: HouseActor[], rng: Rng = Math.random): boolean {
+  const taken = new Set<string>();
+  for (const acc of Object.values(launch.accounts || {})) {
+    if (acc.username) taken.add(acc.username.toLowerCase());
+  }
+  let dirty = false;
+  for (const actor of actors) {
+    if (!actor.named) continue;
+    if (!isSolanaAddress(actor.pubkey)) continue;
+    const cur = launch.accounts?.[actor.pubkey]?.username;
+    if (cur) {
+      taken.add(cur.toLowerCase());
+      continue;
+    }
+    const u = cryptoUsername(rng, taken);
+    if (!u) continue;
+    const set = setUsername(launch, actor.pubkey, u);
+    if (set.ok && set.username) {
+      taken.add(set.username.toLowerCase());
+      dirty = true;
+    }
+  }
+  return dirty;
+}
+
+export function houseWorkDue(book: ShillBook, now = Date.now()): boolean {
+  const actors = book.houseActors || [];
+  if (actors.length < HOUSE_ACTOR_N) return true;
+  return actors.some((a) => a.nextShareAt <= now || a.nextVoteAt <= now);
+}
+
+function pickTop(pool: HousePinCoin[], rng: Rng): HousePinCoin | null {
+  if (!pool.length) return null;
+  const top = pool.slice(0, Math.min(HOUSE_TOP_N, pool.length));
+  let sum = 0;
+  const w = top.map((_, i) => {
+    const v = 1 / (1 + i * 0.35);
+    sum += v;
+    return v;
+  });
+  let r = rng() * sum;
+  for (let i = 0; i < top.length; i++) {
+    r -= w[i]!;
+    if (r <= 0) return top[i]!;
+  }
+  return top[0] || null;
+}
+
+function jitterEvery(every: number, rng: Rng) {
+  return Math.max(60_000, Math.floor(every * (0.65 + rng() * 0.7)));
+}
+
+export function tickHouseActions(
+  book: ShillBook,
+  candidates: HousePinCoin[],
+  now = Date.now(),
+  rng: Rng = Math.random,
+  blocked: Set<string> = new Set(),
+): { shares: number; votes: number } {
+  plantHouseSchedules(book, now, rng);
+  const pool = candidates.filter((c) => c.mint && isSolanaAddress(c.mint) && !PIN_BLOCK.has(c.mint) && !blocked.has(c.mint));
+  const actors = book.houseActors || [];
+  let shares = 0;
+  let votes = 0;
+
+  const shareDue = actors.filter((a) => a.nextShareAt <= now).sort((a, b) => a.nextShareAt - b.nextShareAt);
+  const lastShare = book.lastHouseShareAt || 0;
+  const gapOk = !lastShare || now - lastShare >= HOUSE_SHARE_GAP_MS;
+  if (gapOk && pool.length) {
+    for (const actor of shareDue) {
+      if (shares >= HOUSE_SHARE_CAP) break;
+      const coin = pickTop(pool, rng);
+      if (!coin?.mint) {
+        actor.nextShareAt = now + jitterEvery(actor.shareEveryMs, rng);
+        continue;
+      }
+      const sym = (coin.symbol || coin.mint.slice(0, 4)).replace(/^\$+/, "");
+      const line = LINES[Math.floor(rng() * LINES.length)] || LINES[0];
+      const text = line!(sym, coin.mint);
+      const posted = postShill(book, {
+        owner: actor.pubkey,
+        text,
+        token: {
+          mint: coin.mint,
+          symbol: coin.symbol || sym,
+          name: coin.name || coin.symbol || "token",
+          image: coin.image,
+          priceUsd: coin.priceUsd,
+          mcUsd: coin.mcUsd,
+        },
+        now,
+      });
+      actor.nextShareAt = now + jitterEvery(actor.shareEveryMs, rng);
+      if (posted.ok) {
+        shares += 1;
+        book.lastHouseShareAt = now;
+        for (const other of shareDue) {
+          if (other.pubkey === actor.pubkey || other.nextShareAt > now) continue;
+          other.nextShareAt = now + HOUSE_SHARE_GAP_MS + Math.floor(rng() * HOUSE_SHARE_CLUSTER_MS);
+        }
+      }
+    }
+  } else {
+    for (const actor of shareDue) {
+      const wait = Math.max(0, HOUSE_SHARE_GAP_MS - (now - (book.lastHouseShareAt || 0)));
+      actor.nextShareAt = now + wait + Math.floor(rng() * actor.shareEveryMs * 0.25);
+    }
+  }
+
+  const voteDue = actors.filter((a) => a.nextVoteAt <= now).sort((a, b) => a.nextVoteAt - b.nextVoteAt);
+  for (const actor of voteDue) {
+    if (votes >= HOUSE_VOTE_CAP) break;
+    if (rng() >= actor.voteP || !pool.length) {
+      actor.nextVoteAt = now + 30 * 60_000 + Math.floor(rng() * 4 * 3600_000);
+      continue;
+    }
+    const coin = pickTop(pool, rng);
+    if (!coin?.mint) {
+      actor.nextVoteAt = now + jitterEvery(actor.voteEveryMs, rng);
+      continue;
+    }
+    const out = voteShill(book, {
+      owner: actor.pubkey,
+      mint: coin.mint,
+      token: {
+        mint: coin.mint,
+        symbol: coin.symbol || coin.mint.slice(0, 4),
+        name: coin.name || coin.symbol || "token",
+        image: coin.image,
+      },
+      now,
+    });
+    if (out.ok) {
+      votes += 1;
+      actor.nextVoteAt = now + jitterEvery(actor.voteEveryMs, rng);
+    } else {
+      actor.nextVoteAt = (out.nextAt || now) + Math.floor(rng() * 40 * 60_000);
+    }
+  }
+  return { shares, votes };
+}
+
+export async function loadHouseMarketCoins(): Promise<HousePinCoin[]> {
+  try {
+    const out: HousePinCoin[] = [];
+    const seen = new Set<string>();
+    const launch = await withLaunch((st) => st, false);
+    const book = launch.launch || emptyLaunchBook();
+    const padMints = padLaunchMints(book);
+    const pack = await loadMarketTape();
+    for (const row of pack.rows) {
+      const c = row.coin;
+      if (!c?.mint || PIN_BLOCK.has(c.mint) || seen.has(c.mint) || padMints.has(c.mint) || c.born) continue;
+      seen.add(c.mint);
+      out.push({
+        mint: c.mint,
+        symbol: c.symbol,
+        name: c.name,
+        image: c.image,
+        priceUsd: c.priceSol && pack.solUsd ? c.priceSol * pack.solUsd : undefined,
+        mcUsd: c.marketCapUsd,
+      });
+      if (out.length >= 16) break;
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
+export async function runHouseShill(now = Date.now()): Promise<{ shares: number; votes: number; planted: boolean }> {
+  const peek = await withShill((st) => {
+    const book = ensureShill(st.shill);
+    return { due: houseWorkDue(book, now), n: (book.houseActors || []).length, actors: book.houseActors || [] };
+  }, false);
+
+  let planted = false;
+  let actors = peek.actors;
+  if (peek.n < HOUSE_ACTOR_N) {
+    actors = await withShill((st) => {
+      st.shill = ensureShill(st.shill);
+      planted = plantHouseSchedules(st.shill, now);
+      return st.shill.houseActors || [];
+    }, true);
+  }
+
+  const needNames = await withLaunch((st) => {
+    if (!st.launch) st.launch = emptyLaunchBook();
+    return houseNeedsNames(st.launch, actors);
+  }, false);
+  if (needNames) {
+    await withLaunch((st) => {
+      if (!st.launch) st.launch = emptyLaunchBook();
+      paintHouseNames(st.launch, actors);
+    }, true);
+  }
+
+  const dueNow = houseWorkDue({ houseActors: actors } as ShillBook, now);
+  if (!dueNow) return { shares: 0, votes: 0, planted };
+
+  const coins = await loadHouseMarketCoins();
+  const out = await withShill((st) => {
+    st.shill = ensureShill(st.shill);
+    if ((st.shill.houseActors || []).length < HOUSE_ACTOR_N) plantHouseSchedules(st.shill, now);
+    return tickHouseActions(st.shill, coins, now);
+  }, true);
+  return { ...out, planted };
+}
