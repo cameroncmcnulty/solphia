@@ -102,28 +102,26 @@ async function tokenOf(mint: string): Promise<ShillToken | null> {
 
 const PIN_BLOCK = new Set([SOL_MINT, SPYX_MINT_OFFICIAL, QQQX_MINT_OFFICIAL, GLDX_MINT_OFFICIAL, USDC_MINT, USDT_MINT]);
 
+function padLaunchMintsFromBook(book: ReturnType<typeof emptyLaunchBook>): Set<string> {
+  const out = new Set<string>();
+  for (const c of book.coins || []) {
+    if (c.mint) out.add(c.mint);
+    if (c.id) out.add(c.id);
+  }
+  return out;
+}
+
 async function tapePinCoins() {
   try {
     const out: { mint: string; symbol?: string; name?: string; image?: string; priceUsd?: number; mcUsd?: number }[] = [];
     const seen = new Set<string>();
     const launch = await withLaunch((st) => st, false);
     const book = launch.launch || emptyLaunchBook();
-    for (const c of book.coins) {
-      if (!c.mint || PIN_BLOCK.has(c.mint) || seen.has(c.mint) || c.status === "graduated") continue;
-      seen.add(c.mint);
-      out.push({
-        mint: c.mint,
-        symbol: c.symbol,
-        name: c.name,
-        image: c.image,
-        mcUsd: undefined,
-      });
-      if (out.length >= 16) return out;
-    }
+    const padMints = padLaunchMintsFromBook(book);
     const pack = await loadMarketTape();
     for (const row of pack.rows) {
       const c = row.coin;
-      if (!c?.mint || PIN_BLOCK.has(c.mint) || seen.has(c.mint)) continue;
+      if (!c?.mint || PIN_BLOCK.has(c.mint) || seen.has(c.mint) || padMints.has(c.mint) || c.born) continue;
       seen.add(c.mint);
       out.push({
         mint: c.mint,
@@ -177,16 +175,18 @@ export async function GET(req: NextRequest) {
   const pubkey = req.nextUrl.searchParams.get("pubkey") || "";
   const since = Number(req.nextUrl.searchParams.get("since") || 0);
   const light = since > 0;
+  const padMints = light ? new Set<string>() : await withLaunch((st) => padLaunchMintsFromBook(st.launch || emptyLaunchBook()), false);
   const needHouse = !light && (await withShill((st) => {
     st.shill = ensureShill(st.shill);
-    const house = st.shill.pins.filter((p) => p.house && p.endsAt > Date.now()).length;
-    return house < SHILL_HOUSE_PIN_MIN;
+    const house = st.shill.pins.filter((p) => p.house && p.endsAt > Date.now());
+    const clean = house.filter((p) => !PIN_BLOCK.has(p.mint) && !padMints.has(p.mint));
+    return clean.length < SHILL_HOUSE_PIN_MIN || clean.length !== house.length;
   }, false));
   if (needHouse) {
     const tapeCoins = await tapePinCoins();
     await withShill((st) => {
       st.shill = ensureShill(st.shill);
-      st.shill.pins = st.shill.pins.filter((p) => !p.house || !PIN_BLOCK.has(p.mint));
+      st.shill.pins = st.shill.pins.filter((p) => !p.house || (!PIN_BLOCK.has(p.mint) && !padMints.has(p.mint)));
       fillHousePins(st.shill, tapeCoins);
     }, true);
     bustShillSnap();

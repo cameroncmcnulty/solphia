@@ -445,6 +445,8 @@ describe("launch create validation", () => {
     assert.match(src, /\["trending", "Trending"\],\s*\["rank", "Rank"\]/);
     assert.equal(src.includes("Graduated"), false);
     assert.equal(/k === "live" \? "Curve"/.test(src), false);
+    assert.equal(src.includes("Open a token below"), false);
+    assert.match(src, /onPick/);
     assert.match(src, /Approve this claim in Phantom/);
   });
 

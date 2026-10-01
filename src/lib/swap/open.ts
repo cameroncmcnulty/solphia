@@ -2,7 +2,9 @@ import { PublicKey } from "@solana/web3.js";
 import { connection } from "../solana/connection";
 import { isSolanaAddress } from "../security";
 import { SOL_MINT, USDC_MINT, SOL_DECIMALS, USDC_DECIMALS } from "../pair/mints";
-import { buildSwapTx, quoteOpenSwap } from "../pair/jupiter";
+import { quoteOpenSwap } from "../pair/jupiter";
+import { assembleSwapTx } from "./build";
+import { liveSwapFeeSol } from "./route";
 import { buildPadSwapTx, quotePadSwap } from "./pad";
 import { isDeskMint } from "../tx/venue";
 
@@ -82,12 +84,14 @@ export async function quoteAnySwap(opts: {
     }
   }
   const [inDecimals, outDecimals] = await Promise.all([mintDecimals(opts.inputMint), mintDecimals(opts.outputMint)]);
+  const buyFee = opts.inputMint === SOL_MINT ? liveSwapFeeSol(opts.amount) : 0;
+  const quoteAmount = buyFee > 0 ? Math.max(0, opts.amount - buyFee) : opts.amount;
   let q: Awaited<ReturnType<typeof quoteOpenSwap>>;
   try {
     q = await quoteOpenSwap({
       inputMint: opts.inputMint,
       outputMint: opts.outputMint,
-      amount: opts.amount,
+      amount: quoteAmount,
       slippageBps: slip,
       inDecimals,
       outDecimals,
@@ -96,11 +100,13 @@ export async function quoteAnySwap(opts: {
     return { ok: false, reason: e instanceof Error ? e.message : "No swap route." };
   }
   if (!q.ok) return { ok: false, reason: q.reason };
+  const feeSol =
+    opts.inputMint === SOL_MINT ? liveSwapFeeSol(opts.amount) : opts.outputMint === SOL_MINT ? liveSwapFeeSol(q.outAmount) : 0;
   return {
     ok: true,
     via: "jupiter",
-    outAmount: q.outAmount,
-    feeSol: 0,
+    outAmount: opts.outputMint === SOL_MINT && feeSol > 0 ? Math.max(0, q.outAmount - feeSol) : q.outAmount,
+    feeSol,
     spendSol: opts.amount,
     impactPct: q.impactPct,
     inMint: opts.inputMint,
@@ -133,16 +139,26 @@ export async function buildAnySwapTx(opts: {
     if (!tx.ok) return { ok: false, reason: tx.reason };
     return { ok: true, transaction: tx.transaction, via: "curve", outAmount: q.outAmount, feeSol: q.feeSol };
   }
+  const buyFee = opts.inputMint === SOL_MINT ? liveSwapFeeSol(opts.amount) : 0;
+  const quoteAmount = buyFee > 0 ? Math.max(0, opts.amount - buyFee) : opts.amount;
   const jup = await quoteOpenSwap({
     inputMint: opts.inputMint,
     outputMint: opts.outputMint,
-    amount: opts.amount,
+    amount: quoteAmount,
     slippageBps: slip,
     inDecimals: q.inDecimals,
     outDecimals: q.outDecimals,
   });
   if (!jup.ok) return { ok: false, reason: jup.reason };
-  const built = await buildSwapTx(jup.quote, opts.owner);
+  const feeAfter = opts.outputMint === SOL_MINT && opts.inputMint !== SOL_MINT;
+  const feeSol = buyFee > 0 ? buyFee : feeAfter ? liveSwapFeeSol(jup.outAmount) : 0;
+  const built = await assembleSwapTx({
+    owner: opts.owner,
+    quote: jup.quote,
+    feeSol,
+    feeAfter,
+  });
   if (!built.ok) return built;
-  return { ok: true, transaction: built.transaction, via: "jupiter", outAmount: q.outAmount, feeSol: 0 };
+  const outAmount = feeAfter && feeSol > 0 ? Math.max(0, jup.outAmount - feeSol) : jup.outAmount;
+  return { ok: true, transaction: built.transaction, via: "jupiter", outAmount, feeSol };
 }

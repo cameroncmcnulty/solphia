@@ -9,6 +9,8 @@ import { isDeskMint } from "../lib/tx/venue";
 import { SOL_MINT, USDC_MINT } from "../lib/pair/mints";
 import { padPair } from "../lib/swap/open";
 import { launchError } from "../lib/launch/errors";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 
 describe("pad swap fee", () => {
   it("takes 1% of SOL on the in-house curve, not a Jupiter skim", () => {
@@ -62,6 +64,15 @@ describe("in-house pad venue", () => {
     assert.equal(padPair(padMint, USDC_MINT), null);
     assert.equal(padPair(SOL_MINT, SOL_MINT), null);
     assert.equal(padPair("nope", SOL_MINT), null);
+  });
+});
+
+describe("open market swap fees", () => {
+  it("skims 1% SOL to treasury on the native swap path", () => {
+    const src = readFileSync(path.join(process.cwd(), "src/lib/swap/open.ts"), "utf8");
+    assert.match(src, /assembleSwapTx/);
+    assert.match(src, /liveSwapFeeSol/);
+    assert.equal(liveSwapFeeSol(1), 0.01);
   });
 });
 

@@ -8,6 +8,7 @@ import { withLaunch } from "@/lib/store";
 import { emptyLaunchBook } from "@/lib/launch/engine";
 import { loadMarketTape } from "@/lib/launch/market";
 import {
+  HOUSE_KEEP_MIN,
   ROCKET_MAX,
   ROCKET_PACKS,
   buyBoost,
@@ -28,6 +29,10 @@ const Body = z.object({
   coinId: z.string().max(80),
   rockets: z.number().int().min(1).max(ROCKET_MAX),
   signature: z.string().min(32).max(128).optional(),
+  mint: z.string().max(80).optional(),
+  symbol: z.string().max(20).optional(),
+  name: z.string().max(40).optional(),
+  image: z.string().max(2000).optional(),
 });
 
 function bookOf(s: { launch?: ReturnType<typeof emptyLaunchBook> }) {
@@ -41,55 +46,34 @@ export async function GET(req: NextRequest) {
   const first = await withLaunch((st) => {
     const book = bookOf(st);
     const dirtyTick = tickBoosts(book);
-    const empty = rankedBoosts(book).length === 0;
-    if (empty) {
-      fillHouseBoosts(
-        book,
-        book.coins.slice(0, 10).map((c) => ({
-          id: c.id,
-          mint: c.mint,
-          symbol: c.symbol,
-          name: c.name,
-          image: c.image,
-        })),
-      );
-    }
-    return { dirty: dirtyTick || empty, book };
+    const house = fillHouseBoosts(book, []);
+    return { dirty: dirtyTick || house, book };
   }, false);
   if (first.dirty) {
     await withLaunch((st) => {
       const book = bookOf(st);
       tickBoosts(book);
-      if (rankedBoosts(book).length === 0) {
-        fillHouseBoosts(
-          book,
-          book.coins.slice(0, 10).map((c) => ({
-            id: c.id,
-            mint: c.mint,
-            symbol: c.symbol,
-            name: c.name,
-            image: c.image,
-          })),
-        );
-      }
+      fillHouseBoosts(book, []);
     }, true);
   }
   let book = first.book;
   const now = Date.now();
   let ranked = rankedBoosts(book, now);
-  if (ranked.length === 0) {
+  const houseLive = liveBoosts(book, now).filter((b) => b.house).length;
+  if (houseLive < HOUSE_KEEP_MIN) {
     try {
       const pack = await loadMarketTape();
       await withLaunch((st) => {
         const b = bookOf(st);
         fillHouseBoosts(
           b,
-          pack.rows.slice(0, 10).map((r) => ({
+          pack.rows.map((r) => ({
             id: r.coin.id || r.coin.mint,
             mint: r.coin.mint,
             symbol: r.coin.symbol,
             name: r.coin.name,
             image: r.coin.image,
+            born: Boolean(r.coin.born),
           })),
         );
       }, true);
@@ -131,9 +115,9 @@ export async function POST(req: NextRequest) {
   if (!parsed.data.signature) {
     const s = await withLaunch((st) => st, false);
     const book = bookOf(s);
-    const coin = book.coins.find((c) => c.id === parsed.data.coinId || c.mint === parsed.data.coinId);
-    if (!coin && !parsed.data.coinId) {
-      return NextResponse.json({ error: "not_found", message: "Pick a token." }, { status: 400 });
+    const coinId = parsed.data.coinId || parsed.data.mint || "";
+    if (!coinId) {
+      return NextResponse.json({ error: "not_found", message: "Paste a CA to boost." }, { status: 400 });
     }
     return NextResponse.json({
       ok: true,
@@ -156,7 +140,11 @@ export async function POST(req: NextRequest) {
     const book = bookOf(s);
     return buyBoost(book, {
       owner: parsed.data.pubkey,
-      coinId: parsed.data.coinId,
+      coinId: parsed.data.coinId || parsed.data.mint || "",
+      mint: parsed.data.mint,
+      symbol: parsed.data.symbol,
+      name: parsed.data.name,
+      image: parsed.data.image,
       rockets,
       sig: parsed.data.signature || "",
       paidSol: sol,

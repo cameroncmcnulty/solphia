@@ -1,12 +1,20 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { createCoin, emptyLaunchBook } from "../lib/launch/engine";
 import {
+  HOUSE_INITIAL,
+  HOUSE_KEEP_MIN,
+  HOUSE_SPREAD_MS,
+  HOUSE_STAGGER_MS,
   MEGA_ROCKETS,
   ROCKET_MS,
   buyBoost,
+  dropPadHouseBoosts,
   fillHouseBoosts,
   liveBoosts,
+  organicizeHouseBoosts,
   rankedBoosts,
   rocketSol,
   tickBoosts,
@@ -105,28 +113,125 @@ describe("rocket boosts", () => {
     assert.equal(b.ok, false);
   });
 
-  it("house-fills from the top 10 until 8-10 live, and does not reshuffle while any are live", () => {
-    const book = bookWithCoins();
+  it("house-fills a few market coins with staggered start times and does not reshuffle live rows", () => {
+    const book = emptyLaunchBook();
     const t0 = 9_000_000;
-    const top = book.coins.slice(0, 10).map((c) => ({ id: c.id, mint: c.mint, symbol: c.symbol, name: c.name, image: c.image }));
-    assert.equal(fillHouseBoosts(book, top, t0), true);
-    const n = rankedBoosts(book, t0).length;
-    assert.ok(n >= 8 && n <= 10);
-    assert.equal(fillHouseBoosts(book, top, t0), false);
-    for (const b of liveBoosts(book, t0)) b.status = "done";
-    assert.equal(rankedBoosts(book, t0).length, 0);
-    assert.equal(fillHouseBoosts(book, top, t0 + 1), true);
-    assert.ok(rankedBoosts(book, t0 + 1).length >= 8);
+    const market = Array.from({ length: 12 }, (_, i) => ({
+      id: `m${i}`,
+      mint: `MarketMint${i}11111111111111111111111111111`.slice(0, 44),
+      symbol: `M${i}`,
+      name: `Market${i}`,
+    }));
+    assert.equal(fillHouseBoosts(book, market, t0), true);
+    const live = liveBoosts(book, t0);
+    assert.ok(live.length >= 2 && live.length <= HOUSE_INITIAL);
+    const bought = live.map((b) => b.boughtAt).sort((a, b) => a - b);
+    for (let i = 1; i < bought.length; i++) {
+      assert.ok(bought[i] > bought[i - 1], "house boosts must not share a start time");
+      assert.ok(bought[i] - bought[i - 1] >= HOUSE_SPREAD_MS / 2, "house boosts must be hours apart");
+    }
+    assert.ok(live.length <= HOUSE_KEEP_MIN);
+    const ids = live.map((b) => b.id);
+    assert.equal(fillHouseBoosts(book, market, t0), false);
+    assert.deepEqual(
+      liveBoosts(book, t0).map((b) => b.id),
+      ids,
+    );
+    assert.equal(fillHouseBoosts(book, market, t0 + HOUSE_STAGGER_MS), true);
+    assert.ok(liveBoosts(book, t0 + HOUSE_STAGGER_MS).length >= live.length);
+    assert.ok(ids.every((id) => liveBoosts(book, t0 + HOUSE_STAGGER_MS).some((b) => b.id === id)));
   });
 
-  it("plants 1–2 mega 500 packs so the rail can spark", () => {
+  it("never house-boosts pad launches and drops ones that slipped in", () => {
     const book = bookWithCoins();
+    const t0 = 12_000_000;
+    const pad = book.coins.slice(0, 8).map((c) => ({
+      id: c.id,
+      mint: c.mint,
+      symbol: c.symbol,
+      name: c.name,
+      image: c.image,
+      born: true,
+    }));
+    assert.equal(fillHouseBoosts(book, pad, t0), false);
+    assert.equal(rankedBoosts(book, t0).length, 0);
+    const marketMint = "MarketKeep111111111111111111111111111111111";
+    buyBoost(book, {
+      owner: "solphia",
+      coinId: book.coins[0].id,
+      mint: book.coins[0].mint,
+      rockets: 10,
+      sig: "housepadxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      paidSol: 0,
+      now: t0,
+      house: true,
+    });
+    buyBoost(book, {
+      owner: "solphia",
+      coinId: marketMint,
+      mint: marketMint,
+      symbol: "KEEP",
+      rockets: 30,
+      sig: "housemarketxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      paidSol: 0,
+      now: t0,
+      house: true,
+    });
+    assert.equal(dropPadHouseBoosts(book), true);
+    const left = liveBoosts(book, t0);
+    assert.equal(left.length, 1);
+    assert.equal(left[0].mint, marketMint);
+  });
+
+  it("spreads a clustered house batch instead of resetting it", () => {
+    const book = emptyLaunchBook();
+    const t0 = 15_000_000;
+    for (let i = 0; i < 3; i++) {
+      buyBoost(book, {
+        owner: "solphia",
+        coinId: `c${i}`,
+        mint: `ClusterMint${i}1111111111111111111111111111`.slice(0, 44),
+        rockets: 10,
+        sig: `cluster${i}xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx`,
+        paidSol: 0,
+        now: t0,
+        house: true,
+      });
+    }
+    const ids = liveBoosts(book, t0).map((b) => b.id);
+    assert.equal(organicizeHouseBoosts(book, t0), true);
+    const live = liveBoosts(book, t0);
+    assert.deepEqual(
+      live.map((b) => b.id).sort(),
+      [...ids].sort(),
+    );
+    const bought = live.map((b) => b.boughtAt).sort((a, b) => a - b);
+    for (let i = 1; i < bought.length; i++) {
+      assert.ok(bought[i] > bought[i - 1]);
+      assert.ok(bought[i] - bought[i - 1] >= HOUSE_SPREAD_MS / 2);
+    }
+    assert.equal(organicizeHouseBoosts(book, t0), false);
+  });
+
+  it("plants a mega 500 pack in the first house batch", () => {
+    const book = emptyLaunchBook();
     const t0 = 11_000_000;
-    const top = book.coins.slice(0, 10).map((c) => ({ id: c.id, mint: c.mint, symbol: c.symbol, name: c.name, image: c.image }));
-    assert.equal(fillHouseBoosts(book, top, t0), true);
+    const market = Array.from({ length: 8 }, (_, i) => ({
+      id: `m${i}`,
+      mint: `MegaMint${i}1111111111111111111111111111111`.slice(0, 44),
+      symbol: `G${i}`,
+    }));
+    assert.equal(fillHouseBoosts(book, market, t0), true);
     const megas = rankedBoosts(book, t0).filter((r) => r.rockets >= MEGA_ROCKETS);
     assert.ok(megas.length >= 1);
     assert.ok(megas.length <= 2);
     assert.equal(megas[0].mega, true);
+  });
+
+  it("lets a user search a CA instead of hunting the tape", () => {
+    const src = readFileSync(path.join(process.cwd(), "src/components/BoostBuy.tsx"), "utf8");
+    assert.match(src, /Paste any Solana CA/);
+    assert.match(src, /\/api\/launch\/lookup/);
+    assert.equal(src.includes("Open a token below"), false);
   });
 });

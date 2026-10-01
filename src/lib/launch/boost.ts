@@ -7,10 +7,18 @@ export const ROCKET_MS = 24 * 60 * 60 * 1000;
 export const ROCKET_MIN = 10;
 export const ROCKET_MAX = 500;
 export const HOUSE_OWNER = "solphia";
-export const HOUSE_KEEP_MIN = 8;
-export const HOUSE_KEEP_MAX = 10;
-export const HOUSE_REFILL_AT = 7;
-export const HOUSE_TOP = 10;
+export const HOUSE_KEEP_MIN = 6;
+export const HOUSE_KEEP_MAX = 9;
+export const HOUSE_INITIAL = 3;
+export const HOUSE_REFILL_AT = 5;
+export const HOUSE_TOP = 24;
+/** Spread fake start times so two house boosts never share a timestamp. */
+export const HOUSE_SPREAD_MS = 2 * 60 * 60 * 1000;
+export const HOUSE_JITTER_MS = 40 * 60 * 1000;
+export const HOUSE_STAGGER_MS = 45 * 60 * 1000;
+export const HOUSE_REPLACE_MS = 5 * 60 * 1000;
+export const HOUSE_MIN_LEFT_MS = 3 * 60 * 60 * 1000;
+export const HOUSE_CLUSTER_MS = 2 * 60 * 1000;
 export const MEGA_ROCKETS = 500;
 
 export const ROCKET_PACKS = [
@@ -185,6 +193,8 @@ export function buyBoost(
     sig: string;
     paidSol: number;
     now?: number;
+    liveAt?: number;
+    endsAt?: number;
     house?: boolean;
   },
 ): { ok: true; boost: LaunchBoost } | { ok: false; error: string } {
@@ -196,11 +206,13 @@ export function buyBoost(
   if (sig.length < 32) return { ok: false, error: "bad_sig" };
   const rows = ensureBoosts(book);
   if (rows.some((b) => b.sig === sig)) return { ok: false, error: "replay" };
-  const coin = book.coins.find((c) => c.id === opts.coinId || c.mint === opts.coinId);
-  const coinId = coin?.id || opts.coinId;
+  const coin = book.coins.find((c) => c.id === opts.coinId || c.mint === opts.coinId || c.mint === opts.mint);
+  const coinId = coin?.id || opts.coinId || opts.mint || "";
   if (!coinId) return { ok: false, error: "not_found" };
   const now = opts.now || Date.now();
   tickBoosts(book, now);
+  const liveAt = opts.liveAt || now;
+  const endsAt = Math.max(opts.endsAt || liveAt + ROCKET_MS, now + 1_000);
   const boost: LaunchBoost = {
     id: `b_${now.toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
     coinId,
@@ -212,9 +224,9 @@ export function buyBoost(
     rockets,
     paidSol: opts.paidSol,
     sig,
-    boughtAt: now,
-    liveAt: now,
-    endsAt: now + ROCKET_MS,
+    boughtAt: liveAt,
+    liveAt,
+    endsAt,
     status: "live",
     house: Boolean(opts.house),
   };
@@ -222,45 +234,148 @@ export function buyBoost(
   return { ok: true, boost };
 }
 
-export type HouseCoin = { id?: string; mint?: string; symbol?: string; name?: string; image?: string };
+export type HouseCoin = { id?: string; mint?: string; symbol?: string; name?: string; image?: string; born?: boolean };
 
-export function fillHouseBoosts(book: LaunchBook, candidates: HouseCoin[], now = Date.now()): boolean {
-  tickBoosts(book, now);
-  const ranked = rankedBoosts(book, now);
-  const liveN = ranked.length;
-  if (liveN > 0) return false;
-  const add =
-    liveN === 0 ? HOUSE_KEEP_MIN + Math.floor(Math.random() * (HOUSE_KEEP_MAX - HOUSE_KEEP_MIN + 1)) : liveN <= 6 ? 3 : 2;
-  const taken = new Set(ranked.map((r) => r.mint || r.coinId));
-  const top = candidates.filter((c) => (c.mint || c.id) && !taken.has(c.mint || c.id || "")).slice(0, HOUSE_TOP);
-  const pool = [...top];
+function jitter(max = HOUSE_JITTER_MS): number {
+  return Math.floor(Math.random() * Math.max(0, max));
+}
+
+export function padLaunchMints(book: LaunchBook): Set<string> {
+  const out = new Set<string>();
+  for (const c of book.coins || []) {
+    if (c.mint) out.add(c.mint);
+    if (c.id) out.add(c.id);
+  }
+  return out;
+}
+
+export function dropPadHouseBoosts(book: LaunchBook): boolean {
+  const pad = padLaunchMints(book);
+  if (!pad.size) return false;
+  const rows = ensureBoosts(book);
+  const next = rows.filter((b) => !(b.house && pad.has(b.mint || b.coinId)));
+  if (next.length === rows.length) return false;
+  book.boosts = next;
+  return true;
+}
+
+function houseMarketPool(book: LaunchBook, candidates: HouseCoin[], taken: Set<string>): HouseCoin[] {
+  const pad = padLaunchMints(book);
+  const pool = candidates.filter((c) => {
+    const id = c.mint || c.id || "";
+    if (!id || taken.has(id) || pad.has(id) || c.born) return false;
+    return true;
+  });
   for (let i = pool.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [pool[i], pool[j]] = [pool[j], pool[i]];
   }
-  const picks = pool.slice(0, add);
-  const hasMega = ranked.some((r) => r.mega || r.rockets >= MEGA_ROCKETS);
-  const megaN = hasMega ? 0 : Math.min(2, picks.length);
-  let dirty = false;
-  picks.forEach((c, i) => {
-    const id = c.mint || c.id || "";
-    const roll = Math.random();
-    const rockets = i < megaN ? MEGA_ROCKETS : roll < 0.2 ? 100 : roll < 0.5 ? 30 : 10;
-    const r = buyBoost(book, {
-      owner: HOUSE_OWNER,
-      coinId: id,
-      mint: c.mint,
-      symbol: c.symbol,
-      name: c.name,
-      image: c.image,
-      rockets,
-      sig: `house_${id}_${now}_${rockets}_${Math.random().toString(36).slice(2, 8)}`.padEnd(32, "x"),
-      paidSol: 0,
-      now,
-      house: true,
-    });
-    if (r.ok) dirty = true;
+  return pool.slice(0, HOUSE_TOP);
+}
+
+function houseTimesClustered(rows: LaunchBoost[], now: number): boolean {
+  const house = rows.filter((b) => b.house && b.status === "live" && (b.endsAt || 0) > now);
+  if (house.length < 2) return false;
+  const bought = house.map((b) => b.boughtAt || b.liveAt || 0).sort((a, b) => a - b);
+  for (let i = 1; i < bought.length; i++) {
+    if (bought[i] - bought[i - 1] < HOUSE_CLUSTER_MS) return true;
+  }
+  const ends = house.map((b) => b.endsAt || 0).sort((a, b) => a - b);
+  for (let i = 1; i < ends.length; i++) {
+    if (ends[i] - ends[i - 1] < HOUSE_CLUSTER_MS) return true;
+  }
+  return false;
+}
+
+/** One-time spread so a bad batch does not look planted together. Never wipes the row. */
+export function organicizeHouseBoosts(book: LaunchBook, now = Date.now()): boolean {
+  const rows = ensureBoosts(book).filter((b) => b.house && b.status === "live" && (b.endsAt || 0) > now);
+  if (!houseTimesClustered(rows, now)) return false;
+  const order = [...rows].sort((a, b) => (b.rockets || 0) - (a.rockets || 0));
+  order.forEach((b, i) => {
+    const age = (order.length - 1 - i) * HOUSE_SPREAD_MS + jitter();
+    const boughtAt = now - age;
+    const left = HOUSE_MIN_LEFT_MS + i * HOUSE_SPREAD_MS + jitter();
+    b.boughtAt = boughtAt;
+    b.liveAt = boughtAt;
+    b.endsAt = Math.min(boughtAt + ROCKET_MS, now + left);
+    if ((b.endsAt || 0) <= now) b.endsAt = now + HOUSE_MIN_LEFT_MS + jitter(HOUSE_JITTER_MS);
   });
+  return true;
+}
+
+function plantHouseBoost(
+  book: LaunchBook,
+  c: HouseCoin,
+  now: number,
+  slot: number,
+  batch: boolean,
+  mega: boolean,
+): boolean {
+  const id = c.mint || c.id || "";
+  if (!id) return false;
+  const age = (batch ? slot * HOUSE_SPREAD_MS : 0) + jitter();
+  const liveAt = now - age;
+  const left = HOUSE_MIN_LEFT_MS + slot * (HOUSE_SPREAD_MS / 2) + jitter();
+  const endsAt = Math.min(liveAt + ROCKET_MS, now + left);
+  const roll = Math.random();
+  const rockets = mega ? MEGA_ROCKETS : roll < 0.2 ? 100 : roll < 0.5 ? 30 : 10;
+  const r = buyBoost(book, {
+    owner: HOUSE_OWNER,
+    coinId: id,
+    mint: c.mint || id,
+    symbol: c.symbol,
+    name: c.name,
+    image: c.image,
+    rockets,
+    sig: `house_${id}_${now}_${slot}_${rockets}_${Math.random().toString(36).slice(2, 8)}`.padEnd(32, "x"),
+    paidSol: 0,
+    now: liveAt,
+    liveAt,
+    endsAt: Math.max(endsAt, now + HOUSE_MIN_LEFT_MS),
+    house: true,
+  });
+  return r.ok;
+}
+
+export function fillHouseBoosts(book: LaunchBook, candidates: HouseCoin[], now = Date.now()): boolean {
+  tickBoosts(book, now);
+  let dirty = dropPadHouseBoosts(book);
+  if (organicizeHouseBoosts(book, now)) dirty = true;
+  const ranked = rankedBoosts(book, now);
+  const houseN = liveBoosts(book, now).filter((b) => b.house).length;
+  if (houseN >= HOUSE_KEEP_MIN) {
+    if (dirty) {
+      book.lastHouseBoostAt = book.lastHouseBoostAt || now;
+    }
+    return dirty;
+  }
+  const taken = new Set(ranked.map((r) => r.mint || r.coinId));
+  const pool = houseMarketPool(book, candidates, taken);
+  if (!pool.length) return dirty;
+
+  if (houseN === 0 && !book.lastHouseBoostAt) {
+    const add = Math.min(HOUSE_INITIAL, pool.length);
+    if (!add) return dirty;
+    const megaN = Math.min(1, add);
+    for (let i = 0; i < add; i++) {
+      if (plantHouseBoost(book, pool[i], now, add - 1 - i, true, i < megaN)) dirty = true;
+    }
+    book.lastHouseBoostAt = now;
+    book.nextHouseBoostAt = now + HOUSE_STAGGER_MS;
+    return dirty;
+  }
+
+  const due = book.nextHouseBoostAt || 0;
+  if (due && now < due) return dirty;
+  if (!due) {
+    book.nextHouseBoostAt = now + HOUSE_REPLACE_MS;
+    return dirty;
+  }
+  const hasMega = ranked.some((r) => r.mega || r.rockets >= MEGA_ROCKETS);
+  if (plantHouseBoost(book, pool[0], now, 0, false, !hasMega && Math.random() < 0.25)) dirty = true;
+  book.lastHouseBoostAt = now;
+  book.nextHouseBoostAt = now + HOUSE_STAGGER_MS;
   return dirty;
 }
 

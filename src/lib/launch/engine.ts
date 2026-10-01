@@ -127,6 +127,8 @@ export type LaunchBook = {
   treasuryFeesSol: number;
   accounts: Record<string, LaunchAccount>;
   boosts?: LaunchBoost[];
+  lastHouseBoostAt?: number;
+  nextHouseBoostAt?: number;
   /** Partner DBC config. 40 SOL open / 585 SOL graduate. */
   dbcConfig?: string;
   /** Short-lived Phantom connect/sign jobs. Never returned on public GET. */
@@ -134,7 +136,7 @@ export type LaunchBook = {
 };
 
 export function emptyLaunchBook(): LaunchBook {
-  return { coins: [], ownerWallet: DEFAULT_OWNER, ownerEarningsSol: 0, treasuryFeesSol: 0, accounts: {}, boosts: [] };
+  return { coins: [], ownerWallet: DEFAULT_OWNER, ownerEarningsSol: 0, treasuryFeesSol: 0, accounts: {}, boosts: [], lastHouseBoostAt: 0, nextHouseBoostAt: 0 };
 }
 
 export function emptyAccount(pubkey: string): LaunchAccount {
@@ -330,6 +332,8 @@ export function mergeLaunch(local: LaunchBook, remote: LaunchBook): LaunchBook {
     treasuryFeesSol: Math.max(local.treasuryFeesSol || 0, remote.treasuryFeesSol || 0),
     accounts,
     boosts: [...boostMap.values()],
+    lastHouseBoostAt: Math.max(local.lastHouseBoostAt || 0, remote.lastHouseBoostAt || 0),
+    nextHouseBoostAt: Math.max(local.nextHouseBoostAt || 0, remote.nextHouseBoostAt || 0),
     dbcConfig: local.dbcConfig || remote.dbcConfig,
     phJobs: Object.keys(phJobs).length ? phJobs : undefined,
   };

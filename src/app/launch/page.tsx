@@ -1574,20 +1574,21 @@ export default function LaunchPage() {
             />
             {boostOpen && (
               <div className="border-t border-white/10 px-3 pb-4 pt-3 sm:px-4">
-                {owner && open ? (
+                {owner ? (
                   <BoostBuy
                     owner={owner}
-                    coinId={open.id}
-                    symbol={open.symbol}
-                    name={open.name}
-                    image={open.image}
-                    mint={open.mint}
+                    coinId={open?.id}
+                    symbol={open?.symbol}
+                    name={open?.name}
+                    image={open?.image}
+                    mint={open?.mint}
                     onDone={() => refreshBoosts().catch(() => {})}
+                    onPick={(token) => {
+                      if (token.mint) searchMint(token.mint).catch(() => {});
+                    }}
                   />
                 ) : (
-                  <p className="px-1 py-2 text-center text-[13px] text-white/45">
-                    {owner ? "Open a token below, then boost it." : "Connect Phantom to boost."}
-                  </p>
+                  <p className="px-1 py-2 text-center text-[13px] text-white/45">Connect Phantom to boost.</p>
                 )}
               </div>
             )}
