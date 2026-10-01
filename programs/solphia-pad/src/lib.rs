@@ -3,6 +3,7 @@
 //! Graduation is a milestone flag. The same program stays the AMM — no Jupiter hop.
 //! After graduate, the remaining 200M still trade on this curve.
 //! One fee: 1.00% of SOL, split 50 creator / 25 owner / 25 treasury.
+//! If the launcher was invited, the owner’s 25% splits 12.5 / 12.5 with that inviter. Treasury stays 25%.
 //! Tokens live on the curve ATA. Only an optional first buy hits the creator.
 
 use solana_program::{
@@ -35,7 +36,7 @@ const GRADUATE_FEE: u64 = 10_000_000; // 0.01 SOL
 const FEE_BPS: u64 = 100;
 const DEV_BPS: u64 = 50;
 const OWNER_BPS: u64 = 25;
-const REF_BPS: u64 = 25;
+const REF_BPS: u64 = 125; // 12.5% of fee, per 1000; taken from the owner share only
 const MIN_TRADE: u64 = 10_000_000; // 0.01 SOL
 const MAX_TRADE: u64 = 40 * 1_000_000_000;
 
@@ -578,14 +579,13 @@ fn take_str<'a>(data: &'a [u8], i: &mut usize) -> Result<&'a [u8], ProgramError>
 
 fn split_fee(fee: u64, referred: bool) -> (u64, u64, u64, u64) {
     let dev = fee * DEV_BPS / 100;
+    let treasury = fee * 25 / 100;
     if !referred {
-        let owner = fee * OWNER_BPS / 100;
-        let treasury = fee.saturating_sub(dev).saturating_sub(owner);
+        let owner = fee.saturating_sub(dev).saturating_sub(treasury);
         return (dev, owner, treasury, 0);
     }
-    let referral = fee * REF_BPS / 100;
-    let owner = fee / 8;
-    let treasury = fee.saturating_sub(dev).saturating_sub(referral).saturating_sub(owner);
+    let referral = fee * REF_BPS / 1000;
+    let owner = fee.saturating_sub(dev).saturating_sub(treasury).saturating_sub(referral);
     (dev, owner, treasury, referral)
 }
 

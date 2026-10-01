@@ -28,6 +28,7 @@ async function swapDirect(
   amount: number,
   feeSol = 0,
   feeAfter = false,
+  person?: string,
 ): Promise<string> {
   let spend = amount;
   if (!feeAfter && inputMint === SOL_MINT && feeSol > 0) {
@@ -36,7 +37,7 @@ async function swapDirect(
   }
   const q = await quoteBestRoute({ inputMint, outputMint, amount: spend, slippageBps: BOT_SLIPPAGE_BPS });
   if (!q.ok) throw new Error(q.reason);
-  const built = await assembleSwapTx({ owner: kp.publicKey.toBase58(), quote: q.quote, feeSol, feeAfter });
+  const built = await assembleSwapTx({ owner: kp.publicKey.toBase58(), quote: q.quote, feeSol, feeAfter, person });
   if (!built.ok) throw new Error(built.reason);
   return signAndSend(conn, kp, built.transaction);
 }
@@ -48,16 +49,17 @@ async function swapLeg(
   outputMint: string,
   amount: number,
   feeSol = 0,
+  person?: string,
 ): Promise<string> {
   const q = await quoteBestRoute({ inputMint, outputMint, amount, slippageBps: BOT_SLIPPAGE_BPS });
   if (!q.ok) throw new Error(q.reason);
   if (q.viaUsdc && q.midAmount && q.midAmount > 0) {
     const solOut = outputMint === SOL_MINT;
-    await swapDirect(conn, kp, inputMint, USDC_MINT, amount, solOut ? 0 : feeSol, false);
-    return swapDirect(conn, kp, USDC_MINT, outputMint, q.midAmount, solOut ? feeSol : 0, solOut);
+    await swapDirect(conn, kp, inputMint, USDC_MINT, amount, solOut ? 0 : feeSol, false, person);
+    return swapDirect(conn, kp, USDC_MINT, outputMint, q.midAmount, solOut ? feeSol : 0, solOut, person);
   }
   const feeAfter = outputMint === SOL_MINT && inputMint !== SOL_MINT;
-  return swapDirect(conn, kp, inputMint, outputMint, amount, feeSol, feeAfter);
+  return swapDirect(conn, kp, inputMint, outputMint, amount, feeSol, feeAfter, person);
 }
 
 export async function executeIntentOnchain(opts: {
@@ -68,6 +70,7 @@ export async function executeIntentOnchain(opts: {
   qqqxUsd: number;
   gldxUsd: number;
   holdings?: { spyxQty?: number; qqqxQty?: number; gldxQty?: number; usdcQty?: number };
+  person?: string;
 }): Promise<string> {
   const legs = planIntentSwaps(opts);
   if (!legs.length) throw new Error("no live swap built");
@@ -76,7 +79,7 @@ export async function executeIntentOnchain(opts: {
   let sig = "";
   for (let i = 0; i < legs.length; i++) {
     const leg = legs[i];
-    sig = await swapLeg(conn, opts.kp, leg.inputMint, leg.outputMint, leg.amount, i === 0 ? feeSol : 0);
+    sig = await swapLeg(conn, opts.kp, leg.inputMint, leg.outputMint, leg.amount, i === 0 ? feeSol : 0, opts.person);
   }
   return sig;
 }
@@ -118,6 +121,7 @@ export async function fillLiveIntent(
       holdings: h
         ? { spyxQty: h.spyxQty, qqqxQty: h.qqqxQty, gldxQty: h.gldxQty, usdcQty: h.usdcQty }
         : undefined,
+      person: trader.owner,
     });
     applyPairDecision(trader.book, decisionFromIntent(intent, sig), prices, now, mind);
     return { ok: true, signature: sig };

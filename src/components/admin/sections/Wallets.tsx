@@ -633,8 +633,9 @@ function ProfitsPanel() {
       <div className="font-mono text-[10px] tracking-[0.28em] text-acid">PROFITS</div>
       <h2 className="mt-1 font-display text-2xl text-ghost">What we take, where it lands</h2>
       <p className="mt-2 max-w-2xl text-sm text-mute">
-        Live desk and in-house swaps skim 1% SOL to treasury in the same transaction. Pad curve fees are 1% split 50 /
-        25 / 25. Seats, pins, and boosts pay treasury in SOL.
+        Every Solphia fee is 50% creator / 25% owner / 25% treasury. If the launcher or swapper was invited, the
+        owner’s 25% splits 12.5 / 12.5 with their inviter — treasury stays 25%. Open-market tokens and seats / pins /
+        boosts have no Solphia creator, so that 50% stays protocol (75% treasury / 25% owner).
       </p>
       <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
         <Mini k="Treasury booked" v={money(p.accrued.treasurySol)} />
@@ -670,7 +671,7 @@ function ProfitsPanel() {
         </table>
       </div>
       <p className="mt-3 font-mono text-[11px] text-mute">
-        Pad split {p.padSplit.creator} creator / {p.padSplit.owner} owner / {p.padSplit.treasury} treasury. Referred coins:{" "}
+        Pad split {p.padSplit.creator} creator / {p.padSplit.owner} owner / {p.padSplit.treasury} treasury. If referred:{" "}
         {p.padSplitReferred.creator} creator / {p.padSplitReferred.referral} inviter / {p.padSplitReferred.owner} owner /{" "}
         {p.padSplitReferred.treasury} treasury.
       </p>

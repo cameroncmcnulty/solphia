@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { LAMPORTS_PER_SOL } from "@solana/web3.js";
 import { z } from "zod";
 import { clientIp, isSolanaAddress, rateLimit, sanitizeText } from "@/lib/security";
 import { withLaunch, withShill } from "@/lib/store";
 import { treasuryAddress } from "@/lib/treasury";
 import { displayMedia } from "@/lib/pinata";
-import { confirmedSolTransfer } from "@/lib/solana/connection";
+import { confirmedHouseTransfers } from "@/lib/solana/connection";
+import { boundReferrer, houseFeeLegs } from "@/lib/fees/payout";
+import { unsignedHousePay } from "@/lib/fees/payTx";
 import { lookupMarketMint } from "@/lib/launch/market";
 import {
   banShill,
@@ -307,13 +308,22 @@ export async function POST(req: NextRequest) {
       );
     }
     if (!b.signature) {
-      return NextResponse.json({ ok: true, needsSignature: true, treasury, sol: SHILL_PIN_SOL });
+      const packed = await unsignedHousePay(b.pubkey, SHILL_PIN_SOL, b.pubkey);
+      if (!packed.ok) return NextResponse.json({ error: packed.error, message: "Could not start the pin." }, { status: 400 });
+      return NextResponse.json({
+        ok: true,
+        needsSignature: true,
+        treasury,
+        sol: SHILL_PIN_SOL,
+        transaction: packed.transaction,
+        legs: packed.legs,
+      });
     }
-    const pay = await confirmedSolTransfer({
+    const legs = houseFeeLegs({ from: b.pubkey, feeSol: SHILL_PIN_SOL, referrer: boundReferrer(b.pubkey) });
+    const pay = await confirmedHouseTransfers({
       signature: b.signature,
       from: b.pubkey,
-      to: treasury,
-      lamports: Math.round(SHILL_PIN_SOL * LAMPORTS_PER_SOL),
+      legs,
     });
     if (!pay.ok) return NextResponse.json({ error: "pay", message: pay.error || "Payment not found yet." }, { status: 400 });
     const token = (await tokenOf(mint)) || { mint, symbol: mint.slice(0, 4), name: "token" };

@@ -8,10 +8,12 @@ import * as DbcMod from "@meteora-ag/dynamic-bonding-curve-sdk";
 import BN from "bn.js";
 
 import { connection } from "../solana/connection";
-import { Keypair, PublicKey, Transaction, VersionedTransaction } from "@solana/web3.js";
+import { Keypair, LAMPORTS_PER_SOL, PublicKey, SystemProgram, Transaction, VersionedTransaction } from "@solana/web3.js";
 import { encodeTx } from "../token/mint";
 import { bytesToB64 } from "../solana/wire";
 import { treasuryAddress } from "../treasury";
+import { ownerAddress } from "../ownerWallet";
+import { FEE_DUST_LAMPORTS } from "../fees/payout";
 import { liveDbcConfig, dbcEnabled } from "./dbcIds";
 import { MIN_TRADE_SOL } from "./curve";
 import { CLAIM_DUST_SOL, feesFromPoolAccount } from "./claim";
@@ -528,6 +530,19 @@ export async function buildDbcClaimPartnerTx(opts: {
       receiver: opts.receiver ? new PublicKey(opts.receiver) : undefined,
     });
     const tx = await readyTx(raw as Transaction, claimer);
+    const inner = asPool(row);
+    const fees = feesFromPoolAccount(inner.poolState || inner);
+    const ownerPk = ownerAddress();
+    const ownerCut = Math.floor((Number(fees.partnerUnclaimedSol) || 0) * LAMPORTS_PER_SOL / 2);
+    if (ownerCut >= FEE_DUST_LAMPORTS && ownerPk && ownerPk !== opts.owner) {
+      tx.add(
+        SystemProgram.transfer({
+          fromPubkey: claimer,
+          toPubkey: new PublicKey(ownerPk),
+          lamports: ownerCut,
+        }),
+      );
+    }
     return { ok: true, transaction: encodeTx(tx) };
   } catch {
     return { ok: false, error: "empty" };

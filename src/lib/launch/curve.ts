@@ -8,8 +8,9 @@
  *   50% creator Dev Rewards (withdraw anytime)
  *   25% owner earnings
  *   25% protocol treasury
- * If the creator was invited, the inviter also gets 25% of the fee for life
- * (taken from owner + treasury, never from the creator’s 50%).
+ * If the person generating the fee (launcher or swapper) was invited, the
+ * owner’s 25% splits 12.5 / 12.5 with their inviter. Treasury stays 25%.
+ * Creator always keeps 50%.
  *
  * Live launches go through the Solphia pad program. This module is the spec
  * that program must match. Graduation at 85 SOL is a milestone — the same
@@ -27,10 +28,10 @@ export const SWAP_FEE_BPS = 100;
 export const DEV_FEE_BPS = 50;
 export const OWNER_FEE_BPS = 25;
 export const TREAS_FEE_BPS = 25;
-/** Inviter cut when the coin’s creator was referred. Same size as owner, taken from owner+treasury. */
-export const REF_FEE_BPS = 25;
+/** Inviter cut when the fee generator was referred. Taken from the owner share only. */
+export const REF_FEE_BPS = 12.5;
 export const REFERRED_OWNER_BPS = 12.5;
-export const REFERRED_TREAS_BPS = 12.5;
+export const REFERRED_TREAS_BPS = 25;
 export const CREATE_FEE_SOL = 0;
 export const GRADUATE_FEE_SOL = 0.01;
 export const MAX_WALLET_BPS = 500;
@@ -80,15 +81,15 @@ export function progressPct(c: CurveState): number {
 export type FeeSplit = { dev: number; owner: number; treasury: number; referral: number };
 
 export function splitFee(feeSol: number, referred = false): FeeSplit {
-  const dev = (feeSol * DEV_FEE_BPS) / SWAP_FEE_BPS;
+  const fee = Math.max(0, feeSol);
+  const dev = (fee * DEV_FEE_BPS) / SWAP_FEE_BPS;
+  const treasury = (fee * TREAS_FEE_BPS) / SWAP_FEE_BPS;
   if (!referred) {
-    const owner = (feeSol * OWNER_FEE_BPS) / SWAP_FEE_BPS;
-    const treasury = Math.max(0, feeSol - dev - owner);
+    const owner = Math.max(0, fee - dev - treasury);
     return { dev, owner, treasury, referral: 0 };
   }
-  const referral = (feeSol * REF_FEE_BPS) / SWAP_FEE_BPS;
-  const owner = (feeSol * REFERRED_OWNER_BPS) / SWAP_FEE_BPS;
-  const treasury = Math.max(0, feeSol - dev - referral - owner);
+  const referral = (fee * REF_FEE_BPS) / SWAP_FEE_BPS;
+  const owner = Math.max(0, fee - dev - treasury - referral);
   return { dev, owner, treasury, referral };
 }
 

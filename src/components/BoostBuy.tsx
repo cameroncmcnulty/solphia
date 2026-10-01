@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Rocket } from "lucide-react";
 import { TokenArt } from "@/components/TokenArt";
-import { paySeatFromPhantom } from "@/lib/wallet/trading";
+import { paySeatFromPhantom, signAndSendPhantom } from "@/lib/wallet/trading";
 import { isSolanaAddress } from "@/lib/wallet/addr";
 import { MEGA_ROCKETS, ROCKET_PACKS, rocketSol, type BoostRank, type BoostSort } from "@/lib/launch/boost";
 
@@ -106,8 +106,10 @@ export function BoostBuy({
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body),
       }).then((r) => r.json());
-      if (!prep.treasury || !prep.sol) throw new Error(prep.message || "Could not start the boost.");
-      const sig = await paySeatFromPhantom(owner, prep.treasury, Number(prep.sol));
+      if (!prep.transaction && (!prep.treasury || !prep.sol)) throw new Error(prep.message || "Could not start the boost.");
+      const sig = prep.transaction
+        ? await signAndSendPhantom(prep.transaction)
+        : await paySeatFromPhantom(owner, prep.treasury, Number(prep.sol));
       if (!sig) throw new Error("Payment did not send.");
       const done = await fetch("/api/launch/boost", {
         method: "POST",

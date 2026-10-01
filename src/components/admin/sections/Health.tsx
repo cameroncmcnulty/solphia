@@ -363,8 +363,8 @@ export function HealthSection() {
           </div>
           {pack?.jup && (
             <p className="mt-3 text-[12px] text-mute">
-              Open-market /swap skims 1% SOL to treasury. Jupiter referral ATAs are plugin-only — do not add a Jupiter API
-              key. {pack.jup.sol ? "SOL ATA ready" : "SOL ATA missing"}
+              Open-market /swap skims 1% SOL, then 25% owner / 75% protocol. Jupiter referral ATAs are plugin-only — do
+              not add a Jupiter API key. {pack.jup.sol ? "SOL ATA ready" : "SOL ATA missing"}
               {" · "}
               {pack.jup.usdc ? "USDC ATA ready" : "USDC ATA missing"}.
             </p>

@@ -540,7 +540,7 @@ export default function AccountPage() {
         <section className="panel-bubble mt-6 overflow-hidden rounded-3xl p-5">
           <h2 className="text-[22px] font-semibold tracking-tight text-white">Referrals</h2>
           <p className="mt-2 text-sm text-mute">
-            Share your link. It bonds their wallet to yours. When they launch, you keep a cut of every swap on those coins for life. Withdraw anytime.
+            Share your link. It bonds their wallet to yours. When they launch or swap, you keep a cut of the owner share of those fees. Withdraw anytime.
           </p>
           <div className="mt-4 flex flex-col gap-2 sm:flex-row">
             <input readOnly value={invite} className="min-h-[44px] flex-1 rounded-full border border-violet/30 bg-void px-4 font-mono text-[11px] text-ghost" />

@@ -12,7 +12,7 @@ export function protocolFeeSol(clipUsd: number, solUsd: number): number {
   return (clipUsd * PROTOCOL_FEE_BPS) / 10_000 / solUsd;
 }
 
-/** Live in-house skim: 1% of SOL, paid to treasury in the same swap tx. */
+/** Live in-house skim: 1% of SOL, then 50/25/25 (creator share stays protocol when there is no Solphia creator). */
 export function liveSwapFeeSol(solAmount: number): number {
   if (!(solAmount > 0)) return 0;
   return Math.floor(solAmount * SWAP_FEE_BPS) / 10_000;

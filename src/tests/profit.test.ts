@@ -22,7 +22,7 @@ describe("profit catalog", () => {
     assert.equal(splitPadSpend(1).feeSol, 0.01);
   });
 
-  it("splits pad fees 50/25/25 and referred 50/25/12.5/12.5", () => {
+  it("splits pad fees 50/25/25 and referred 50/12.5/12.5/25", () => {
     const fee = feeOn(1);
     assert.equal(fee, 0.01);
     const plain = splitFee(fee, false);
@@ -31,9 +31,9 @@ describe("profit catalog", () => {
     assert.equal(plain.treasury, 0.0025);
     const ref = splitFee(fee, true);
     assert.equal(ref.dev, 0.005);
-    assert.equal(ref.referral, 0.0025);
+    assert.equal(ref.referral, 0.00125);
     assert.equal(ref.owner, 0.00125);
-    assert.equal(ref.treasury, 0.00125);
+    assert.equal(ref.treasury, 0.0025);
   });
 
   it("prices seats, pins, and boost packs", () => {

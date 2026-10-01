@@ -29,7 +29,7 @@ import { RankBadge } from "@/components/RankBadge";
 import { ProfileOverlay } from "@/components/ProfileOverlay";
 import { useOwner } from "@/lib/hooks";
 import { persistOwner } from "@/lib/wallet/owner";
-import { paySeatFromPhantom } from "@/lib/wallet/trading";
+import { paySeatFromPhantom, signAndSendPhantom } from "@/lib/wallet/trading";
 import { SHILL_PIN_MS, SHILL_PIN_SOL, SHILL_REACTS, SHILL_STICKERS, type ShillToken } from "@/lib/shill/types";
 
 type Msg = {
@@ -574,8 +574,10 @@ export default function ShillPage() {
     setPinBusy(true);
     try {
       const prep = await act({ action: "pin", mint: pinMint.trim() });
-      if (!prep.treasury || !prep.sol) throw new Error(prep.message || "Could not start the pin.");
-      const sig = await paySeatFromPhantom(owner, prep.treasury, Number(prep.sol));
+      if (!prep.transaction && (!prep.treasury || !prep.sol)) throw new Error(prep.message || "Could not start the pin.");
+      const sig = prep.transaction
+        ? await signAndSendPhantom(prep.transaction)
+        : await paySeatFromPhantom(owner, prep.treasury, Number(prep.sol));
       if (!sig) throw new Error("Payment did not send.");
       await act({ action: "pin", mint: pinMint.trim(), signature: sig });
       setPinMint("");

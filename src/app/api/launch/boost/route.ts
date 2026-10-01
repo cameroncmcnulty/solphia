@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { LAMPORTS_PER_SOL } from "@solana/web3.js";
 import { z } from "zod";
 import { clientIp, isSolanaAddress, rateLimit } from "@/lib/security";
 import { treasuryAddress } from "@/lib/treasury";
-import { confirmedSolTransfer } from "@/lib/solana/connection";
+import { confirmedHouseTransfers } from "@/lib/solana/connection";
+import { boundReferrer, houseFeeLegs } from "@/lib/fees/payout";
+import { unsignedHousePay } from "@/lib/fees/payTx";
 import { withLaunch } from "@/lib/store";
 import { emptyLaunchBook } from "@/lib/launch/engine";
 import { loadMarketTape } from "@/lib/launch/market";
@@ -119,19 +120,23 @@ export async function POST(req: NextRequest) {
     if (!coinId) {
       return NextResponse.json({ error: "not_found", message: "Paste a CA to boost." }, { status: 400 });
     }
+    const packed = await unsignedHousePay(parsed.data.pubkey, sol, parsed.data.pubkey);
+    if (!packed.ok) return NextResponse.json({ error: packed.error, message: "Could not start the boost." }, { status: 400 });
     return NextResponse.json({
       ok: true,
       needsSignature: true,
       treasury,
       sol,
       rockets,
+      transaction: packed.transaction,
+      legs: packed.legs,
     });
   }
-  const pay = await confirmedSolTransfer({
+  const legs = houseFeeLegs({ from: parsed.data.pubkey, feeSol: sol, referrer: boundReferrer(parsed.data.pubkey) });
+  const pay = await confirmedHouseTransfers({
     signature: parsed.data.signature,
     from: parsed.data.pubkey,
-    to: treasury,
-    lamports: Math.round(sol * LAMPORTS_PER_SOL),
+    legs,
   });
   if (!pay.ok) {
     return NextResponse.json({ error: "pay", message: pay.error || "Payment not found yet." }, { status: 400 });

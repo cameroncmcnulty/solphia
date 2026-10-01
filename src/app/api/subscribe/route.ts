@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { SystemProgram, Transaction, PublicKey } from "@solana/web3.js";
 import { clientIp, isEmail, isSolanaAddress, rateLimit, sanitizeText } from "@/lib/security";
 import { liveTradingEnabled } from "@/lib/liveFlag";
 import { treasuryAddress } from "@/lib/treasury";
 import { PLANS, planById, lamportsForPlan, type PlanId } from "@/lib/plans";
-import { connection, confirmedSolTransfer } from "@/lib/solana/connection";
+import { confirmedHouseTransfers } from "@/lib/solana/connection";
+import { boundReferrer, houseFeeLegs } from "@/lib/fees/payout";
+import { unsignedHousePay } from "@/lib/fees/payTx";
 import { loadState, mutateState, readyState } from "@/lib/store";
 import { isFounder, liveSeatOk } from "@/lib/access";
 import { queueEmail } from "@/lib/email/send";
@@ -142,29 +143,23 @@ export async function POST(req: NextRequest) {
   }
 
   const lamports = lamportsForPlan(planId === "lev" ? "lev" : "live");
+  const sol = seatSol(planId);
+  const legs = houseFeeLegs({ from: payer, feeSol: sol, referrer: boundReferrer(parsed.data.pubkey) });
 
   if (!parsed.data.signature) {
-    const tx = new Transaction().add(
-      SystemProgram.transfer({
-        fromPubkey: new PublicKey(payer),
-        toPubkey: new PublicKey(treasury),
-        lamports,
-      }),
-    );
-    tx.feePayer = new PublicKey(payer);
-    const { blockhash } = await connection().getLatestBlockhash();
-    tx.recentBlockhash = blockhash;
-    const serialized = tx.serialize({ requireAllSignatures: false }).toString("base64");
+    const packed = await unsignedHousePay(payer, sol, parsed.data.pubkey);
+    if (!packed.ok) return NextResponse.json({ error: packed.error }, { status: 400 });
     return NextResponse.json(
       seatPayload({
         needsSignature: true,
-        transaction: serialized,
+        transaction: packed.transaction,
         treasury,
         lamports,
-        sol: seatSol(planId),
+        sol,
         plan: planId,
         payer,
         fromPhantom: payer === parsed.data.pubkey,
+        legs: packed.legs,
       }),
     );
   }
@@ -182,11 +177,10 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const check = await confirmedSolTransfer({
+  const check = await confirmedHouseTransfers({
     signature: parsed.data.signature,
     from: payer,
-    to: treasury,
-    lamports,
+    legs,
   });
   if (!check.ok) return NextResponse.json({ error: check.error }, { status: 400 });
 

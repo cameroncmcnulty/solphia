@@ -1,6 +1,6 @@
 "use client";
 
-import { paySeatFromPhantom, paySeatFromTrading, tradingPubkey } from "./trading";
+import { paySeatFromPhantom, paySeatFromTrading, signAndSendPhantom, signAndSendSwap, tradingPubkey } from "./trading";
 
 async function confirmPay(body: Record<string, unknown>) {
   const r = await fetch("/api/subscribe", {
@@ -29,11 +29,13 @@ export async function subscribeWithPhantom(opts: {
   if (start.ok && start.mode === "founder") {
     return { subscribedUntil: Number(start.subscribedUntil), autoRenew: false };
   }
-  if (!start.needsSignature || !start.treasury) {
+  if (!start.needsSignature || (!start.transaction && !start.treasury)) {
     if (start.ok) return { subscribedUntil: Number(start.subscribedUntil), autoRenew: Boolean(start.autoRenew) };
     throw new Error(start.error || "Could not start the live seat.");
   }
-  const sig = await paySeatFromPhantom(opts.owner, start.treasury, Number(start.sol || (plan === "lev" ? 0.15 : 0.1)));
+  const sig = start.transaction
+    ? await signAndSendPhantom(start.transaction)
+    : await paySeatFromPhantom(opts.owner, start.treasury, Number(start.sol || (plan === "lev" ? 0.15 : 0.1)));
   if (!sig) throw new Error("Phantom did not return a signature.");
   const done = await confirmPayRetry({
     pubkey: opts.owner,
@@ -77,7 +79,17 @@ export async function tryAutoRenew(owner: string): Promise<"paid" | "skipped" | 
   const plan = a.plan === "lev" ? "lev" : "live";
   const tpk = tradingPubkey();
   try {
-    const sig = await paySeatFromTrading(a.treasury, Number(a.seatSol || (plan === "lev" ? 0.15 : 0.1)));
+    const start = await confirmPay({
+      pubkey: owner,
+      payer: tpk,
+      plan,
+      tos: true,
+      autoRenew: true,
+      action: "renew",
+    });
+    const sig = start.transaction
+      ? await signAndSendSwap(start.transaction)
+      : await paySeatFromTrading(a.treasury, Number(a.seatSol || (plan === "lev" ? 0.15 : 0.1)));
     const done = await confirmPayRetry({
       pubkey: owner,
       payer: tpk,

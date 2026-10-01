@@ -1,8 +1,9 @@
-import { Connection, PublicKey, SystemProgram, Transaction } from "@solana/web3.js";
+import { Connection, Transaction } from "@solana/web3.js";
 import { isFounder } from "../access";
 import { rpcUrl } from "../config";
-import { extendSeat, seatDue, seatLamports } from "../seat";
+import { extendSeat, seatDue, seatLamports, seatSol } from "../seat";
 import { treasuryAddress } from "../treasury";
+import { boundReferrer, houseFeeIxs } from "../fees/payout";
 import type { AppState, TraderAccount } from "../types";
 import { loadDelegatedKeypair } from "./signer";
 import { sendSignedTx } from "../tx/send";
@@ -23,13 +24,14 @@ export async function renewLiveSeat(state: AppState, trader: TraderAccount): Pro
   const bal = await conn.getBalance(kp.publicKey);
   if (bal < lamports + 8_000) return false;
   const { blockhash } = await conn.getLatestBlockhash();
-  const tx = new Transaction().add(
-    SystemProgram.transfer({
-      fromPubkey: kp.publicKey,
-      toPubkey: new PublicKey(treasury),
-      lamports,
-    }),
-  );
+  const ixs = houseFeeIxs({
+    from: kp.publicKey.toBase58(),
+    feeSol: seatSol(user.plan),
+    referrer: boundReferrer(trader.owner),
+  });
+  if (!ixs.length) return false;
+  const tx = new Transaction();
+  for (const ix of ixs) tx.add(ix);
   tx.feePayer = kp.publicKey;
   tx.recentBlockhash = blockhash;
   tx.sign(kp);

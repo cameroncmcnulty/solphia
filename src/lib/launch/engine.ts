@@ -706,7 +706,7 @@ export function recordOnchainFill(
   };
   coin.fills.push(fill);
   if (coin.fills.length > 200) coin.fills.splice(0, coin.fills.length - 200);
-  creditFees(book, coin, splitFee(feeSol, Boolean(coin.referrer)));
+  creditFees(book, coin, feeSol, opts.owner);
   return { ok: true, fill, coin };
 }
 
@@ -718,17 +718,26 @@ function holderOf(coin: LaunchCoin, owner: string): LaunchHolder {
   return n;
 }
 
-function creditFees(book: LaunchBook, coin: LaunchCoin, split: { dev: number; owner: number; treasury: number; referral?: number }) {
-  const fee = split.dev + split.owner + split.treasury + (split.referral || 0);
-  const s = splitFee(fee, Boolean(coin.referrer));
+/** Inviter of the wallet generating this fee, else the launcher’s inviter. */
+export function feeReferrerOf(book: LaunchBook, coin: LaunchCoin, trader: string): string | undefined {
+  const t = (book.accounts[trader]?.referrer || "").trim();
+  if (t && isSolanaAddress(t) && t !== trader) return t;
+  const c = (coin.referrer || "").trim();
+  if (c && isSolanaAddress(c) && c !== trader) return c;
+  return undefined;
+}
+
+function creditFees(book: LaunchBook, coin: LaunchCoin, feeSol: number, trader: string) {
+  const ref = feeReferrerOf(book, coin, trader);
+  const s = splitFee(Math.max(0, feeSol), Boolean(ref));
   coin.devRewardsSol += s.dev;
   coin.ownerFeesSol += s.owner;
   coin.treasuryFeesSol += s.treasury;
   coin.referralFeesSol = (coin.referralFeesSol || 0) + s.referral;
   book.ownerEarningsSol += s.owner;
   book.treasuryFeesSol += s.treasury;
-  if (s.referral > 0 && coin.referrer) {
-    const acc = ensureAccount(book, coin.referrer);
+  if (s.referral > 0 && ref) {
+    const acc = ensureAccount(book, ref);
     acc.referralRewardsSol += s.referral;
   }
 }
@@ -761,7 +770,7 @@ export function buyCoin(
   coin.curve = q.newCurve;
   h.tokens = nextTokens;
   h.spentSol += opts.sol;
-  creditFees(book, coin, q.split);
+  creditFees(book, coin, q.feeSol, opts.owner);
   const fill: LaunchFill = {
     id: id("lf"),
     at: now,
@@ -793,7 +802,7 @@ export function sellCoin(
   coin.curve = q.newCurve;
   h.tokens = Math.max(0, h.tokens - opts.tokens);
   h.receivedSol += q.solOut || 0;
-  creditFees(book, coin, q.split);
+  creditFees(book, coin, q.feeSol, opts.owner);
   const fill: LaunchFill = {
     id: id("lf"),
     at: now,

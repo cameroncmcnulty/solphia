@@ -70,6 +70,7 @@ export async function POST(req: NextRequest) {
     quote: q.quote,
     feeSol,
     feeAfter: Boolean(solOut && !solIn),
+    person: parsed.data.owner,
   });
   if (!tx.ok) return NextResponse.json({ error: tx.reason }, { status: 400 });
   return NextResponse.json({

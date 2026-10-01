@@ -3,16 +3,14 @@ import {
   ComputeBudgetProgram,
   Connection,
   PublicKey,
-  SystemProgram,
   Transaction,
   TransactionInstruction,
   TransactionMessage,
   VersionedTransaction,
-  LAMPORTS_PER_SOL,
 } from "@solana/web3.js";
 import { rpcUrl } from "../config";
 import { buildSwapTx, type JupiterQuote } from "../pair/jupiter";
-import { treasuryAddress } from "../treasury";
+import { boundReferrer, houseFeeIxs } from "../fees/payout";
 import { simulateUnsignedB64 } from "../solana/simulate";
 
 const IX_URLS = ["https://lite-api.jup.ag/swap/v1/swap-instructions", "https://api.jup.ag/swap/v1/swap-instructions"];
@@ -61,27 +59,23 @@ export async function fetchSwapInstructions(quote: JupiterQuote, userPublicKey: 
   return null;
 }
 
-export function treasuryFeeIx(owner: string, feeSol?: number): TransactionInstruction | null {
-  const treasury = treasuryAddress();
-  const feeLamports = Math.round((feeSol || 0) * LAMPORTS_PER_SOL);
-  if (!treasury || feeLamports < 5_000 || owner === treasury) return null;
-  return SystemProgram.transfer({
-    fromPubkey: new PublicKey(owner),
-    toPubkey: new PublicKey(treasury),
-    lamports: feeLamports,
-  });
+/** @deprecated use houseFeeIxs — kept so one-ix tests still compile. */
+export function treasuryFeeIx(owner: string, feeSol?: number, person?: string): TransactionInstruction | null {
+  return houseFeeIxs({ from: owner, feeSol: feeSol || 0, referrer: person ? boundReferrer(person) : boundReferrer(owner) })[0] || null;
 }
 
 const LEGACY_MAX = 1232;
 
 /** Add the 1% SOL skim to a Jupiter *legacy* tx. Never decompile a v0/ALT message — Blowfish flags that. */
-export function appendLegacyFee(b64: string, feeIx: TransactionInstruction, feeAfter: boolean): string | null {
+export function appendLegacyFees(b64: string, feeIxs: TransactionInstruction[], feeAfter: boolean): string | null {
+  if (!feeIxs.length) return b64;
   try {
     const tx = Transaction.from(Buffer.from(b64, "base64"));
-    if (feeAfter) tx.add(feeIx);
-    else {
+    if (feeAfter) {
+      for (const ix of feeIxs) tx.add(ix);
+    } else {
       const idx = tx.instructions.findIndex((ix) => !ix.programId.equals(ComputeBudgetProgram.programId));
-      tx.instructions.splice(idx < 0 ? tx.instructions.length : idx, 0, feeIx);
+      tx.instructions.splice(idx < 0 ? tx.instructions.length : idx, 0, ...feeIxs);
     }
     const raw = tx.serialize({ requireAllSignatures: false, verifySignatures: false });
     if (raw.length > LEGACY_MAX) return null;
@@ -89,6 +83,10 @@ export function appendLegacyFee(b64: string, feeIx: TransactionInstruction, feeA
   } catch {
     return null;
   }
+}
+
+export function appendLegacyFee(b64: string, feeIx: TransactionInstruction, feeAfter: boolean): string | null {
+  return appendLegacyFees(b64, [feeIx], feeAfter);
 }
 
 /**
@@ -101,8 +99,15 @@ export async function assemblePhantomSwapTx(opts: {
   quote: JupiterQuote;
   feeSol?: number;
   feeAfter?: boolean;
+  /** Human generating the fee (Phantom owner). Defaults to `owner`. */
+  person?: string;
 }): Promise<{ ok: true; transaction: string } | { ok: false; reason: string }> {
-  const feeIx = treasuryFeeIx(opts.owner, opts.feeSol);
+  const person = opts.person || opts.owner;
+  const feeIxs = houseFeeIxs({
+    from: opts.owner,
+    feeSol: opts.feeSol || 0,
+    referrer: boundReferrer(person),
+  });
   let last = "Could not build the swap.";
   for (const asLegacy of [true, false]) {
     const built = await buildSwapTx(opts.quote, opts.owner, { asLegacy });
@@ -111,8 +116,8 @@ export async function assemblePhantomSwapTx(opts: {
       continue;
     }
     let packed = built.transaction;
-    if (feeIx && asLegacy) {
-      packed = appendLegacyFee(packed, feeIx, Boolean(opts.feeAfter)) || packed;
+    if (feeIxs.length && asLegacy) {
+      packed = appendLegacyFees(packed, feeIxs, Boolean(opts.feeAfter)) || packed;
     }
     const sim = await simulateUnsignedB64(packed);
     if (sim.ok) return { ok: true, transaction: packed };
@@ -132,6 +137,8 @@ export async function assembleSwapTx(opts: {
   feeSol?: number;
   /** Sell routes take the 1% skim after SOL lands. Buys skim first. */
   feeAfter?: boolean;
+  /** Human generating the fee. Trading-wallet swaps pass the Phantom owner here. */
+  person?: string;
 }): Promise<{ ok: true; transaction: string } | { ok: false; reason: string }> {
   const ixPayload = await fetchSwapInstructions(opts.quote, opts.owner);
   if (!ixPayload) return { ok: false, reason: "Could not build the swap." };
@@ -142,11 +149,15 @@ export async function assembleSwapTx(opts: {
   if (!swap) return { ok: false, reason: "Could not build the swap." };
 
   const ixs: TransactionInstruction[] = [...compute];
-  const feeIx = treasuryFeeIx(opts.owner, opts.feeSol);
-  if (feeIx && !opts.feeAfter) ixs.push(feeIx);
+  const feeIxs = houseFeeIxs({
+    from: opts.owner,
+    feeSol: opts.feeSol || 0,
+    referrer: boundReferrer(opts.person || opts.owner),
+  });
+  if (feeIxs.length && !opts.feeAfter) ixs.push(...feeIxs);
   ixs.push(...setup, swap);
   if (cleanup) ixs.push(cleanup);
-  if (feeIx && opts.feeAfter) ixs.push(feeIx);
+  if (feeIxs.length && opts.feeAfter) ixs.push(...feeIxs);
 
   const conn = new Connection(rpcUrl(), { commitment: "confirmed" });
   const altAddrs = (ixPayload.addressLookupTableAddresses as string[]) || [];
