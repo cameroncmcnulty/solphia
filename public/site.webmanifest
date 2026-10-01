@@ -1,7 +1,7 @@
 {
   "name": "SOLPHIA",
   "short_name": "SOLPHIA",
-  "description": "Launch. Shill. Swap. $SPHA.",
+  "description": "solphia.io",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#04000a",

@@ -14,6 +14,7 @@ import {
   extractCas,
   fillHousePins,
   livePins,
+  liveRoomCount,
   muteShill,
   nextPinFreeAt,
   pinSlotsLeft,
@@ -33,7 +34,7 @@ import { creditRank, leaderboard, publicCard } from "@/lib/rank/engine";
 import { canModerateChat, staffRole } from "@/lib/access";
 import type { AppState } from "@/lib/types";
 import { GLDX_MINT_OFFICIAL, QQQX_MINT_OFFICIAL, SOL_MINT, SPYX_MINT_OFFICIAL, USDC_MINT, USDT_MINT } from "@/lib/pair/mints";
-import { houseNeedsNames, houseWorkDue, loadHouseMarketCoins, paintHouseNames, plantHouseSchedules, tickHouseActions } from "@/lib/shill/house";
+import { houseNeedsNames, houseNeedsTape, houseWorkDue, loadHouseMarketCoins, paintHouseNames, plantHouseSchedules, tickHouseActions } from "@/lib/shill/house";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -122,7 +123,7 @@ async function shillSnap(force = false): Promise<LightSnap> {
     messages: book.messages.slice(-120).map(paintMsg),
     pins,
     voteBoard: voteBoard(book, now).map(paintVote),
-    members: Object.keys(book.members).length,
+    members: liveRoomCount(book, now),
   };
   return lightSnap;
 }
@@ -156,11 +157,12 @@ export async function GET(req: NextRequest) {
         return {
           pins: clean.length < SHILL_HOUSE_PIN_MIN || clean.length !== house.length,
           actors: houseWorkDue(st.shill),
+          tape: houseNeedsTape(st.shill),
         };
       }, false)
-    : { pins: false, actors: false };
+    : { pins: false, actors: false, tape: false };
   if (need.pins || need.actors) {
-    const tapeCoins = await loadHouseMarketCoins();
+    const tapeCoins = need.pins || need.tape ? await loadHouseMarketCoins() : [];
     if (need.actors) {
       const actors = await withShill((st) => {
         st.shill = ensureShill(st.shill);
@@ -185,6 +187,15 @@ export async function GET(req: NextRequest) {
         fillHousePins(st.shill, tapeCoins);
       }
       if (need.actors) tickHouseActions(st.shill, tapeCoins);
+    }, true);
+    bustShillSnap();
+  }
+  if (!light && pubkey && isSolanaAddress(pubkey)) {
+    await withShill((st) => {
+      st.shill = ensureShill(st.shill);
+      const m = st.shill.members[pubkey];
+      if (m?.lastReadAt && Date.now() - m.lastReadAt < 10_000) return;
+      touchMember(st.shill, pubkey);
     }, true);
     bustShillSnap();
   }

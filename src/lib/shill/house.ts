@@ -7,20 +7,25 @@ import { loadMarketTape } from "../launch/market";
 import { setUsername, usernameOk } from "../launch/username";
 import { GLDX_MINT_OFFICIAL, QQQX_MINT_OFFICIAL, SOL_MINT, SPYX_MINT_OFFICIAL, USDC_MINT, USDT_MINT } from "../pair/mints";
 import { withLaunch, withShill } from "../store";
-import { ensureShill, postShill, voteShill, type HousePinCoin } from "./engine";
-import { type HouseActor, type ShillBook } from "./types";
+import { ensureShill, postShill, touchMember, voteShill, type HousePinCoin } from "./engine";
+import { composeHouseChat } from "./phrases";
+import { type HouseActor, type ShillBook, type ShillMessage } from "./types";
 
 export const HOUSE_ACTOR_N = 87;
 export const HOUSE_NAME_MIN = 0.6;
 export const HOUSE_NAME_MAX = 0.7;
+export const HOUSE_LIVE_MIN = 51;
+export const HOUSE_LIVE_MAX = 87;
 export const HOUSE_SHARE_CAP = 1;
 export const HOUSE_VOTE_CAP = 2;
-export const HOUSE_SHARE_CLUSTER_MS = 8 * 60_000;
+export const HOUSE_CHAT_CAP = 1;
+export const HOUSE_SHARE_CLUSTER_MS = 2 * 60_000;
 export const HOUSE_VOTE_CLUSTER_MS = 4 * 60_000;
-export const HOUSE_SHARE_GAP_MS = 8 * 60_000;
+export const HOUSE_SHARE_GAP_MS = 2.5 * 60_000;
+export const HOUSE_CHAT_GAP_MS = 16_000;
 export const HOUSE_SHARE_HORIZON_MS = 22 * 3600_000;
 export const HOUSE_VOTE_HORIZON_MS = 30 * 3600_000;
-export const HOUSE_MIN_LEAD_MS = 8 * 60_000;
+export const HOUSE_MIN_LEAD_MS = 45_000;
 export const HOUSE_TOP_N = 16;
 
 const PIN_BLOCK = new Set([SOL_MINT, SPYX_MINT_OFFICIAL, QQQX_MINT_OFFICIAL, GLDX_MINT_OFFICIAL, USDC_MINT, USDT_MINT]);
@@ -102,6 +107,17 @@ function pickVoteP(rng: Rng): number {
   return 0.22 + rng() * 0.38;
 }
 
+function pickChatEvery(rng: Rng): number {
+  const r = rng();
+  if (r < 0.35) return lerp(70_000, 3 * 60_000, rng());
+  if (r < 0.75) return lerp(3 * 60_000, 8 * 60_000, rng());
+  return lerp(8 * 60_000, 14 * 60_000, rng());
+}
+
+function clampLive(n: number) {
+  return Math.max(HOUSE_LIVE_MIN, Math.min(HOUSE_LIVE_MAX, Math.floor(n)));
+}
+
 function shuffle<T>(arr: T[], rng: Rng): T[] {
   const a = arr.slice();
   for (let i = a.length - 1; i > 0; i--) {
@@ -149,15 +165,17 @@ export function cryptoUsername(rng: Rng, taken: Set<string>): string | null {
   return null;
 }
 
-function newActor(i: number, named: boolean, shareAt: number, voteAt: number, rng: Rng): HouseActor {
+function newActor(i: number, named: boolean, shareAt: number, voteAt: number, rng: Rng, now: number): HouseActor {
   return {
     i,
     pubkey: houseActorPubkey(i),
     named,
     nextShareAt: shareAt,
     nextVoteAt: voteAt,
+    nextChatAt: now + 4_000 + Math.floor(rng() * 80_000),
     shareEveryMs: pickShareEvery(rng),
     voteEveryMs: pickVoteEvery(rng),
+    chatEveryMs: pickChatEvery(rng),
     voteP: pickVoteP(rng),
   };
 }
@@ -207,7 +225,7 @@ export function plantHouseSchedules(book: ShillBook, now = Date.now(), rng: Rng 
   missing.forEach((i, k) => {
     const named = namedSlot.has(k) && stillNeed > 0;
     if (named) stillNeed -= 1;
-    const actor = newActor(i, named, shareAt[k]!, voteAt[k]!, rng);
+    const actor = newActor(i, named, shareAt[k]!, voteAt[k]!, rng, now);
     book.houseActors!.push(actor);
   });
   book.houseActors.sort((a, b) => a.i - b.i);
@@ -247,7 +265,130 @@ export function paintHouseNames(launch: LaunchBook, actors: HouseActor[], rng: R
 export function houseWorkDue(book: ShillBook, now = Date.now()): boolean {
   const actors = book.houseActors || [];
   if (actors.length < HOUSE_ACTOR_N) return true;
-  return actors.some((a) => a.nextShareAt <= now || a.nextVoteAt <= now);
+  if (!book.houseBootedAt) return true;
+  if (!(book.housePresent || []).length) return true;
+  if ((book.nextHouseLiveAt || 0) <= now) return true;
+  return actors.some((a) => (a.nextChatAt || 0) <= now || a.nextShareAt <= now || a.nextVoteAt <= now);
+}
+
+export function houseNeedsTape(book: ShillBook, now = Date.now()): boolean {
+  const present = new Set(book.housePresent || []);
+  if (!present.size) return true;
+  return (book.houseActors || []).some(
+    (a) => present.has(a.pubkey) && (a.nextShareAt <= now || a.nextVoteAt <= now),
+  );
+}
+
+function ensureActorClocks(book: ShillBook, now: number, rng: Rng) {
+  for (const a of book.houseActors || []) {
+    if (!a.chatEveryMs) a.chatEveryMs = pickChatEvery(rng);
+    if (!a.nextChatAt) a.nextChatAt = now + 3_000 + Math.floor(rng() * 70_000);
+  }
+}
+
+export function tickHousePresence(book: ShillBook, now = Date.now(), rng: Rng = Math.random): boolean {
+  const actors = book.houseActors || [];
+  if (actors.length < HOUSE_LIVE_MIN) return false;
+  const due = (book.nextHouseLiveAt || 0) <= now || !(book.housePresent || []).length;
+  if (!due) return false;
+  const cur = book.houseLive || 0;
+  let next: number;
+  if (!cur) next = HOUSE_LIVE_MIN + Math.floor(rng() * (HOUSE_LIVE_MAX - HOUSE_LIVE_MIN + 1));
+  else {
+    const delta = Math.floor(rng() * 7) - 3;
+    next = clampLive(cur + (delta === 0 ? (rng() < 0.5 ? -1 : 1) : delta));
+  }
+  const pool = shuffle(actors, rng);
+  book.houseLive = next;
+  book.housePresent = pool.slice(0, next).map((a) => a.pubkey);
+  book.nextHouseLiveAt = now + lerp(90_000, 6 * 60_000, rng());
+  return true;
+}
+
+function presentActors(book: ShillBook): HouseActor[] {
+  const want = new Set(book.housePresent || []);
+  return (book.houseActors || []).filter((a) => want.has(a.pubkey));
+}
+
+function lastHumanish(book: ShillBook): ShillMessage | undefined {
+  const msgs = book.messages || [];
+  for (let i = msgs.length - 1; i >= 0; i--) {
+    const m = msgs[i]!;
+    if (m.kind === "text" || m.kind === "sticker") return m;
+  }
+  return undefined;
+}
+
+function bootHouseRoom(book: ShillBook, candidates: HousePinCoin[], now: number, rng: Rng) {
+  if (book.houseBootedAt) return;
+  const room = presentActors(book);
+  if (!room.length) return;
+  const chatAt = spreadTimes(room.length, now, 90_000, 2_500, 2_000, rng);
+  room.forEach((a, i) => {
+    a.nextChatAt = chatAt[i]!;
+    if (rng() < 0.4) a.nextShareAt = now + lerp(40_000, 12 * 60_000, rng());
+    if (rng() < 0.35) a.nextVoteAt = now + lerp(50_000, 18 * 60_000, rng());
+  });
+  const n = 14 + Math.floor(rng() * 12);
+  const pool = candidates.filter((c) => c.mint && isSolanaAddress(c.mint) && !PIN_BLOCK.has(c.mint));
+  let prevId = "";
+  let prevOwner = "";
+  let prevText = "";
+  let prevSym = "";
+  let prevTok = false;
+  for (let i = 0; i < n; i++) {
+    const actor = room[Math.floor(rng() * room.length)]!;
+    const at = now - (n - i) * lerp(45_000, 110_000, rng());
+    const id = `s${at.toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+    const share = pool.length && rng() < 0.18;
+    let text = "";
+    let token: ShillMessage["token"];
+    let replyTo: string | undefined;
+    if (share) {
+      const coin = pickTop(pool, rng);
+      if (coin?.mint) {
+        const sym = (coin.symbol || coin.mint.slice(0, 4)).replace(/^\$+/, "");
+        const line = LINES[Math.floor(rng() * LINES.length)] || LINES[0];
+        text = line!(sym, coin.mint);
+        token = {
+          mint: coin.mint,
+          symbol: coin.symbol || sym,
+          name: coin.name || coin.symbol || "token",
+          image: coin.image,
+          priceUsd: coin.priceUsd,
+          mcUsd: coin.mcUsd,
+        };
+      }
+    }
+    if (!text) {
+      const line = composeHouseChat(
+        rng,
+        { lastText: prevText, lastId: prevId, lastOwner: prevOwner, lastHasToken: prevTok, lastSymbol: prevSym },
+        actor.pubkey,
+      );
+      text = line.text;
+      replyTo = line.replyTo;
+    }
+    book.messages.push({
+      id,
+      at,
+      owner: actor.pubkey,
+      kind: "text",
+      text,
+      replyTo,
+      reactions: {},
+      token,
+    });
+    touchMember(book, actor.pubkey, at);
+    prevId = id;
+    prevOwner = actor.pubkey;
+    prevText = text;
+    prevTok = Boolean(token?.mint);
+    prevSym = token?.symbol || "";
+  }
+  book.messages.sort((a, b) => a.at - b.at);
+  book.lastHouseChatAt = now - 20_000;
+  book.houseBootedAt = now;
 }
 
 function pickTop(pool: HousePinCoin[], rng: Rng): HousePinCoin | null {
@@ -277,14 +418,56 @@ export function tickHouseActions(
   now = Date.now(),
   rng: Rng = Math.random,
   blocked: Set<string> = new Set(),
-): { shares: number; votes: number } {
+): { shares: number; votes: number; chats: number } {
   plantHouseSchedules(book, now, rng);
+  ensureActorClocks(book, now, rng);
+  tickHousePresence(book, now, rng);
+  bootHouseRoom(book, candidates, now, rng);
   const pool = candidates.filter((c) => c.mint && isSolanaAddress(c.mint) && !PIN_BLOCK.has(c.mint) && !blocked.has(c.mint));
-  const actors = book.houseActors || [];
+  const room = presentActors(book);
+  const inRoom = new Set(room.map((a) => a.pubkey));
   let shares = 0;
   let votes = 0;
+  let chats = 0;
 
-  const shareDue = actors.filter((a) => a.nextShareAt <= now).sort((a, b) => a.nextShareAt - b.nextShareAt);
+  const chatDue = room.filter((a) => (a.nextChatAt || 0) <= now).sort((a, b) => (a.nextChatAt || 0) - (b.nextChatAt || 0));
+  const lastChat = book.lastHouseChatAt || 0;
+  const chatGapOk = !lastChat || now - lastChat >= HOUSE_CHAT_GAP_MS;
+  if (chatGapOk) {
+    for (const actor of chatDue) {
+      if (chats >= HOUSE_CHAT_CAP) break;
+      const last = lastHumanish(book);
+      const line = composeHouseChat(
+        rng,
+        {
+          lastText: last?.text,
+          lastId: last?.id,
+          lastOwner: last?.owner,
+          lastHasToken: Boolean(last?.token?.mint),
+          lastSymbol: last?.token?.symbol,
+        },
+        actor.pubkey,
+      );
+      const posted = postShill(book, {
+        owner: actor.pubkey,
+        text: line.text,
+        replyTo: line.replyTo,
+        now,
+      });
+      actor.nextChatAt = now + jitterEvery(actor.chatEveryMs || 4 * 60_000, rng);
+      if (posted.ok) {
+        chats += 1;
+        book.lastHouseChatAt = now;
+      }
+    }
+  } else {
+    for (const actor of chatDue) {
+      const wait = Math.max(0, HOUSE_CHAT_GAP_MS - (now - lastChat));
+      actor.nextChatAt = now + wait + Math.floor(rng() * 8_000);
+    }
+  }
+
+  const shareDue = room.filter((a) => a.nextShareAt <= now).sort((a, b) => a.nextShareAt - b.nextShareAt);
   const lastShare = book.lastHouseShareAt || 0;
   const gapOk = !lastShare || now - lastShare >= HOUSE_SHARE_GAP_MS;
   if (gapOk && pool.length) {
@@ -323,12 +506,12 @@ export function tickHouseActions(
     }
   } else {
     for (const actor of shareDue) {
-      const wait = Math.max(0, HOUSE_SHARE_GAP_MS - (now - (book.lastHouseShareAt || 0)));
+      const wait = Math.max(0, HOUSE_SHARE_GAP_MS - (now - lastShare));
       actor.nextShareAt = now + wait + Math.floor(rng() * actor.shareEveryMs * 0.25);
     }
   }
 
-  const voteDue = actors.filter((a) => a.nextVoteAt <= now).sort((a, b) => a.nextVoteAt - b.nextVoteAt);
+  const voteDue = room.filter((a) => a.nextVoteAt <= now).sort((a, b) => a.nextVoteAt - b.nextVoteAt);
   for (const actor of voteDue) {
     if (votes >= HOUSE_VOTE_CAP) break;
     if (rng() >= actor.voteP || !pool.length) {
@@ -358,7 +541,12 @@ export function tickHouseActions(
       actor.nextVoteAt = (out.nextAt || now) + Math.floor(rng() * 40 * 60_000);
     }
   }
-  return { shares, votes };
+
+  for (const a of book.houseActors || []) {
+    if (inRoom.has(a.pubkey)) continue;
+    if ((a.nextChatAt || 0) <= now) a.nextChatAt = now + lerp(2 * 60_000, 18 * 60_000, rng());
+  }
+  return { shares, votes, chats };
 }
 
 export async function loadHouseMarketCoins(): Promise<HousePinCoin[]> {
@@ -389,10 +577,10 @@ export async function loadHouseMarketCoins(): Promise<HousePinCoin[]> {
   }
 }
 
-export async function runHouseShill(now = Date.now()): Promise<{ shares: number; votes: number; planted: boolean }> {
+export async function runHouseShill(now = Date.now()): Promise<{ shares: number; votes: number; chats: number; planted: boolean }> {
   const peek = await withShill((st) => {
     const book = ensureShill(st.shill);
-    return { due: houseWorkDue(book, now), n: (book.houseActors || []).length, actors: book.houseActors || [] };
+    return { due: houseWorkDue(book, now), n: (book.houseActors || []).length, actors: book.houseActors || [], tape: houseNeedsTape(book, now) };
   }, false);
 
   let planted = false;
@@ -416,10 +604,9 @@ export async function runHouseShill(now = Date.now()): Promise<{ shares: number;
     }, true);
   }
 
-  const dueNow = houseWorkDue({ houseActors: actors } as ShillBook, now);
-  if (!dueNow) return { shares: 0, votes: 0, planted };
+  if (!peek.due && peek.n >= HOUSE_ACTOR_N) return { shares: 0, votes: 0, chats: 0, planted };
 
-  const coins = await loadHouseMarketCoins();
+  const coins = peek.tape || planted ? await loadHouseMarketCoins() : [];
   const out = await withShill((st) => {
     st.shill = ensureShill(st.shill);
     if ((st.shill.houseActors || []).length < HOUSE_ACTOR_N) plantHouseSchedules(st.shill, now);

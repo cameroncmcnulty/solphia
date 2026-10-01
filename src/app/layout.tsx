@@ -20,25 +20,24 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   metadataBase: new URL("https://solphia.io"),
   title: {
-    default: "SOLPHIA — Launch. Shill. Swap.",
+    default: "SOLPHIA",
     template: "%s · SOLPHIA",
   },
-  description:
-    "Launch on Meteora. Shill Zone. Swap. $SPHA. Phantom signs. Nothing is custodial.",
+  description: "solphia.io",
   applicationName: "SOLPHIA",
   openGraph: {
     title: "SOLPHIA",
-    description: "Launch on Meteora. Shill Zone. Swap. $SPHA. Phantom signs. Nothing is custodial.",
+    description: "solphia.io",
     url: "https://solphia.io",
     siteName: "SOLPHIA",
-    images: [{ url: "/og.jpg?v=6", width: 1200, height: 630 }],
+    images: [{ url: "/og.jpg?v=7", width: 1200, height: 630 }],
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
     title: "SOLPHIA",
-    description: "Launch on Meteora. Shill Zone. Swap. $SPHA. Phantom signs. Nothing is custodial.",
-    images: ["/og.jpg?v=6"],
+    description: "solphia.io",
+    images: ["/og.jpg?v=7"],
   },
   icons: {
     icon: [

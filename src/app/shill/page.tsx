@@ -219,7 +219,7 @@ function Sheet({
   if (!open) return null;
   return (
     <div
-      className="fixed inset-x-0 top-0 z-[45] flex items-end justify-center bg-black/70 bottom-[calc(4.85rem+env(safe-area-inset-bottom))] md:bottom-0 md:items-center md:p-4"
+      className="fixed inset-x-0 top-0 z-[45] flex items-end justify-center bg-black/70 bottom-[calc(4.85rem+env(safe-area-inset-bottom))] md:bottom-[4.25rem] md:items-center md:p-4"
       onClick={onClose}
     >
       <div
@@ -652,10 +652,10 @@ export default function ShillPage() {
   const nextVote = pack?.nextVoteAt || 0;
   const canVote = Boolean(owner) && now >= nextVote;
   const voteByMint = useMemo(() => Object.fromEntries(voteRows.map((r) => [r.mint, r.votes])), [voteRows]);
-  const live = Math.max(pack?.members || 0, (pack?.typing || []).length + (owner ? 1 : 0), msgs.length ? 1 : 0);
+  const live = pack?.members || 0;
 
   return (
-    <main ref={frame} className="fixed inset-0 z-10 flex flex-col overflow-hidden pb-[calc(4.85rem+env(safe-area-inset-bottom))] md:pb-0">
+    <main ref={frame} className="fixed inset-0 z-10 flex flex-col overflow-hidden pb-[calc(4.85rem+env(safe-area-inset-bottom))] md:pb-[4.25rem]">
       <ParticleField />
       <div className="relative z-10 mx-auto flex h-full min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden lg:max-w-6xl">
         <div className="shrink-0">
@@ -746,7 +746,7 @@ export default function ShillPage() {
             <div className="flex h-full min-h-[18rem] flex-col items-center justify-center px-6 text-center">
               <p className="font-mono text-[11px] tracking-[0.28em] text-acid">SHILL ZONE</p>
               <h2 className="mt-2 font-display text-4xl text-ghost">Drop a CA.</h2>
-              <p className="mt-3 max-w-sm text-[15px] leading-relaxed text-mute">Chat like Telegram. Pin the rail. Vote the board. Phantom signs. Nothing is custodial.</p>
+              <p className="mt-3 max-w-sm text-[15px] leading-relaxed text-mute">Drop a CA. Pin the rail. Vote the board.</p>
             </div>
           )}
           {msgs.map((m, i) => {
@@ -926,7 +926,7 @@ export default function ShillPage() {
           </div>
         )}
 
-        <div className={`relative z-[60] shrink-0 border-t border-white/10 bg-[#04000a] ${tab === "chat" ? "" : "hidden"}`}>
+        <div className={`relative z-[60] shrink-0 border-t border-white/10 bg-[#04000a] pb-1 md:pb-2 ${tab === "chat" ? "" : "hidden"}`}>
           {!owner ? (
             <div className="flex items-center gap-3 px-3 py-3">
               <input
@@ -1031,7 +1031,7 @@ export default function ShillPage() {
 
         {openPin && (
           <div
-            className="fixed inset-x-0 top-0 z-[46] flex items-end justify-center bg-black/55 p-3 bottom-[calc(4.85rem+env(safe-area-inset-bottom))] backdrop-blur-sm md:bottom-0 md:items-center"
+            className="fixed inset-x-0 top-0 z-[46] flex items-end justify-center bg-black/55 p-3 bottom-[calc(4.85rem+env(safe-area-inset-bottom))] backdrop-blur-sm md:bottom-[4.25rem] md:items-center"
             onClick={() => setOpenPin(null)}
           >
             <div className="panel-bubble w-full max-w-sm rounded-3xl p-4" onClick={(e) => e.stopPropagation()}>

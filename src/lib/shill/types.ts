@@ -63,8 +63,10 @@ export type HouseActor = {
   named: boolean;
   nextShareAt: number;
   nextVoteAt: number;
+  nextChatAt?: number;
   shareEveryMs: number;
   voteEveryMs: number;
+  chatEveryMs?: number;
   voteP: number;
 };
 
@@ -79,6 +81,11 @@ export type ShillBook = {
   nextHousePinAt?: number;
   houseActors?: HouseActor[];
   lastHouseShareAt?: number;
+  lastHouseChatAt?: number;
+  houseLive?: number;
+  nextHouseLiveAt?: number;
+  housePresent?: string[];
+  houseBootedAt?: number;
 };
 
 export const SHILL_MSG_MAX = 240;
@@ -99,5 +106,7 @@ export const SHILL_VOTE_MS = 24 * 3600_000;
 export const SHILL_VOTE_COOLDOWN_MS = 60 * 60_000;
 export const SHILL_VOTE_MAX = 4000;
 export const SHILL_HOUSE_OWNER = "solphia";
+/** A wallet is "in the room" only while it is still heartbeating. */
+export const SHILL_PRESENCE_MS = 25_000;
 export const SHILL_STICKERS = ["🚀", "🔥", "💎", "🐸", "👑", "🪩", "🎉", "💸", "🧠", "🫡", "👀"];
 export const SHILL_REACTS = ["❤️", "😂", "🔥", "🚀", "👍", "💎", "👀"];

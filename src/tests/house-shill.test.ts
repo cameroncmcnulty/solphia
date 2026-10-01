@@ -4,9 +4,13 @@ import { join } from "node:path";
 import { describe, it } from "node:test";
 import { isSolanaAddress } from "../lib/security";
 import { emptyLaunchBook } from "../lib/launch/engine";
-import { emptyShill, mergeShill } from "../lib/shill/engine";
+import { emptyShill, liveRoomCount, mergeShill } from "../lib/shill/engine";
+import { SHILL_PRESENCE_MS } from "../lib/shill/types";
+import { composeHouseChat, phraseCardinality } from "../lib/shill/phrases";
 import {
   HOUSE_ACTOR_N,
+  HOUSE_LIVE_MAX,
+  HOUSE_LIVE_MIN,
   HOUSE_NAME_MAX,
   HOUSE_NAME_MIN,
   HOUSE_SHARE_CLUSTER_MS,
@@ -36,6 +40,14 @@ function minGap(times: number[]) {
   let g = Infinity;
   for (let i = 1; i < s.length; i++) g = Math.min(g, s[i]! - s[i - 1]!);
   return g;
+}
+
+function isolate(book: ReturnType<typeof emptyShill>) {
+  book.houseBootedAt = 1;
+  book.housePresent = (book.houseActors || []).map((a) => a.pubkey);
+  book.houseLive = book.housePresent.length;
+  book.nextHouseLiveAt = 9e15;
+  for (const a of book.houseActors || []) a.nextChatAt = 9e15;
 }
 
 describe("house shill wallets", () => {
@@ -70,8 +82,8 @@ describe("house shill wallets", () => {
     const votes = book.houseActors!.map((a) => a.nextVoteAt);
     assert.ok(minGap(shares) >= HOUSE_SHARE_CLUSTER_MS - 1);
     assert.ok(minGap(votes) >= HOUSE_VOTE_CLUSTER_MS - 1);
-    assert.ok(Math.max(...shares) - Math.min(...shares) > 6 * 3600_000, "share times must span hours");
-    assert.ok(Math.max(...votes) - Math.min(...votes) > 6 * 3600_000, "vote times must span hours");
+    assert.ok(Math.max(...shares) - Math.min(...shares) > 2 * 3600_000, "share times must span hours");
+    assert.ok(Math.max(...votes) - Math.min(...votes) > 2 * 3600_000, "vote times must span hours");
     assert.ok(shares.every((t) => t > t0));
     assert.ok(new Set(book.houseActors!.map((a) => a.shareEveryMs)).size > 10);
     assert.ok(new Set(book.houseActors!.map((a) => a.voteEveryMs)).size > 10);
@@ -94,6 +106,7 @@ describe("house shill wallets", () => {
     const book = emptyShill();
     const rng = mulberry32(7);
     plantHouseSchedules(book, 10_000, rng);
+    isolate(book);
     for (const a of book.houseActors!) a.nextShareAt = 50_000;
     book.lastHouseShareAt = 0;
     const pad = CA;
@@ -112,6 +125,8 @@ describe("house shill wallets", () => {
     const fire = emptyShill();
     plantHouseSchedules(skip, 1_000, mulberry32(3));
     plantHouseSchedules(fire, 1_000, mulberry32(4));
+    isolate(skip);
+    isolate(fire);
     for (const a of skip.houseActors!) {
       a.nextVoteAt = 20_000;
       a.nextShareAt = 9e15;
@@ -140,6 +155,35 @@ describe("house shill wallets", () => {
     assert.equal(again.houseActors?.length, 87);
   });
 
+  it("boots 51-87 wallets into the live room and they chat", () => {
+    const book = emptyShill();
+    const rng = mulberry32(42);
+    const t0 = 3_000_000;
+    plantHouseSchedules(book, t0, rng);
+    const out = tickHouseActions(book, market, t0 + 1_000, rng);
+    assert.ok((book.houseLive || 0) >= HOUSE_LIVE_MIN);
+    assert.ok((book.houseLive || 0) <= HOUSE_LIVE_MAX);
+    assert.equal((book.housePresent || []).length, book.houseLive);
+    assert.ok(book.messages.length >= 10);
+    assert.ok(book.messages.some((m) => !m.token), "plain chat, not only CA dumps");
+    assert.ok(book.messages.some((m) => m.replyTo), "they answer each other");
+    assert.equal(liveRoomCount(book, t0 + 1_000), book.houseLive);
+    assert.ok(out.chats >= 0);
+  });
+
+  it("counts only wallets still in the room, not old ones that switched out", () => {
+    const book = emptyShill();
+    plantHouseSchedules(book, 1_000, mulberry32(5));
+    tickHouseActions(book, market, 2_000, mulberry32(5));
+    const house = book.houseLive || 0;
+    const now = 10_000_000;
+    book.members[A] = { pubkey: A, lastReadAt: now };
+    book.members[B] = { pubkey: B, lastReadAt: now - SHILL_PRESENCE_MS - 1 };
+    assert.equal(liveRoomCount(book, now), house + 1);
+    book.members[A].lastReadAt = now - SHILL_PRESENCE_MS - 1;
+    assert.equal(liveRoomCount(book, now), house);
+  });
+
   it("crypto names pass the username rules", () => {
     const rng = mulberry32(21);
     const taken = new Set<string>();
@@ -151,6 +195,16 @@ describe("house shill wallets", () => {
       names.add(u!);
     }
     assert.equal(names.size, 40);
+  });
+});
+
+describe("house chat phrases", () => {
+  it("has at least 10000 distinct lines", () => {
+    assert.ok(phraseCardinality() >= 10_000);
+    const rng = mulberry32(99);
+    const seen = new Set<string>();
+    for (let i = 0; i < 2500; i++) seen.add(composeHouseChat(rng).text);
+    assert.ok(seen.size > 400);
   });
 });
 

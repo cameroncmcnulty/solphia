@@ -12,6 +12,7 @@ import {
   SHILL_PIN_MS,
   SHILL_PIN_SLOTS,
   SHILL_PIN_SOL,
+  SHILL_PRESENCE_MS,
   SHILL_VOTE_COOLDOWN_MS,
   SHILL_VOTE_MAX,
   SHILL_VOTE_MS,
@@ -41,6 +42,11 @@ export function emptyShill(): ShillBook {
     nextHousePinAt: 0,
     houseActors: [],
     lastHouseShareAt: 0,
+    lastHouseChatAt: 0,
+    houseLive: 0,
+    nextHouseLiveAt: 0,
+    housePresent: [],
+    houseBootedAt: 0,
   };
 }
 
@@ -73,6 +79,11 @@ export function mergeShill(local: ShillBook, remote: ShillBook): ShillBook {
     nextHousePinAt: Math.max(a.nextHousePinAt || 0, b.nextHousePinAt || 0),
     houseActors: [...actors.values()].sort((x, y) => x.i - y.i),
     lastHouseShareAt: Math.max(a.lastHouseShareAt || 0, b.lastHouseShareAt || 0),
+    lastHouseChatAt: Math.max(a.lastHouseChatAt || 0, b.lastHouseChatAt || 0),
+    houseLive: a.houseLive || b.houseLive || 0,
+    nextHouseLiveAt: Math.max(a.nextHouseLiveAt || 0, b.nextHouseLiveAt || 0),
+    housePresent: (a.housePresent && a.housePresent.length ? a.housePresent : b.housePresent) || [],
+    houseBootedAt: Math.max(a.houseBootedAt || 0, b.houseBootedAt || 0),
   };
   pruneShill(out);
   return out;
@@ -91,6 +102,11 @@ export function slimShill(book?: ShillBook | null): ShillBook {
     nextHousePinAt: b.nextHousePinAt,
     houseActors: b.houseActors || [],
     lastHouseShareAt: b.lastHouseShareAt || 0,
+    lastHouseChatAt: b.lastHouseChatAt || 0,
+    houseLive: b.houseLive || 0,
+    nextHouseLiveAt: b.nextHouseLiveAt || 0,
+    housePresent: b.housePresent || [],
+    houseBootedAt: b.houseBootedAt || 0,
   };
 }
 
@@ -104,6 +120,11 @@ export function ensureShill(book?: ShillBook | null): ShillBook {
   if (!b.lastVoteAt) b.lastVoteAt = {};
   if (!b.houseActors) b.houseActors = [];
   if (!b.lastHouseShareAt) b.lastHouseShareAt = 0;
+  if (!b.lastHouseChatAt) b.lastHouseChatAt = 0;
+  if (!b.housePresent) b.housePresent = [];
+  if (!b.houseLive) b.houseLive = 0;
+  if (!b.nextHouseLiveAt) b.nextHouseLiveAt = 0;
+  if (!b.houseBootedAt) b.houseBootedAt = 0;
   b.typing = {};
   pruneShill(b);
   return b;
@@ -428,4 +449,25 @@ export function voteBoard(book: ShillBook, now = Date.now()): VoteBoardRow[] {
 
 export function votesOnMint(book: ShillBook, mint: string, now = Date.now()): number {
   return (book.votes || []).filter((v) => v.mint === mint && v.endsAt > now).length;
+}
+
+export function housePubkeySet(book: ShillBook): Set<string> {
+  return new Set((book.houseActors || []).map((a) => a.pubkey));
+}
+
+/** Humans actually looking at the room right now. Old wallets drop off after the presence window. */
+export function liveHumanKeys(book: ShillBook, now = Date.now()): string[] {
+  const house = housePubkeySet(book);
+  const out: string[] = [];
+  for (const [pk, m] of Object.entries(book.members || {})) {
+    if (!pk || house.has(pk) || m.banned) continue;
+    if (now - (m.lastReadAt || 0) <= SHILL_PRESENCE_MS) out.push(pk);
+  }
+  return out;
+}
+
+/** Live bodies in the room: present house wallets + humans still heartbeating. */
+export function liveRoomCount(book: ShillBook, now = Date.now()): number {
+  const house = (book.housePresent || []).length;
+  return house + liveHumanKeys(book, now).length;
 }
