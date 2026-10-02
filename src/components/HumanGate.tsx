@@ -8,16 +8,24 @@ import {
   PUZZLE_H,
   PUZZLE_W,
   clampSlide,
-  humanVerified,
   makePuzzle,
-  markHuman,
   puzzleHit,
   type PuzzleChallenge,
 } from "@/lib/human/puzzle";
 import { clearScrollLock, lockPageScroll } from "@/lib/scrollLock";
 
-export function HumanGate() {
-  const [open, setOpen] = useState(false);
+export function HumanGate({
+  everyVisit = false,
+  onPass,
+  title = "Enter Shill Zone",
+  subtitle = "Slide the piece into the hole. One pass gets you into this room.",
+}: {
+  everyVisit?: boolean;
+  onPass?: () => void;
+  title?: string;
+  subtitle?: string;
+}) {
+  const [open, setOpen] = useState(everyVisit);
   const [thanks, setThanks] = useState(false);
   const [fire, setFire] = useState(false);
   const [x, setX] = useState(10);
@@ -57,13 +65,14 @@ export function HumanGate() {
   }, []);
 
   useEffect(() => {
-    if (humanVerified()) {
-      setOpen(false);
+    if (everyVisit) {
+      setOpen(true);
+      setPuzzle((p) => p || makePuzzle());
       return;
     }
     setOpen(true);
     setPuzzle((p) => p || makePuzzle());
-  }, []);
+  }, [everyVisit]);
 
   useLayoutEffect(() => {
     if (!open || thanks || !puzzle) return;
@@ -102,13 +111,13 @@ export function HumanGate() {
       setPuzzle(next);
       return;
     }
-    markHuman();
     setThanks(true);
     setFire(true);
     window.setTimeout(() => {
       setOpen(false);
       setFire(false);
-    }, 2000);
+      onPass?.();
+    }, 900);
   }
 
   function onPointerDown(e: PointerEvent<HTMLDivElement>) {
@@ -147,15 +156,15 @@ export function HumanGate() {
         {thanks ? (
           <div className="px-2 py-10 text-center">
             <h2 id="human-title" className="font-display text-3xl text-ghost">
-              Thanks for verifying you&apos;re a human
+              You&apos;re in
             </h2>
           </div>
         ) : (
           <>
             <h2 id="human-title" className="font-display text-2xl text-ghost sm:text-3xl">
-              Verify you&apos;re human
+              {title}
             </h2>
-            <p className="mt-1 text-sm text-mute">Slide the piece into the hole.</p>
+            <p className="mt-1 text-sm text-mute">{subtitle}</p>
             <div className="relative mt-5 overflow-hidden rounded-2xl border border-violet/30 bg-void">
               <canvas ref={viewRef} width={PUZZLE_W} height={PUZZLE_H} className="human-canvas" />
             </div>

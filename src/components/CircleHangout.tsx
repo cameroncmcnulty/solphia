@@ -1,6 +1,6 @@
 "use client";
 
-import { Gift } from "lucide-react";
+import { Crown, Gift } from "lucide-react";
 import { CartoonPfp } from "@/components/CartoonPfp";
 
 export type HangoutPromo = { id: string; url: string; caption?: string };
@@ -41,18 +41,28 @@ export function CircleHangout({
 }) {
   return (
     <div className="flex flex-col gap-4">
-      <header className="rounded-3xl border border-acid/25 bg-acid/[0.06] p-5">
+      <header className="relative overflow-hidden rounded-3xl border border-[#e8c35a]/45 bg-[radial-gradient(120%_80%_at_10%_0%,rgba(232,195,90,0.18),transparent_55%),linear-gradient(180deg,rgba(20,8,28,0.92),rgba(8,0,14,0.96))] p-6 shadow-[0_0_40px_rgba(232,195,90,0.12)]">
         <div className="flex items-center gap-3">
-          <CartoonPfp seed={seed} src={pfpSrc} className="h-12 w-12" />
+          <div className="relative">
+            <CartoonPfp seed={seed} src={pfpSrc} className="h-14 w-14 ring-2 ring-[#e8c35a]/70" />
+            <span className="absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full border border-[#e8c35a]/60 bg-[#12081c] text-[#e8c35a]">
+              <Crown className="h-3.5 w-3.5" strokeWidth={2.2} />
+            </span>
+          </div>
           <div>
-            <div className="font-mono text-[10px] tracking-[0.22em] text-acid">FOUNDERS CIRCLE</div>
-            <h1 className="pump-h1">You&apos;re in</h1>
+            <div className="font-mono text-[10px] tracking-[0.28em] text-[#e8c35a]">FOUNDING CLASS · ELITE</div>
+            <h1 className="font-display text-4xl text-ghost sm:text-5xl">You made the cut.</h1>
           </div>
         </div>
-        <p className="mt-2 text-sm text-mute">
+        <p className="mt-4 max-w-2xl text-[15px] leading-relaxed text-ghost/90 sm:text-base">
+          You are among the early <span className="font-semibold tracking-wide text-[#e8c35a]">BELIEVERS</span>.
+          This is not a crowd. It is a founding class. True greatness here is earned through commitment and
+          dedication to Solphia — and you already belong in this room.
+        </p>
+        <p className="mt-3 font-mono text-[12px] text-[#e8c35a]/80">
           {members} founders · {refs} invited · {boostPct}% airdrop boost
         </p>
-        <div className="mt-4 flex flex-wrap gap-2">
+        <div className="mt-5 flex flex-wrap gap-2">
           {!hideWithdraw && (
             <button
               type="button"
@@ -66,10 +76,10 @@ export function CircleHangout({
           )}
           <button
             type="button"
-            className="rounded-full border border-violet/30 px-4 py-2 font-mono text-[11px] text-ghost"
+            className="rounded-full border border-[#e8c35a]/40 bg-[#e8c35a]/10 px-4 py-2 font-mono text-[11px] text-[#e8c35a]"
             onClick={onCopyInvite}
           >
-            {copied ? "copied" : "copy invite"}
+            {copied ? "copied" : "invite a believer"}
           </button>
         </div>
         {note && <p className="mt-2 text-sm text-acid">{note}</p>}
@@ -98,13 +108,13 @@ export function CircleHangout({
 
 function JobsBoard({ jobs }: { jobs: HangoutJob[] }) {
   return (
-    <section className="rounded-3xl border border-violet/20 bg-void/30 p-5">
-      <div className="font-mono text-[10px] tracking-[0.22em] text-mute">JOB LISTINGS</div>
+    <section className="rounded-3xl border border-[#e8c35a]/20 bg-void/30 p-5">
+      <div className="font-mono text-[10px] tracking-[0.22em] text-[#e8c35a]/70">INNER CIRCLE</div>
       <h2 className="pump-h2 mt-1">Work with Solphia</h2>
       {jobs.length === 0 ? (
         <p className="mt-2 max-w-xl text-sm leading-relaxed text-mute">
-          This is where we&apos;ll list any opportunities that come up to work with Solphia — roles, contracts, and
-          founder-only gigs. Nothing open right now. When something is, it lands here first.
+          Founder-only roles, contracts, and gigs land here first. Nothing open right now. When something is,
+          this class sees it before the rest of the market.
         </p>
       ) : (
         <div className="mt-3 space-y-3">

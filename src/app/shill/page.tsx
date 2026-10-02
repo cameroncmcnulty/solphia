@@ -27,6 +27,7 @@ import { TokenArt } from "@/components/TokenArt";
 import { WalletConnect } from "@/components/WalletConnect";
 import { RankBadge } from "@/components/RankBadge";
 import { ProfileOverlay } from "@/components/ProfileOverlay";
+import { HumanGate } from "@/components/HumanGate";
 import { useOwner } from "@/lib/hooks";
 import { persistOwner } from "@/lib/wallet/owner";
 import { paySeatFromPhantom, signAndSendPhantom } from "@/lib/wallet/trading";
@@ -339,6 +340,7 @@ export default function ShillPage() {
   const [now, setNow] = useState(() => Date.now());
   const stickToBottom = useRef(true);
   const [atBottom, setAtBottom] = useState(true);
+  const [entered, setEntered] = useState(false);
 
   const load = useCallback(async (full = false) => {
     const gen = ++loadGen.current;
@@ -492,6 +494,15 @@ export default function ShillPage() {
       body: JSON.stringify({ action: "read", pubkey: owner }),
     }).catch(() => undefined);
   }, [owner]);
+
+  useEffect(() => {
+    if (!entered || !owner) return;
+    void fetch("/api/shill", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "human", pubkey: owner }),
+    }).catch(() => undefined);
+  }, [entered, owner]);
 
   async function send(extra?: Record<string, unknown>) {
     if (!owner) {
@@ -658,6 +669,14 @@ export default function ShillPage() {
 
   return (
     <main ref={frame} className="fixed inset-0 z-10 flex flex-col overflow-hidden pb-[calc(4.85rem+env(safe-area-inset-bottom))] md:pb-[4.25rem]">
+      {!entered ? (
+        <HumanGate
+          everyVisit
+          onPass={() => setEntered(true)}
+          title="Enter Shill Zone"
+          subtitle="Slide the piece into the hole. This check is only for this room."
+        />
+      ) : null}
       <ParticleField />
       <div className="relative z-10 mx-auto flex h-full min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden lg:max-w-6xl">
         <div className="shrink-0">

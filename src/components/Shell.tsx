@@ -8,7 +8,6 @@ import { BottomNav } from "./BottomNav";
 import { LiveRunner } from "./LiveRunner";
 import { SeatRunner } from "./SeatRunner";
 import { ReferralCapture } from "./ReferralCapture";
-import { HumanGate } from "./HumanGate";
 import { WalletKeepalive } from "./WalletConnect";
 import { TosGate } from "./TosGate";
 import { SiteFooter } from "./SiteFooter";
@@ -18,10 +17,6 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const path = usePathname();
   const isAdmin = path.startsWith("/admin");
   const isShill = path === "/shill" || path.startsWith("/shill/");
-  const isSwap = path === "/swap" || path.startsWith("/swap/");
-  const isLaunch = path === "/launch" || path.startsWith("/launch/");
-  const skipHuman = isAdmin || isLaunch || isSwap;
-
   useEffect(() => {
     if (isShill) {
       lockPageScroll();
@@ -48,7 +43,6 @@ export function Shell({ children }: { children: React.ReactNode }) {
         </Suspense>
         {children}
         {runners}
-        {!skipHuman && <HumanGate />}
         <BottomNav />
       </div>
     );
@@ -69,7 +63,6 @@ export function Shell({ children }: { children: React.ReactNode }) {
       </div>
       <SiteFooter />
       {runners}
-      {!skipHuman && <HumanGate />}
       {!isAdmin && <BottomNav />}
     </div>
   );

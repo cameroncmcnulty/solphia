@@ -37,6 +37,7 @@ import { canModerateChat, staffRole } from "@/lib/access";
 import type { AppState } from "@/lib/types";
 import { GLDX_MINT_OFFICIAL, QQQX_MINT_OFFICIAL, SOL_MINT, SPYX_MINT_OFFICIAL, USDC_MINT, USDT_MINT } from "@/lib/pair/mints";
 import { houseNeedsNames, houseNeedsTape, houseWorkDue, loadHouseMarketCoins, paintHouseNames, persistHouseXpAndCycles, plantHouseSchedules, tickHouseActions } from "@/lib/shill/house";
+import { readShillDevice, shillHumanOk, shillJson, shillWalletAllowed, stampShillOk } from "@/lib/shill/antispam";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -71,7 +72,7 @@ function bustShillSnap() {
 }
 
 const Body = z.object({
-  action: z.enum(["chat", "react", "typing", "read", "delete", "pin", "mute", "ban", "vote"]),
+  action: z.enum(["chat", "react", "typing", "read", "delete", "pin", "mute", "ban", "vote", "human"]),
   pubkey: z.string(),
   text: z.string().max(2000).optional(),
   sticker: z.string().max(16).optional(),
@@ -143,9 +144,19 @@ function youCard(s: AppState, pubkey: string) {
   };
 }
 
+function guestBlock(req: NextRequest, ip: string, pubkey: string, human: boolean) {
+  if (human && !shillHumanOk(req, ip)) {
+    return { error: "human", message: "Slide to enter Shill Zone first.", status: 403 as const };
+  }
+  const flood = shillWalletAllowed(ip, readShillDevice(req), pubkey);
+  if (!flood.ok) return { error: flood.error, message: flood.message, status: 429 as const };
+  return null;
+}
+
 export async function GET(req: NextRequest) {
-  if (!rateLimit(clientIp(req) + ":shill-get", 120, 60_000)) {
-    return NextResponse.json({ error: "rate_limited" }, { status: 429 });
+  const ip = clientIp(req);
+  if (!rateLimit(ip + ":shill-get", 120, 60_000)) {
+    return shillJson(req, { error: "rate_limited" }, 429);
   }
   const pubkey = req.nextUrl.searchParams.get("pubkey") || "";
   const since = Number(req.nextUrl.searchParams.get("since") || 0);
@@ -198,13 +209,16 @@ export async function GET(req: NextRequest) {
     bustShillSnap();
   }
   if (!light && pubkey && isSolanaAddress(pubkey)) {
-    await withShill((st) => {
-      st.shill = ensureShill(st.shill);
-      const m = st.shill.members[pubkey];
-      if (m?.lastReadAt && Date.now() - m.lastReadAt < 10_000) return;
-      touchMember(st.shill, pubkey);
-    }, true);
-    bustShillSnap();
+    const blocked = guestBlock(req, ip, pubkey, false);
+    if (!blocked) {
+      await withShill((st) => {
+        st.shill = ensureShill(st.shill);
+        const m = st.shill.members[pubkey];
+        if (m?.lastReadAt && Date.now() - m.lastReadAt < 10_000) return;
+        touchMember(st.shill, pubkey);
+      }, true);
+      bustShillSnap();
+    }
   }
   const snap = await shillSnap(need.pins || need.actors);
   const now = Date.now();
@@ -224,7 +238,7 @@ export async function GET(req: NextRequest) {
   }
   if (light) {
     const quiet = messages.length === 0;
-    return NextResponse.json({
+    return shillJson(req, {
       messages,
       typing,
       members: snap.members,
@@ -234,7 +248,7 @@ export async function GET(req: NextRequest) {
       ...(quiet ? {} : { pins: snap.pins, voteBoard: snap.voteBoard }),
     });
   }
-  return NextResponse.json({
+  return shillJson(req, {
     members: snap.members,
     messages,
     pins: snap.pins,
@@ -260,6 +274,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "bad_request", message: "Connect your wallet." }, { status: 400 });
   }
   const b = parsed.data;
+  if (b.action === "human") {
+    if (!rateLimit(ip + ":shill-human", 20, 60_000)) {
+      return shillJson(req, { error: "rate_limited", message: "Slow down." }, 429);
+    }
+    const flood = shillWalletAllowed(ip, readShillDevice(req), b.pubkey);
+    if (!flood.ok) return shillJson(req, { error: flood.error, message: flood.message }, 429);
+    const res = NextResponse.json({ ok: true });
+    stampShillOk(req, res, ip);
+    return res;
+  }
   if (b.action === "typing") {
     if (!rateLimit(ip + ":shill-type", 80, 60_000)) return NextResponse.json({ ok: true });
     typingMem.set(b.pubkey, Date.now() + 4000);
@@ -270,6 +294,8 @@ export async function POST(req: NextRequest) {
   }
 
   if (b.action === "vote") {
+    const blocked = guestBlock(req, ip, b.pubkey, true);
+    if (blocked) return shillJson(req, { error: blocked.error, message: blocked.message }, blocked.status);
     const mint = (b.mint || "").trim();
     if (!isSolanaAddress(mint)) return NextResponse.json({ error: "bad_mint", message: "Pick a token to upvote." }, { status: 400 });
     const token = (await tokenOf(mint)) || { mint, symbol: mint.slice(0, 4), name: "token" };
@@ -293,6 +319,8 @@ export async function POST(req: NextRequest) {
   }
 
   if (b.action === "pin") {
+    const blocked = guestBlock(req, ip, b.pubkey, true);
+    if (blocked) return shillJson(req, { error: blocked.error, message: blocked.message }, blocked.status);
     const mint = (b.mint || "").trim();
     if (!isSolanaAddress(mint)) return NextResponse.json({ error: "bad_mint", message: "Drop a token CA." }, { status: 400 });
     const treasury = treasuryAddress();
@@ -351,6 +379,8 @@ export async function POST(req: NextRequest) {
   }
 
   if (b.action === "chat") {
+    const blocked = guestBlock(req, ip, b.pubkey, true);
+    if (blocked) return shillJson(req, { error: blocked.error, message: blocked.message }, blocked.status);
     const text = sanitizeText(b.text || "", 2000);
     const cas = extractCas(text);
     let token: ShillToken | undefined;
@@ -396,6 +426,15 @@ export async function POST(req: NextRequest) {
     }
     bustShillSnap();
     return NextResponse.json({ ok: true, message: posted.message, leveled, rank });
+  }
+
+  if (b.action === "react") {
+    const blocked = guestBlock(req, ip, b.pubkey, true);
+    if (blocked) return shillJson(req, { error: blocked.error, message: blocked.message }, blocked.status);
+  }
+  if (b.action === "read") {
+    const blocked = guestBlock(req, ip, b.pubkey, false);
+    if (blocked) return NextResponse.json({ ok: true });
   }
 
   const posted = await withShill((st) => {

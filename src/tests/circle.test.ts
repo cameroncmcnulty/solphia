@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   addJob,
   airdropWeight,
@@ -69,6 +71,16 @@ describe("founders circle", () => {
     assert.equal(book.jobs[0].title, "Protocol engineer");
     assert.equal(removeJob(book, ok.job.id), true);
     assert.equal(book.jobs.length, 0);
+  });
+
+  it("welcomes founders as an elite class of early BELIEVERS", () => {
+    const hang = readFileSync(join(process.cwd(), "src/components/CircleHangout.tsx"), "utf8");
+    const page = readFileSync(join(process.cwd(), "src/app/circle/page.tsx"), "utf8");
+    assert.match(hang, /BELIEVERS/);
+    assert.match(hang, /You made the cut/);
+    assert.match(hang, /FOUNDING CLASS/);
+    assert.match(page, /early BELIEVERS/);
+    assert.match(page, /Enter the founding class/);
   });
 
   it("lets a vip wallet in without inviting anyone", () => {

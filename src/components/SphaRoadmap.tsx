@@ -4,6 +4,7 @@ import type { LucideIcon } from "lucide-react";
 import {
   Activity,
   Blocks,
+  Bot,
   Flame,
   Globe2,
   Landmark,
@@ -11,6 +12,7 @@ import {
   Megaphone,
   Network,
   Sparkles,
+  Trophy,
   TrendingUp,
   Vote,
 } from "lucide-react";
@@ -26,7 +28,7 @@ const ERAS: Era[] = [
     tag: "GENESIS",
     live: true,
     steps: [
-      { t: "Launch of Solphia — trading bot and token launcher", Icon: Activity },
+      { t: "Launch of Solphia — swap market, Shill Zone, and token launcher", Icon: Activity },
       { t: "Launch of $SPHA", Icon: Sparkles },
       { t: "Marketing campaigns, community growth, transactional volume", Icon: Megaphone },
       { t: "Automate buybacks and burns", Icon: Flame },
@@ -37,6 +39,8 @@ const ERAS: Era[] = [
     when: "2027",
     tag: "EXPANSION",
     steps: [
+      { t: "Launch of autonomous trading bot", Icon: Bot },
+      { t: "Increased engagement rewards", Icon: Trophy },
       { t: "Small exchange listing exploration and applications", Icon: Globe2 },
       { t: "Increased transactional volume and buyback + burn rate", Icon: TrendingUp },
       { t: "New features on the token launcher / DEX", Icon: Blocks },

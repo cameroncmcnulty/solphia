@@ -2,7 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useState, type ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
-import { Gift } from "lucide-react";
+import { Crown } from "lucide-react";
 import { CircleHangout } from "@/components/CircleHangout";
 import { TealConfetti } from "@/components/TealConfetti";
 import { WalletConnect } from "@/components/WalletConnect";
@@ -139,28 +139,34 @@ function CircleInner() {
       <TealConfetti fire={fire} />
       <div className="mx-auto flex max-w-5xl flex-col gap-4 px-3 pt-6 md:px-6">
         {!owner ? (
-          <Gate title="Connect your wallet" body="Founders Circle is wallet-in. Then drop an email for project updates.">
+          <Gate
+            title="The founding class is wallet-in"
+            body="Connect Phantom and take your seat among the early BELIEVERS — the people who saw Solphia first and chose to stay."
+          >
             <WalletConnect />
           </Gate>
         ) : pack?.banned ? (
           <Gate title="Not this door" body="This wallet is banned from Founders Circle." />
         ) : !member ? (
-          <Gate title="Take a seat" body="Connect is done. Email gets you project updates. Then invite one friend to unlock the hang.">
+          <Gate
+            title="Take your seat among the early BELIEVERS"
+            body="This room is elite on purpose. Email gets you project updates. Then invite one believer. Commitment and dedication is how this class is built — and how true greatness is earned."
+          >
             <input
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@email.com"
-              className="w-full max-w-sm rounded-full border border-violet/30 bg-void px-4 py-2 text-ghost outline-none"
+              className="w-full max-w-sm rounded-full border border-[#e8c35a]/35 bg-void px-4 py-2 text-ghost outline-none"
             />
             <button type="button" disabled={busy} onClick={join} className="btn-acid mt-3 rounded-full px-6 py-2 disabled:opacity-40">
-              {busy ? "Entering…" : "Enter Founders Circle"}
+              {busy ? "Entering…" : "Enter the founding class"}
             </button>
             {err && <p className="mt-2 text-sm text-blood">{err}</p>}
           </Gate>
         ) : !inCircle ? (
           <Gate
-            title="Invite one person"
-            body="Copy your link. When they connect a wallet, drop their email, and register, you both get in."
+            title="One invite unlocks the room"
+            body="You are almost in. Copy your link. When they connect a wallet, drop their email, and register, you both stand with the early BELIEVERS."
           >
             <button
               type="button"
@@ -206,9 +212,12 @@ function CircleInner() {
 function Gate({ title, body, children }: { title: string; body: string; children?: ReactNode }) {
   return (
     <div className="flex min-h-[70vh] flex-1 flex-col items-center justify-center px-6 text-center">
-      <Gift className="h-10 w-10 text-acid" />
-      <h2 className="mt-4 font-display text-3xl text-ghost">{title}</h2>
-      <p className="mt-2 max-w-md text-sm text-mute">{body}</p>
+      <span className="flex h-14 w-14 items-center justify-center rounded-full border border-[#e8c35a]/50 bg-[#e8c35a]/10 text-[#e8c35a] shadow-[0_0_28px_rgba(232,195,90,0.25)]">
+        <Crown className="h-7 w-7" strokeWidth={1.8} />
+      </span>
+      <p className="mt-5 font-mono text-[10px] tracking-[0.32em] text-[#e8c35a]">FOUNDERS CIRCLE · ELITE</p>
+      <h2 className="mt-2 font-display text-3xl text-ghost sm:text-4xl">{title}</h2>
+      <p className="mt-3 max-w-lg text-[15px] leading-relaxed text-mute">{body}</p>
       <div className="mt-6 flex w-full flex-col items-center">{children}</div>
     </div>
   );

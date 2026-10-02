@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { clampSlide, HUMAN_KEY, makePuzzle, PIECE_BOX, PUZZLE_W, puzzleHit } from "../lib/human/puzzle";
 
 describe("human puzzle", () => {
@@ -27,8 +29,19 @@ describe("human puzzle", () => {
     assert.equal(clampSlide(40), 40);
   });
 
-  it("uses a durable key so one pass lasts across Shill visits", () => {
+  it("is a Shill Zone entry slider, not a site-wide cookie", () => {
     assert.equal(HUMAN_KEY, "solphia_human");
+    const shell = readFileSync(join(process.cwd(), "src/components/Shell.tsx"), "utf8");
+    const shill = readFileSync(join(process.cwd(), "src/app/shill/page.tsx"), "utf8");
+    const gate = readFileSync(join(process.cwd(), "src/components/HumanGate.tsx"), "utf8");
+    const house = readFileSync(join(process.cwd(), "src/lib/shill/house.ts"), "utf8");
+    assert.equal(shell.includes("<HumanGate"), false);
+    assert.match(shill, /<HumanGate/);
+    assert.match(shill, /everyVisit/);
+    assert.match(gate, /Enter Shill Zone/);
+    assert.equal(gate.includes("markHuman()"), false);
+    assert.equal(house.includes("shillWalletAllowed"), false);
+    assert.equal(house.includes("guestBlock"), false);
   });
 
   it("rolls a different cartoon slot for a different seed", () => {
