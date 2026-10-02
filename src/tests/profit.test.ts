@@ -86,5 +86,11 @@ describe("profit catalog", () => {
     const treas = p.streams.filter((row) => row.wallet === "treasury");
     assert.ok(treas.some((row) => row.id === "desk"));
     assert.ok(treas.some((row) => row.id === "seat"));
+    const pin = p.streams.find((row) => row.id === "pin");
+    const boost = p.streams.find((row) => row.id === "boost");
+    assert.ok(pin?.rate.includes("50%"));
+    assert.ok(boost?.rate.includes("50%"));
+    assert.equal(p.pinBoostSplit.owner, "50%");
+    assert.equal(p.claimable.ownerReadySol, 0.4);
   });
 });

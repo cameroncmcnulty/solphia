@@ -3,8 +3,9 @@ import { z } from "zod";
 import { clientIp, isSolanaAddress, rateLimit } from "@/lib/security";
 import { treasuryAddress } from "@/lib/treasury";
 import { confirmedHouseTransfers } from "@/lib/solana/connection";
-import { boundReferrer, houseFeeLegs } from "@/lib/fees/payout";
+import { houseFeeLegs } from "@/lib/fees/payout";
 import { unsignedHousePay } from "@/lib/fees/payTx";
+import { creditEvenIncome } from "@/lib/fees/income";
 import { withLaunch } from "@/lib/store";
 import { emptyLaunchBook } from "@/lib/launch/engine";
 import { loadMarketTape } from "@/lib/launch/market";
@@ -120,7 +121,7 @@ export async function POST(req: NextRequest) {
     if (!coinId) {
       return NextResponse.json({ error: "not_found", message: "Paste a CA to boost." }, { status: 400 });
     }
-    const packed = await unsignedHousePay(parsed.data.pubkey, sol, parsed.data.pubkey);
+    const packed = await unsignedHousePay(parsed.data.pubkey, sol, parsed.data.pubkey, "even");
     if (!packed.ok) return NextResponse.json({ error: packed.error, message: "Could not start the boost." }, { status: 400 });
     return NextResponse.json({
       ok: true,
@@ -132,7 +133,7 @@ export async function POST(req: NextRequest) {
       legs: packed.legs,
     });
   }
-  const legs = houseFeeLegs({ from: parsed.data.pubkey, feeSol: sol, referrer: boundReferrer(parsed.data.pubkey) });
+  const legs = houseFeeLegs({ from: parsed.data.pubkey, feeSol: sol, mode: "even" });
   const pay = await confirmedHouseTransfers({
     signature: parsed.data.signature,
     from: parsed.data.pubkey,
@@ -143,7 +144,7 @@ export async function POST(req: NextRequest) {
   }
   const out = await withLaunch((s) => {
     const book = bookOf(s);
-    return buyBoost(book, {
+    const bought = buyBoost(book, {
       owner: parsed.data.pubkey,
       coinId: parsed.data.coinId || parsed.data.mint || "",
       mint: parsed.data.mint,
@@ -154,6 +155,8 @@ export async function POST(req: NextRequest) {
       sig: parsed.data.signature || "",
       paidSol: sol,
     });
+    if (bought.ok) creditEvenIncome(book, sol, "boost");
+    return bought;
   });
   if (!out.ok) {
     const message = out.error === "replay" ? "That payment was already used." : "Could not apply the boost.";

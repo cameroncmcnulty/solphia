@@ -25,7 +25,7 @@ import {
   splitFee,
   spotPriceSol,
 } from "../lib/launch/curve";
-import { buyCoin, createCoin, emptyLaunchBook, mergeLaunch, publicCoin, sellCoin, sparkCandles, withdrawDev, withdrawOwner, setOwnerWallet } from "../lib/launch/engine";
+import { buyCoin, createCoin, emptyLaunchBook, mergeLaunch, publicCoin, sellCoin, sparkCandles, withdrawDev, setOwnerWallet } from "../lib/launch/engine";
 import { launchError } from "../lib/launch/errors";
 import { yourLaunches } from "../lib/launch/yours";
 import { IMAGE_DATA_MAX, firstErrorKey, validateLaunchCreate } from "../lib/launch/validate";
@@ -200,15 +200,12 @@ describe("fair launch book", () => {
     if (!buy.ok) return;
     assert.ok((buy.coin.holders[B]?.tokens || 0) > 0);
     assert.ok(buy.coin.devRewardsSol > 0);
-    assert.ok(book.ownerEarningsSol > 0);
+    assert.ok(buy.coin.ownerFeesSol > 0);
     const d = withdrawDev(book, { id: made.coin.id, owner: A });
     assert.equal(d.ok, true);
     if (!d.ok) return;
     assert.ok(d.sol > 0);
     assert.equal(made.coin.devRewardsSol, 0);
-    const o = withdrawOwner(book, { owner: OWN });
-    assert.equal(o.ok, true);
-    if (!o.ok) return;
     assert.equal(book.ownerEarningsSol, 0);
   });
 

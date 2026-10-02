@@ -125,6 +125,14 @@ export type LaunchBook = {
   ownerWallet: string;
   ownerEarningsSol: number;
   treasuryFeesSol: number;
+  /** Lifetime paid pins (not just currently live). */
+  pinFeesSol?: number;
+  /** Lifetime paid boosts. */
+  boostFeesSol?: number;
+  /** Lifetime paid seats. */
+  seatFeesSol?: number;
+  /** Lifetime protocol swap / partner claims. */
+  swapFeesSol?: number;
   accounts: Record<string, LaunchAccount>;
   boosts?: LaunchBoost[];
   lastHouseBoostAt?: number;
@@ -136,7 +144,20 @@ export type LaunchBook = {
 };
 
 export function emptyLaunchBook(): LaunchBook {
-  return { coins: [], ownerWallet: DEFAULT_OWNER, ownerEarningsSol: 0, treasuryFeesSol: 0, accounts: {}, boosts: [], lastHouseBoostAt: 0, nextHouseBoostAt: 0 };
+  return {
+    coins: [],
+    ownerWallet: DEFAULT_OWNER,
+    ownerEarningsSol: 0,
+    treasuryFeesSol: 0,
+    pinFeesSol: 0,
+    boostFeesSol: 0,
+    seatFeesSol: 0,
+    swapFeesSol: 0,
+    accounts: {},
+    boosts: [],
+    lastHouseBoostAt: 0,
+    nextHouseBoostAt: 0,
+  };
 }
 
 export function emptyAccount(pubkey: string): LaunchAccount {
@@ -328,6 +349,10 @@ export function mergeLaunch(local: LaunchBook, remote: LaunchBook): LaunchBook {
     ownerWallet: local.ownerWallet || remote.ownerWallet,
     ownerEarningsSol: Math.max(local.ownerEarningsSol || 0, remote.ownerEarningsSol || 0),
     treasuryFeesSol: Math.max(local.treasuryFeesSol || 0, remote.treasuryFeesSol || 0),
+    pinFeesSol: Math.max(local.pinFeesSol || 0, remote.pinFeesSol || 0),
+    boostFeesSol: Math.max(local.boostFeesSol || 0, remote.boostFeesSol || 0),
+    seatFeesSol: Math.max(local.seatFeesSol || 0, remote.seatFeesSol || 0),
+    swapFeesSol: Math.max(local.swapFeesSol || 0, remote.swapFeesSol || 0),
     accounts,
     boosts: [...boostMap.values()],
     lastHouseBoostAt: Math.max(local.lastHouseBoostAt || 0, remote.lastHouseBoostAt || 0),
@@ -734,8 +759,6 @@ function creditFees(book: LaunchBook, coin: LaunchCoin, feeSol: number, trader: 
   coin.ownerFeesSol += s.owner;
   coin.treasuryFeesSol += s.treasury;
   coin.referralFeesSol = (coin.referralFeesSol || 0) + s.referral;
-  book.ownerEarningsSol += s.owner;
-  book.treasuryFeesSol += s.treasury;
   if (s.referral > 0 && ref) {
     const acc = ensureAccount(book, ref);
     acc.referralRewardsSol += s.referral;

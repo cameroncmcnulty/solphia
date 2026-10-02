@@ -51,7 +51,7 @@ describe("pad on-chain mint", () => {
     assert.equal(fill.coin.holders[A]?.tokens, 12_000_000);
     assert.equal(fill.coin.curve.tokensSold, 0);
     assert.equal(fill.fill.feeSol, 0.004);
-    assert.equal(book.treasuryFeesSol, 0.001);
+    assert.equal(fill.coin.treasuryFeesSol, 0.001);
   });
 
   it("takes 1% in integer math and never sends supply to the buyer on quote", () => {

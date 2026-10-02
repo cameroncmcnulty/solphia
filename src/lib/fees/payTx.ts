@@ -1,15 +1,16 @@
 import { PublicKey, Transaction } from "@solana/web3.js";
 import { connection } from "../solana/connection";
-import { boundReferrer, houseFeeIxs, houseFeeLegs, type HouseLeg } from "./payout";
+import { boundReferrer, houseFeeIxs, houseFeeLegs, type HouseFeeMode, type HouseLeg } from "./payout";
 
 export async function unsignedHousePay(
   from: string,
   feeSol: number,
   person?: string,
+  mode: HouseFeeMode = "hold",
 ): Promise<{ ok: true; transaction: string; legs: HouseLeg[] } | { ok: false; error: string }> {
   const referrer = boundReferrer(person || from);
-  const legs = houseFeeLegs({ from, feeSol, referrer });
-  const ixs = houseFeeIxs({ from, feeSol, referrer });
+  const legs = houseFeeLegs({ from, feeSol, referrer, mode });
+  const ixs = houseFeeIxs({ from, feeSol, referrer, mode });
   if (!ixs.length) return { ok: false, error: "empty" };
   const tx = new Transaction();
   for (const ix of ixs) tx.add(ix);

@@ -20,12 +20,12 @@ import { buildAdminUsers } from "./users";
 import { ensureShill, livePins } from "../shill/engine";
 import { leaderboard } from "../rank/engine";
 import { emptyLaunchBook } from "../launch/engine";
-import { buildProfitDesk } from "../profit/catalog";
+import { buildProfitDesk, type ProfitDesk } from "../profit/catalog";
 import type { AdminDesk, AdminPromo, AdminSeat, AdminSleeve, AdminTrader } from "./types";
 
 export type { AdminDesk, AdminSeat, AdminSleeve, AdminTrader } from "./types";
 
-export function buildAdminDesk(opts?: { light?: boolean }): AdminDesk {
+export function buildAdminDesk(opts?: { light?: boolean; profits?: ProfitDesk }): AdminDesk {
   const s = loadState();
   const paper = publicBook(s.paper);
   const pair = (lastPairDesk() || (s.lastPair as PairDeskPublic | null) || null) as PairDeskPublic | null;
@@ -133,7 +133,7 @@ export function buildAdminDesk(opts?: { light?: boolean }): AdminDesk {
     },
     ownerEarningsSol: s.launch?.ownerEarningsSol || 0,
     treasuryFeesSol: s.launch?.treasuryFeesSol || 0,
-    profits: buildProfitDesk(s),
+    profits: opts?.profits || buildProfitDesk(s),
     launchCount: s.launch?.coins?.length || 0,
     durable: storeInfo().durable,
     durableKind: storeInfo().kind,

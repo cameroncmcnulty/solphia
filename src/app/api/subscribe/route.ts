@@ -7,6 +7,8 @@ import { PLANS, planById, lamportsForPlan, type PlanId } from "@/lib/plans";
 import { confirmedHouseTransfers } from "@/lib/solana/connection";
 import { boundReferrer, houseFeeLegs } from "@/lib/fees/payout";
 import { unsignedHousePay } from "@/lib/fees/payTx";
+import { creditSeatHold } from "@/lib/fees/income";
+import { emptyLaunchBook } from "@/lib/launch/engine";
 import { loadState, mutateState, readyState } from "@/lib/store";
 import { isFounder, liveSeatOk } from "@/lib/access";
 import { queueEmail } from "@/lib/email/send";
@@ -144,10 +146,10 @@ export async function POST(req: NextRequest) {
 
   const lamports = lamportsForPlan(planId === "lev" ? "lev" : "live");
   const sol = seatSol(planId);
-  const legs = houseFeeLegs({ from: payer, feeSol: sol, referrer: boundReferrer(parsed.data.pubkey) });
+  const legs = houseFeeLegs({ from: payer, feeSol: sol, referrer: boundReferrer(parsed.data.pubkey), mode: "hold" });
 
   if (!parsed.data.signature) {
-    const packed = await unsignedHousePay(payer, sol, parsed.data.pubkey);
+    const packed = await unsignedHousePay(payer, sol, parsed.data.pubkey, "hold");
     if (!packed.ok) return NextResponse.json({ error: packed.error }, { status: 400 });
     return NextResponse.json(
       seatPayload({
@@ -189,6 +191,8 @@ export async function POST(req: NextRequest) {
     acceptTos(user);
     user.lastPaySig = parsed.data.signature;
     extendSeat(user, Date.now(), autoRenew, planId);
+    if (!s.launch) s.launch = emptyLaunchBook();
+    creditSeatHold(s.launch, sol, Boolean(boundReferrer(parsed.data.pubkey)));
     if (email) {
       user.email = email;
       user.alertsEnabled = Boolean(email);

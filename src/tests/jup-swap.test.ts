@@ -6,6 +6,7 @@ import { appendLegacyFee } from "../lib/swap/build";
 import { parseQuote } from "../lib/pair/jupiter";
 import { SOL_MINT, USDC_MINT } from "../lib/pair/mints";
 import { JUP_PLUGIN_ACCOUNT, JUP_PLUGIN_FEE_BPS, JUP_PLUGIN_SRC } from "../lib/jup/plugin";
+import { jupReferralAccount, jupReferralAta, JUP_REFERRAL_PROGRAM } from "../lib/jup/referral";
 import { jupWalletState } from "../lib/jup/passthrough";
 import {
   clearSwapNotice,
@@ -41,6 +42,13 @@ describe("jupiter swap v2", () => {
     assert.equal(JUP_PLUGIN_SRC, "https://plugin.jup.ag/plugin-v1.js");
     assert.equal(JUP_PLUGIN_FEE_BPS, 100);
     assert.equal(JUP_PLUGIN_ACCOUNT, "rT14BqLLxVXiyK3ZeoeK8kCuU9sCQHVYUCXuBjeG8cV");
+  });
+
+  it("derives the Jupiter referral token PDA for SOL", () => {
+    assert.equal(jupReferralAccount(), JUP_PLUGIN_ACCOUNT);
+    const ata = jupReferralAta(SOL_MINT, JUP_PLUGIN_ACCOUNT);
+    assert.equal(jupReferralAta(SOL_MINT, JUP_PLUGIN_ACCOUNT).toBase58(), ata.toBase58());
+    assert.equal(JUP_REFERRAL_PROGRAM.startsWith("REFER"), true);
   });
 
   it("marks a Solphia owner as connected without injected Phantom", () => {

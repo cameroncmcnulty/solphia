@@ -5,8 +5,9 @@ import { withLaunch, withShill } from "@/lib/store";
 import { treasuryAddress } from "@/lib/treasury";
 import { displayMedia } from "@/lib/pinata";
 import { confirmedHouseTransfers } from "@/lib/solana/connection";
-import { boundReferrer, houseFeeLegs } from "@/lib/fees/payout";
+import { houseFeeLegs } from "@/lib/fees/payout";
 import { unsignedHousePay } from "@/lib/fees/payTx";
+import { creditEvenIncome } from "@/lib/fees/income";
 import { lookupMarketMint } from "@/lib/launch/market";
 import {
   banShill,
@@ -342,7 +343,7 @@ export async function POST(req: NextRequest) {
       );
     }
     if (!b.signature) {
-      const packed = await unsignedHousePay(b.pubkey, SHILL_PIN_SOL, b.pubkey);
+      const packed = await unsignedHousePay(b.pubkey, SHILL_PIN_SOL, b.pubkey, "even");
       if (!packed.ok) return NextResponse.json({ error: packed.error, message: "Could not start the pin." }, { status: 400 });
       return NextResponse.json({
         ok: true,
@@ -353,7 +354,7 @@ export async function POST(req: NextRequest) {
         legs: packed.legs,
       });
     }
-    const legs = houseFeeLegs({ from: b.pubkey, feeSol: SHILL_PIN_SOL, referrer: boundReferrer(b.pubkey) });
+    const legs = houseFeeLegs({ from: b.pubkey, feeSol: SHILL_PIN_SOL, mode: "even" });
     const pay = await confirmedHouseTransfers({
       signature: b.signature,
       from: b.pubkey,
@@ -375,6 +376,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: out.error, message, nextFreeAt: out.nextFreeAt }, { status: 400 });
     }
     bustShillSnap();
+    try {
+      await withLaunch((st) => {
+        if (!st.launch) st.launch = emptyLaunchBook();
+        creditEvenIncome(st.launch, SHILL_PIN_SOL, "pin");
+      }, true);
+    } catch {
+      /* pin still stands */
+    }
     return NextResponse.json({ ok: true, pin: out.pin });
   }
 

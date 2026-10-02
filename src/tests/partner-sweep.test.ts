@@ -13,7 +13,7 @@ describe("partner fee sweep", () => {
     assert.match(src, /limit/);
     const dbc = readFileSync(path.join(process.cwd(), "src/lib/launch/dbc.ts"), "utf8");
     assert.match(dbc, /buildDbcClaimPartnerBatch/);
-    assert.match(dbc, /ownerCut/);
+    assert.equal(dbc.includes("ownerCut"), false);
     const cron = readFileSync(path.join(process.cwd(), "src/app/api/cron/tick/route.ts"), "utf8");
     assert.match(cron, /sweepPartnerFees/);
   });

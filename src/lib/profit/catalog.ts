@@ -23,6 +23,17 @@ export type ProfitStream = {
   settlement: string;
 };
 
+export type ProfitClaimable = {
+  ownerSol: number;
+  treasuryOnchainSol: number;
+  dbcPartnerSol: number;
+  jupSol: number;
+  jupUsdc: number;
+  ownerReadySol: number;
+  treasuryPk: string;
+  ownerPk: string;
+};
+
 export type ProfitDesk = {
   treasury: string;
   ownerWallet: string;
@@ -34,6 +45,7 @@ export type ProfitDesk = {
   boosts: { rockets: number; sol: number; label: string }[];
   padSplit: { creator: string; owner: string; treasury: string };
   padSplitReferred: { creator: string; referral: string; owner: string; treasury: string };
+  pinBoostSplit: { owner: string; treasury: string };
   streams: ProfitStream[];
   accrued: {
     treasurySol: number;
@@ -41,6 +53,7 @@ export type ProfitDesk = {
     creatorSol: number;
     referralSol: number;
   };
+  claimable: ProfitClaimable;
 };
 
 export function buildProfitDesk(state: AppState): ProfitDesk {
@@ -52,12 +65,17 @@ export function buildProfitDesk(state: AppState): ProfitDesk {
   const padOwner = Number(launch.ownerEarningsSol) || 0;
   const padCreator = (launch.coins || []).reduce((s, c) => s + (c.devRewardsSol || 0), 0);
   const padReferral = Object.values(launch.accounts || {}).reduce((s, a) => s + (a.referralRewardsSol || 0), 0);
-  const pinSol = (shill.pins || []).reduce((s, p) => s + (p.house ? 0 : Number(p.paidSol) || 0), 0);
-  const boostSol = (launch.boosts || []).reduce((s, b) => s + (b.house ? 0 : Number(b.paidSol) || 0), 0);
-  const seatSolAccrued = (state.users || []).reduce((s, u) => {
-    if (!(u.lastPaidAt && (u.plan === "live" || u.plan === "lev" || u.plan === "full"))) return s;
-    return s + seatSol(u.plan);
-  }, 0);
+  const livePinSol = (shill.pins || []).reduce((s, p) => s + (p.house ? 0 : Number(p.paidSol) || 0), 0);
+  const liveBoostSol = (launch.boosts || []).reduce((s, b) => s + (b.house ? 0 : Number(b.paidSol) || 0), 0);
+  const pinSolAccrued = Math.max(Number(launch.pinFeesSol) || 0, livePinSol);
+  const boostSolAccrued = Math.max(Number(launch.boostFeesSol) || 0, liveBoostSol);
+  const seatSolAccrued =
+    Number(launch.seatFeesSol) ||
+    (state.users || []).reduce((s, u) => {
+      if (!(u.lastPaidAt && (u.plan === "live" || u.plan === "lev" || u.plan === "full"))) return s;
+      return s + seatSol(u.plan);
+    }, 0);
+  const swapSolAccrued = Number(launch.swapFeesSol) || 0;
   const streams: ProfitStream[] = [
     {
       id: "desk",
@@ -66,16 +84,16 @@ export function buildProfitDesk(state: AppState): ProfitDesk {
       wallet: "treasury",
       walletPk: treasury,
       accruedSol: 0,
-      settlement: "Same swap tx: 25% owner, 75% treasury (creator 50% stays protocol)",
+      settlement: "Lands in treasury. Owner 25% sits unclaimed until you claim on this desk.",
     },
     {
       id: "swap",
-      feature: "Pad curve swaps",
+      feature: "Open-market / Jupiter swaps",
       rate: "1% of SOL · 25% owner / 75% protocol (no token creator)",
       wallet: "treasury",
       walletPk: treasury,
-      accruedSol: 0,
-      settlement: "Same swap tx: 25% owner, 75% treasury. Inviter takes 12.5 from the owner share.",
+      accruedSol: swapSolAccrued,
+      settlement: "Jupiter referral ATAs and SOL skim sit until Claim treasury. Inviter 12.5% is live.",
     },
     {
       id: "pad-treasury",
@@ -84,7 +102,7 @@ export function buildProfitDesk(state: AppState): ProfitDesk {
       wallet: "treasury",
       walletPk: treasury,
       accruedSol: padTreasury,
-      settlement: "On-chain SOL to treasury in the same pad swap tx",
+      settlement: "Partner fees sit in the DBC pool. Claim treasury with Phantom to pull them.",
     },
     {
       id: "pad-owner",
@@ -93,7 +111,7 @@ export function buildProfitDesk(state: AppState): ProfitDesk {
       wallet: "owner",
       walletPk: ownerWallet,
       accruedSol: padOwner,
-      settlement: "Owner withdraw on the pad",
+      settlement: "Claim owner with the treasury Phantom to send this share to the owner wallet.",
     },
     {
       id: "pad-creator",
@@ -102,7 +120,7 @@ export function buildProfitDesk(state: AppState): ProfitDesk {
       wallet: "creator",
       walletPk: "coin creator",
       accruedSol: padCreator,
-      settlement: "On-chain SOL to the creator in the same swap tx",
+      settlement: "Creators claim on /launch. Not these buttons.",
     },
     {
       id: "pad-ref",
@@ -120,28 +138,28 @@ export function buildProfitDesk(state: AppState): ProfitDesk {
       wallet: "treasury",
       walletPk: treasury,
       accruedSol: seatSolAccrued,
-      settlement: "Phantom first month, trading wallet renewals. 25% owner, 75% treasury.",
+      settlement: "Full payment lands in treasury. Owner 25% sits until Claim owner.",
     },
     {
       id: "pin",
       feature: "Shill Zone pins",
-      rate: `${SHILL_PIN_SOL} SOL / 3h · 25% owner / 75% protocol`,
+      rate: `${SHILL_PIN_SOL} SOL / 3h · 50% owner / 50% treasury`,
       wallet: "treasury",
       walletPk: treasury,
-      accruedSol: pinSol,
-      settlement: "Phantom pay. 25% owner, 75% treasury.",
+      accruedSol: pinSolAccrued,
+      settlement: "Full pin payment lands in treasury. Claim owner sends the 50% share.",
     },
     {
       id: "boost",
       feature: "Pad boosts (rockets)",
-      rate: `${ROCKET_PACKS.map((p) => `${p.rockets} = ${p.sol} SOL`).join(" · ")} · 25% owner / 75% protocol`,
+      rate: `${ROCKET_PACKS.map((p) => `${p.rockets} = ${p.sol} SOL`).join(" · ")} · 50% owner / 50% treasury`,
       wallet: "treasury",
       walletPk: treasury,
-      accruedSol: boostSol,
-      settlement: "Phantom pay. 25% owner, 75% treasury.",
+      accruedSol: boostSolAccrued,
+      settlement: "Full boost payment lands in treasury. Claim owner sends the 50% share.",
     },
   ];
-  const treasurySol = padTreasury + pinSol + boostSol + seatSolAccrued;
+  const treasurySol = padTreasury + pinSolAccrued + boostSolAccrued + seatSolAccrued + swapSolAccrued;
   return {
     treasury,
     ownerWallet,
@@ -153,12 +171,23 @@ export function buildProfitDesk(state: AppState): ProfitDesk {
     boosts: ROCKET_PACKS.map((p) => ({ rockets: p.rockets, sol: p.sol, label: p.label })),
     padSplit: { creator: "50%", owner: "25%", treasury: "25%" },
     padSplitReferred: { creator: "50%", referral: "12.5%", owner: "12.5%", treasury: "25%" },
+    pinBoostSplit: { owner: "50%", treasury: "50%" },
     streams,
     accrued: {
       treasurySol,
       ownerSol: padOwner,
       creatorSol: padCreator,
       referralSol: padReferral,
+    },
+    claimable: {
+      ownerSol: padOwner,
+      treasuryOnchainSol: 0,
+      dbcPartnerSol: 0,
+      jupSol: 0,
+      jupUsdc: 0,
+      ownerReadySol: padOwner,
+      treasuryPk: treasury,
+      ownerPk: ownerWallet,
     },
   };
 }

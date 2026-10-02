@@ -10,6 +10,8 @@ export const FEE_DUST_LAMPORTS = 5_000;
 
 export type HouseLeg = { to: string; lamports: number };
 
+export type HouseFeeMode = "split" | "hold" | "even";
+
 export type HouseFeeOpts = {
   from: string;
   feeSol: number;
@@ -19,6 +21,12 @@ export type HouseFeeOpts = {
   referrer?: string;
   owner?: string;
   treasury?: string;
+  /**
+   * split: live transfers to each wallet.
+   * hold: creator + inviter still live; owner + treasury cut lands in treasury until admin claim.
+   * even: boosts / pins — 100% to treasury, 50/50 split claimed later.
+   */
+  mode?: HouseFeeMode;
 };
 
 /** First locked inviter on this wallet, if any. */
@@ -57,10 +65,18 @@ export function houseFeeLegs(opts: HouseFeeOpts): HouseLeg[] {
     if (hit) hit.lamports += lamports;
     else rows.push({ to, lamports });
   };
+  const mode = opts.mode || "split";
+  if (mode === "even") {
+    add(treasury, feeSol);
+    return rows.filter((r) => r.lamports >= FEE_DUST_LAMPORTS);
+  }
   add(creator, s.dev);
-  add(owner, s.owner);
   add(referrer, s.referral);
-  add(treasury, s.treasury);
+  if (mode === "hold") add(treasury, s.owner + s.treasury);
+  else {
+    add(owner, s.owner);
+    add(treasury, s.treasury);
+  }
   return rows.filter((r) => r.lamports >= FEE_DUST_LAMPORTS);
 }
 

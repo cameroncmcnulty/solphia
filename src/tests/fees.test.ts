@@ -55,4 +55,31 @@ describe("house fee legs", () => {
     const fee = splitFee(1, true);
     assert.equal(fee.treasury, splitFee(1, false).treasury);
   });
+
+  it("hold mode sends owner + treasury cuts to treasury only", () => {
+    const fee = feeOn(1);
+    const legs = houseFeeLegs({
+      from: FROM,
+      feeSol: fee,
+      owner: DEFAULT_OWNER,
+      treasury: DEFAULT_TREASURY,
+      mode: "hold",
+    });
+    assert.equal(legs.length, 1);
+    assert.equal(legs[0]!.to, DEFAULT_TREASURY);
+    assert.equal(legs[0]!.lamports, Math.round(fee * 1e9));
+  });
+
+  it("even mode sends the full pin or boost payment to treasury", () => {
+    const legs = houseFeeLegs({
+      from: FROM,
+      feeSol: 0.2,
+      owner: DEFAULT_OWNER,
+      treasury: DEFAULT_TREASURY,
+      mode: "even",
+    });
+    assert.equal(legs.length, 1);
+    assert.equal(legs[0]!.to, DEFAULT_TREASURY);
+    assert.equal(legs[0]!.lamports, 200_000_000);
+  });
 });

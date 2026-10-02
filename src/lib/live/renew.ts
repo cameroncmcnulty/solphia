@@ -4,6 +4,8 @@ import { rpcUrl } from "../config";
 import { extendSeat, seatDue, seatLamports, seatSol } from "../seat";
 import { treasuryAddress } from "../treasury";
 import { boundReferrer, houseFeeIxs } from "../fees/payout";
+import { creditSeatHold } from "../fees/income";
+import { emptyLaunchBook } from "../launch/engine";
 import type { AppState, TraderAccount } from "../types";
 import { loadDelegatedKeypair } from "./signer";
 import { sendSignedTx } from "../tx/send";
@@ -28,6 +30,7 @@ export async function renewLiveSeat(state: AppState, trader: TraderAccount): Pro
     from: kp.publicKey.toBase58(),
     feeSol: seatSol(user.plan),
     referrer: boundReferrer(trader.owner),
+    mode: "hold",
   });
   if (!ixs.length) return false;
   const tx = new Transaction();
@@ -38,6 +41,8 @@ export async function renewLiveSeat(state: AppState, trader: TraderAccount): Pro
   const sent = await sendSignedTx(tx, { conn });
   if (!sent.ok) return false;
   extendSeat(user, Date.now(), true, user.plan === "lev" ? "lev" : "live");
+  if (!state.launch) state.launch = emptyLaunchBook();
+  creditSeatHold(state.launch, seatSol(user.plan), Boolean(boundReferrer(trader.owner)));
   return true;
 }
 

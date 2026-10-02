@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/admin/auth";
 import { buildAdminDesk } from "@/lib/admin/desk";
+import { enrichProfitDesk } from "@/lib/profit/onchain";
+import { buildProfitDesk } from "@/lib/profit/catalog";
 import { grantFounder, grantMod, revokeFounder, revokeMod } from "@/lib/access";
 import { isSolanaAddress, isEmail, clientIp } from "@/lib/security";
 import { lockedAuto } from "@/lib/auto";
@@ -22,7 +24,13 @@ export async function GET(req: NextRequest) {
   if (denied) return denied;
   const state = await readyState();
   await loadAllTraders(state);
-  return NextResponse.json(buildAdminDesk());
+  let profits = buildProfitDesk(state);
+  try {
+    profits = await enrichProfitDesk(profits, state);
+  } catch {
+    /* ledger still loads */
+  }
+  return NextResponse.json(buildAdminDesk({ profits }));
 }
 
 const Patch = z.object({

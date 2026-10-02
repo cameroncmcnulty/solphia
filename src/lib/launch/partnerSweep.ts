@@ -6,7 +6,7 @@ import { dbcEnabled } from "./dbcIds";
 
 /**
  * Server-sign partner (protocol) claims one pool at a time.
- * Lands 50% of that pool’s partner cut in treasury and 50% to owner.
+ * Lands the partner cut in treasury. Owner 50% of that is credited unclaimed for the admin claim button.
  * Never packs mints — Blowfish is not in play here, but one-ix-per-tx stays the rule.
  */
 export async function sweepPartnerFees(opts?: {
