@@ -619,122 +619,63 @@ export function WalletsSection() {
 }
 
 function ProfitsPanel() {
-  const { data, owner, reload } = useAdmin();
+  const { data } = useAdmin();
   const p = data?.profits;
-  const [cBusy, setCBusy] = useState<"treasury" | "owner" | "">("");
-  const [cMsg, setCMsg] = useState("");
-  const [cErr, setCErr] = useState("");
   if (!p) return null;
   const solUsd = data.prices?.solUsd || 0;
   const claim = p.claimable;
+  const hot = Boolean(data.treasuryHot);
   function money(sol: number) {
     if (!(sol > 0)) return "0 SOL";
     const usd = solUsd > 0 ? ` · $${(sol * solUsd).toFixed(2)}` : "";
     return `${sol.toFixed(4)} SOL${usd}`;
-  }
-  async function runClaim(wallet: "treasury" | "owner") {
-    setCErr("");
-    setCMsg("");
-    setCBusy(wallet);
-    let mint: string | undefined;
-    let mints: string[] | undefined;
-    let pulled = 0;
-    try {
-      for (let hop = 0; hop < 12; hop++) {
-        const r = await fetch("/api/admin/claim", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ wallet, mint, mints }),
-        });
-        const j = await r.json();
-        if (!r.ok) throw new Error(j.message || j.error || "claim failed");
-        if (!j.transaction) throw new Error(j.message || "No transaction to sign.");
-        if (owner && j.from && owner !== j.from) {
-          throw new Error("Connect the treasury Phantom to sign this claim.");
-        }
-        const sig = await signAndSendPhantom(j.transaction);
-        await fetch("/api/admin/claim", {
-          method: "PUT",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ wallet, signature: sig, claimSol: Number(j.claimSol) || 0 }),
-        });
-        pulled += Number(j.claimSol) || 0;
-        const rest = (j.remainingMints as string[] | undefined) || [];
-        const nextMint = rest.find((m) => m && m !== (j.claimMints || [])[0]);
-        if (wallet === "treasury" && nextMint) {
-          mint = nextMint;
-          mints = rest;
-          setCMsg(`Claimed ${pulled.toFixed(4)} SOL. Approve the next unpaid pool in Phantom…`);
-          continue;
-        }
-        break;
-      }
-      setCMsg(
-        wallet === "treasury"
-          ? `Pulled ${pulled.toFixed(4)} SOL into treasury.`
-          : `Sent ${pulled.toFixed(4)} SOL to the owner wallet.`,
-      );
-      await reload().catch(() => {});
-    } catch (e) {
-      setCErr(e instanceof Error ? e.message : "claim failed");
-    } finally {
-      setCBusy("");
-    }
   }
   return (
     <section className="panel rounded-2xl p-5">
       <div className="font-mono text-[10px] tracking-[0.28em] text-acid">PROFITS</div>
       <h2 className="mt-1 font-display text-2xl text-ghost">What we take, where it lands</h2>
       <p className="mt-2 max-w-2xl text-sm text-mute">
-        Pad swaps: 50% creator / 25% owner / 25% treasury. If the trader was invited, the owner’s 25% splits 12.5 /
-        12.5 with their inviter — treasury stays 25%. Boosts and pins are 50 / 50 owner and treasury. Protocol shares
-        sit here until you claim with the treasury Phantom.
+        No withdraw step. Every paid Phantom tx sends the house cut to the wallets below. Pad swaps: 50% creator (they
+        claim on /launch) / 25% owner / 25% treasury. If the trader was invited, the owner’s 25% splits 12.5 / 12.5 with
+        their inviter — treasury stays 25%. Boosts and pins: 50 / 50 owner and treasury in that same payment.
       </p>
       <div className="mt-4 grid gap-3 md:grid-cols-2">
         <div className="rounded-2xl border border-acid/25 bg-acid/[0.04] p-4">
-          <div className="font-mono text-[10px] tracking-[0.2em] text-acid">CLAIM TREASURY</div>
-          <div className="mt-2 font-display text-3xl text-ghost">{money(claim?.treasuryOnchainSol || 0)}</div>
+          <div className="font-mono text-[10px] tracking-[0.2em] text-acid">TREASURY · LIVE</div>
+          <div className="mt-2 font-display text-3xl text-ghost">{money(p.accrued.treasurySol)}</div>
           <p className="mt-1 text-sm text-mute">
-            Pad partner fees
-            {claim?.dbcPartnerSol ? ` · ${claim.dbcPartnerSol.toFixed(4)} SOL on-chain` : ""}
-            {claim?.jupSol ? ` · ${claim.jupSol.toFixed(4)} SOL in Jupiter referral` : ""}
-            {claim?.jupUsdc ? ` · ${claim.jupUsdc.toFixed(2)} USDC in Jupiter referral` : ""}
-            . Pulls into the treasury wallet. Owner half of pad partner fees becomes claimable after this lands.
+            25% of swap and launch fees, 50% of boosts and pins. Lands in the treasury wallet as the buyer signs.
+            {claim?.dbcPartnerSol
+              ? ` ${claim.dbcPartnerSol.toFixed(4)} SOL still sitting in pad pools — ${hot ? "the minute cron pulls it and forwards the owner half." : "set TREASURY_SECRET so cron can pull it."}`
+              : hot
+                ? " Pad partner fees auto-sweep every minute."
+                : " Pad partner fees need TREASURY_SECRET on the server to auto-sweep."}
           </p>
-          <button
-            type="button"
-            disabled={Boolean(cBusy)}
-            onClick={() => runClaim("treasury")}
-            className="btn-acid mt-3 rounded-full px-5 py-2 text-sm disabled:opacity-40"
-          >
-            {cBusy === "treasury" ? "Claiming…" : "Claim treasury"}
-          </button>
         </div>
         <div className="rounded-2xl border border-violet/25 bg-void/40 p-4">
-          <div className="font-mono text-[10px] tracking-[0.2em] text-mute">CLAIM OWNER</div>
-          <div className="mt-2 font-display text-3xl text-ghost">{money(claim?.ownerSol || 0)}</div>
+          <div className="font-mono text-[10px] tracking-[0.2em] text-mute">OWNER · LIVE</div>
+          <div className="mt-2 font-display text-3xl text-ghost">{money(p.accrued.ownerSol)}</div>
           <p className="mt-1 text-sm text-mute">
-            Ready to send: {money(claim?.ownerReadySol || 0)}. 25% of swap fees (12.5% if referred) and 50% of boosts
-            and pins. Connect the treasury Phantom — it pays the owner wallet.
+            25% of swaps and launches (12.5% if the trader was invited) and 50% of boosts and pins. Sent to{" "}
+            {p.ownerWallet ? shortPk(p.ownerWallet, 4) : "the owner wallet"} in the payer’s tx — you do not connect
+            Phantom here to get paid.
           </p>
-          <button
-            type="button"
-            disabled={Boolean(cBusy) || !((claim?.ownerReadySol || 0) > 1e-6)}
-            onClick={() => runClaim("owner")}
-            className="btn-acid mt-3 rounded-full px-5 py-2 text-sm disabled:opacity-40"
-          >
-            {cBusy === "owner" ? "Claiming…" : "Claim owner"}
-          </button>
         </div>
       </div>
-      {cMsg && <p className="mt-2 text-sm text-acid">{cMsg}</p>}
-      {cErr && <p className="mt-2 text-sm text-blood">{cErr}</p>}
-      {!owner && (
-        <p className="mt-2 text-sm text-mute">Connect the treasury Phantom below to sign claims.</p>
-      )}
+      {(claim?.jupSol || claim?.jupUsdc) ? (
+        <p className="mt-3 text-sm text-mute">
+          Jupiter plugin 1% is sitting in the referral account
+          {claim.jupSol ? ` · ${claim.jupSol.toFixed(4)} SOL` : ""}
+          {claim.jupUsdc ? ` · ${claim.jupUsdc.toFixed(2)} USDC` : ""}. Claim that at{" "}
+          <a href="https://referral.jup.ag" target="_blank" rel="noreferrer" className="text-acid hover:underline">
+            referral.jup.ag
+          </a>
+          . Do not stack a second 1% on those swaps.
+        </p>
+      ) : null}
       <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
         <Mini k="Treasury booked" v={money(p.accrued.treasurySol)} />
-        <Mini k="Owner unclaimed" v={money(p.accrued.ownerSol)} />
+        <Mini k="Owner received" v={money(p.accrued.ownerSol)} />
         <Mini k="Creator rewards" v={money(p.accrued.creatorSol)} />
         <Mini k="Inviter cut" v={money(p.accrued.referralSol)} />
       </div>

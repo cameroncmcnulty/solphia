@@ -14,8 +14,8 @@ export function SphaSection() {
     <section className="panel rounded-2xl p-5">
       <div className="font-mono text-[10px] tracking-[0.3em] text-mute">$SPHA · SOCIALS</div>
       <p className="mt-2 max-w-2xl text-sm text-mute">
-        Icons always show on the token page in Solphia teal. Empty fields stay decorative — they do not link until you save a URL or
-        handle.
+        Saved handles go live on /token immediately. Icons always show in Solphia teal — empty fields stay decorative until
+        you save a URL or handle.
       </p>
       <div className="mt-4 grid gap-2 sm:grid-cols-3">
         <div>
@@ -75,8 +75,30 @@ export function SphaSection() {
         }}
         className="btn-acid mt-4 rounded-full px-5 py-2 text-sm disabled:opacity-40"
       >
-        Save $SPHA socials
+        {busy ? "Publishing…" : "Save & publish on /token"}
       </button>
+      {(socialHref("x", sphaX) || socialHref("telegram", sphaTg) || socialHref("discord", sphaDc)) && (
+        <p className="mt-2 font-mono text-[11px] text-mute">
+          Preview:{" "}
+          {socialHref("x", sphaX) ? (
+            <a href={socialHref("x", sphaX)} target="_blank" rel="noreferrer" className="text-acid hover:underline">
+              X
+            </a>
+          ) : null}
+          {socialHref("x", sphaX) && (socialHref("telegram", sphaTg) || socialHref("discord", sphaDc)) ? " · " : ""}
+          {socialHref("telegram", sphaTg) ? (
+            <a href={socialHref("telegram", sphaTg)} target="_blank" rel="noreferrer" className="text-acid hover:underline">
+              Telegram
+            </a>
+          ) : null}
+          {socialHref("telegram", sphaTg) && socialHref("discord", sphaDc) ? " · " : ""}
+          {socialHref("discord", sphaDc) ? (
+            <a href={socialHref("discord", sphaDc)} target="_blank" rel="noreferrer" className="text-acid hover:underline">
+              Discord
+            </a>
+          ) : null}
+        </p>
+      )}
       <div className="mt-6 rounded-2xl border border-violet/20 bg-void/30 p-4">
         <div className="font-mono text-[10px] tracking-[0.2em] text-mute">DEV WALLET · HOLDINGS</div>
         <p className="mt-1 text-sm text-mute">

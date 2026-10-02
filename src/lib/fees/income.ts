@@ -1,14 +1,9 @@
-import { splitFee, type FeeSplit } from "../launch/curve";
+import { splitFee } from "../launch/curve";
 import type { LaunchBook } from "../launch/engine";
+import { evenShare } from "./payout";
+export { evenShare };
 
 export type IncomeKind = "swap" | "pin" | "boost" | "seat";
-
-/** Boosts and pins: 50% owner / 50% treasury of the full payment. */
-export function evenShare(sol: number): FeeSplit {
-  const fee = Math.max(0, Number(sol) || 0);
-  const owner = fee / 2;
-  return { dev: 0, owner, treasury: fee - owner, referral: 0 };
-}
 
 export function creditProtocol(
   book: LaunchBook,
@@ -25,15 +20,15 @@ export function creditProtocol(
   else if (opts.kind === "swap") book.swapFeesSol = (book.swapFeesSol || 0) + gross;
 }
 
-/** Pins / boosts land 100% in treasury; owner 50% sits unclaimed until Phantom claim. */
+/** Pins / boosts already sent 50/50 live in the payer Phantom tx. This is lifetime booked. */
 export function creditEvenIncome(book: LaunchBook, sol: number, kind: "pin" | "boost") {
   const s = evenShare(sol);
   creditProtocol(book, { ownerSol: s.owner, treasurySol: s.treasury, kind, grossSol: sol });
 }
 
 /**
- * Partner (protocol) DBC claim lands in treasury. Half is the owner's 25% of the 1% fee
- * and sits unclaimed until the owner claim button.
+ * Partner (protocol) DBC claim: 50% stays treasury (25% of the 1% fee) and 50% is
+ * sent to the owner wallet in the same sweep. Lifetime booked, not a withdraw.
  */
 export function creditPartnerClaim(book: LaunchBook, claimSol: number) {
   const s = evenShare(claimSol);

@@ -28,7 +28,7 @@ export async function enrichProfitDesk(desk: ProfitDesk, state: AppState): Promi
     /* desk still loads */
   }
 
-  const ownerReady = Number(desk.claimable.ownerReadySol) || 0;
+  const ownerBooked = Number(desk.accrued.ownerSol) || 0;
   const ownerFromOnchain = dbcPartnerSol * 0.5 + jupSol * 0.25;
   const streams = desk.streams.map((row) => {
     if (row.id === "pad-treasury") {
@@ -38,7 +38,7 @@ export async function enrichProfitDesk(desk: ProfitDesk, state: AppState): Promi
       return { ...row, accruedSol: Math.max(row.accruedSol, jupSol) };
     }
     if (row.id === "pad-owner") {
-      return { ...row, accruedSol: ownerReady + ownerFromOnchain };
+      return { ...row, accruedSol: ownerBooked + ownerFromOnchain };
     }
     return row;
   });
@@ -49,12 +49,12 @@ export async function enrichProfitDesk(desk: ProfitDesk, state: AppState): Promi
     accrued: {
       ...desk.accrued,
       treasurySol: desk.accrued.treasurySol + dbcPartnerSol + jupSol,
-      ownerSol: ownerReady + ownerFromOnchain,
+      ownerSol: ownerBooked + ownerFromOnchain,
     },
     claimable: {
       ...desk.claimable,
-      ownerSol: ownerReady + ownerFromOnchain,
-      ownerReadySol: ownerReady,
+      ownerSol: ownerBooked + ownerFromOnchain,
+      ownerReadySol: 0,
       treasuryOnchainSol: dbcPartnerSol + jupSol,
       dbcPartnerSol,
       jupSol,

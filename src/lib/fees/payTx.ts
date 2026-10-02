@@ -6,7 +6,7 @@ export async function unsignedHousePay(
   from: string,
   feeSol: number,
   person?: string,
-  mode: HouseFeeMode = "hold",
+  mode: HouseFeeMode = "split",
 ): Promise<{ ok: true; transaction: string; legs: HouseLeg[] } | { ok: false; error: string }> {
   const referrer = boundReferrer(person || from);
   const legs = houseFeeLegs({ from, feeSol, referrer, mode });

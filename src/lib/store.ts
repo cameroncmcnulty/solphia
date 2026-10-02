@@ -37,6 +37,90 @@ let writing = Promise.resolve();
 let hydrated = false;
 let boot: Promise<AppState> | null = null;
 let knownTraderOwners: string[] = [];
+let lastOpsPull = 0;
+let lastMutateAt = 0;
+const OPS_PULL_MS = 800;
+
+function touchMutate(state?: AppState) {
+  lastMutateAt = Date.now();
+  if (state) state.opsUpdatedAt = lastMutateAt;
+}
+
+/** Copy admin-editable public fields from durable ops onto a live instance. */
+export function applyOpsConfig(local: AppState, remote: Partial<AppState>): boolean {
+  const remoteAt = Number(remote.opsUpdatedAt) || 0;
+  const localAt = Number(local.opsUpdatedAt) || 0;
+  if (remoteAt && localAt && remoteAt < localAt) return false;
+  let dirty = false;
+  const socials = remote.sphaSocials;
+  if (socials && typeof socials === "object") {
+    const next = {
+      x: socials.x || "",
+      telegram: socials.telegram || "",
+      discord: socials.discord || "",
+      website: socials.website || "",
+    };
+    const cur = local.sphaSocials || { x: "", telegram: "", discord: "", website: "" };
+    if (next.x !== (cur.x || "") || next.telegram !== (cur.telegram || "") || next.discord !== (cur.discord || "") || next.website !== (cur.website || "")) {
+      local.sphaSocials = next;
+      dirty = true;
+    }
+  }
+  const copyStr = (key: "sphaMint" | "treasuryWallet" | "ownerWallet" | "devWallet" | "foundationWallet" | "airdropWallet" | "lpWallet") => {
+    if (typeof remote[key] !== "string") return;
+    if (local[key] === remote[key]) return;
+    local[key] = remote[key];
+    dirty = true;
+  };
+  copyStr("sphaMint");
+  copyStr("treasuryWallet");
+  copyStr("ownerWallet");
+  copyStr("devWallet");
+  copyStr("foundationWallet");
+  copyStr("airdropWallet");
+  copyStr("lpWallet");
+  if (remote.sphaNetwork === "devnet" || remote.sphaNetwork === "mainnet-beta") {
+    if (local.sphaNetwork !== remote.sphaNetwork) {
+      local.sphaNetwork = remote.sphaNetwork;
+      dirty = true;
+    }
+  }
+  if (remote.sphaLaunch !== undefined && JSON.stringify(local.sphaLaunch) !== JSON.stringify(remote.sphaLaunch)) {
+    local.sphaLaunch = remote.sphaLaunch || null;
+    dirty = true;
+  }
+  if (typeof remote.liveTrading === "boolean" && local.liveTrading !== remote.liveTrading) {
+    local.liveTrading = remote.liveTrading;
+    dirty = true;
+  }
+  if (typeof remote.publishLiveWallet === "boolean" && local.publishLiveWallet !== remote.publishLiveWallet) {
+    local.publishLiveWallet = remote.publishLiveWallet;
+    dirty = true;
+  }
+  if (Array.isArray(remote.adminWallets)) {
+    local.adminWallets = remote.adminWallets.filter(Boolean);
+    dirty = true;
+  }
+  if (Array.isArray(remote.modWallets)) {
+    local.modWallets = remote.modWallets.filter(Boolean);
+    dirty = true;
+  }
+  if (remoteAt > localAt) local.opsUpdatedAt = remoteAt;
+  return dirty;
+}
+
+async function maybeOverlayOps(state: AppState) {
+  if (!durableConfigured()) return;
+  if (Date.now() - lastMutateAt < 1500) return;
+  if (Date.now() - lastOpsPull < OPS_PULL_MS) return;
+  lastOpsPull = Date.now();
+  try {
+    const raw = await kvGetJson(KEYS.ops);
+    if (raw && typeof raw === "object") applyOpsConfig(state, raw as AppState);
+  } catch {
+    /* keep mem */
+  }
+}
 
 export const HOT_MS = 6 * 60_000;
 export const MAX_TICK_TRADERS = 48;
@@ -85,6 +169,7 @@ export function emptyState(): AppState {
     shill: emptyShill(),
     mail: emptyMail(),
     sphaSocials: { x: "", telegram: "", discord: "", website: "" },
+    opsUpdatedAt: 0,
     publishLiveWallet: false,
     buybacks: [],
     healthLog: [],
@@ -157,6 +242,7 @@ function hydrateFromRaw(raw: AppState): AppState {
       discord: raw.sphaSocials?.discord || "",
       website: raw.sphaSocials?.website || "",
     },
+    opsUpdatedAt: Number(raw.opsUpdatedAt) || 0,
     publishLiveWallet: Boolean(raw.publishLiveWallet),
     buybacks: Array.isArray(raw.buybacks) ? raw.buybacks.slice(-40) : [],
   };
@@ -414,6 +500,7 @@ async function persistShards(next: AppState, owners: string[]) {
 
 export async function saveState(next: AppState): Promise<void> {
   if (next.paper) pruneBookLogs(next.paper);
+  touchMutate(next);
   mem = next;
   writing = writing.then(async () => {
     writeFs(next);
@@ -430,6 +517,7 @@ export async function saveState(next: AppState): Promise<void> {
 
 export async function saveOps(next: AppState): Promise<void> {
   if (next.paper) pruneBookLogs(next.paper);
+  touchMutate(next);
   mem = next;
   writing = writing.then(async () => {
     writeFs(next);
@@ -613,7 +701,10 @@ async function hydrate(): Promise<AppState> {
 
 /** Pull durable shards (if configured) before reads/writes. */
 export async function readyState(): Promise<AppState> {
-  if (hydrated && mem) return mem;
+  if (hydrated && mem) {
+    await maybeOverlayOps(mem);
+    return mem;
+  }
   if (!boot) boot = hydrate();
   return boot;
 }

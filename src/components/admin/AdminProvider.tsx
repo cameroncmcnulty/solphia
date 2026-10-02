@@ -175,9 +175,10 @@ export function AdminProvider({ children }: { children: ReactNode }) {
         if (j.desk) setData(j.desk);
         return { ok: false, error, message };
       }
-      if (j.desk) setData(j.desk as AdminDesk);
+      if (j.desk) hydrate(j.desk as AdminDesk);
       if (j.note) setNote(j.note);
       else if (j.made != null) setNote(j.made ? `Made ${j.made} new post${j.made === 1 ? "" : "s"}.` : "Pack already ran today.");
+      else setNote("Saved.");
       setNoteErr(false);
       return { ok: true };
     } catch {
@@ -187,7 +188,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     } finally {
       setBusy(false);
     }
-  }, []);
+  }, [hydrate]);
 
   useEffect(() => {
     if (!authed) return;

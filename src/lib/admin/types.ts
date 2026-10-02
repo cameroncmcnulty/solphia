@@ -139,6 +139,7 @@ export type AdminDesk = {
   helius: boolean;
   treasury: string;
   treasurySet: boolean;
+  treasuryHot: boolean;
   ownerWallet: string;
   devWallet: string;
   sphaMint: string;

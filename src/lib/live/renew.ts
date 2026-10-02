@@ -30,7 +30,7 @@ export async function renewLiveSeat(state: AppState, trader: TraderAccount): Pro
     from: kp.publicKey.toBase58(),
     feeSol: seatSol(user.plan),
     referrer: boundReferrer(trader.owner),
-    mode: "hold",
+    mode: "split",
   });
   if (!ixs.length) return false;
   const tx = new Transaction();

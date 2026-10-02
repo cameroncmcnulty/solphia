@@ -107,7 +107,7 @@ export async function assemblePhantomSwapTx(opts: {
     from: opts.owner,
     feeSol: opts.feeSol || 0,
     referrer: boundReferrer(person),
-    mode: "hold",
+    mode: "split",
   });
   let last = "Could not build the swap.";
   for (const asLegacy of [true, false]) {
@@ -154,7 +154,7 @@ export async function assembleSwapTx(opts: {
     from: opts.owner,
     feeSol: opts.feeSol || 0,
     referrer: boundReferrer(opts.person || opts.owner),
-    mode: "hold",
+    mode: "split",
   });
   if (feeIxs.length && !opts.feeAfter) ixs.push(...feeIxs);
   ixs.push(...setup, swap);

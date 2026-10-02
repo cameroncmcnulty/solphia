@@ -234,4 +234,11 @@ describe("rocket boosts", () => {
     assert.match(src, /\/api\/launch\/lookup/);
     assert.equal(src.includes("Open a token below"), false);
   });
+
+  it("charges boosts with a live 50/50 owner and treasury split", () => {
+    const src = readFileSync(path.join(process.cwd(), "src/app/api/launch/boost/route.ts"), "utf8");
+    assert.match(src, /mode: "even"/);
+    assert.match(src, /unsignedHousePay/);
+    assert.match(src, /creditEvenIncome/);
+  });
 });

@@ -91,6 +91,7 @@ describe("profit catalog", () => {
     assert.ok(pin?.rate.includes("50%"));
     assert.ok(boost?.rate.includes("50%"));
     assert.equal(p.pinBoostSplit.owner, "50%");
-    assert.equal(p.claimable.ownerReadySol, 0.4);
+    assert.equal(p.claimable.ownerReadySol, 0);
+    assert.equal(p.accrued.ownerSol, 0.4);
   });
 });

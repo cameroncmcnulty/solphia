@@ -11,6 +11,7 @@ import { loadState, storeInfo } from "../store";
 import { latestBacktest } from "../pair/backtest";
 import { lastPairDesk, lastPairPrices, publicBook } from "../tick";
 import { treasuryAddress } from "../treasury";
+import { treasuryHot } from "../treasury/withdraw";
 import { sphaMintOf } from "../token/solphia";
 import { activeMembers, ensureCircle, spotsLeft } from "../circle/engine";
 import { seatSol } from "../seat";
@@ -114,6 +115,7 @@ export function buildAdminDesk(opts?: { light?: boolean; profits?: ProfitDesk })
     helius: heliusEnabled(),
     treasury,
     treasurySet: Boolean(treasury),
+    treasuryHot: treasuryHot(),
     ownerWallet: s.ownerWallet || s.launch?.ownerWallet || "",
     devWallet: s.devWallet || "",
     sphaMint: sphaMintOf(s.sphaMint),

@@ -541,6 +541,8 @@ export interface AppState {
     website?: string;
   } | null;
   sphaSocials?: { x?: string; telegram?: string; discord?: string; website?: string };
+  /** Last admin-ops write. Serverless instances overlay KEYS.ops when this is newer. */
+  opsUpdatedAt?: number;
   /** Publish the live founder book on the public site instead of paper-only copy. */
   publishLiveWallet?: boolean;
   buybacks?: {

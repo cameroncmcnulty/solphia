@@ -22,12 +22,19 @@ export type HouseFeeOpts = {
   owner?: string;
   treasury?: string;
   /**
-   * split: live transfers to each wallet.
-   * hold: creator + inviter still live; owner + treasury cut lands in treasury until admin claim.
-   * even: boosts / pins — 100% to treasury, 50/50 split claimed later.
+   * split: live transfers — creator 50 / owner 25 / treasury 25 (owner 12.5 if referred).
+   * hold: creator + inviter still live; owner + treasury cut lands in treasury.
+   * even: boosts / pins — live 50% owner / 50% treasury of the full payment.
    */
   mode?: HouseFeeMode;
 };
+
+/** Boosts and pins: 50% owner / 50% treasury of the full payment. */
+export function evenShare(sol: number): FeeSplit {
+  const fee = Math.max(0, Number(sol) || 0);
+  const owner = fee / 2;
+  return { dev: 0, owner, treasury: fee - owner, referral: 0 };
+}
 
 /** First locked inviter on this wallet, if any. */
 export function boundReferrer(pubkey: string): string | undefined {
@@ -67,7 +74,9 @@ export function houseFeeLegs(opts: HouseFeeOpts): HouseLeg[] {
   };
   const mode = opts.mode || "split";
   if (mode === "even") {
-    add(treasury, feeSol);
+    const half = evenShare(feeSol);
+    add(owner, half.owner);
+    add(treasury, half.treasury);
     return rows.filter((r) => r.lamports >= FEE_DUST_LAMPORTS);
   }
   add(creator, s.dev);

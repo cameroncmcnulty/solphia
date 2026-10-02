@@ -146,10 +146,10 @@ export async function POST(req: NextRequest) {
 
   const lamports = lamportsForPlan(planId === "lev" ? "lev" : "live");
   const sol = seatSol(planId);
-  const legs = houseFeeLegs({ from: payer, feeSol: sol, referrer: boundReferrer(parsed.data.pubkey), mode: "hold" });
+  const legs = houseFeeLegs({ from: payer, feeSol: sol, referrer: boundReferrer(parsed.data.pubkey), mode: "split" });
 
   if (!parsed.data.signature) {
-    const packed = await unsignedHousePay(payer, sol, parsed.data.pubkey, "hold");
+    const packed = await unsignedHousePay(payer, sol, parsed.data.pubkey, "split");
     if (!packed.ok) return NextResponse.json({ error: packed.error }, { status: 400 });
     return NextResponse.json(
       seatPayload({

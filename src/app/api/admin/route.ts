@@ -155,8 +155,17 @@ export async function POST(req: NextRequest) {
         x: socialHref("x", body.sphaSocials?.x),
         telegram: socialHref("telegram", body.sphaSocials?.telegram),
         discord: socialHref("discord", body.sphaSocials?.discord),
+        website:
+          body.sphaSocials?.website != null
+            ? socialHref("website", body.sphaSocials.website)
+            : s.sphaSocials?.website || "",
       };
       pushBounded(s.audit, audit("admin", "spha_socials", "updated", ip), 400);
+    });
+    return NextResponse.json({
+      ok: true,
+      note: "Saved. $SPHA socials are live on /token.",
+      desk: buildAdminDesk(),
     });
   }
   if (typeof body.liveTrading === "boolean") {
@@ -300,5 +309,5 @@ export async function POST(req: NextRequest) {
     }
     return NextResponse.json({ ok: true, note: "Account updated.", desk: buildAdminDesk() });
   }
-  return NextResponse.json({ ok: true, desk: buildAdminDesk() });
+  return NextResponse.json({ ok: true, note: "Saved.", desk: buildAdminDesk() });
 }

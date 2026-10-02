@@ -70,7 +70,7 @@ describe("house fee legs", () => {
     assert.equal(legs[0]!.lamports, Math.round(fee * 1e9));
   });
 
-  it("even mode sends the full pin or boost payment to treasury", () => {
+  it("even mode sends 50/50 owner and treasury live", () => {
     const legs = houseFeeLegs({
       from: FROM,
       feeSol: 0.2,
@@ -78,8 +78,21 @@ describe("house fee legs", () => {
       treasury: DEFAULT_TREASURY,
       mode: "even",
     });
-    assert.equal(legs.length, 1);
-    assert.equal(legs[0]!.to, DEFAULT_TREASURY);
-    assert.equal(legs[0]!.lamports, 200_000_000);
+    assert.equal(legs.length, 2);
+    assert.equal(legs.find((l) => l.to === DEFAULT_OWNER)?.lamports, 100_000_000);
+    assert.equal(legs.find((l) => l.to === DEFAULT_TREASURY)?.lamports, 100_000_000);
+  });
+
+  it("split mode without a creator still pays owner 25% live", () => {
+    const fee = feeOn(1);
+    const legs = houseFeeLegs({
+      from: FROM,
+      feeSol: fee,
+      owner: DEFAULT_OWNER,
+      treasury: DEFAULT_TREASURY,
+      mode: "split",
+    });
+    assert.equal(legs.find((l) => l.to === DEFAULT_OWNER)?.lamports, 2_500_000);
+    assert.equal(legs.find((l) => l.to === DEFAULT_TREASURY)?.lamports, 7_500_000);
   });
 });

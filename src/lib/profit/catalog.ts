@@ -84,7 +84,7 @@ export function buildProfitDesk(state: AppState): ProfitDesk {
       wallet: "treasury",
       walletPk: treasury,
       accruedSol: 0,
-      settlement: "Lands in treasury. Owner 25% sits unclaimed until you claim on this desk.",
+      settlement: "Sent live in the clip tx: 25% owner / 75% protocol (no clip creator).",
     },
     {
       id: "swap",
@@ -93,7 +93,7 @@ export function buildProfitDesk(state: AppState): ProfitDesk {
       wallet: "treasury",
       walletPk: treasury,
       accruedSol: swapSolAccrued,
-      settlement: "Jupiter referral ATAs and SOL skim sit until Claim treasury. Inviter 12.5% is live.",
+      settlement: "Native SOL skim sends 25% owner / 75% protocol in the swap tx when Phantom can carry it. Jupiter's 1% referral sits at referral.jup.ag.",
     },
     {
       id: "pad-treasury",
@@ -102,7 +102,7 @@ export function buildProfitDesk(state: AppState): ProfitDesk {
       wallet: "treasury",
       walletPk: treasury,
       accruedSol: padTreasury,
-      settlement: "Partner fees sit in the DBC pool. Claim treasury with Phantom to pull them.",
+      settlement: "On-chain partner 50% of the 1% fee. Cron pulls it into treasury and forwards half to the owner wallet.",
     },
     {
       id: "pad-owner",
@@ -111,7 +111,7 @@ export function buildProfitDesk(state: AppState): ProfitDesk {
       wallet: "owner",
       walletPk: ownerWallet,
       accruedSol: padOwner,
-      settlement: "Claim owner with the treasury Phantom to send this share to the owner wallet.",
+      settlement: "Owner 25% of pad partner fees is sent to the owner wallet when the cron sweep lands. No withdraw button.",
     },
     {
       id: "pad-creator",
@@ -138,7 +138,7 @@ export function buildProfitDesk(state: AppState): ProfitDesk {
       wallet: "treasury",
       walletPk: treasury,
       accruedSol: seatSolAccrued,
-      settlement: "Full payment lands in treasury. Owner 25% sits until Claim owner.",
+      settlement: "Sent live in the seat Phantom tx: 25% owner / 75% protocol (12.5% owner if referred).",
     },
     {
       id: "pin",
@@ -147,7 +147,7 @@ export function buildProfitDesk(state: AppState): ProfitDesk {
       wallet: "treasury",
       walletPk: treasury,
       accruedSol: pinSolAccrued,
-      settlement: "Full pin payment lands in treasury. Claim owner sends the 50% share.",
+      settlement: "Sent live in the pin Phantom tx: 50% owner / 50% treasury.",
     },
     {
       id: "boost",
@@ -156,7 +156,7 @@ export function buildProfitDesk(state: AppState): ProfitDesk {
       wallet: "treasury",
       walletPk: treasury,
       accruedSol: boostSolAccrued,
-      settlement: "Full boost payment lands in treasury. Claim owner sends the 50% share.",
+      settlement: "Sent live in the boost Phantom tx: 50% owner / 50% treasury.",
     },
   ];
   const treasurySol = padTreasury + pinSolAccrued + boostSolAccrued + seatSolAccrued + swapSolAccrued;
@@ -185,7 +185,7 @@ export function buildProfitDesk(state: AppState): ProfitDesk {
       dbcPartnerSol: 0,
       jupSol: 0,
       jupUsdc: 0,
-      ownerReadySol: padOwner,
+      ownerReadySol: 0,
       treasuryPk: treasury,
       ownerPk: ownerWallet,
     },

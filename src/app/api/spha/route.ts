@@ -34,5 +34,7 @@ export async function GET() {
       discord: socials.discord || "",
       website: socials.website || "",
     },
+  }, {
+    headers: { "Cache-Control": "no-store, max-age=0" },
   });
 }

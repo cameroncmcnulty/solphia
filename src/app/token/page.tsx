@@ -23,15 +23,28 @@ export default function TokenPage() {
   const [blurb, setBlurb] = useState("");
 
   useEffect(() => {
-    fetch("/api/spha", { cache: "no-store" })
-      .then((r) => r.json())
-      .then((j) => {
-        if (j?.socials) setSocials({ x: j.socials.x || "", telegram: j.socials.telegram || "", discord: j.socials.discord || "" });
-        if (typeof j?.mint === "string") setT(solphiaTokenDesk(j.mint));
-        if (j?.image) setArt(j.image);
-        if (j?.blurb) setBlurb(j.blurb);
-      })
-      .catch(() => {});
+    let live = true;
+    const load = () => {
+      fetch("/api/spha", { cache: "no-store" })
+        .then((r) => r.json())
+        .then((j) => {
+          if (!live) return;
+          if (j?.socials) setSocials({ x: j.socials.x || "", telegram: j.socials.telegram || "", discord: j.socials.discord || "" });
+          if (typeof j?.mint === "string") setT(solphiaTokenDesk(j.mint));
+          if (j?.image) setArt(j.image);
+          if (j?.blurb) setBlurb(j.blurb);
+        })
+        .catch(() => {});
+    };
+    load();
+    const onFocus = () => load();
+    window.addEventListener("focus", onFocus);
+    const tick = window.setInterval(load, 20_000);
+    return () => {
+      live = false;
+      window.removeEventListener("focus", onFocus);
+      window.clearInterval(tick);
+    };
   }, []);
 
   return (

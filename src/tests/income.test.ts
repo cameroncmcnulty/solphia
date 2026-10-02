@@ -13,7 +13,7 @@ describe("protocol income accrual", () => {
     assert.equal(s.referral, 0);
   });
 
-  it("credits pin income as unclaimed owner share plus treasury booked", () => {
+  it("credits pin income 50/50 owner and treasury as lifetime booked", () => {
     const book = emptyLaunchBook();
     creditEvenIncome(book, 0.2, "pin");
     assert.equal(book.ownerEarningsSol, 0.1);
@@ -21,7 +21,7 @@ describe("protocol income accrual", () => {
     assert.equal(book.pinFeesSol, 0.2);
   });
 
-  it("credits partner DBC claims 50/50 so owner can withdraw later", () => {
+  it("credits partner DBC claims 50/50 after the sweep sends the owner half", () => {
     const book = emptyLaunchBook();
     creditPartnerClaim(book, 0.004);
     assert.ok(Math.abs(book.ownerEarningsSol - 0.002) < 1e-12);

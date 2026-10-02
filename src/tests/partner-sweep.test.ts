@@ -14,6 +14,9 @@ describe("partner fee sweep", () => {
     const dbc = readFileSync(path.join(process.cwd(), "src/lib/launch/dbc.ts"), "utf8");
     assert.match(dbc, /buildDbcClaimPartnerBatch/);
     assert.equal(dbc.includes("ownerCut"), false);
+    assert.match(src, /evenShare/);
+    assert.match(src, /ownerAddress/);
+    assert.match(src, /sendTreasurySol|packClaimWithOwnerCut/);
     const cron = readFileSync(path.join(process.cwd(), "src/app/api/cron/tick/route.ts"), "utf8");
     assert.match(cron, /sweepPartnerFees/);
   });
