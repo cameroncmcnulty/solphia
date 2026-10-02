@@ -9,20 +9,26 @@ import { SHILL_PRESENCE_MS } from "../lib/shill/types";
 import { composeHouseChat, phraseCardinality } from "../lib/shill/phrases";
 import {
   HOUSE_ACTOR_N,
+  HOUSE_CYCLE_MIN_LIFE_MS,
   HOUSE_LIVE_MAX,
   HOUSE_LIVE_MIN,
   HOUSE_NAME_MAX,
   HOUSE_NAME_MIN,
+  HOUSE_RETIRE_RANK_MAX,
+  HOUSE_RETIRE_RANK_MIN,
   HOUSE_SHARE_CLUSTER_MS,
   HOUSE_VOTE_CLUSTER_MS,
+  actorShouldRetire,
   cryptoUsername,
   houseActorPubkey,
   mulberry32,
   namedHouseCount,
   paintHouseNames,
   plantHouseSchedules,
+  recycleHouseActors,
   tickHouseActions,
 } from "../lib/shill/house";
+import { creditRank, leaderboard } from "../lib/rank/engine";
 
 const CA = "So11111111111111111111111111111111111111112";
 const A = "CyaE1VxvBrahnPWkqm5VsdCvyS2QmNht2UFrKJHga54o";
@@ -182,6 +188,141 @@ describe("house shill wallets", () => {
     assert.equal(liveRoomCount(book, now), house + 1);
     book.members[A].lastReadAt = now - SHILL_PRESENCE_MS - 1;
     assert.equal(liveRoomCount(book, now), house);
+  });
+
+  it("gen 0 keeps the original seed; later gens are new wallets", () => {
+    assert.equal(houseActorPubkey(0), houseActorPubkey(0, 0));
+    assert.notEqual(houseActorPubkey(0, 1), houseActorPubkey(0));
+    assert.equal(isSolanaAddress(houseActorPubkey(3, 4)), true);
+    assert.notEqual(houseActorPubkey(3, 4), houseActorPubkey(3, 5));
+  });
+
+  it("plants cycle clocks so wallets retire on a random rank or in a few weeks", () => {
+    const book = emptyShill();
+    const t0 = 1_800_000_000_000;
+    plantHouseSchedules(book, t0, mulberry32(17));
+    for (const a of book.houseActors!) {
+      assert.equal(a.gen, 0);
+      assert.equal(a.bornAt, t0);
+      assert.ok((a.retireRank || 0) >= HOUSE_RETIRE_RANK_MIN);
+      assert.ok((a.retireRank || 0) <= HOUSE_RETIRE_RANK_MAX);
+      assert.ok((a.retireAt || 0) > t0);
+      assert.equal(actorShouldRetire(a, 100, t0 + 1000), false, "min life before a swap");
+    }
+    assert.equal(plantHouseSchedules(book, t0 + 1000, mulberry32(17)), false);
+  });
+
+  it("credits chat XP for a live house post and reports the owner", () => {
+    const book = emptyShill();
+    const launch = emptyLaunchBook();
+    const rng = mulberry32(7);
+    plantHouseSchedules(book, 10_000, rng);
+    isolate(book);
+    for (const a of book.houseActors!) a.nextShareAt = 50_000;
+    book.lastHouseShareAt = 0;
+    const out = tickHouseActions(book, market, 50_000, rng);
+    assert.equal(out.shares, 1);
+    assert.ok(out.xpOwners.length >= 1);
+    const pk = out.xpOwners[0]!;
+    const cred = creditRank(launch, pk, "chat", { now: 50_000 });
+    assert.equal(cred.ok, true);
+    if (cred.ok) assert.ok(cred.added > 0);
+    assert.ok((launch.accounts[pk]?.xp || 0) > 0);
+  });
+
+  it("swaps a wallet that hit its random rank for a new pubkey", () => {
+    const book = emptyShill();
+    const rng = mulberry32(3);
+    const born = 1_000;
+    plantHouseSchedules(book, born, rng);
+    const actor = book.houseActors![0]!;
+    actor.retireRank = 8;
+    actor.retireAt = 9e15;
+    actor.bornAt = born;
+    const old = actor.pubkey;
+    book.housePresent = [old];
+    const now = born + HOUSE_CYCLE_MIN_LIFE_MS;
+    const retired = recycleHouseActors(book, { [old]: 8 }, now, rng);
+    assert.equal(retired.length, 1);
+    assert.equal(retired[0]!.oldPk, old);
+    assert.notEqual(retired[0]!.newPk, old);
+    assert.equal(isSolanaAddress(retired[0]!.newPk), true);
+    assert.equal(book.houseActors!.find((x) => x.i === actor.i)?.pubkey, retired[0]!.newPk);
+    assert.equal(book.houseActors!.some((x) => x.pubkey === old), false);
+    assert.equal(book.housePresent!.includes(retired[0]!.newPk), true);
+    assert.equal(book.houseActors!.length, HOUSE_ACTOR_N);
+  });
+
+  it("cycles on the few-week clock even at a low rank", () => {
+    const book = emptyShill();
+    const rng = mulberry32(9);
+    const born = 2_000;
+    plantHouseSchedules(book, born, rng);
+    const actor = book.houseActors![4]!;
+    const old = actor.pubkey;
+    actor.retireRank = 90;
+    actor.bornAt = born;
+    actor.retireAt = born + HOUSE_CYCLE_MIN_LIFE_MS;
+    const now = actor.retireAt;
+    const retired = recycleHouseActors(book, { [old]: 2 }, now, rng);
+    assert.equal(retired.length, 1);
+    assert.equal(retired[0]!.oldPk, old);
+    assert.notEqual(book.houseActors!.find((x) => x.i === actor.i)?.pubkey, old);
+  });
+
+  it("does not swap before the minimum life", () => {
+    const book = emptyShill();
+    const rng = mulberry32(2);
+    const born = 3_000;
+    plantHouseSchedules(book, born, rng);
+    const actor = book.houseActors![1]!;
+    actor.retireRank = 2;
+    actor.retireAt = born;
+    actor.bornAt = born;
+    const retired = recycleHouseActors(book, { [actor.pubkey]: 40 }, born + 60_000, rng);
+    assert.equal(retired.length, 0);
+  });
+
+  it("keeps 60-70 percent named after a swap", () => {
+    const book = emptyShill();
+    const rng = mulberry32(12);
+    const born = 4_000;
+    plantHouseSchedules(book, born, rng);
+    for (const a of book.houseActors!) {
+      a.bornAt = born;
+      a.retireAt = born + HOUSE_CYCLE_MIN_LIFE_MS;
+      a.retireRank = 8;
+    }
+    const now = born + HOUSE_CYCLE_MIN_LIFE_MS;
+    const ranks: Record<string, number> = {};
+    for (const a of book.houseActors!) ranks[a.pubkey] = 8;
+    recycleHouseActors(book, ranks, now, rng, 1);
+    const namedN = book.houseActors!.filter((a) => a.named).length;
+    assert.ok(namedN / HOUSE_ACTOR_N >= HOUSE_NAME_MIN - 1e-9);
+    assert.ok(namedN / HOUSE_ACTOR_N <= HOUSE_NAME_MAX + 1e-9);
+  });
+
+  it("wires house posts into rank XP and skips house keys on the live board", () => {
+    const house = readFileSync(join(process.cwd(), "src/lib/shill/house.ts"), "utf8");
+    const route = readFileSync(join(process.cwd(), "src/app/api/shill/route.ts"), "utf8");
+    assert.match(house, /persistHouseXpAndCycles/);
+    assert.match(house, /creditRank\(st\.launch, pk, "chat"/);
+    assert.match(house, /recycleHouseActors/);
+    assert.match(route, /persistHouseXpAndCycles/);
+    assert.match(route, /housePubkeySet\(book\)/);
+  });
+
+  it("keeps house wallets off the public rank board", () => {
+    const launch = emptyLaunchBook();
+    const book = emptyShill();
+    plantHouseSchedules(book, 1_000, mulberry32(1));
+    const house = book.houseActors![0]!.pubkey;
+    creditRank(launch, house, "chat", { now: 1_000 });
+    creditRank(launch, A, "launch", { now: 1_000 });
+    const skip = new Set(book.houseActors!.map((a) => a.pubkey));
+    const board = leaderboard(launch, 10, skip);
+    assert.equal(board.some((r) => r.pubkey === house), false);
+    assert.equal(board.some((r) => r.pubkey === A), true);
   });
 
   it("crypto names pass the username rules", () => {

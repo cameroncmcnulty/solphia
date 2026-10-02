@@ -253,9 +253,9 @@ export function publicCard(acc?: LaunchAccount | null, pubkey = "") {
   };
 }
 
-export function leaderboard(book: LaunchBook, n = 12) {
+export function leaderboard(book: LaunchBook, n = 12, skip?: Set<string>) {
   const rows = Object.values(book.accounts || {})
-    .filter((a) => (a.xp || 0) > 0)
+    .filter((a) => (a.xp || 0) > 0 && !(skip && skip.has(a.pubkey)))
     .map((a) => publicCard(a))
     .sort((a, b) => b.xp - a.xp || b.rank - a.rank);
   return rows.slice(0, n);

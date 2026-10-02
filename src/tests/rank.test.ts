@@ -4,6 +4,7 @@ import { emptyLaunchBook, mergeAccountMaps, mergeLaunch, slimLaunch } from "../l
 import {
   RANK_MAX,
   creditRank,
+  leaderboard,
   rankFromXp,
   rankTier,
   resetRank,
@@ -65,6 +66,16 @@ describe("rank engine", () => {
       if (r.ok) swap += r.added;
     }
     assert.equal(swap, 420);
+  });
+
+  it("can hide a wallet from the public board", () => {
+    const book = emptyLaunchBook();
+    const now = 1_700_000_000_000;
+    creditRank(book, A, "launch", { now });
+    creditRank(book, B, "chat", { now });
+    assert.equal(leaderboard(book, 10).some((r) => r.pubkey === A), true);
+    assert.equal(leaderboard(book, 10, new Set([A])).some((r) => r.pubkey === A), false);
+    assert.equal(leaderboard(book, 10, new Set([A])).some((r) => r.pubkey === B), true);
   });
 
   it("lets admin snap a rank and reset it", () => {

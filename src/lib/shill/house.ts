@@ -5,6 +5,7 @@ import { emptyLaunchBook, type LaunchBook } from "../launch/engine";
 import { padLaunchMints } from "../launch/boost";
 import { loadMarketTape } from "../launch/market";
 import { setUsername, usernameOk } from "../launch/username";
+import { creditRank, rankFromXp, resetRank } from "../rank/engine";
 import { GLDX_MINT_OFFICIAL, QQQX_MINT_OFFICIAL, SOL_MINT, SPYX_MINT_OFFICIAL, USDC_MINT, USDT_MINT } from "../pair/mints";
 import { withLaunch, withShill } from "../store";
 import { ensureShill, postShill, touchMember, voteShill, type HousePinCoin } from "./engine";
@@ -27,6 +28,13 @@ export const HOUSE_SHARE_HORIZON_MS = 22 * 3600_000;
 export const HOUSE_VOTE_HORIZON_MS = 30 * 3600_000;
 export const HOUSE_MIN_LEAD_MS = 45_000;
 export const HOUSE_TOP_N = 16;
+/** Recycle once they hit a random rank in this band, or the few-week clock, whichever first. */
+export const HOUSE_RETIRE_RANK_MIN = 6;
+export const HOUSE_RETIRE_RANK_MAX = 16;
+export const HOUSE_CYCLE_MIN_MS = 12 * 24 * 3600_000;
+export const HOUSE_CYCLE_MAX_MS = 28 * 24 * 3600_000;
+export const HOUSE_CYCLE_MIN_LIFE_MS = 5 * 24 * 3600_000;
+export const HOUSE_CYCLE_PER_TICK = 1;
 
 const PIN_BLOCK = new Set([SOL_MINT, SPYX_MINT_OFFICIAL, QQQX_MINT_OFFICIAL, GLDX_MINT_OFFICIAL, USDC_MINT, USDT_MINT]);
 
@@ -74,9 +82,18 @@ export function mulberry32(seed: number): Rng {
   };
 }
 
-export function houseActorPubkey(i: number): string {
-  const seed = createHash("sha256").update(`solphia.house.shill.${i}`).digest();
+export function houseActorPubkey(i: number, gen = 0): string {
+  const key = gen > 0 ? `solphia.house.shill.${i}.${gen}` : `solphia.house.shill.${i}`;
+  const seed = createHash("sha256").update(key).digest();
   return Keypair.fromSeed(seed).publicKey.toBase58();
+}
+
+export function pickRetireRank(rng: Rng): number {
+  return HOUSE_RETIRE_RANK_MIN + Math.floor(rng() * (HOUSE_RETIRE_RANK_MAX - HOUSE_RETIRE_RANK_MIN + 1));
+}
+
+export function pickRetireAt(now: number, rng: Rng): number {
+  return now + lerp(HOUSE_CYCLE_MIN_MS, HOUSE_CYCLE_MAX_MS, rng());
 }
 
 export function namedHouseCount(n = HOUSE_ACTOR_N, rng: Rng = Math.random): number {
@@ -165,11 +182,15 @@ export function cryptoUsername(rng: Rng, taken: Set<string>): string | null {
   return null;
 }
 
-function newActor(i: number, named: boolean, shareAt: number, voteAt: number, rng: Rng, now: number): HouseActor {
+function newActor(i: number, named: boolean, shareAt: number, voteAt: number, rng: Rng, now: number, gen = 0): HouseActor {
   return {
     i,
-    pubkey: houseActorPubkey(i),
+    pubkey: houseActorPubkey(i, gen),
     named,
+    gen,
+    bornAt: now,
+    retireRank: pickRetireRank(rng),
+    retireAt: pickRetireAt(now, rng),
     nextShareAt: shareAt,
     nextVoteAt: voteAt,
     nextChatAt: now + 4_000 + Math.floor(rng() * 80_000),
@@ -178,6 +199,83 @@ function newActor(i: number, named: boolean, shareAt: number, voteAt: number, rn
     chatEveryMs: pickChatEvery(rng),
     voteP: pickVoteP(rng),
   };
+}
+
+function ensureCycleFields(a: HouseActor, now: number, rng: Rng): boolean {
+  let dirty = false;
+  if (a.gen == null) {
+    a.gen = 0;
+    dirty = true;
+  }
+  if (!a.bornAt) {
+    a.bornAt = now;
+    dirty = true;
+  }
+  if (!a.retireRank) {
+    a.retireRank = pickRetireRank(rng);
+    dirty = true;
+  }
+  if (!a.retireAt) {
+    a.retireAt = pickRetireAt(now, rng);
+    dirty = true;
+  }
+  return dirty;
+}
+
+export function actorShouldRetire(a: HouseActor, rank: number, now: number): boolean {
+  const born = a.bornAt || 0;
+  if (!born || now - born < HOUSE_CYCLE_MIN_LIFE_MS) return false;
+  const retireAt = a.retireAt || 0;
+  const retireRank = a.retireRank || 0;
+  if (retireAt > 0 && now >= retireAt) return true;
+  if (retireRank > 0 && rank >= retireRank) return true;
+  return false;
+}
+
+function namedForCycle(actors: HouseActor[], skipI: number, rng: Rng): boolean {
+  const n = actors.length || HOUSE_ACTOR_N;
+  let namedN = 0;
+  for (const a of actors) {
+    if (a.i === skipI) continue;
+    if (a.named) namedN += 1;
+  }
+  const lo = Math.ceil(n * HOUSE_NAME_MIN);
+  const hi = Math.floor(n * HOUSE_NAME_MAX);
+  if (namedN < lo) return true;
+  if (namedN > hi) return false;
+  return rng() < (HOUSE_NAME_MIN + HOUSE_NAME_MAX) / 2;
+}
+
+export type HouseRetirement = { i: number; oldPk: string; newPk: string; named: boolean };
+
+export function recycleHouseActors(
+  book: ShillBook,
+  ranks: Record<string, number>,
+  now = Date.now(),
+  rng: Rng = Math.random,
+  limit = HOUSE_CYCLE_PER_TICK,
+): HouseRetirement[] {
+  const actors = book.houseActors || [];
+  const cap = Math.max(1, Math.min(4, Math.floor(limit) || HOUSE_CYCLE_PER_TICK));
+  const due = actors
+    .filter((a) => actorShouldRetire(a, ranks[a.pubkey] || 1, now))
+    .sort((a, b) => (a.bornAt || 0) - (b.bornAt || 0));
+  const retired: HouseRetirement[] = [];
+  for (const actor of due) {
+    if (retired.length >= cap) break;
+    const named = namedForCycle(actors, actor.i, rng);
+    const oldPk = actor.pubkey;
+    const gen = (actor.gen || 0) + 1;
+    const shareAt = now + HOUSE_MIN_LEAD_MS + Math.floor(rng() * HOUSE_SHARE_HORIZON_MS * 0.2);
+    const voteAt = now + HOUSE_MIN_LEAD_MS + Math.floor(rng() * HOUSE_VOTE_HORIZON_MS * 0.2);
+    const next = newActor(actor.i, named, shareAt, voteAt, rng, now, gen);
+    Object.assign(actor, next);
+    if (book.housePresent) {
+      book.housePresent = book.housePresent.map((pk) => (pk === oldPk ? actor.pubkey : pk));
+    }
+    retired.push({ i: actor.i, oldPk, newPk: actor.pubkey, named: actor.named });
+  }
+  return retired;
 }
 
 export function organicizeHouseActors(book: ShillBook, now = Date.now(), rng: Rng = Math.random): boolean {
@@ -213,7 +311,13 @@ export function plantHouseSchedules(book: ShillBook, now = Date.now(), rng: Rng 
   for (let i = 0; i < HOUSE_ACTOR_N; i++) {
     if (!have.has(i)) missing.push(i);
   }
-  if (!missing.length) return false;
+  if (!missing.length) {
+    let dirty = false;
+    for (const a of book.houseActors) {
+      if (ensureCycleFields(a, now, rng)) dirty = true;
+    }
+    return dirty;
+  }
 
   const existingNamed = book.houseActors.filter((a) => a.named).length;
   const targetNamed = namedHouseCount(HOUSE_ACTOR_N, rng);
@@ -229,6 +333,7 @@ export function plantHouseSchedules(book: ShillBook, now = Date.now(), rng: Rng 
     book.houseActors!.push(actor);
   });
   book.houseActors.sort((a, b) => a.i - b.i);
+  for (const a of book.houseActors) ensureCycleFields(a, now, rng);
   organicizeHouseActors(book, now, rng);
   return true;
 }
@@ -268,6 +373,8 @@ export function houseWorkDue(book: ShillBook, now = Date.now()): boolean {
   if (!book.houseBootedAt) return true;
   if (!(book.housePresent || []).length) return true;
   if ((book.nextHouseLiveAt || 0) <= now) return true;
+  if (actors.some((a) => !a.bornAt || !a.retireRank || !a.retireAt)) return true;
+  if (actors.some((a) => actorShouldRetire(a, 1, now))) return true;
   return actors.some((a) => (a.nextChatAt || 0) <= now || a.nextShareAt <= now || a.nextVoteAt <= now);
 }
 
@@ -418,7 +525,7 @@ export function tickHouseActions(
   now = Date.now(),
   rng: Rng = Math.random,
   blocked: Set<string> = new Set(),
-): { shares: number; votes: number; chats: number } {
+): { shares: number; votes: number; chats: number; xpOwners: string[] } {
   plantHouseSchedules(book, now, rng);
   ensureActorClocks(book, now, rng);
   tickHousePresence(book, now, rng);
@@ -429,6 +536,10 @@ export function tickHouseActions(
   let shares = 0;
   let votes = 0;
   let chats = 0;
+  const xpOwners: string[] = [];
+  const noteXp = (pk: string) => {
+    if (pk && !xpOwners.includes(pk)) xpOwners.push(pk);
+  };
 
   const chatDue = room.filter((a) => (a.nextChatAt || 0) <= now).sort((a, b) => (a.nextChatAt || 0) - (b.nextChatAt || 0));
   const lastChat = book.lastHouseChatAt || 0;
@@ -458,6 +569,7 @@ export function tickHouseActions(
       if (posted.ok) {
         chats += 1;
         book.lastHouseChatAt = now;
+        noteXp(actor.pubkey);
       }
     }
   } else {
@@ -498,6 +610,7 @@ export function tickHouseActions(
       if (posted.ok) {
         shares += 1;
         book.lastHouseShareAt = now;
+        noteXp(actor.pubkey);
         for (const other of shareDue) {
           if (other.pubkey === actor.pubkey || other.nextShareAt > now) continue;
           other.nextShareAt = now + HOUSE_SHARE_GAP_MS + Math.floor(rng() * HOUSE_SHARE_CLUSTER_MS);
@@ -546,7 +659,7 @@ export function tickHouseActions(
     if (inRoom.has(a.pubkey)) continue;
     if ((a.nextChatAt || 0) <= now) a.nextChatAt = now + lerp(2 * 60_000, 18 * 60_000, rng());
   }
-  return { shares, votes, chats };
+  return { shares, votes, chats, xpOwners };
 }
 
 export async function loadHouseMarketCoins(): Promise<HousePinCoin[]> {
@@ -577,7 +690,41 @@ export async function loadHouseMarketCoins(): Promise<HousePinCoin[]> {
   }
 }
 
-export async function runHouseShill(now = Date.now()): Promise<{ shares: number; votes: number; chats: number; planted: boolean }> {
+export async function persistHouseXpAndCycles(
+  xpOwners: string[],
+  now = Date.now(),
+  rng: Rng = Math.random,
+): Promise<number> {
+  const unique = [...new Set((xpOwners || []).filter((p) => isSolanaAddress(p)))];
+  const actors = await withShill((st) => (ensureShill(st.shill).houseActors || []).slice(), false);
+  if (!actors.length && !unique.length) return 0;
+  const ranks = await withLaunch((st) => {
+    if (!st.launch) st.launch = emptyLaunchBook();
+    for (const pk of unique) creditRank(st.launch, pk, "chat", { now });
+    const map: Record<string, number> = {};
+    for (const a of actors) map[a.pubkey] = rankFromXp(st.launch.accounts?.[a.pubkey]?.xp || 0);
+    return map;
+  }, unique.length > 0);
+  const cycleDue = actors.some((a) => actorShouldRetire(a, ranks[a.pubkey] || 1, now));
+  if (!cycleDue) return 0;
+  const retired = await withShill((st) => {
+    st.shill = ensureShill(st.shill);
+    return recycleHouseActors(st.shill, ranks, now, rng);
+  }, true);
+  if (!retired.length) return 0;
+  const latest = await withShill((st) => ensureShill(st.shill).houseActors || [], false);
+  await withLaunch((st) => {
+    if (!st.launch) st.launch = emptyLaunchBook();
+    for (const r of retired) {
+      resetRank(st.launch, r.oldPk);
+      setUsername(st.launch, r.oldPk, "");
+    }
+    paintHouseNames(st.launch, latest, rng);
+  }, true);
+  return retired.length;
+}
+
+export async function runHouseShill(now = Date.now()): Promise<{ shares: number; votes: number; chats: number; planted: boolean; recycled: number }> {
   const peek = await withShill((st) => {
     const book = ensureShill(st.shill);
     return { due: houseWorkDue(book, now), n: (book.houseActors || []).length, actors: book.houseActors || [], tape: houseNeedsTape(book, now) };
@@ -604,7 +751,7 @@ export async function runHouseShill(now = Date.now()): Promise<{ shares: number;
     }, true);
   }
 
-  if (!peek.due && peek.n >= HOUSE_ACTOR_N) return { shares: 0, votes: 0, chats: 0, planted };
+  if (!peek.due && peek.n >= HOUSE_ACTOR_N) return { shares: 0, votes: 0, chats: 0, planted, recycled: 0 };
 
   const coins = peek.tape || planted ? await loadHouseMarketCoins() : [];
   const out = await withShill((st) => {
@@ -612,5 +759,6 @@ export async function runHouseShill(now = Date.now()): Promise<{ shares: number;
     if ((st.shill.houseActors || []).length < HOUSE_ACTOR_N) plantHouseSchedules(st.shill, now);
     return tickHouseActions(st.shill, coins, now);
   }, true);
-  return { ...out, planted };
+  const recycled = await persistHouseXpAndCycles(out.xpOwners, now);
+  return { ...out, planted, recycled };
 }

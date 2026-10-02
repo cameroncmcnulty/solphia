@@ -65,9 +65,9 @@ export function mergeShill(local: ShillBook, remote: ShillBook): ShillBook {
   for (const v of b.votes || []) votes.set(v.id, v);
   for (const v of a.votes || []) votes.set(v.id, v);
   const lastVoteAt = { ...(b.lastVoteAt || {}), ...(a.lastVoteAt || {}) };
-  const actors = new Map<string, HouseActor>();
-  for (const x of b.houseActors || []) actors.set(x.pubkey, x);
-  for (const x of a.houseActors || []) actors.set(x.pubkey, x);
+  const actors = new Map<number, HouseActor>();
+  for (const x of b.houseActors || []) actors.set(x.i, x);
+  for (const x of a.houseActors || []) actors.set(x.i, x);
   const out: ShillBook = {
     messages: [...msgs.values()].sort((x, y) => x.at - y.at),
     pins: [...pins.values()].sort((x, y) => x.at - y.at),

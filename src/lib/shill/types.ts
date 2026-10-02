@@ -68,6 +68,11 @@ export type HouseActor = {
   voteEveryMs: number;
   chatEveryMs?: number;
   voteP: number;
+  /** Identity generation. 0 is the original seed; each recycle bumps it. */
+  gen?: number;
+  bornAt?: number;
+  retireRank?: number;
+  retireAt?: number;
 };
 
 export type ShillBook = {

@@ -27,6 +27,7 @@ import {
   voteBoard,
   voteShill,
   votesOnMint,
+  housePubkeySet,
   type VoteBoardRow,
 } from "@/lib/shill/engine";
 import { SHILL_HOUSE_PIN_MIN, SHILL_MSG_MAX, SHILL_PIN_SOL, SHILL_REACTS, SHILL_STICKERS, type ShillMessage, type ShillPin, type ShillToken } from "@/lib/shill/types";
@@ -35,7 +36,7 @@ import { creditRank, leaderboard, publicCard } from "@/lib/rank/engine";
 import { canModerateChat, staffRole } from "@/lib/access";
 import type { AppState } from "@/lib/types";
 import { GLDX_MINT_OFFICIAL, QQQX_MINT_OFFICIAL, SOL_MINT, SPYX_MINT_OFFICIAL, USDC_MINT, USDT_MINT } from "@/lib/pair/mints";
-import { houseNeedsNames, houseNeedsTape, houseWorkDue, loadHouseMarketCoins, paintHouseNames, plantHouseSchedules, tickHouseActions } from "@/lib/shill/house";
+import { houseNeedsNames, houseNeedsTape, houseWorkDue, loadHouseMarketCoins, paintHouseNames, persistHouseXpAndCycles, plantHouseSchedules, tickHouseActions } from "@/lib/shill/house";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -181,14 +182,19 @@ export async function GET(req: NextRequest) {
         }, true);
       }
     }
+    let xpOwners: string[] = [];
     await withShill((st) => {
       st.shill = ensureShill(st.shill);
       if (need.pins) {
         st.shill.pins = st.shill.pins.filter((p) => !p.house || (!PIN_BLOCK.has(p.mint) && !padMints.has(p.mint)));
         fillHousePins(st.shill, tapeCoins);
       }
-      if (need.actors) tickHouseActions(st.shill, tapeCoins);
+      if (need.actors) {
+        const out = tickHouseActions(st.shill, tapeCoins);
+        xpOwners = out.xpOwners || [];
+      }
     }, true);
+    if (need.actors) await persistHouseXpAndCycles(xpOwners);
     bustShillSnap();
   }
   if (!light && pubkey && isSolanaAddress(pubkey)) {
@@ -239,7 +245,7 @@ export async function GET(req: NextRequest) {
     reacts: SHILL_REACTS,
     typing,
     profiles,
-    board: leaderboard(launch, 10),
+    board: leaderboard(launch, 10, housePubkeySet(book)),
     voteBoard: snap.voteBoard,
     nextVoteAt: nextAt,
     you,
