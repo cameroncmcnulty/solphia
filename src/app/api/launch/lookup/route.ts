@@ -6,6 +6,7 @@ import { withLaunch } from "@/lib/store";
 import { padCurveReady } from "@/lib/launch/program";
 import { dbcEnabled } from "@/lib/launch/dbcIds";
 import { lastPairPrices } from "@/lib/tick";
+import { isPlaceholderLabel } from "@/lib/launch/labels";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 20;
@@ -22,7 +23,23 @@ export async function GET(req: NextRequest) {
     const book = s.launch || emptyLaunchBook();
     const owned = book.coins.find((c) => c.mint === mint || c.id === mint);
     if (owned) {
-      return NextResponse.json({ coin: publicCoin(owned, solUsd), solUsd });
+      const coin = publicCoin(owned, solUsd);
+      if (isPlaceholderLabel(coin.symbol) || isPlaceholderLabel(coin.name)) {
+        const { readSplMeta } = await import("@/lib/token/onchainMeta");
+        const meta = await readSplMeta(mint).catch(() => null);
+        if (meta && (meta.symbol || meta.name)) {
+          return NextResponse.json({
+            coin: {
+              ...coin,
+              name: meta.name || coin.name,
+              symbol: meta.symbol || coin.symbol,
+              image: meta.image || coin.image,
+            },
+            solUsd,
+          });
+        }
+      }
+      return NextResponse.json({ coin, solUsd });
     }
     const dbc = dbcEnabled() ? await (await import("@/lib/launch/dbc")).dbcPoolByMint(mint) : null;
     if (dbc) {
@@ -34,8 +51,8 @@ export async function GET(req: NextRequest) {
           mint,
           born: true,
           venue: "solphia",
-          name: meta?.name || "Solphia curve",
-          symbol: meta?.symbol || mint.slice(0, 4).toUpperCase(),
+          name: meta?.name || "",
+          symbol: meta?.symbol || "",
           image: meta?.image || "",
           blurb: "",
           creator: String((dbc.account as any).poolState?.creator || (dbc.account as any).creator || ""),

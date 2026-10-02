@@ -82,6 +82,14 @@ describe("open market swap fees", () => {
     assert.equal(widget.includes('useState("0.25")'), false);
     assert.match(widget, /maxPayString\(spendable/);
     assert.equal(/setAmount\(payIsSol \? fmtSol/.test(widget), false);
+    assert.equal(widget.includes('defaultSymbol || "TOKEN"'), false);
+    assert.equal(widget.includes("symbol: liveLabel(next.symbol"), false);
+    assert.match(widget, /isPlaceholderLabel/);
+    const launch = readFileSync(path.join(process.cwd(), "src/app/launch/page.tsx"), "utf8");
+    assert.equal(launch.includes("function MarketSwap"), false);
+    assert.match(launch, /<SwapWidget/);
+    const lookup = readFileSync(path.join(process.cwd(), "src/app/api/launch/lookup/route.ts"), "utf8");
+    assert.match(lookup, /isPlaceholderLabel/);
   });
 });
 

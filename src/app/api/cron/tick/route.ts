@@ -47,6 +47,16 @@ export async function GET(req: NextRequest) {
   } catch {
     /* tick still counts */
   }
+  let partnerClaims = 0;
+  let partnerSol = 0;
+  try {
+    const mints = (loadState().launch?.coins || []).map((c) => c.mint || "").filter(Boolean);
+    const swept = await (await import("@/lib/launch/partnerSweep")).sweepPartnerFees({ mints, limit: 4 });
+    partnerClaims = swept.claimed;
+    partnerSol = swept.sol;
+  } catch {
+    /* tick still counts */
+  }
   return NextResponse.json({
     ok: true,
     entries: tick.entries,
@@ -55,6 +65,8 @@ export async function GET(req: NextRequest) {
     promos,
     houseShares,
     houseVotes,
+    partnerClaims,
+    partnerSol,
     lastTickAt: Date.now(),
     liveTrading: tick.liveTrading,
     liveFills: tick.liveFills,

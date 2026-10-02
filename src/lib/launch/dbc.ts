@@ -451,7 +451,6 @@ export async function buildDbcClaimCreatorBatch(opts: {
   const creator = new PublicKey(opts.owner);
   const max = new BN("1000000000000000");
   const target = (opts.mints || []).map((m) => String(m || "").trim()).find(Boolean) || "";
-  if (!target) return { ok: false, error: "empty" };
   clearDbcCreatorCache(opts.owner);
   let pools: { publicKey: PublicKey; account: any }[] = [];
   try {
@@ -469,8 +468,22 @@ export async function buildDbcClaimCreatorBatch(opts: {
     seen.add(mint);
     unpaid.push({ mint, unclaimedSol, pool: row.publicKey });
   }
+  for (const mint of (opts.mints || []).map((m) => String(m || "").trim()).filter(Boolean)) {
+    if (seen.has(mint)) continue;
+    try {
+      const row = await dbc.state.getPoolByBaseMint(mint);
+      if (!row) continue;
+      const unclaimedSol = feesFromPoolAccount(poolInner(row)).creatorUnclaimedSol;
+      if (unclaimedSol <= CLAIM_DUST_SOL) continue;
+      seen.add(mint);
+      unpaid.push({ mint, unclaimedSol, pool: row.publicKey });
+    } catch {
+      /* skip */
+    }
+  }
+  unpaid.sort((a, b) => b.unclaimedSol - a.unclaimedSol);
   let hit = unpaid.find((p) => p.mint === target);
-  if (!hit) {
+  if (!hit && target) {
     try {
       const row = await dbc.state.getPoolByBaseMint(target);
       if (row) {
@@ -481,6 +494,7 @@ export async function buildDbcClaimCreatorBatch(opts: {
       /* missing */
     }
   }
+  if (!hit) hit = unpaid[0];
   if (!hit) return { ok: false, error: "empty" };
   let raw: Transaction;
   try {
@@ -515,25 +529,64 @@ export async function buildDbcClaimPartnerTx(opts: {
   owner: string;
   receiver?: string;
 }): Promise<{ ok: true; transaction: string } | { ok: false; error: string }> {
+  const batch = await buildDbcClaimPartnerBatch({ mints: [opts.mint], owner: opts.owner, receiver: opts.receiver });
+  if (!batch.ok) return batch;
+  return { ok: true, transaction: batch.transaction };
+}
+
+export async function buildDbcClaimPartnerBatch(opts: {
+  mints: string[];
+  owner: string;
+  receiver?: string;
+}): Promise<DbcClaimBatch | { ok: false; error: string }> {
   const dbc = client();
-  const row = await dbc.state.getPoolByBaseMint(opts.mint);
-  if (!row) return { ok: false, error: "curve_missing" };
   const claimer = new PublicKey(opts.owner);
   const max = new BN("1000000000000000");
+  const wanted = (opts.mints || []).map((m) => String(m || "").trim()).filter(Boolean);
+  const unpaid: { mint: string; unclaimedSol: number; pool: PublicKey }[] = [];
+  const seen = new Set<string>();
+  const push = (mint: string, unclaimedSol: number, pool: PublicKey) => {
+    if (!mint || seen.has(mint) || unclaimedSol <= CLAIM_DUST_SOL) return;
+    seen.add(mint);
+    unpaid.push({ mint, unclaimedSol, pool });
+  };
+  for (const mint of wanted) {
+    try {
+      const row = await dbc.state.getPoolByBaseMint(mint);
+      if (!row) continue;
+      push(mint, feesFromPoolAccount(poolInner(row)).partnerUnclaimedSol, row.publicKey);
+    } catch {
+      /* skip */
+    }
+  }
+  const cfg = liveDbcConfig();
+  if (cfg) {
+    try {
+      const pools = await dbc.state.getPoolsByConfig(cfg);
+      for (const row of pools) {
+        const mint = mintOfPool(row);
+        if (wanted.length && !wanted.includes(mint)) continue;
+        push(mint, feesFromPoolAccount(poolInner(row)).partnerUnclaimedSol, row.publicKey);
+      }
+    } catch {
+      /* config scan optional */
+    }
+  }
+  const target = wanted.find((m) => unpaid.some((p) => p.mint === m)) || unpaid[0]?.mint || "";
+  const hit = unpaid.find((p) => p.mint === target);
+  if (!hit) return { ok: false, error: "empty" };
   try {
     const raw = await dbc.partner.claimPartnerTradingFee({
       feeClaimer: claimer,
       payer: claimer,
-      pool: row.publicKey,
+      pool: hit.pool,
       maxBaseAmount: max,
       maxQuoteAmount: max,
       receiver: opts.receiver ? new PublicKey(opts.receiver) : undefined,
     });
     const tx = await readyTx(raw as Transaction, claimer);
-    const inner = asPool(row);
-    const fees = feesFromPoolAccount(inner.poolState || inner);
     const ownerPk = ownerAddress();
-    const ownerCut = Math.floor((Number(fees.partnerUnclaimedSol) || 0) * LAMPORTS_PER_SOL / 2);
+    const ownerCut = Math.floor((Number(hit.unclaimedSol) || 0) * LAMPORTS_PER_SOL / 2);
     if (ownerCut >= FEE_DUST_LAMPORTS && ownerPk && ownerPk !== opts.owner) {
       tx.add(
         SystemProgram.transfer({
@@ -543,7 +596,19 @@ export async function buildDbcClaimPartnerTx(opts: {
         }),
       );
     }
-    return { ok: true, transaction: encodeTx(tx) };
+    if (!(await simulateClaim(tx))) {
+      return { ok: false, error: "Claim would fail simulation. Phantom would block it." };
+    }
+    const rest = unpaid.filter((p) => p.mint !== hit.mint);
+    return {
+      ok: true,
+      transaction: encodeTx(tx),
+      claimSol: hit.unclaimedSol,
+      mints: [hit.mint],
+      remaining: rest.length,
+      remainingSol: rest.reduce((s, p) => s + p.unclaimedSol, 0),
+      remainingMints: rest.map((p) => p.mint),
+    };
   } catch {
     return { ok: false, error: "empty" };
   }

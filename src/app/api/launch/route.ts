@@ -61,6 +61,7 @@ const Body = z.object({
     "quote",
     "withdraw_dev",
     "withdraw_partner",
+    "sweep_partner",
     "withdraw_owner",
     "withdraw_referral",
     "set_owner",
@@ -85,7 +86,7 @@ const Body = z.object({
   ownerWallet: z.string().optional(),
   adminSecret: z.string().optional(),
   mint: z.string().optional(),
-  mints: z.array(z.string()).max(16).optional(),
+  mints: z.array(z.string()).max(40).optional(),
   nonce: z.string().max(24).optional(),
   sigs: z.array(z.string().max(128)).max(8).optional(),
   sig: z.string().max(128).optional(),
@@ -709,8 +710,9 @@ async function postLaunch(req: NextRequest) {
       (b.mint && isSolanaAddress(b.mint) ? b.mint : "") ||
       (b.mints || []).find((m) => isSolanaAddress(m)) ||
       (coin?.mint && isSolanaAddress(coin.mint) ? coin.mint : "");
-    if (!mint || !dbcEnabled()) return fail("not_found", 404);
-    const built = await (await dbcApi()).buildDbcClaimCreatorBatch({ mints: [mint], owner: b.pubkey });
+    if (!dbcEnabled()) return fail("not_found", 404);
+    const mints = [mint, ...(b.mints || [])].filter((m) => isSolanaAddress(m));
+    const built = await (await dbcApi()).buildDbcClaimCreatorBatch({ mints, owner: b.pubkey });
     if (!built.ok) return fail(built.error);
     return NextResponse.json({
       ok: true,
@@ -729,22 +731,50 @@ async function postLaunch(req: NextRequest) {
   if (b.action === "withdraw_partner") {
     const snap = await withLaunch((st) => st, false);
     const book = bookOf(snap);
-    const coin = book.coins.find((c) => c.id === b.id || (b.mint && c.mint === b.mint));
-    if (!coin) return fail("not_found", 404);
     const treas = treasuryAddress();
     if (b.pubkey !== treas) return fail("not_owner");
-    if (dbcEnabled() && coin.mint && isSolanaAddress(coin.mint)) {
-      const built = await (await dbcApi()).buildDbcClaimPartnerTx({ mint: coin.mint, owner: b.pubkey });
-      if (!built.ok) return fail(built.error);
-      return NextResponse.json({
-        ok: true,
-        needsSign: true,
-        claim: true,
-        partner: true,
-        transaction: built.transaction,
-        coin: publicCoin(coin, solUsd, b.pubkey, book),
-      });
-    }
+    const mint =
+      (b.mint && isSolanaAddress(b.mint) ? b.mint : "") ||
+      (b.mints || []).find((m) => isSolanaAddress(m)) ||
+      book.coins.find((c) => isSolanaAddress(c.mint))?.mint ||
+      "";
+    if (!dbcEnabled()) return fail("not_found", 404);
+    const mints = [mint, ...(b.mints || []), ...book.coins.map((c) => c.mint || "")].filter((m) => isSolanaAddress(m));
+    const built = await (await dbcApi()).buildDbcClaimPartnerBatch({ mints, owner: b.pubkey });
+    if (!built.ok) return fail(built.error);
+    const coin = book.coins.find((c) => c.mint && built.mints.includes(c.mint));
+    return NextResponse.json({
+      ok: true,
+      needsSign: true,
+      claim: true,
+      partner: true,
+      transaction: built.transaction,
+      claimSol: built.claimSol,
+      claimMints: built.mints,
+      remaining: built.remaining,
+      remainingSol: built.remainingSol,
+      remainingMints: built.remainingMints,
+      coin: coin ? publicCoin(coin, solUsd, b.pubkey, book) : undefined,
+    });
+  }
+
+  if (b.action === "sweep_partner") {
+    const snap = await withLaunch((st) => st, false);
+    const book = bookOf(snap);
+    const treas = treasuryAddress();
+    const ownerPk = (book.ownerWallet || DEFAULT_OWNER).trim();
+    const { treasuryHot } = await import("@/lib/treasury/withdraw");
+    const hot = treasuryHot();
+    if (!hot && b.pubkey !== treas && b.pubkey !== ownerPk && b.pubkey !== DEFAULT_OWNER) return fail("not_owner");
+    if (!hot) return fail("empty");
+    const { sweepPartnerFees } = await import("@/lib/launch/partnerSweep");
+    const mints = [
+      b.mint || "",
+      ...(b.mints || []),
+      ...book.coins.map((c) => c.mint || ""),
+    ].filter((m) => isSolanaAddress(m));
+    const swept = await sweepPartnerFees({ mints, limit: 4 });
+    return NextResponse.json({ ok: true, swept });
   }
 
   if (b.action === "trade_confirm") {
@@ -778,6 +808,11 @@ async function postLaunch(req: NextRequest) {
     if (!out || !("ok" in out) || !out.ok) return fail((out as { error?: string })?.error || "failed");
     const bookSnap = await withLaunch((st) => bookOf(st), false);
     const coin = bookSnap.coins.find((c) => c.id === b.id || (mint && c.mint === mint));
+    if (mint) {
+      void import("@/lib/launch/partnerSweep")
+        .then((m) => m.sweepPartnerFees({ mints: [mint], limit: 1 }))
+        .catch(() => {});
+    }
     return NextResponse.json({
       ok: true,
       coin: coin ? publicCoin(coin, solUsd, b.pubkey, bookSnap) : undefined,

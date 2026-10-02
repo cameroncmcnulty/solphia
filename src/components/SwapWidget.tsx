@@ -16,6 +16,7 @@ import { isSolanaAddress } from "@/lib/wallet/addr";
 import { MIN_TRADE_SOL } from "@/lib/launch/curve";
 import { SOL_MINT, USDC_MINT } from "@/lib/pair/mints";
 import { amountExceedsBalance, maxPayString, spendableAmount } from "@/lib/swap/spendable";
+import { isPlaceholderLabel } from "@/lib/launch/labels";
 import {
   clearSwapNotice,
   loadSwapNotice,
@@ -50,7 +51,28 @@ function fmtTok(n: number) {
 
 function tick(symbol?: string) {
   const s = (symbol || "").replace(/^\$+/, "").replace(/\*+$/, "").trim();
-  return s ? `$${s}` : "";
+  if (!s || isPlaceholderLabel(s)) return "";
+  return `$${s}`;
+}
+
+function liveLabel(symbol?: string, name?: string, mint?: string) {
+  const s = (symbol || "").replace(/^\$+/, "").replace(/\*+$/, "").trim();
+  if (s && !isPlaceholderLabel(s)) return s;
+  const n = (name || "").trim();
+  if (n && !isPlaceholderLabel(n)) return n;
+  const m = (mint || "").trim();
+  return m.length >= 4 ? m.slice(0, 4).toUpperCase() : "";
+}
+
+function tokenFromMint(mint: string, symbol?: string, name?: string, image?: string): SwapToken {
+  const s = (symbol || "").replace(/^\$+/, "").replace(/\*+$/, "").trim();
+  const n = (name || "").trim();
+  return {
+    mint,
+    symbol: s && !isPlaceholderLabel(s) ? s : "",
+    name: n && !isPlaceholderLabel(n) ? n : "",
+    image,
+  };
 }
 
 export function SwapShell({
@@ -130,7 +152,7 @@ function TokenChip({ token, onClick }: { token?: SwapToken | null; onClick?: () 
   ) : token ? (
     <>
       <TokenArt src={token.image} mint={token.mint} label={token.symbol} eager className="h-7 w-7 rounded-full" />
-      <span className="max-w-[5.5rem] truncate text-[15px] font-semibold text-white">{token.symbol.replace(/^\$+/, "") || "Token"}</span>
+      <span className="max-w-[5.5rem] truncate text-[15px] font-semibold text-white">{liveLabel(token.symbol, token.name, token.mint)}</span>
     </>
   ) : (
     <span className="text-[15px] font-semibold text-white">Select</span>
@@ -170,7 +192,7 @@ export function SwapWidget({
   const siteOwner = useOwner();
   const pk = owner || siteOwner || (typeof window !== "undefined" ? loadOwner() : null);
   const seeded = defaultMint && defaultMint.length > 30
-    ? { mint: defaultMint, symbol: defaultSymbol || "TOKEN", name: defaultName, image: defaultImage }
+    ? tokenFromMint(defaultMint, defaultSymbol, defaultName, defaultImage)
     : USDC_TOKEN;
   const [pay, setPay] = useState<SwapToken>(SOL_TOKEN);
   const [recv, setRecv] = useState<SwapToken>(seeded);
@@ -185,6 +207,7 @@ export function SwapWidget({
   const noticeRef = useRef<(n: SwapNotice) => void>(() => undefined);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const liveRef = useRef(false);
+  const lookedUpMint = useRef("");
 
   function stayOnCard() {
     rootRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -206,10 +229,38 @@ export function SwapWidget({
 
   useEffect(() => {
     if (!defaultMint || defaultMint.length < 32) return;
-    const next = { mint: defaultMint, symbol: defaultSymbol || "TOKEN", name: defaultName, image: defaultImage };
+    const next = tokenFromMint(defaultMint, defaultSymbol, defaultName, defaultImage);
     setRecv((cur) => (cur.mint === defaultMint ? { ...cur, ...next } : next));
     setPay((cur) => (cur.mint === defaultMint ? SOL_TOKEN : cur));
   }, [defaultMint, defaultSymbol, defaultName, defaultImage]);
+
+  useEffect(() => {
+    const mint = recv.mint;
+    if (!mint || mint === SOL_MINT || mint === USDC_MINT || mint.length < 32) return;
+    if (recv.symbol && !isPlaceholderLabel(recv.symbol)) return;
+    if (lookedUpMint.current === mint) return;
+    lookedUpMint.current = mint;
+    const ctrl = new AbortController();
+    void fetch(`/api/launch/lookup?mint=${encodeURIComponent(mint)}`, { signal: ctrl.signal, cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => {
+        const coin = j?.coin as { symbol?: string; name?: string; image?: string } | undefined;
+        const symbol = liveLabel(coin?.symbol, coin?.name, mint);
+        if (!symbol || isPlaceholderLabel(symbol)) return;
+        setRecv((cur) =>
+          cur.mint !== mint
+            ? cur
+            : {
+                ...cur,
+                symbol,
+                name: (coin?.name || "").trim() || cur.name,
+                image: coin?.image || cur.image,
+              },
+        );
+      })
+      .catch(() => {});
+    return () => ctrl.abort();
+  }, [recv.mint, recv.symbol, recv.name]);
 
   useEffect(() => {
     const onPh = (e: Event) => {
@@ -345,12 +396,12 @@ export function SwapWidget({
       const coin = j?.coin as { mint?: string; symbol?: string; name?: string; image?: string } | undefined;
       applyPick({
         mint: coin?.mint || q,
-        symbol: coin?.symbol || q.slice(0, 4).toUpperCase(),
-        name: coin?.name || "Token",
+        symbol: liveLabel(coin?.symbol, coin?.name, q),
+        name: (coin?.name || "").trim() || liveLabel(coin?.symbol, coin?.name, q),
         image: coin?.image,
       });
     } catch {
-      applyPick({ mint: q, symbol: q.slice(0, 4).toUpperCase(), name: "Token" });
+      applyPick({ mint: q, symbol: q.slice(0, 4).toUpperCase(), name: q.slice(0, 8) });
     } finally {
       setCaBusy(false);
     }
@@ -422,6 +473,12 @@ export function SwapWidget({
       liveRef.current = false;
       stayOnCard();
       showNotice({ kind: "ok", text: `Swap landed. ${sig}`, at: Date.now() });
+      const feeMint = pay.mint === SOL_MINT ? recv.mint : pay.mint;
+      void fetch("/api/launch", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "sweep_partner", pubkey: pk, mint: feeMint }),
+      }).catch(() => {});
       onDone?.();
     } catch (e) {
       if (isPhantomRedirect(e)) {
@@ -659,7 +716,7 @@ export function SwapWidget({
                     <TokenArt src={row.image} mint={row.mint} label={row.symbol} eager className="h-9 w-9 rounded-full" />
                   )}
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-[15px] font-medium text-white">{row.symbol.replace(/^\$+/, "")}</p>
+                    <p className="truncate text-[15px] font-medium text-white">{liveLabel(row.symbol, row.name, row.mint)}</p>
                     <p className="truncate font-mono text-[11px] text-white/35">{row.name || row.mint.slice(0, 8) + "…"}</p>
                   </div>
                 </button>

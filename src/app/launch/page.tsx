@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Rocket } from "lucide-react";
 import { Keypair } from "@solana/web3.js";
 import { usePathname } from "next/navigation";
@@ -14,14 +14,9 @@ import { TokenSocials } from "@/components/TokenSocials";
 import { WalletConnect } from "@/components/WalletConnect";
 import { useOwner } from "@/lib/hooks";
 import {
-  ANTI_SNIPE_MS,
-  ANTI_SNIPE_SOL,
-  MIN_TRADE_SOL,
   buySupplyPct,
   emptyCurve,
   launchDevBuyCap,
-  quoteBuy,
-  quoteSell,
 } from "@/lib/launch/curve";
 import { launchError } from "@/lib/launch/errors";
 import {
@@ -41,7 +36,7 @@ import { asTxB64, b64ToBytes, bytesToB64 } from "@/lib/solana/wire";
 import { mintPda, newMintNonce, nonceToB64 } from "@/lib/launch/pda";
 import { dbcEnabled } from "@/lib/launch/dbcIds";
 
-import { auditLaunchCoin, rankTape, scoreTape, type LaunchAudit } from "@/lib/launch/audit";
+import { auditLaunchCoin, rankTape, scoreTape } from "@/lib/launch/audit";
 import { BoostBuy, BoostRail, fmtLeft } from "@/components/BoostBuy";
 
 import { TokenImageCrop, readLaunchImage, type CropSource } from "@/components/TokenImageCrop";
@@ -53,7 +48,7 @@ import { hideLaunch, loadHidden } from "@/lib/launch/hidden";
 import { PadPitch } from "@/components/PadPitch";
 import { killNativeValidity } from "@/lib/killNativeValidity";
 
-import { SwapBox, SwapShell, SwapTabs, SwapWidget } from "@/components/SwapWidget";
+import { SwapWidget } from "@/components/SwapWidget";
 import type { BoostRank } from "@/lib/launch/boost";
 import { filterTape, sortByTrending, sortTape, type AgeFilter, type VolWindow } from "@/lib/launch/tape";
 import { isSolanaAddress } from "@/lib/wallet/addr";
@@ -219,13 +214,6 @@ function fmtSol(n: number, d = 3) {
   return n.toFixed(d);
 }
 
-function fmtTok(n: number) {
-  if (!(n > 0)) return "0";
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
-  return n.toFixed(0);
-}
-
 function tick(symbol?: string) {
   const s = (symbol || "").replace(/^\$+/, "").replace(/\*+$/, "").trim();
   return s ? `$${s}` : "";
@@ -350,7 +338,7 @@ export default function LaunchPage() {
   const [telegram, setTelegram] = useState("");
   const [discord, setDiscord] = useState("");
   const [devBuy, setDevBuy] = useState(0);
-  const [sol, setSol] = useState(0.25);
+
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
   const createErr = useConfirmErrors<LaunchField>();
@@ -388,7 +376,7 @@ export default function LaunchPage() {
   const finishPhantomRef = useRef<(sig: string, after: PhAfter) => Promise<void>>(async () => {});
   const cropUrlRef = useRef<string>("");
   const claimSeqRef = useRef(0);
-  const claimNextAt = useRef(0);
+  const claimLock = useRef("");
   const isSwapRef = useRef(isSwap);
   isSwapRef.current = isSwap;
   const devPct = buySupplyPct(emptyCurve(), devBuy);
@@ -1216,17 +1204,21 @@ export default function LaunchPage() {
       setWork("claim");
       await Promise.all([refreshPad(true), refreshTape()]).catch(() => {});
       const paid = Number(after.claimSol) || 0;
-      const nextMint = after.claimAll && !after.partner ? (after.remainingMints || []).find((m) => m && m !== after.mint) : "";
-      const now = Date.now();
-      if (nextMint && claimSeqRef.current < CLAIM_ALL_MAX && now - claimNextAt.current > 1200) {
-        claimNextAt.current = now;
+      const nextMint = after.claimAll ? (after.remainingMints || []).find((m) => m && m !== after.mint) : "";
+      if (nextMint && claimSeqRef.current < CLAIM_ALL_MAX && claimLock.current !== nextMint) {
+        claimLock.current = nextMint;
         claimSeqRef.current += 1;
         setMsg(
           paid
             ? `Claimed ${fmtClaimSol(paid)} SOL. Approve the next unpaid token in Phantom…`
             : "Claimed. Approve the next unpaid token in Phantom…",
         );
-        await act({ action: "withdraw_dev", mint: nextMint, mints: [nextMint], claimAll: true });
+        await act({
+          action: after.partner ? "withdraw_partner" : "withdraw_dev",
+          mint: nextMint,
+          mints: after.remainingMints || [nextMint],
+          claimAll: true,
+        });
         return;
       }
       setMsg(
@@ -1340,16 +1332,20 @@ export default function LaunchPage() {
         });
         if (j.claim) {
           const more = Number(j.remaining) || 0;
-          const nextMint = claimAll && !j.partner ? remainingMints[0] : "";
-          const now = Date.now();
-          if (nextMint && claimSeqRef.current < CLAIM_ALL_MAX && now - claimNextAt.current > 1200) {
-            claimNextAt.current = now;
+          const nextMint = claimAll ? remainingMints[0] : "";
+          if (nextMint && claimSeqRef.current < CLAIM_ALL_MAX && claimLock.current !== nextMint) {
+            claimLock.current = nextMint;
             claimSeqRef.current += 1;
             setTab("mine");
             writeLaunchTab("mine");
             setMsg(`Claimed ${fmtClaimSol(amt)} SOL. Approve the next unpaid token in Phantom…`);
             await Promise.all([refreshPad(true), refreshTape()]);
-            await act({ action: "withdraw_dev", mint: nextMint, mints: [nextMint], claimAll: true });
+            await act({
+              action: j.partner ? "withdraw_partner" : "withdraw_dev",
+              mint: nextMint,
+              mints: remainingMints,
+              claimAll: true,
+            });
             return;
           }
           setMsg(
@@ -1984,12 +1980,12 @@ export default function LaunchPage() {
               </div>
             </div>
             )}
-            {!isSwap && owner && treasuryWallet && owner === treasuryWallet && protocol && (
+            {!isSwap && owner && protocol && (owner === treasuryWallet || owner === ownerWallet) && (
               <div className="mb-4 rounded-3xl border border-white/10 bg-black/30 p-4">
-                <p className="font-mono text-[11px] tracking-[0.28em] text-acid">TREASURY · 50% OF CURVE FEES</p>
+                <p className="font-mono text-[11px] tracking-[0.28em] text-acid">TREASURY + OWNER</p>
                 <h2 className="mt-1 text-[22px] font-semibold tracking-tight text-white">Protocol cut</h2>
                 <p className="mt-1 text-[14px] leading-snug text-white/45">
-                  On-chain partner fees from every Solphia curve swap. Claim with this treasury wallet.
+                  Curve swaps split the protocol half 25/25 owner and treasury. Unclaimed sits on-chain until this is claimed.
                 </p>
                 <div className="mt-4 grid grid-cols-2 gap-3">
                   <div>
@@ -2003,14 +1999,36 @@ export default function LaunchPage() {
                 </div>
                 <button
                   type="button"
-                  disabled={busy || !coins.some((c) => (c.partnerUnclaimedSol || 0) > 1e-6)}
+                  disabled={busy || !((protocol.partnerUnclaimedSol || 0) > 1e-6 || coins.some((c) => (c.partnerUnclaimedSol || 0) > 1e-6))}
                   onClick={() => {
-                    const first = coins.find((c) => (c.partnerUnclaimedSol || 0) > 1e-6);
-                    if (first) act({ action: "withdraw_partner", id: first.id, mint: first.mint });
+                    claimSeqRef.current = 0;
+                    claimLock.current = "";
+                    const unpaid = coins.filter((c) => (c.partnerUnclaimedSol || 0) > 1e-6).map((c) => c.mint).filter(Boolean);
+                    void (async () => {
+                      const r = await fetch("/api/launch", {
+                        method: "POST",
+                        headers: { "content-type": "application/json" },
+                        body: JSON.stringify({ action: "sweep_partner", pubkey: owner, mints: unpaid }),
+                      });
+                      const j = await r.json().catch(() => null);
+                      if (j?.swept?.claimed) {
+                        setMsg(`Routed ${fmtClaimSol(Number(j.swept.sol) || 0)} SOL to treasury and owner.`);
+                        await Promise.all([refreshPad(true), refreshTape()]).catch(() => {});
+                        return;
+                      }
+                      const first = unpaid[0] || coins.find((c) => (c.partnerUnclaimedSol || 0) > 1e-6)?.mint;
+                      if (owner === treasuryWallet && first) {
+                        act({ action: "withdraw_partner", mint: first, mints: unpaid, claimAll: true });
+                      } else {
+                        setErr("Protocol fees need the treasury wallet or TREASURY_SECRET to land.");
+                      }
+                    })();
                   }}
                   className="mt-4 rounded-full bg-[#14f195] px-4 py-2 text-[14px] font-semibold text-[#04000a] disabled:opacity-40"
                 >
-                  Claim protocol fees
+                  {(protocol.partnerUnclaimedSol || 0) > 0
+                    ? `Claim all ${fmtSol(protocol.partnerUnclaimedSol, 4)} SOL`
+                    : "Claim protocol fees"}
                 </button>
               </div>
             )}
@@ -2019,7 +2037,7 @@ export default function LaunchPage() {
                 <p className="font-mono text-[11px] tracking-[0.28em] text-acid">DEV REWARDS</p>
                 <h2 className="mt-1 text-[22px] font-semibold tracking-tight text-white">Claim fees</h2>
                 <p className="mt-1 text-[14px] leading-snug text-white/45">
-                  Swaps on the curve pay 1%. Half is yours. Unclaimed is the wallet total. Each Phantom approval pays one unpaid token — the button is that credit.
+                  Unclaimed is every unpaid token added up. Claim all — Phantom asks once per token until this hits 0.
                 </p>
                 <div className="mt-4 grid grid-cols-2 gap-3">
                   <div>
@@ -2039,20 +2057,20 @@ export default function LaunchPage() {
                       const mint = payout.next?.mint;
                       if (!mint) return;
                       claimSeqRef.current = 0;
-                      claimNextAt.current = 0;
+                      claimLock.current = "";
                       setTab("mine");
                       writeLaunchTab("mine");
                       act({
                         action: "withdraw_dev",
                         id: payout.next?.id,
                         mint,
-                        mints: [mint],
+                        mints: claimable.map((c) => c.mint).filter(Boolean),
                         claimAll: true,
                       });
                     }}
                     className="rounded-full bg-[#14f195] px-4 py-2 text-[14px] font-semibold text-[#04000a] disabled:opacity-40"
                   >
-                    {claimButtonSol(payout) > 0 ? `Claim ${fmtClaimSol(claimButtonSol(payout))} SOL` : "Claim creator fees"}
+                    {claimButtonSol(payout) > 0 ? `Claim all ${fmtClaimSol(claimButtonSol(payout))} SOL` : "Claim creator fees"}
                   </button>
                 </div>
                 {unclaimedSol > 0 ? (
@@ -2157,25 +2175,6 @@ export default function LaunchPage() {
                       <div className="flex items-center gap-2">
                         <button
                           type="button"
-                          disabled={
-                            busy ||
-                            (owner === treasuryWallet
-                              ? !((row.coin.partnerUnclaimedSol || 0) > 1e-6)
-                              : !((row.coin.creatorUnclaimedSol || 0) > 1e-6))
-                          }
-                          onClick={() =>
-                            act({
-                              action: owner === treasuryWallet ? "withdraw_partner" : "withdraw_dev",
-                              id: row.coin.id,
-                              mint: row.coin.mint,
-                            })
-                          }
-                          className="rounded-full bg-[#14f195]/15 px-3 py-1.5 text-[13px] font-medium text-[#14f195] disabled:opacity-40"
-                        >
-                          Claim
-                        </button>
-                        <button
-                          type="button"
                           onClick={() => row.coin.mint && removeFromDashboard(row.coin.mint, row.coin.symbol)}
                           className="rounded-full bg-white/10 px-3 py-1.5 text-[13px] text-white/70"
                         >
@@ -2189,13 +2188,12 @@ export default function LaunchPage() {
                       <CoinDesk
                         open={open}
                         owner={owner}
-                        sol={sol}
-                        setSol={setSol}
                         solUsd={solUsd}
-                        busy={busy}
                         hideTrade={isSwap}
                         onClose={() => setOpen(null)}
-                        onAct={act}
+                        onSwapDone={() => {
+                          void Promise.all([refreshPad(), refreshTape()]).catch(() => {});
+                        }}
                       />
                     </div>
                   )}
@@ -2226,97 +2224,19 @@ export default function LaunchPage() {
 function CoinDesk({
   open,
   owner,
-  sol,
-  setSol,
   solUsd,
-  busy,
   hideTrade,
   onClose,
-  onAct,
+  onSwapDone,
 }: {
   open: Coin;
   owner: string | null;
-  sol: number;
-  setSol: (n: number) => void;
   solUsd: number;
-  busy: boolean;
   hideTrade?: boolean;
   onClose: () => void;
-  onAct: (body: Record<string, unknown>) => void;
+  onSwapDone?: () => void;
 }) {
-  const [side, setSide] = useState<"buy" | "sell">("buy");
-  const [liveOut, setLiveOut] = useState<number | null>(null);
-  const tradeErr = useConfirmErrors<"wallet" | "amount">();
   const audit = useMemo(() => auditLaunchCoin(open, solUsd), [open, solUsd]);
-  const creator = Boolean(owner && open.creator === owner);
-  const padTrade = Boolean(open.born || open.venue === "solphia" || open.venue === "pumpfun");
-  const snipeLeft = Math.max(0, ANTI_SNIPE_MS - (Date.now() - open.createdAt));
-  const cap = open.maxBuySol ?? 0;
-  const snipeCap = open.venue === "solphia" || open.venue === "pumpfun" || creator || snipeLeft <= 0 ? Infinity : ANTI_SNIPE_SOL;
-  const maxOk = Math.min(cap || 40, snipeCap, 40);
-  const quote = useMemo(() => {
-    if (!open.curve) return null;
-    if (side === "buy") return quoteBuy(open.curve, sol);
-    if (!(open.myTokens || 0)) return null;
-    return quoteSell(open.curve, open.myTokens || 0);
-  }, [open.curve, open.myTokens, sol, side]);
-  useEffect(() => {
-    if (!padTrade || !open.mint) {
-      setLiveOut(null);
-      return;
-    }
-    const tokens = open.myTokens || 0;
-    if (side === "buy" && !(sol > 0)) {
-      setLiveOut(null);
-      return;
-    }
-    if (side === "sell" && !(tokens > 0)) {
-      setLiveOut(null);
-      return;
-    }
-    const ctrl = new AbortController();
-    const t = window.setTimeout(() => {
-      fetch("/api/launch", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          action: "quote",
-          pubkey: owner || open.creator,
-          id: open.id,
-          mint: open.mint,
-          sol: side === "buy" ? sol : undefined,
-          tokens: side === "sell" ? tokens : undefined,
-        }),
-        signal: ctrl.signal,
-      })
-        .then((r) => r.json())
-        .then((j) => {
-          const q = j.quote;
-          if (!q?.ok) {
-            setLiveOut(null);
-            return;
-          }
-          setLiveOut(side === "buy" ? Number(q.tokensOut) || 0 : Number(q.solOut) || 0);
-        })
-        .catch(() => setLiveOut(null));
-    }, 250);
-    return () => {
-      ctrl.abort();
-      window.clearTimeout(t);
-    };
-  }, [padTrade, open.mint, open.id, open.creator, open.myTokens, owner, sol, side]);
-  const blocked =
-    side === "sell"
-      ? !(open.myTokens || 0)
-        ? "You have no tokens."
-        : ""
-      : sol < MIN_TRADE_SOL
-        ? `Min ${MIN_TRADE_SOL} SOL.`
-        : sol > maxOk + 1e-9
-          ? snipeLeft > 0 && !creator && sol > ANTI_SNIPE_SOL
-            ? `First 60s: max ${ANTI_SNIPE_SOL} SOL.`
-            : `5% wallet cap. Max ${fmtSol(maxOk, 3)} SOL.`
-          : "";
 
   return (
     <section className="pump-card mt-2 flex min-w-0 flex-col gap-5 overflow-x-hidden">
@@ -2406,319 +2326,24 @@ function CoinDesk({
         {hideTrade ? (
           <div className="min-w-0 rounded-2xl border border-white/10 bg-void/40 p-4">
             <p className="text-[14px] text-white/55">Use the swap card above. This token is loaded there.</p>
-            {creator ? (
-              <button
-                type="button"
-                disabled={busy || !((open.creatorUnclaimedSol || 0) > 1e-6)}
-                onClick={() => onAct({ action: "withdraw_dev", id: open.id, mint: open.mint })}
-                className="mt-3 min-h-[44px] w-full rounded-full border border-acid/40 py-2 text-sm text-acid disabled:opacity-40"
-              >
-                Claim {fmtClaimSol(open.creatorUnclaimedSol || 0)} SOL
-              </button>
-            ) : null}
           </div>
         ) : (
-        <SwapShell title={`Trade ${tick(open.symbol)}`} subtitle="On the Solphia curve until it graduates.">
-          {!padTrade ? (
-            <MarketSwap open={open} owner={owner} sol={sol} setSol={setSol} solUsd={solUsd} />
-          ) : (
-            <>
-              <SwapTabs side={side} onSide={setSide} />
-              {!owner ? (
-                <div className="mt-6 flex justify-center">
-                  <WalletConnect />
-                </div>
-              ) : (
-                <>
-                  <div className="mt-3">
-                    <SwapBox label={side === "buy" ? "YOU PAY" : "YOU SELL"} unit={side === "buy" ? "SOL" : tick(open.symbol) || "TOKEN"}>
-                      {side === "buy" ? (
-                        <input
-                          type="text"
-                          inputMode="decimal"
-                          autoComplete="off"
-                          value={String(sol)}
-                          data-field="amount"
-                          onChange={(e) => {
-                            const n = Number(e.target.value.replace(",", "."));
-                            setSol(Number.isFinite(n) ? n : 0);
-                            tradeErr.clear("amount");
-                          }}
-                          aria-invalid={Boolean(tradeErr.errors.amount)}
-                          className={`w-full bg-transparent font-display text-3xl text-ghost outline-none ${fieldClass(tradeErr.errors.amount, "")}`}
-                        />
-                      ) : (
-                        <div className="font-display text-3xl text-ghost">{fmtTok(open.myTokens || 0)}</div>
-                      )}
-                    </SwapBox>
-                  </div>
-                  <FieldError error={tradeErr.errors.amount} />
-                  {side === "buy" && (
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {PRESETS.map((p) => (
-                        <button
-                          key={p}
-                          type="button"
-                          onClick={() => setSol(p)}
-                          className={`rounded-full border px-3 py-1 font-mono text-[11px] ${Math.abs(sol - p) < 1e-9 ? "border-acid bg-acid/15 text-acid" : "border-violet/30 text-mute"}`}
-                        >
-                          {p}
-                        </button>
-                      ))}
-                      <button
-                        type="button"
-                        onClick={() => setSol(Math.max(MIN_TRADE_SOL, Math.floor(maxOk * 1000) / 1000))}
-                        className="rounded-full border border-violet/30 px-3 py-1 font-mono text-[11px] text-mute"
-                      >
-                        MAX
-                      </button>
-                    </div>
-                  )}
-                  <div className="mt-3">
-                    <SwapBox label="YOU GET" unit={side === "buy" ? tick(open.symbol) || "TOKEN" : "SOL"}>
-                      <div className="font-display text-3xl text-ghost">
-                        {liveOut != null
-                          ? side === "buy"
-                            ? fmtTok(liveOut)
-                            : fmtSol(liveOut, 4)
-                          : quote && quote.ok
-                            ? side === "buy"
-                              ? fmtTok(quote.tokensOut || 0)
-                              : fmtSol(quote.solOut || 0, 4)
-                            : "—"}
-                      </div>
-                    </SwapBox>
-                  </div>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => {
-                      if (!owner) {
-                        tradeErr.fail({ wallet: "Connect your wallet to swap." });
-                        return;
-                      }
-                      if (blocked) {
-                        tradeErr.fail({ amount: blocked });
-                        return;
-                      }
-                      tradeErr.ok();
-                      if (side === "buy") onAct({ action: "buy", id: open.id, mint: open.mint, sol });
-                      else onAct({ action: "sell", id: open.id, mint: open.mint, tokens: open.myTokens || 0 });
-                    }}
-                    className="btn-acid mt-4 min-h-[52px] w-full rounded-full disabled:opacity-40"
-                  >
-                    {side === "buy" ? `Buy ${tick(open.symbol)}` : `Sell ${tick(open.symbol)}`}
-                  </button>
-                  <div className="mt-3">
-                    <FormAlert error={tradeErr.banner} />
-                  </div>
-                  <p className="mt-3 text-center font-mono text-[11px] text-mute">
-                    {solUsd ? `SOL $${solUsd.toFixed(0)}` : "You sign. Tokens land in your wallet."}
-                  </p>
-                  {creator && (
-                    <button
-                      type="button"
-                      disabled={busy || !((open.creatorUnclaimedSol || 0) > 1e-6)}
-                      onClick={() => onAct({ action: "withdraw_dev", id: open.id, mint: open.mint })}
-                      className="mt-3 w-full rounded-full border border-acid/40 py-2 text-sm text-acid disabled:opacity-40"
-                    >
-                      Claim {fmtClaimSol(open.creatorUnclaimedSol || 0)} SOL
-                    </button>
-                  )}
-                </>
-              )}
-            </>
-          )}
-        </SwapShell>
+          <SwapWidget
+            owner={owner}
+            defaultMint={open.mint || ""}
+            defaultSymbol={open.symbol || ""}
+            defaultName={open.name || ""}
+            defaultImage={open.image || ""}
+            tokens={
+              open.mint
+                ? [{ mint: open.mint, symbol: open.symbol, name: open.name, image: open.image }]
+                : undefined
+            }
+            onDone={onSwapDone}
+          />
         )}
       </div>
     </section>
-  );
-}
-
-function MarketSwap({
-  open,
-  owner,
-  sol,
-  setSol,
-  solUsd,
-}: {
-  open: Coin;
-  owner: string | null;
-  sol: number;
-  setSol: (n: number) => void;
-  solUsd: number;
-}) {
-  const [side, setSide] = useState<"buy" | "sell">("buy");
-  const [busy, setBusy] = useState(false);
-  const [out, setOut] = useState<number | null>(null);
-  const [feeSol, setFeeSol] = useState(0);
-  const [held, setHeld] = useState(0);
-  const [msg, setMsg] = useState("");
-  const [hint, setHint] = useState("");
-  const tradeErr = useConfirmErrors<"wallet" | "amount">();
-  const mint = open.mint || "";
-
-  useEffect(() => {
-    if (!owner || !mint) {
-      setHeld(0);
-      return;
-    }
-    fetch(`/api/sol/token?owner=${encodeURIComponent(owner)}&mint=${encodeURIComponent(mint)}`)
-      .then((r) => r.json())
-      .then((j) => setHeld(Number(j.amount) || 0))
-      .catch(() => setHeld(0));
-  }, [owner, mint]);
-
-  useEffect(() => {
-    const amount = side === "buy" ? sol : held;
-    if (!mint || !(amount > 0)) {
-      setOut(null);
-      return;
-    }
-    const ctrl = new AbortController();
-    const t = setTimeout(() => {
-      fetch("/api/swap/quote", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ mint, side, amount, slippageBps: 100 }),
-        signal: ctrl.signal,
-      })
-        .then((r) => r.json())
-        .then((j) => {
-          if (j.ok) {
-            setHint("");
-            setOut(Number(j.outAmount) || 0);
-            setFeeSol(Number(j.feeSol) || 0);
-          } else {
-            setOut(null);
-            setHint(typeof j.error === "string" ? j.error : "Not on the Solphia curve.");
-          }
-        })
-        .catch(() => {
-          setOut(null);
-          setHint("Not on the Solphia curve.");
-        });
-    }, 280);
-    return () => {
-      clearTimeout(t);
-      ctrl.abort();
-    };
-  }, [mint, side, sol, held]);
-
-  async function go() {
-    if (!owner) {
-      tradeErr.fail({ wallet: "Connect your wallet to swap. Tokens land in that wallet." });
-      return;
-    }
-    if (!mint) {
-      tradeErr.fail({ amount: "This coin has no mint yet." });
-      return;
-    }
-    const amount = side === "buy" ? sol : held;
-    if (side === "buy" && sol < MIN_TRADE_SOL) {
-      tradeErr.fail({ amount: `Min ${MIN_TRADE_SOL} SOL.` });
-      return;
-    }
-    if (side === "sell" && !(held > 0)) {
-      tradeErr.fail({ amount: "You have none of this token in your wallet." });
-      return;
-    }
-    tradeErr.ok();
-    setBusy(true);
-    setMsg("");
-    try {
-      const r = await fetch("/api/swap/build", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ owner, mint, side, amount, slippageBps: 100 }),
-      });
-      const j = await r.json();
-      if (!r.ok) throw new Error(j.error || "Could not build the swap.");
-      const sig = await signPhantomAndSend(j.transaction, undefined, { kind: "swap", owner, mint, side, sol: amount });
-      setMsg(`Filled · ${sig.slice(0, 8)}… Tokens landed in your wallet.`);
-      if (owner && mint) {
-        const b = await fetch(`/api/sol/token?owner=${encodeURIComponent(owner)}&mint=${encodeURIComponent(mint)}`).then((x) => x.json());
-        setHeld(Number(b.amount) || 0);
-      }
-    } catch (e) {
-      if (isPhantomRedirect(e)) {
-        setMsg("Approve in Phantom. You'll come back here.");
-        return;
-      }
-      tradeErr.fail({ amount: e instanceof Error ? e.message : "swap failed" });
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div>
-      <SwapTabs side={side} onSide={setSide} />
-      {!owner ? (
-        <div className="mt-5 flex justify-center">
-          <WalletConnect />
-          <FieldError error={tradeErr.errors.wallet} />
-        </div>
-      ) : (
-        <>
-          <div className="mt-3">
-            <SwapBox label={side === "buy" ? "YOU PAY" : "YOU SELL"} unit={side === "buy" ? "SOL" : tick(open.symbol) || "TOKEN"}>
-              {side === "buy" ? (
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  autoComplete="off"
-                  value={String(sol)}
-                  data-field="amount"
-                  onChange={(e) => {
-                    const n = Number(e.target.value.replace(",", "."));
-                    setSol(Number.isFinite(n) ? n : 0);
-                    tradeErr.clear("amount");
-                  }}
-                  aria-invalid={Boolean(tradeErr.errors.amount)}
-                  className="w-full bg-transparent font-display text-3xl text-ghost outline-none"
-                />
-              ) : (
-                <div className="font-display text-3xl text-ghost">{fmtTok(held)}</div>
-              )}
-            </SwapBox>
-          </div>
-          <FieldError error={tradeErr.errors.amount} />
-          {side === "buy" && (
-            <div className="mt-2 flex flex-wrap gap-2">
-              {PRESETS.map((p) => (
-                <button
-                  key={p}
-                  type="button"
-                  onClick={() => setSol(p)}
-                  className={`rounded-full border px-3 py-1 font-mono text-[11px] ${Math.abs(sol - p) < 1e-9 ? "border-acid bg-acid/15 text-acid" : "border-violet/30 text-mute"}`}
-                >
-                  {p}
-                </button>
-              ))}
-            </div>
-          )}
-          <div className="mt-3">
-            <SwapBox label="YOU GET" unit={side === "buy" ? tick(open.symbol) || "TOKEN" : "SOL"}>
-              <div className="font-display text-3xl text-ghost">
-                {out == null ? "—" : side === "buy" ? fmtTok(out) : fmtSol(out, 4)}
-              </div>
-            </SwapBox>
-          </div>
-          {feeSol > 0 && (
-            <p className="mt-2 font-mono text-[11px] text-mute">
-              Protocol fee {fmtSol(feeSol, 4)} SOL{solUsd ? ` · ~$${(feeSol * solUsd).toFixed(3)}` : ""}
-            </p>
-          )}
-          <button type="button" disabled={busy} onClick={go} className="btn-acid mt-4 min-h-[52px] w-full rounded-full disabled:opacity-40">
-            {busy ? "Swapping…" : side === "buy" ? `Buy ${tick(open.symbol)}` : `Sell ${tick(open.symbol)}`}
-          </button>
-          {hint && !msg && <p className="mt-3 text-[12px] leading-snug text-mute">{hint}</p>}
-          {msg && <p className="mt-3 font-mono text-sm text-acid">{msg}</p>}
-        </>
-      )}
-    </div>
   );
 }
 

@@ -95,19 +95,19 @@ export function nextCreatorPayout<T extends { mint?: string; creatorUnclaimedSol
   };
 }
 
-/** Button amount is this Phantom signature, not the wallet sum. Packing flags malicious. */
-export function claimButtonSol(p: { nextSol: number }): number {
-  return Number(p.nextSol) || 0;
+/** Master Claim all amount — the wallet sum. Each Phantom signature still pays one pool. */
+export function claimButtonSol(p: { totalUnclaimed: number; nextSol?: number }): number {
+  return Number(p.totalUnclaimed) || 0;
 }
 
 export function claimHint(p: { nextSol: number; restCount: number; restSol: number; totalUnclaimed: number }): string {
   if (!(p.totalUnclaimed > 0) || !(p.nextSol > 0)) return "";
-  const now = fmtClaimSol(p.nextSol);
+  const all = fmtClaimSol(p.totalUnclaimed);
   if (p.restCount > 0) {
-    const n = p.restCount;
-    return `This approval credits ${now} SOL in Phantom. ${fmtClaimSol(p.restSol)} SOL left on ${n} more token${n === 1 ? "" : "s"} — approve those next.`;
+    const n = p.restCount + 1;
+    return `Claim all ${all} SOL. Phantom asks once per token (${n} approvals) until this hits 0.`;
   }
-  return `Phantom will credit ${now} SOL, minus the network fee.`;
+  return `Phantom will credit ${all} SOL, minus the network fee.`;
 }
 
 export function claimablePartner<T extends { mint?: string; partnerUnclaimedSol?: number }>(rows: T[]): T[] {

@@ -54,6 +54,7 @@ describe("creator claim amounts", () => {
     assert.equal(fmtClaimSol(p.totalUnclaimed), "0.07732");
     assert.equal(fmtClaimSol(p.totalUnclaimed), fmtClaimSol(sumCreatorUnclaimed(rows)));
     assert.notEqual(fmtClaimSol(p.nextSol), fmtClaimSol(p.totalUnclaimed));
+    assert.equal(fmtClaimSol(claimButtonSol(p)), fmtClaimSol(p.totalUnclaimed));
     assert.equal(p.mints.length, 1);
     assert.equal(p.mints[0], p.next?.mint);
     assert.equal(p.restCount, 1);
@@ -75,17 +76,18 @@ describe("creator claim amounts", () => {
     assert.equal(fmtClaimSol(p.totalUnclaimed), fmtClaimSol(0.0029993 + 0.001 + 0.061849));
   });
 
-  it("button matches Phantom credit for this pool, not the wallet unclaimed sum", () => {
+  it("Claim all advertises the wallet sum; each signature is still one pool", () => {
     const rows = [
       { mint: "MintTest11111111111111111111111111111111111", creatorUnclaimedSol: 0.061849, createdAt: 1 },
       { mint: "MintRest11111111111111111111111111111111111", creatorUnclaimedSol: 0.021962, createdAt: 2 },
     ];
     const p = nextCreatorPayout(rows);
     assert.equal(fmtClaimSol(p.totalUnclaimed), "0.083811");
-    assert.equal(fmtClaimSol(claimButtonSol(p)), "0.061849");
-    assert.notEqual(fmtClaimSol(claimButtonSol(p)), fmtClaimSol(p.totalUnclaimed));
-    assert.match(claimHint(p), /0\.061849 SOL in Phantom/);
-    assert.match(claimHint(p), /0\.021962 SOL left on 1 more token/);
+    assert.equal(fmtClaimSol(claimButtonSol(p)), "0.083811");
+    assert.equal(p.mints.length, 1);
+    assert.equal(p.next?.mint, "MintTest11111111111111111111111111111111111");
+    assert.match(claimHint(p), /Claim all 0\.083811 SOL/);
+    assert.match(claimHint(p), /once per token/);
     const last = nextCreatorPayout([rows[1]!]);
     assert.equal(fmtClaimSol(claimButtonSol(last)), fmtClaimSol(last.totalUnclaimed));
     assert.match(claimHint(last), /Phantom will credit 0\.021962 SOL/);

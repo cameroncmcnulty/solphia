@@ -439,6 +439,9 @@ describe("launch create validation", () => {
     assert.match(src, /PadPitch/);
     assert.match(src, /setTab\("tape"\)/);
     assert.match(src, /claimButtonSol/);
+    assert.match(src, /Claim all/);
+    assert.equal(src.includes("function MarketSwap"), false);
+    assert.match(src, /<SwapWidget/);
     assert.match(src, /writeLaunchTab\("mine"\)/);
     assert.match(src, /sortByTrending/);
     assert.match(src, /Trending/);
