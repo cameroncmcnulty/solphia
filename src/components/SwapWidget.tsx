@@ -15,7 +15,7 @@ import type { PhAfter } from "@/lib/wallet/phantomBox";
 import { isSolanaAddress } from "@/lib/wallet/addr";
 import { MIN_TRADE_SOL } from "@/lib/launch/curve";
 import { SOL_MINT, USDC_MINT } from "@/lib/pair/mints";
-import { amountExceedsBalance, spendableAmount } from "@/lib/swap/spendable";
+import { amountExceedsBalance, maxPayString, spendableAmount } from "@/lib/swap/spendable";
 import {
   clearSwapNotice,
   loadSwapNotice,
@@ -492,7 +492,7 @@ export function SwapWidget({
                 {pk
                   ? payIsSol
                     ? `Balance ${fmtSol(payBal, 4)} SOL`
-                    : `Balance ${fmtTok(payBal)} ${pay.symbol.replace(/^\$+/, "")}`
+                    : `Balance ${maxPayString(payBal, pay.mint)} ${pay.symbol.replace(/^\$+/, "")}`
                   : ""}
               </p>
             </div>
@@ -528,7 +528,7 @@ export function SwapWidget({
                 {pk
                   ? recvIsSol
                     ? `Balance ${fmtSol(recvBal, 4)} SOL`
-                    : `Balance ${fmtTok(recvBal)} ${recv.symbol.replace(/^\$+/, "")}`
+                    : `Balance ${maxPayString(recvBal, recv.mint)} ${recv.symbol.replace(/^\$+/, "")}`
                   : ""}
               </p>
             </div>
@@ -563,7 +563,7 @@ export function SwapWidget({
                     key={p}
                     type="button"
                     disabled={!(spendable > 0)}
-                    onClick={() => setAmount(fmtTok(spendable * p))}
+                    onClick={() => setAmount(maxPayString(spendable * p, pay.mint))}
                     className="rounded-full bg-white/8 px-3 py-1.5 font-mono text-[11px] text-white/55 disabled:opacity-30"
                   >
                     {Math.round(p * 100)}%
@@ -572,7 +572,7 @@ export function SwapWidget({
             <button
               type="button"
               disabled={!(spendable > 0)}
-              onClick={() => setAmount(payIsSol ? fmtSol(spendable, 4) : fmtTok(spendable))}
+              onClick={() => setAmount(maxPayString(spendable, pay.mint))}
               className="rounded-full bg-white/8 px-3 py-1.5 font-mono text-[11px] text-white/55 disabled:opacity-30"
             >
               MAX

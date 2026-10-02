@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { SOL_MINT, USDC_MINT } from "../lib/pair/mints";
-import { amountExceedsBalance, SOL_GAS_RESERVE, spendableAmount } from "../lib/swap/spendable";
+import {
+  amountExceedsBalance,
+  maxPayString,
+  SOL_GAS_RESERVE,
+  spendableAmount,
+} from "../lib/swap/spendable";
 
 describe("swap spendable", () => {
   it("keeps a SOL gas reserve so MAX cannot empty the wallet", () => {
@@ -19,5 +24,20 @@ describe("swap spendable", () => {
     assert.equal(amountExceedsBalance(0.25, have), true);
     assert.equal(amountExceedsBalance(0.05, have), false);
     assert.equal(amountExceedsBalance(0, have), false);
+  });
+
+  it("MAX USDC floors 25.87396 instead of rounding up to 25.874", () => {
+    const have = 25.87396;
+    const filled = maxPayString(have, USDC_MINT);
+    assert.equal(filled, "25.87396");
+    assert.equal(amountExceedsBalance(Number(filled), have), false);
+    assert.equal(amountExceedsBalance(25.874, have), true);
+  });
+
+  it("MAX percent chips also stay at or under the bag", () => {
+    const have = 25.87396;
+    const filled = maxPayString(have * 0.75, USDC_MINT);
+    assert.equal(amountExceedsBalance(Number(filled), have), false);
+    assert.match(filled, /^\d+\.\d+$/);
   });
 });

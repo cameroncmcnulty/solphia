@@ -80,6 +80,8 @@ describe("open market swap fees", () => {
     assert.equal(/assemblePhantomSwapTx/.test(pair), false);
     const widget = readFileSync(path.join(process.cwd(), "src/components/SwapWidget.tsx"), "utf8");
     assert.equal(widget.includes('useState("0.25")'), false);
+    assert.match(widget, /maxPayString\(spendable/);
+    assert.equal(/setAmount\(payIsSol \? fmtSol/.test(widget), false);
   });
 });
 
