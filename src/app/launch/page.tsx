@@ -2031,41 +2031,56 @@ export default function LaunchPage() {
                 <p className="font-mono text-[11px] tracking-[0.28em] text-acid">TREASURY + OWNER</p>
                 <h2 className="mt-1 text-[22px] font-semibold tracking-tight text-white">Protocol cut</h2>
                 <p className="mt-1 text-[14px] leading-snug text-white/45">
-                  Curve swaps split 25/25 owner and treasury into paired vaults. Claim drains your vault into this Phantom in one transfer.
+                  {owner === treasuryWallet
+                    ? "Connect this treasury Phantom to claim. Phantom asks once per unpaid token. Each claim lands here and sends the owner 25% in the same approval."
+                    : "Partner fees claim with the treasury Phantom. Your 25% is transferred to this wallet in that same approval."}
                 </p>
                 <div className="mt-4 grid grid-cols-2 gap-3">
                   <div>
-                    <p className="font-mono text-[10px] text-white/40">IN VAULT</p>
-                    <p className="stat-num text-[18px] text-acid">{fmtSol(vault?.claimableSol || 0, 4)} SOL</p>
+                    <p className="font-mono text-[10px] text-white/40">STILL IN POOLS</p>
+                    <p className="stat-num text-[18px] text-acid">{fmtSol(protocol.partnerUnclaimedSol, 4)} SOL</p>
                   </div>
                   <div>
-                    <p className="font-mono text-[10px] text-white/40">STILL IN POOLS</p>
-                    <p className="stat-num text-[18px] text-white">{fmtSol(protocol.partnerUnclaimedSol, 4)} SOL</p>
+                    <p className="font-mono text-[10px] text-white/40">TREASURY WALLET</p>
+                    <p className="stat-num text-[14px] text-white">{treasuryWallet.slice(0, 4)}…{treasuryWallet.slice(-4)}</p>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  disabled={busy || !((vault?.claimableSol || 0) > 1e-6 || (protocol.partnerUnclaimedSol || 0) > 1e-6 || coins.some((c) => (c.partnerUnclaimedSol || 0) > 1e-6))}
-                  onClick={() => {
-                    const unpaid = coins
-                      .filter((c) => (c.partnerUnclaimedSol || 0) > 1e-6)
-                      .map((c) => c.mint)
-                      .filter((m): m is string => Boolean(m));
-                    void (async () => {
-                      const got = await claimVault(unpaid);
-                      if (got) return;
-                      setErr("Protocol fees need TREASURY_SECRET on the server so unpaid pools can harvest into the vault.");
-                    })();
-                  }}
-                  className="mt-4 rounded-full bg-[#14f195] px-4 py-2 text-[14px] font-semibold text-[#04000a] disabled:opacity-40"
-                >
-                  {(vault?.claimableSol || 0) + (protocol.partnerUnclaimedSol || 0) > 0
-                    ? `Claim ${(vault?.claimableSol || 0) > 0 ? fmtSol(vault?.claimableSol || 0, 4) : fmtSol(protocol.partnerUnclaimedSol, 4)} SOL`
-                    : "Claim protocol fees"}
-                </button>
-                {(vault?.claimableSol || 0) > 0 ? (
-                  <p className="mt-2 text-[12px] text-white/40">{vaultClaimHint(vault?.claimableSol || 0)}</p>
-                ) : null}
+                {owner === treasuryWallet ? (
+                  <button
+                    type="button"
+                    disabled={busy || !((protocol.partnerUnclaimedSol || 0) > 1e-6 || coins.some((c) => (c.partnerUnclaimedSol || 0) > 1e-6))}
+                    onClick={() => {
+                      const unpaid = coins
+                        .filter((c) => (c.partnerUnclaimedSol || 0) > 1e-6)
+                        .map((c) => c.mint)
+                        .filter((m): m is string => Boolean(m));
+                      const mint = unpaid[0];
+                      if (!mint) {
+                        setErr("No unpaid partner fees on listed tokens.");
+                        return;
+                      }
+                      claimSeqRef.current = 0;
+                      claimLock.current = "";
+                      setTab("mine");
+                      writeLaunchTab("mine");
+                      act({
+                        action: "withdraw_partner",
+                        mint,
+                        mints: unpaid,
+                        claimAll: true,
+                      });
+                    }}
+                    className="mt-4 rounded-full bg-[#14f195] px-4 py-2 text-[14px] font-semibold text-[#04000a] disabled:opacity-40"
+                  >
+                    {(protocol.partnerUnclaimedSol || 0) > 0
+                      ? `Claim ${fmtSol(protocol.partnerUnclaimedSol, 4)} SOL`
+                      : "Claim protocol fees"}
+                  </button>
+                ) : (
+                  <p className="mt-4 text-[12px] text-white/40">
+                    Switch to the treasury Phantom to claim unpaid pools.
+                  </p>
+                )}
               </div>
             )}
             {!isSwap && (
@@ -2073,8 +2088,8 @@ export default function LaunchPage() {
                 <p className="font-mono text-[11px] tracking-[0.28em] text-acid">DEV REWARDS</p>
                 <h2 className="mt-1 text-[22px] font-semibold tracking-tight text-white">Claim fees</h2>
                 <p className="mt-1 text-[14px] leading-snug text-white/45">
-                  {vault
-                    ? "Fees land in your Solphia vault as pools are harvested. Claim sends the full vault into this Phantom in one transfer."
+                  {vault && (vault.claimableSol || 0) > 0
+                    ? "Some fees are in your Solphia vault. Claim sends that vault into this Phantom in one transfer. Unpaid curve fees still need one Phantom approval per token."
                     : "Unclaimed is every unpaid token added up. Claim all — Phantom asks once per token until this hits 0."}
                 </p>
                 <div className="mt-4 grid grid-cols-2 gap-3">

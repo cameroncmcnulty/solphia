@@ -114,4 +114,18 @@ describe("house fee legs", () => {
     assert.equal(s.owner, 0.0025);
     assert.equal(s.treasury, 0.0025);
   });
+
+  it("pays owner and treasury live even when vaults are on", () => {
+    const fee = feeOn(1);
+    const legs = houseFeeLegs({
+      from: FROM,
+      feeSol: fee,
+      creator: DEV,
+      owner: DEFAULT_OWNER,
+      treasury: DEFAULT_TREASURY,
+      vaults: true,
+    });
+    assert.equal(legs.find((l) => l.to === DEFAULT_OWNER)?.lamports, 2_500_000);
+    assert.equal(legs.find((l) => l.to === DEFAULT_TREASURY)?.lamports, 2_500_000);
+  });
 });

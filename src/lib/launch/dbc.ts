@@ -11,7 +11,7 @@ import { connection } from "../solana/connection";
 import { Keypair, PublicKey, Transaction, VersionedTransaction } from "@solana/web3.js";
 import { encodeTx } from "../token/mint";
 import { bytesToB64 } from "../solana/wire";
-import { harvestAddress, harvestKeypair } from "../treasury/withdraw";
+import { treasuryAddress } from "../treasury";
 import { liveDbcConfig, dbcEnabled } from "./dbcIds";
 import { MIN_TRADE_SOL } from "./curve";
 import { CLAIM_DUST_SOL, feesFromPoolAccount } from "./claim";
@@ -52,8 +52,8 @@ export async function solphiaCurveConfig() {
       },
       dynamicFeeEnabled: false,
       collectFeeMode: m.CollectFeeMode.QuoteToken,
-      /** 0 when we can harvest: 100% of the 1% lands with feeClaimer, then we split 50/25/25 into vaults. */
-      creatorTradingFeePercentage: harvestKeypair() ? 0 : 50,
+      /** 50% creator on-chain; partner 50% is the displayed Phantom treasury (feeClaimer). */
+      creatorTradingFeePercentage: 50,
       poolCreationFee: 0,
       enableFirstSwapWithMinFee: false,
     },
@@ -100,27 +100,6 @@ export async function dbcConfigOnchain(config?: string | null): Promise<string> 
   }
 }
 
-/**
- * Reuse a shared config only when its feeClaimer and creator split match this harvest key.
- * Old 50% creator configs stay for existing pools; new launches get a 0% creator config we can vault-split.
- */
-export async function configReadyForHarvest(config?: string | null): Promise<string> {
-  const pk = await dbcConfigOnchain(config);
-  if (!pk) return "";
-  const hot = harvestKeypair();
-  if (!hot) return pk;
-  try {
-    const cfg = await client().state.getPoolConfig(pk);
-    if (!cfg) return "";
-    const claimer = pkStr(cfg.feeClaimer || cfg.fee_claimer);
-    const pct = Number(cfg.creatorTradingFeePercentage ?? cfg.creator_trading_fee_percentage ?? 0);
-    if (claimer === hot.publicKey.toBase58() && pct === 0) return pk;
-    return "";
-  } catch {
-    return "";
-  }
-}
-
 export async function waitForDbcConfig(config: string, tries = 24): Promise<boolean> {
   if (!liveDbcConfig(config)) return false;
   for (let i = 0; i < tries; i++) {
@@ -136,7 +115,7 @@ export async function buildDbcCreateConfigTx(opts: { owner: string }): Promise<{
   configSecret: string;
 }> {
   const payer = new PublicKey(opts.owner);
-  const treasury = new PublicKey(harvestAddress());
+  const treasury = new PublicKey(treasuryAddress());
   const config = Keypair.generate();
   const params = await solphiaCurveConfig();
   const raw = await client().partner.createConfig({
@@ -201,7 +180,7 @@ export async function buildDbcLaunchTx(opts: {
   const payer = new PublicKey(opts.payer);
   const mint = new PublicKey(opts.mint);
   const buySol = Math.max(0, Number(opts.buySol) || 0);
-  const existing = await configReadyForHarvest(opts.config);
+  const existing = await dbcConfigOnchain(opts.config);
   const name = opts.name.slice(0, 32);
   const symbol = opts.symbol.slice(0, 10);
   const uri = opts.uri.slice(0, 255);
@@ -233,7 +212,7 @@ export async function buildDbcLaunchTx(opts: {
   }
 
   const configKp = Keypair.generate();
-  const treasury = new PublicKey(harvestAddress());
+  const treasury = new PublicKey(treasuryAddress());
   const curve = await solphiaCurveConfig();
   const raw = await client().partner.createConfigAndPool({
     ...curve,

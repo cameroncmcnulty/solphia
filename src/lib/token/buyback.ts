@@ -32,7 +32,7 @@ export async function runBuybackBurn(opts: { mint: string; sol: number }): Promi
     return {
       ok: false,
       error: "no_signer",
-      message: "Set TREASURY_SECRET so the treasury can sign the buyback.",
+      message: "Buyback needs a hot treasury signer. The treasury itself is the Phantom wallet.",
     };
   }
   const owner = kp.publicKey.toBase58();

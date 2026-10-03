@@ -28,7 +28,7 @@ export type HouseFeeOpts = {
    * even: boosts / pins — live 50% owner / 50% treasury of the full payment.
    */
   mode?: HouseFeeMode;
-  /** Pay fee vaults when configured. Tests pass false to pin destinations. */
+  /** Vault creator/referrer only when configured. Owner and treasury always stay the Phantom wallets. */
   vaults?: boolean;
 };
 
@@ -77,9 +77,10 @@ export function houseFeeLegs(opts: HouseFeeOpts): HouseLeg[] {
     opts.creator && isSolanaAddress(opts.creator) && opts.creator !== opts.from ? opts.creator : "";
   const s = houseShare(feeSol, Boolean(referrer), Boolean(creator));
   const toVault = opts.vaults !== false;
-  const dest = (pk: string) => (toVault ? payoutAddress(pk) : pk);
-  const owner = dest((opts.owner && isSolanaAddress(opts.owner) ? opts.owner : ownerAddress()).trim());
-  const treasury = dest((opts.treasury && isSolanaAddress(opts.treasury) ? opts.treasury : treasuryAddress()).trim());
+  /** Owner and treasury always get the Phantom wallets they set. Vaults are creator/referrer only. */
+  const destVault = (pk: string) => (toVault ? payoutAddress(pk) : pk);
+  const owner = (opts.owner && isSolanaAddress(opts.owner) ? opts.owner : ownerAddress()).trim();
+  const treasury = (opts.treasury && isSolanaAddress(opts.treasury) ? opts.treasury : treasuryAddress()).trim();
   const rows: HouseLeg[] = [];
   const add = (to: string, sol: number) => {
     const lamports = Math.round(sol * LAMPORTS_PER_SOL);
@@ -95,8 +96,8 @@ export function houseFeeLegs(opts: HouseFeeOpts): HouseLeg[] {
     add(treasury, half.treasury);
     return rows.filter((r) => r.lamports >= FEE_DUST_LAMPORTS);
   }
-  add(dest(creator), s.dev);
-  add(dest(referrer), s.referral);
+  add(destVault(creator), s.dev);
+  add(destVault(referrer), s.referral);
   if (mode === "hold") add(treasury, s.owner + s.treasury);
   else {
     add(owner, s.owner);

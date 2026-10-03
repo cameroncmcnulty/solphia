@@ -220,7 +220,7 @@ export function WalletsSection() {
         await loadBal();
         return;
       }
-      throw new Error(j.message || "No signer. Connect treasury Phantom or set TREASURY_SECRET.");
+      throw new Error(j.message || "Connect the treasury Phantom to sign this send.");
     } catch (e) {
       setErr(e instanceof Error ? e.message : "withdraw failed");
     } finally {
@@ -236,8 +236,8 @@ export function WalletsSection() {
         <div className="font-mono text-[10px] tracking-[0.28em] text-mute">PROTOCOL WALLETS</div>
         <h2 className="mt-1 font-display text-3xl text-ghost">Where SOL sits</h2>
         <p className="mt-1 max-w-2xl text-sm text-mute">
-          Fees land in paired vaults (creator / owner / treasury). Claim on /launch drains a vault into the connected
-          Phantom in one transfer. Dev holdings are team $SPHA. Trading keys are bot-only — never mix them with protocol SOL.
+          Boosts, pins, and seats land live in the owner and treasury Phantoms. Pad 1% sits in the pool until the
+          treasury Phantom claims. Dev holdings are team $SPHA. Trading keys are bot-only — never mix them with protocol SOL.
         </p>
       </div>
 
@@ -247,43 +247,22 @@ export function WalletsSection() {
         <WalletCard
           kicker="TREASURY · IN"
           title="Treasury"
-          blurb={`${data.seatSol} SOL spot seats, ${data.seatSolLev} SOL lev seats, 1% live clips, 1% in-house swaps, pins, and boosts. Claim on /launch drains the treasury vault into this wallet.`}
+          blurb={`${data.seatSol} SOL spot seats, ${data.seatSolLev} SOL lev seats, 1% live clips, 1% in-house swaps, pins, and boosts. Pad partner fees claim with this Phantom.`}
           pk={pack?.treasury.pk || data.treasury}
           sol={treasSol}
           solUsd={solUsd}
           tone="acid"
         >
-          {pack?.hot ? <p className="mt-2 font-mono text-[10px] text-acid">Hot harvest signer on the server</p> : null}
+          {pack?.hot ? <p className="mt-2 font-mono text-[10px] text-acid">Optional hot signer matches this Phantom</p> : null}
         </WalletCard>
-        {pack?.treasuryVault?.pk ? (
-          <WalletCard
-            kicker="TREASURY · VAULT"
-            title="Treasury vault"
-            blurb="Paired holding wallet. Harvest and live house legs land here until Claim."
-            pk={pack.treasuryVault.pk}
-            sol={pack.treasuryVault.sol}
-            solUsd={solUsd}
-            tone="acid"
-          />
-        ) : null}
         <WalletCard
           kicker="OWNER · OUT"
           title="Owner"
-          blurb="Claim on /launch drains the owner vault into this Phantom."
+          blurb="Live 25% of house fees and 50% of boosts/pins. Pad 25% is sent here when treasury claims."
           pk={pack?.owner.pk || data.ownerWallet}
           sol={pack?.owner.sol ?? 0}
           solUsd={solUsd}
         />
-        {pack?.ownerVault?.pk ? (
-          <WalletCard
-            kicker="OWNER · VAULT"
-            title="Owner vault"
-            blurb="Paired holding wallet for the owner 25% (and 50% of boosts/pins)."
-            pk={pack.ownerVault.pk}
-            sol={pack.ownerVault.sol}
-            solUsd={solUsd}
-          />
-        ) : null}
         <WalletCard
           kicker="DEV · $SPHA"
           title="Dev holdings"
@@ -328,9 +307,7 @@ export function WalletsSection() {
         <div className="font-mono text-[10px] tracking-[0.22em] text-acid">WITHDRAW TREASURY → OWNER</div>
         <p className="mt-1 text-sm text-mute">
           Pull a percent of spendable SOL, or an exact amount. 0.002 SOL stays in treasury so the account does not close.
-          {pack?.hot
-            ? " Server signs with TREASURY_SECRET."
-            : " Sign with the treasury Phantom, or set TREASURY_SECRET on Vercel for a hot send."}
+          {pack?.hot ? " Server can sign as this Phantom." : " Sign with the treasury Phantom."}
         </p>
         <div className="mt-4 flex flex-wrap gap-2">
           {PCTS.map((n) => (
@@ -380,7 +357,7 @@ export function WalletsSection() {
         {msg && <p className="mt-2 text-sm text-acid">{msg}</p>}
         {err && <p className="mt-2 text-sm text-blood">{err}</p>}
         {!owner && !pack?.hot && (
-          <p className="mt-2 text-sm text-mute">Connect the treasury Phantom below if the hot key is not set.</p>
+          <p className="mt-2 text-sm text-mute">Connect the treasury Phantom below to sign.</p>
         )}
       </div>
 
@@ -657,30 +634,29 @@ function ProfitsPanel() {
       <div className="font-mono text-[10px] tracking-[0.28em] text-acid">PROFITS</div>
       <h2 className="mt-1 font-display text-2xl text-ghost">What we take, where it lands</h2>
       <p className="mt-2 max-w-2xl text-sm text-mute">
-        Fees land in a paired vault per account (creator, owner, treasury). Claim on /launch drains that vault into the
-        connected Phantom in one transfer — not one Phantom popup per token. Split is still 50% creator / 25% owner /
-        25% treasury (owner 12.5% if referred). Boosts and pins: 50/50 into those vaults.
+        Split is 50% creator / 25% owner / 25% treasury (owner 12.5% if referred). Boosts and pins: 50/50 live to those
+        Phantoms. Pad 1% stays in the pool until the treasury Phantom claims — Phantom asks once per unpaid token, and
+        the owner 25% is transferred in that same approval.
       </p>
       <div className="mt-4 grid gap-3 md:grid-cols-2">
         <div className="rounded-2xl border border-acid/25 bg-acid/[0.04] p-4">
           <div className="font-mono text-[10px] tracking-[0.2em] text-acid">TREASURY · LIVE</div>
           <div className="mt-2 font-display text-3xl text-ghost">{money(p.accrued.treasurySol)}</div>
           <p className="mt-1 text-sm text-mute">
-            25% of swap and launch fees, 50% of boosts and pins. Lands in the treasury vault; Claim on /launch drains it.
+            25% of swap and launch fees, 50% of boosts and pins, live in this Phantom.
             {claim?.dbcPartnerSol
-              ? ` ${claim.dbcPartnerSol.toFixed(4)} SOL still sitting in pad pools — ${hot ? "cron harvests into vaults every minute." : "set TREASURY_SECRET so cron can harvest."}`
+              ? ` ${claim.dbcPartnerSol.toFixed(4)} SOL still sitting in pad pools — connect the treasury Phantom on /launch to claim.`
               : hot
-                ? " Pad partner fees harvest into vaults every minute."
-                : " Pad partner fees need TREASURY_SECRET on the server to harvest."}
+                ? " Optional cron can harvest pad partner fees into this Phantom."
+                : " Pad partner fees claim with the treasury Phantom on /launch."}
           </p>
         </div>
         <div className="rounded-2xl border border-violet/25 bg-void/40 p-4">
           <div className="font-mono text-[10px] tracking-[0.2em] text-mute">OWNER · LIVE</div>
           <div className="mt-2 font-display text-3xl text-ghost">{money(p.accrued.ownerSol)}</div>
           <p className="mt-1 text-sm text-mute">
-            25% of swaps and launches (12.5% if the trader was invited) and 50% of boosts and pins. Lands in the owner
-            vault paired with {p.ownerWallet ? shortPk(p.ownerWallet, 4) : "the owner wallet"}. Claim on /launch drains
-            it in one shot.
+            25% of swaps and launches (12.5% if the trader was invited) and 50% of boosts and pins, live to{" "}
+            {p.ownerWallet ? shortPk(p.ownerWallet, 4) : "the owner Phantom"}. Pad 25% arrives when treasury claims.
           </p>
         </div>
       </div>

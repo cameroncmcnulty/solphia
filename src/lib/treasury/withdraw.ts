@@ -30,18 +30,11 @@ function keypairFromTreasurySecret(): Keypair | null {
 }
 
 /**
- * DBC feeClaimer / harvest signer. Does not have to equal the displayed treasury
- * (that one is the cold drain destination). New configs set feeClaimer to this pubkey.
+ * Optional hot key for the displayed treasury Phantom.
+ * Only signs when TREASURY_SECRET's pubkey equals treasuryAddress().
+ * Not required: feeClaimer is that Phantom, and partner claims are Phantom-signed.
+ * Never log this.
  */
-export function harvestKeypair(): Keypair | null {
-  return keypairFromTreasurySecret();
-}
-
-export function harvestAddress(): string {
-  return harvestKeypair()?.publicKey.toBase58() || treasuryAddress();
-}
-
-/** Optional hot key for the displayed treasury wallet. Never log this. */
 export function treasuryKeypair(): Keypair | null {
   const kp = keypairFromTreasurySecret();
   if (!kp) return null;
@@ -49,6 +42,16 @@ export function treasuryKeypair(): Keypair | null {
   return kp;
 }
 
+/** Same as treasuryKeypair — cron harvest only if the secret is the displayed treasury. */
+export function harvestKeypair(): Keypair | null {
+  return treasuryKeypair();
+}
+
+/** Always the Phantom treasury they set. Never a different harvest wallet. */
+export function harvestAddress(): string {
+  return treasuryAddress();
+}
+
 export function treasuryHot(): boolean {
-  return Boolean(harvestKeypair());
+  return Boolean(treasuryKeypair());
 }

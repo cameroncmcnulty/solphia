@@ -9,12 +9,11 @@ export const VAULT_KEEP_LAMPORTS = 2_000_000;
 const DUST_LAMPORTS = 5_000;
 
 /**
- * HD fee vaults. One Solana wallet per Phantom account (and owner / treasury).
- * Seed is FEE_VAULT_SECRET, else LIVE_SIGNER_SECRET, else TREASURY_SECRET.
- * Set FEE_VAULT_SECRET once and do not rotate it or these addresses move.
+ * HD fee vaults for creators / referrers only. Owner and treasury are Phantom wallets.
+ * Seed is FEE_VAULT_SECRET, else LIVE_SIGNER_SECRET. Do not rotate the seed or addresses move.
  */
 function vaultSeed(): string {
-  return (process.env.FEE_VAULT_SECRET || process.env.LIVE_SIGNER_SECRET || process.env.TREASURY_SECRET || "").trim();
+  return (process.env.FEE_VAULT_SECRET || process.env.LIVE_SIGNER_SECRET || "").trim();
 }
 
 export function vaultsConfigured(): boolean {

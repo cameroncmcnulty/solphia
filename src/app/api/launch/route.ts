@@ -752,13 +752,19 @@ async function postLaunch(req: NextRequest) {
     const mints = [mint, ...(b.mints || []), ...book.coins.map((c) => c.mint || "")].filter((m) => isSolanaAddress(m));
     const built = await (await dbcApi()).buildDbcClaimPartnerBatch({ mints, owner: b.pubkey });
     if (!built.ok) return fail(built.error);
+    const { decoratePartnerClaimTx } = await import("@/lib/launch/partnerSweep");
+    const transaction = await decoratePartnerClaimTx(built.transaction, b.pubkey, {
+      claimSol: built.claimSol,
+      partnerOnly: built.partnerOnly,
+      creator: built.creator,
+    });
     const coin = book.coins.find((c) => c.mint && built.mints.includes(c.mint));
     return NextResponse.json({
       ok: true,
       needsSign: true,
       claim: true,
       partner: true,
-      transaction: built.transaction,
+      transaction,
       claimSol: built.claimSol,
       claimMints: built.mints,
       remaining: built.remaining,
@@ -771,28 +777,14 @@ async function postLaunch(req: NextRequest) {
   if (b.action === "claim_vault") {
     const { vaultsConfigured, drainFeeVault } = await import("@/lib/fees/vault");
     if (!vaultsConfigured() || !isSolanaAddress(b.pubkey)) return fail("empty");
-    const { harvestKeypair } = await import("@/lib/treasury/withdraw");
-    let harvested: { claimed: number; sol: number; ownerSol: number; creatorSol: number } | null = null;
-    if (harvestKeypair()) {
-      const snap = await withLaunch((st) => st, false);
-      const book = bookOf(snap);
-      const mints = [
-        b.mint || "",
-        ...(b.mints || []),
-        ...book.coins.map((c) => c.mint || ""),
-      ].filter((m) => isSolanaAddress(m));
-      const { sweepPartnerFees } = await import("@/lib/launch/partnerSweep");
-      harvested = await sweepPartnerFees({ mints, limit: 8 });
-    }
     const drained = await drainFeeVault(b.pubkey);
-    if (!drained.ok && !(harvested?.claimed)) return fail(drained.error || "empty");
+    if (!drained.ok) return fail(drained.error || "empty");
     return NextResponse.json({
       ok: true,
-      claimed: Boolean(drained.ok),
+      claimed: true,
       sol: drained.sol || 0,
-      signature: drained.ok ? drained.signature : undefined,
+      signature: drained.signature,
       vaultPk: drained.vaultPk,
-      harvested,
     });
   }
 

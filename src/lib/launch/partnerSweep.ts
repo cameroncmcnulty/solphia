@@ -17,9 +17,9 @@ import { simulateUnsignedB64 } from "../solana/simulate";
 const TREASURY_KEEP_LAMPORTS = 2_000_000;
 
 /**
- * Server-sign partner claims one pool at a time (Phantom Blowfish flags packed claims).
- * Lands the cut in the harvest wallet, then routes 50/25/25 (or 50/50 of the partner
- * half on legacy configs) into each account's fee vault. Claim on /launch drains the vault.
+ * Optional cron: server-sign partner claims one pool at a time when TREASURY_SECRET
+ * is the displayed Phantom treasury. Phantom Blowfish flags packed multi-pool claims.
+ * Claim lands in treasury; owner 25% is transferred live. Creators stay on Phantom claim.
  */
 export async function sweepPartnerFees(opts?: {
   mints?: string[];
@@ -65,7 +65,7 @@ export async function sweepPartnerFees(opts?: {
         signatures.push(paid.signature);
       }
     }
-    if (packed.paid.has(payoutAddress(ownerPk))) ownerSol += split.owner;
+    if (packed.paid.has(ownerPk)) ownerSol += split.owner;
     if (built.creator && packed.paid.has(payoutAddress(built.creator))) creatorSol += split.dev;
     try {
       await withLaunch((st) => {
@@ -89,18 +89,35 @@ function harvestLegs(
   opts: { creator: string; owner: string; treasury: string; split: ReturnType<typeof evenShare> },
 ): { to: string; lamports: number }[] {
   const rows: { to: string; lamports: number }[] = [];
-  const add = (to: string, sol: number) => {
-    const dest = payoutAddress(to);
+  const add = (to: string, sol: number, vaultOk = false) => {
+    const dest = vaultOk ? payoutAddress(to) : to;
     const lamports = Math.round(sol * LAMPORTS_PER_SOL);
     if (!dest || !isSolanaAddress(dest) || dest === from || lamports < FEE_DUST_LAMPORTS) return;
     const hit = rows.find((r) => r.to === dest);
     if (hit) hit.lamports += lamports;
     else rows.push({ to: dest, lamports });
   };
-  add(opts.creator, opts.split.dev);
+  add(opts.creator, opts.split.dev, true);
   add(opts.owner, opts.split.owner);
   add(opts.treasury, opts.split.treasury);
   return rows;
+}
+
+/** Pack owner (and creator, if any) live transfers onto a Phantom-signed partner claim. */
+export async function decoratePartnerClaimTx(
+  b64: string,
+  from: string,
+  opts: { claimSol: number; partnerOnly: boolean; creator?: string },
+): Promise<string> {
+  const split = harvestSplit(opts.claimSol, opts.partnerOnly, Boolean(opts.creator));
+  const legs = harvestLegs(from, {
+    creator: opts.creator || "",
+    owner: ownerAddress(),
+    treasury: treasuryAddress(),
+    split,
+  });
+  const packed = await packClaimWithLegs(b64, from, legs);
+  return packed.transaction;
 }
 
 function packClaimWithLegs(

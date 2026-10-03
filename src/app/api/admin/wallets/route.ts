@@ -54,17 +54,6 @@ export async function GET(req: NextRequest) {
   const foundation = state.foundationWallet || "";
   const airdrop = state.airdropWallet || foundation;
   const lp = state.lpWallet || "";
-  let ownerVault = "";
-  let treasuryVault = "";
-  try {
-    const { feeVaultAddress, vaultsConfigured } = await import("@/lib/fees/vault");
-    if (vaultsConfigured()) {
-      treasuryVault = feeVaultAddress(treasury);
-      if (owner) ownerVault = feeVaultAddress(owner);
-    }
-  } catch {
-    /* live wallets still load */
-  }
   const keys = [
     treasury,
     owner,
@@ -72,8 +61,6 @@ export async function GET(req: NextRequest) {
     foundation,
     airdrop,
     lp,
-    ownerVault,
-    treasuryVault,
     ...admins,
     ...traders.map((t) => t.tradingPubkey),
   ];
@@ -100,9 +87,7 @@ export async function GET(req: NextRequest) {
     solUsd,
     hot: treasuryHot(),
     treasury: { pk: treasury, sol: bal[treasury] || 0 },
-    treasuryVault: treasuryVault ? { pk: treasuryVault, sol: bal[treasuryVault] || 0 } : null,
     owner: { pk: owner, sol: owner ? bal[owner] || 0 : 0 },
-    ownerVault: ownerVault ? { pk: ownerVault, sol: bal[ownerVault] || 0 } : null,
     dev: { pk: dev, sol: dev ? bal[dev] || 0 : 0, tokens, mint, decimals },
     foundation: { pk: foundation, sol: foundation ? bal[foundation] || 0 : 0 },
     airdrop: { pk: airdrop, sol: airdrop ? bal[airdrop] || 0 : 0 },
@@ -179,7 +164,7 @@ export async function POST(req: NextRequest) {
     ...preview,
     needsSignature: true,
     transaction: Buffer.from(unsigned).toString("base64"),
-    message: "Connect the treasury Phantom to sign, or set TREASURY_SECRET on the server.",
+    message: "Connect the treasury Phantom to sign this send.",
   });
 }
 
