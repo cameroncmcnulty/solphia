@@ -8,8 +8,7 @@ export {
   type WithdrawPlan,
 } from "./plan";
 
-/** Optional hot key. JSON byte array or base64 of the 64-byte secret. Never log this. */
-export function treasuryKeypair(): Keypair | null {
+function keypairFromTreasurySecret(): Keypair | null {
   const raw = (process.env.TREASURY_SECRET || "").trim();
   if (!raw) return null;
   try {
@@ -24,14 +23,32 @@ export function treasuryKeypair(): Keypair | null {
       if (buf.length === 64 || buf.length === 32) bytes = new Uint8Array(buf);
     }
     if (!bytes) return null;
-    const kp = Keypair.fromSecretKey(bytes);
-    if (kp.publicKey.toBase58() !== treasuryAddress()) return null;
-    return kp;
+    return Keypair.fromSecretKey(bytes);
   } catch {
     return null;
   }
 }
 
+/**
+ * DBC feeClaimer / harvest signer. Does not have to equal the displayed treasury
+ * (that one is the cold drain destination). New configs set feeClaimer to this pubkey.
+ */
+export function harvestKeypair(): Keypair | null {
+  return keypairFromTreasurySecret();
+}
+
+export function harvestAddress(): string {
+  return harvestKeypair()?.publicKey.toBase58() || treasuryAddress();
+}
+
+/** Optional hot key for the displayed treasury wallet. Never log this. */
+export function treasuryKeypair(): Keypair | null {
+  const kp = keypairFromTreasurySecret();
+  if (!kp) return null;
+  if (kp.publicKey.toBase58() !== treasuryAddress()) return null;
+  return kp;
+}
+
 export function treasuryHot(): boolean {
-  return Boolean(treasuryKeypair());
+  return Boolean(harvestKeypair());
 }

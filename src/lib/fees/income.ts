@@ -1,7 +1,7 @@
 import { splitFee } from "../launch/curve";
 import type { LaunchBook } from "../launch/engine";
-import { evenShare } from "./payout";
-export { evenShare };
+import { evenShare, harvestSplit } from "./payout";
+export { evenShare, harvestSplit };
 
 export type IncomeKind = "swap" | "pin" | "boost" | "seat";
 
@@ -27,11 +27,11 @@ export function creditEvenIncome(book: LaunchBook, sol: number, kind: "pin" | "b
 }
 
 /**
- * Partner (protocol) DBC claim: 50% stays treasury (25% of the 1% fee) and 50% is
- * sent to the owner wallet in the same sweep. Lifetime booked, not a withdraw.
+ * Partner (protocol) DBC claim routed into vaults. Lifetime booked, not a withdraw.
+ * partnerOnly: legacy 50% creator configs — this claim is the protocol half.
  */
-export function creditPartnerClaim(book: LaunchBook, claimSol: number) {
-  const s = evenShare(claimSol);
+export function creditPartnerClaim(book: LaunchBook, claimSol: number, partnerOnly = true) {
+  const s = harvestSplit(claimSol, partnerOnly, true);
   creditProtocol(book, { ownerSol: s.owner, treasurySol: s.treasury, kind: "swap", grossSol: claimSol });
 }
 

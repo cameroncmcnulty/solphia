@@ -11,7 +11,7 @@ import { connection } from "../solana/connection";
 import { Keypair, PublicKey, Transaction, VersionedTransaction } from "@solana/web3.js";
 import { encodeTx } from "../token/mint";
 import { bytesToB64 } from "../solana/wire";
-import { treasuryAddress } from "../treasury";
+import { harvestAddress, harvestKeypair } from "../treasury/withdraw";
 import { liveDbcConfig, dbcEnabled } from "./dbcIds";
 import { MIN_TRADE_SOL } from "./curve";
 import { CLAIM_DUST_SOL, feesFromPoolAccount } from "./claim";
@@ -52,7 +52,8 @@ export async function solphiaCurveConfig() {
       },
       dynamicFeeEnabled: false,
       collectFeeMode: m.CollectFeeMode.QuoteToken,
-      creatorTradingFeePercentage: 50,
+      /** 0 when we can harvest: 100% of the 1% lands with feeClaimer, then we split 50/25/25 into vaults. */
+      creatorTradingFeePercentage: harvestKeypair() ? 0 : 50,
       poolCreationFee: 0,
       enableFirstSwapWithMinFee: false,
     },
@@ -99,6 +100,27 @@ export async function dbcConfigOnchain(config?: string | null): Promise<string> 
   }
 }
 
+/**
+ * Reuse a shared config only when its feeClaimer and creator split match this harvest key.
+ * Old 50% creator configs stay for existing pools; new launches get a 0% creator config we can vault-split.
+ */
+export async function configReadyForHarvest(config?: string | null): Promise<string> {
+  const pk = await dbcConfigOnchain(config);
+  if (!pk) return "";
+  const hot = harvestKeypair();
+  if (!hot) return pk;
+  try {
+    const cfg = await client().state.getPoolConfig(pk);
+    if (!cfg) return "";
+    const claimer = pkStr(cfg.feeClaimer || cfg.fee_claimer);
+    const pct = Number(cfg.creatorTradingFeePercentage ?? cfg.creator_trading_fee_percentage ?? 0);
+    if (claimer === hot.publicKey.toBase58() && pct === 0) return pk;
+    return "";
+  } catch {
+    return "";
+  }
+}
+
 export async function waitForDbcConfig(config: string, tries = 24): Promise<boolean> {
   if (!liveDbcConfig(config)) return false;
   for (let i = 0; i < tries; i++) {
@@ -114,7 +136,7 @@ export async function buildDbcCreateConfigTx(opts: { owner: string }): Promise<{
   configSecret: string;
 }> {
   const payer = new PublicKey(opts.owner);
-  const treasury = new PublicKey(treasuryAddress());
+  const treasury = new PublicKey(harvestAddress());
   const config = Keypair.generate();
   const params = await solphiaCurveConfig();
   const raw = await client().partner.createConfig({
@@ -179,7 +201,7 @@ export async function buildDbcLaunchTx(opts: {
   const payer = new PublicKey(opts.payer);
   const mint = new PublicKey(opts.mint);
   const buySol = Math.max(0, Number(opts.buySol) || 0);
-  const existing = await dbcConfigOnchain(opts.config);
+  const existing = await configReadyForHarvest(opts.config);
   const name = opts.name.slice(0, 32);
   const symbol = opts.symbol.slice(0, 10);
   const uri = opts.uri.slice(0, 255);
@@ -211,7 +233,7 @@ export async function buildDbcLaunchTx(opts: {
   }
 
   const configKp = Keypair.generate();
-  const treasury = new PublicKey(treasuryAddress());
+  const treasury = new PublicKey(harvestAddress());
   const curve = await solphiaCurveConfig();
   const raw = await client().partner.createConfigAndPool({
     ...curve,
@@ -412,6 +434,8 @@ export type DbcClaimBatch = {
   transaction: string;
   claimSol: number;
   mints: string[];
+  creator?: string;
+  partnerOnly: boolean;
   remaining: number;
   remainingSol: number;
   remainingMints: string[];
@@ -516,6 +540,7 @@ export async function buildDbcClaimCreatorBatch(opts: {
     transaction: encodeTx(ready),
     claimSol: hit.unclaimedSol,
     mints: [hit.mint],
+    partnerOnly: false,
     remaining: rest.length,
     remainingSol: rest.reduce((s, p) => s + p.unclaimedSol, 0),
     remainingMints: rest.map((p) => p.mint),
@@ -571,34 +596,56 @@ export async function buildDbcClaimPartnerBatch(opts: {
     }
   }
   const target = wanted.find((m) => unpaid.some((p) => p.mint === m)) || unpaid[0]?.mint || "";
-  const hit = unpaid.find((p) => p.mint === target);
-  if (!hit) return { ok: false, error: "empty" };
-  try {
-    const raw = await dbc.partner.claimPartnerTradingFee({
-      feeClaimer: claimer,
-      payer: claimer,
-      pool: hit.pool,
-      maxBaseAmount: max,
-      maxQuoteAmount: max,
-      receiver: opts.receiver ? new PublicKey(opts.receiver) : undefined,
-    });
-    const tx = await readyTx(raw as Transaction, claimer);
-    if (!(await simulateClaim(tx))) {
-      return { ok: false, error: "Claim would fail simulation. Phantom would block it." };
+  const ordered = [
+    ...unpaid.filter((p) => p.mint === target),
+    ...unpaid.filter((p) => p.mint !== target),
+  ];
+  for (const hit of ordered) {
+    let creator = "";
+    let partnerOnly = true;
+    try {
+      const row = await dbc.state.getPoolByBaseMint(hit.mint);
+      if (row) {
+        const inner = poolInner(row);
+        creator = pkStr(inner.creator);
+        const cfgPk = pkStr(inner.config) || pkStr(inner.poolConfig);
+        if (cfgPk) {
+          const cfg = await dbc.state.getPoolConfig(cfgPk);
+          const pct = Number(cfg?.creatorTradingFeePercentage ?? cfg?.creator_trading_fee_percentage ?? 50);
+          partnerOnly = pct > 0;
+        }
+      }
+    } catch {
+      /* split falls back to partner-only */
     }
-    const rest = unpaid.filter((p) => p.mint !== hit.mint);
-    return {
-      ok: true,
-      transaction: encodeTx(tx),
-      claimSol: hit.unclaimedSol,
-      mints: [hit.mint],
-      remaining: rest.length,
-      remainingSol: rest.reduce((s, p) => s + p.unclaimedSol, 0),
-      remainingMints: rest.map((p) => p.mint),
-    };
-  } catch {
-    return { ok: false, error: "empty" };
+    try {
+      const raw = await dbc.partner.claimPartnerTradingFee({
+        feeClaimer: claimer,
+        payer: claimer,
+        pool: hit.pool,
+        maxBaseAmount: max,
+        maxQuoteAmount: max,
+        receiver: opts.receiver ? new PublicKey(opts.receiver) : undefined,
+      });
+      const tx = await readyTx(raw as Transaction, claimer);
+      if (!(await simulateClaim(tx))) continue;
+      const rest = unpaid.filter((p) => p.mint !== hit.mint);
+      return {
+        ok: true,
+        transaction: encodeTx(tx),
+        claimSol: hit.unclaimedSol,
+        mints: [hit.mint],
+        creator,
+        partnerOnly,
+        remaining: rest.length,
+        remainingSol: rest.reduce((s, p) => s + p.unclaimedSol, 0),
+        remainingMints: rest.map((p) => p.mint),
+      };
+    } catch {
+      /* this claimer cannot harvest this pool */
+    }
   }
+  return { ok: false, error: "empty" };
 }
 
 function asPool(row: { publicKey: PublicKey; account: any }) {

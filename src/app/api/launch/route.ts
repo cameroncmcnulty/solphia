@@ -62,6 +62,7 @@ const Body = z.object({
     "withdraw_dev",
     "withdraw_partner",
     "sweep_partner",
+    "claim_vault",
     "withdraw_owner",
     "withdraw_referral",
     "set_owner",
@@ -481,6 +482,13 @@ async function getLaunch(req: NextRequest) {
       protocol = { treasury: treas, partnerUnclaimedSol: 0, partnerFeesSol: 0 };
     }
   }
+  let vault: { pk: string; sol: number; claimableSol: number } | null = null;
+  try {
+    const { vaultSnapshot } = await import("@/lib/fees/vault");
+    if (viewer && isSolanaAddress(viewer)) vault = await vaultSnapshot(viewer);
+  } catch {
+    vault = null;
+  }
   return NextResponse.json({
     coins: rows,
     solUsd,
@@ -491,6 +499,8 @@ async function getLaunch(req: NextRequest) {
     dbcConfig: liveDbcConfig(fresh.dbcConfig),
     needsNewCurve: dbcEnabled() && !liveDbcConfig(fresh.dbcConfig),
     protocol,
+    vault,
+    vaults: Boolean(vault),
     draft: viewer && isSolanaAddress(viewer) ? fresh.accounts?.[viewer]?.draft || null : null,
   });
 }
@@ -755,6 +765,34 @@ async function postLaunch(req: NextRequest) {
       remainingSol: built.remainingSol,
       remainingMints: built.remainingMints,
       coin: coin ? publicCoin(coin, solUsd, b.pubkey, book) : undefined,
+    });
+  }
+
+  if (b.action === "claim_vault") {
+    const { vaultsConfigured, drainFeeVault } = await import("@/lib/fees/vault");
+    if (!vaultsConfigured() || !isSolanaAddress(b.pubkey)) return fail("empty");
+    const { harvestKeypair } = await import("@/lib/treasury/withdraw");
+    let harvested: { claimed: number; sol: number; ownerSol: number; creatorSol: number } | null = null;
+    if (harvestKeypair()) {
+      const snap = await withLaunch((st) => st, false);
+      const book = bookOf(snap);
+      const mints = [
+        b.mint || "",
+        ...(b.mints || []),
+        ...book.coins.map((c) => c.mint || ""),
+      ].filter((m) => isSolanaAddress(m));
+      const { sweepPartnerFees } = await import("@/lib/launch/partnerSweep");
+      harvested = await sweepPartnerFees({ mints, limit: 8 });
+    }
+    const drained = await drainFeeVault(b.pubkey);
+    if (!drained.ok && !(harvested?.claimed)) return fail(drained.error || "empty");
+    return NextResponse.json({
+      ok: true,
+      claimed: Boolean(drained.ok),
+      sol: drained.sol || 0,
+      signature: drained.ok ? drained.signature : undefined,
+      vaultPk: drained.vaultPk,
+      harvested,
     });
   }
 

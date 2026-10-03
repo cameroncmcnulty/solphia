@@ -4,6 +4,7 @@ import { treasuryAddress } from "../treasury";
 import { ownerAddress } from "../ownerWallet";
 import { isSolanaAddress } from "../security";
 import { loadState } from "../store";
+import { payoutAddress } from "./vault";
 
 /** Dust below this is folded into treasury so Phantom does not see empty transfers. */
 export const FEE_DUST_LAMPORTS = 5_000;
@@ -27,6 +28,8 @@ export type HouseFeeOpts = {
    * even: boosts / pins — live 50% owner / 50% treasury of the full payment.
    */
   mode?: HouseFeeMode;
+  /** Pay fee vaults when configured. Tests pass false to pin destinations. */
+  vaults?: boolean;
 };
 
 /** Boosts and pins: 50% owner / 50% treasury of the full payment. */
@@ -34,6 +37,17 @@ export function evenShare(sol: number): FeeSplit {
   const fee = Math.max(0, Number(sol) || 0);
   const owner = fee / 2;
   return { dev: 0, owner, treasury: fee - owner, referral: 0 };
+}
+
+/**
+ * How to split a DBC partner claim after it lands in the harvest wallet.
+ * partnerOnly: old configs (creator 50% still on the pool) — this claim is the protocol half, 50/50 owner/treasury.
+ * full: new configs (creatorTradingFeePercentage 0) — this claim is the whole 1%, 50/25/25.
+ */
+export function harvestSplit(claimSol: number, partnerOnly: boolean, hasCreator: boolean): FeeSplit {
+  const fee = Math.max(0, Number(claimSol) || 0);
+  if (partnerOnly) return evenShare(fee);
+  return houseShare(fee, false, hasCreator);
 }
 
 /** First locked inviter on this wallet, if any. */
@@ -62,8 +76,10 @@ export function houseFeeLegs(opts: HouseFeeOpts): HouseLeg[] {
   const creator =
     opts.creator && isSolanaAddress(opts.creator) && opts.creator !== opts.from ? opts.creator : "";
   const s = houseShare(feeSol, Boolean(referrer), Boolean(creator));
-  const owner = (opts.owner && isSolanaAddress(opts.owner) ? opts.owner : ownerAddress()).trim();
-  const treasury = (opts.treasury && isSolanaAddress(opts.treasury) ? opts.treasury : treasuryAddress()).trim();
+  const toVault = opts.vaults !== false;
+  const dest = (pk: string) => (toVault ? payoutAddress(pk) : pk);
+  const owner = dest((opts.owner && isSolanaAddress(opts.owner) ? opts.owner : ownerAddress()).trim());
+  const treasury = dest((opts.treasury && isSolanaAddress(opts.treasury) ? opts.treasury : treasuryAddress()).trim());
   const rows: HouseLeg[] = [];
   const add = (to: string, sol: number) => {
     const lamports = Math.round(sol * LAMPORTS_PER_SOL);
@@ -79,8 +95,8 @@ export function houseFeeLegs(opts: HouseFeeOpts): HouseLeg[] {
     add(treasury, half.treasury);
     return rows.filter((r) => r.lamports >= FEE_DUST_LAMPORTS);
   }
-  add(creator, s.dev);
-  add(referrer, s.referral);
+  add(dest(creator), s.dev);
+  add(dest(referrer), s.referral);
   if (mode === "hold") add(treasury, s.owner + s.treasury);
   else {
     add(owner, s.owner);

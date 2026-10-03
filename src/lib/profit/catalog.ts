@@ -102,7 +102,7 @@ export function buildProfitDesk(state: AppState): ProfitDesk {
       wallet: "treasury",
       walletPk: treasury,
       accruedSol: padTreasury,
-      settlement: "On-chain partner 50% of the 1% fee. Cron pulls it into treasury and forwards half to the owner wallet.",
+      settlement: "Harvest pulls unpaid pool fees into paired vaults. Claim on /launch drains the vault in one transfer.",
     },
     {
       id: "pad-owner",
@@ -111,7 +111,7 @@ export function buildProfitDesk(state: AppState): ProfitDesk {
       wallet: "owner",
       walletPk: ownerWallet,
       accruedSol: padOwner,
-      settlement: "Owner 25% of pad partner fees is sent to the owner wallet when the cron sweep lands. No withdraw button.",
+      settlement: "Owner 25% of the 1% lands in the owner vault on harvest. Claim on /launch drains it.",
     },
     {
       id: "pad-creator",
@@ -120,7 +120,7 @@ export function buildProfitDesk(state: AppState): ProfitDesk {
       wallet: "creator",
       walletPk: "coin creator",
       accruedSol: padCreator,
-      settlement: "Creators claim on /launch. Not these buttons.",
+      settlement: "Creator 50% lands in that launcher’s vault on harvest (new configs). Claim on /launch drains it in one transfer.",
     },
     {
       id: "pad-ref",
@@ -138,7 +138,7 @@ export function buildProfitDesk(state: AppState): ProfitDesk {
       wallet: "treasury",
       walletPk: treasury,
       accruedSol: seatSolAccrued,
-      settlement: "Sent live in the seat Phantom tx: 25% owner / 75% protocol (12.5% owner if referred).",
+      settlement: "Sent in the seat Phantom tx into owner and treasury vaults (12.5% owner if referred).",
     },
     {
       id: "pin",
@@ -147,7 +147,7 @@ export function buildProfitDesk(state: AppState): ProfitDesk {
       wallet: "treasury",
       walletPk: treasury,
       accruedSol: pinSolAccrued,
-      settlement: "Sent live in the pin Phantom tx: 50% owner / 50% treasury.",
+      settlement: "Sent in the pin Phantom tx into owner and treasury vaults 50/50.",
     },
     {
       id: "boost",
@@ -156,7 +156,7 @@ export function buildProfitDesk(state: AppState): ProfitDesk {
       wallet: "treasury",
       walletPk: treasury,
       accruedSol: boostSolAccrued,
-      settlement: "Sent live in the boost Phantom tx: 50% owner / 50% treasury.",
+      settlement: "Sent in the boost Phantom tx into owner and treasury vaults 50/50.",
     },
   ];
   const treasurySol = padTreasury + pinSolAccrued + boostSolAccrued + seatSolAccrued + swapSolAccrued;

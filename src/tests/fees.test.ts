@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { DEFAULT_OWNER, DEFAULT_TREASURY } from "../lib/protocolWallets";
 import { feeOn, splitFee } from "../lib/launch/curve";
-import { houseFeeLegs, houseShare } from "../lib/fees/payout";
+import { harvestSplit, houseFeeLegs, houseShare } from "../lib/fees/payout";
 
 const FROM = "CyaE1VxvBrahnPWkqm5VsdCvyS2QmNht2UFrKJHga54o";
 const REF = "D4uCNcBKAbG9NAkmhQg7pBiztuejNzbWrZDcZmFGut81";
@@ -21,6 +21,7 @@ describe("house fee legs", () => {
       feeSol: fee,
       owner: DEFAULT_OWNER,
       treasury: DEFAULT_TREASURY,
+      vaults: false,
     });
     const owner = legs.find((l) => l.to === DEFAULT_OWNER);
     const treas = legs.find((l) => l.to === DEFAULT_TREASURY);
@@ -43,6 +44,7 @@ describe("house fee legs", () => {
       referrer: REF,
       owner: DEFAULT_OWNER,
       treasury: DEFAULT_TREASURY,
+      vaults: false,
     });
     assert.equal(legs.length, 4);
     assert.equal(legs.find((l) => l.to === DEV)?.lamports, 5_000_000);
@@ -64,6 +66,7 @@ describe("house fee legs", () => {
       owner: DEFAULT_OWNER,
       treasury: DEFAULT_TREASURY,
       mode: "hold",
+      vaults: false,
     });
     assert.equal(legs.length, 1);
     assert.equal(legs[0]!.to, DEFAULT_TREASURY);
@@ -77,6 +80,7 @@ describe("house fee legs", () => {
       owner: DEFAULT_OWNER,
       treasury: DEFAULT_TREASURY,
       mode: "even",
+      vaults: false,
     });
     assert.equal(legs.length, 2);
     assert.equal(legs.find((l) => l.to === DEFAULT_OWNER)?.lamports, 100_000_000);
@@ -91,8 +95,23 @@ describe("house fee legs", () => {
       owner: DEFAULT_OWNER,
       treasury: DEFAULT_TREASURY,
       mode: "split",
+      vaults: false,
     });
     assert.equal(legs.find((l) => l.to === DEFAULT_OWNER)?.lamports, 2_500_000);
     assert.equal(legs.find((l) => l.to === DEFAULT_TREASURY)?.lamports, 7_500_000);
+  });
+
+  it("harvests legacy partner-only claims 50/50 owner and treasury", () => {
+    const s = harvestSplit(0.008, true, true);
+    assert.equal(s.dev, 0);
+    assert.equal(s.owner, 0.004);
+    assert.equal(s.treasury, 0.004);
+  });
+
+  it("harvests full 1% claims 50 creator / 25 owner / 25 treasury", () => {
+    const s = harvestSplit(0.01, false, true);
+    assert.equal(s.dev, 0.005);
+    assert.equal(s.owner, 0.0025);
+    assert.equal(s.treasury, 0.0025);
   });
 });

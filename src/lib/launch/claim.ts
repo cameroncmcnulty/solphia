@@ -110,6 +110,12 @@ export function claimHint(p: { nextSol: number; restCount: number; restSol: numb
   return `Phantom will credit ${all} SOL, minus the network fee.`;
 }
 
+/** Vault drain — one transfer, no per-pool Phantom. */
+export function vaultClaimHint(sol: number): string {
+  if (!(sol > 0)) return "";
+  return `Claim all ${fmtClaimSol(sol)} SOL. One transfer from your Solphia vault into this Phantom.`;
+}
+
 export function claimablePartner<T extends { mint?: string; partnerUnclaimedSol?: number }>(rows: T[]): T[] {
   return uniqueByMint(rows).filter((row) => (Number(row.partnerUnclaimedSol) || 0) > CLAIM_DUST_SOL);
 }

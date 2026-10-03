@@ -4,6 +4,7 @@ import {
   CLAIM_DUST_SOL,
   claimButtonSol,
   claimHint,
+  vaultClaimHint,
   claimSolFromBalances,
   claimableCreator,
   fmtClaimSol,
@@ -91,6 +92,9 @@ describe("creator claim amounts", () => {
     const last = nextCreatorPayout([rows[1]!]);
     assert.equal(fmtClaimSol(claimButtonSol(last)), fmtClaimSol(last.totalUnclaimed));
     assert.match(claimHint(last), /Phantom will credit 0\.021962 SOL/);
+    assert.match(vaultClaimHint(0.083811), /Claim all 0\.083811 SOL/);
+    assert.match(vaultClaimHint(0.083811), /One transfer/);
+    assert.equal(vaultClaimHint(0), "");
   });
 
   it("advertises the simulated SOL credit Phantom shows, not a stale pool field", () => {

@@ -54,7 +54,29 @@ export async function GET(req: NextRequest) {
   const foundation = state.foundationWallet || "";
   const airdrop = state.airdropWallet || foundation;
   const lp = state.lpWallet || "";
-  const keys = [treasury, owner, dev, foundation, airdrop, lp, ...admins, ...traders.map((t) => t.tradingPubkey)];
+  let ownerVault = "";
+  let treasuryVault = "";
+  try {
+    const { feeVaultAddress, vaultsConfigured } = await import("@/lib/fees/vault");
+    if (vaultsConfigured()) {
+      treasuryVault = feeVaultAddress(treasury);
+      if (owner) ownerVault = feeVaultAddress(owner);
+    }
+  } catch {
+    /* live wallets still load */
+  }
+  const keys = [
+    treasury,
+    owner,
+    dev,
+    foundation,
+    airdrop,
+    lp,
+    ownerVault,
+    treasuryVault,
+    ...admins,
+    ...traders.map((t) => t.tradingPubkey),
+  ];
   const bal = await solBalances(keys);
   const solUsd = lastPairPrices().solUsd || 0;
   let tokens = 0;
@@ -78,7 +100,9 @@ export async function GET(req: NextRequest) {
     solUsd,
     hot: treasuryHot(),
     treasury: { pk: treasury, sol: bal[treasury] || 0 },
+    treasuryVault: treasuryVault ? { pk: treasuryVault, sol: bal[treasuryVault] || 0 } : null,
     owner: { pk: owner, sol: owner ? bal[owner] || 0 : 0 },
+    ownerVault: ownerVault ? { pk: ownerVault, sol: bal[ownerVault] || 0 } : null,
     dev: { pk: dev, sol: dev ? bal[dev] || 0 : 0, tokens, mint, decimals },
     foundation: { pk: foundation, sol: foundation ? bal[foundation] || 0 : 0 },
     airdrop: { pk: airdrop, sol: airdrop ? bal[airdrop] || 0 : 0 },

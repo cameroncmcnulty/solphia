@@ -6,7 +6,7 @@ import path from "node:path";
 describe("partner fee sweep", () => {
   it("server-signs one pool at a time and never packs claims", () => {
     const src = readFileSync(path.join(process.cwd(), "src/lib/launch/partnerSweep.ts"), "utf8");
-    assert.match(src, /treasuryKeypair/);
+    assert.match(src, /harvestKeypair/);
     assert.match(src, /buildDbcClaimPartnerBatch/);
     assert.match(src, /signSendAndConfirm/);
     assert.equal(src.includes("assembleClaimTx"), false);
@@ -14,9 +14,10 @@ describe("partner fee sweep", () => {
     const dbc = readFileSync(path.join(process.cwd(), "src/lib/launch/dbc.ts"), "utf8");
     assert.match(dbc, /buildDbcClaimPartnerBatch/);
     assert.equal(dbc.includes("ownerCut"), false);
-    assert.match(src, /evenShare/);
+    assert.match(src, /harvestSplit/);
+    assert.match(src, /payoutAddress/);
     assert.match(src, /ownerAddress/);
-    assert.match(src, /sendTreasurySol|packClaimWithOwnerCut/);
+    assert.match(src, /packClaimWithLegs|sendHarvestSol/);
     const cron = readFileSync(path.join(process.cwd(), "src/app/api/cron/tick/route.ts"), "utf8");
     assert.match(cron, /sweepPartnerFees/);
   });

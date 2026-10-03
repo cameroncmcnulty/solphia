@@ -41,7 +41,7 @@ import { BoostBuy, BoostRail, fmtLeft } from "@/components/BoostBuy";
 
 import { TokenImageCrop, readLaunchImage, type CropSource } from "@/components/TokenImageCrop";
 import { yourLaunches } from "@/lib/launch/yours";
-import { claimableCreator, claimButtonSol, claimHint, fmtClaimSol, nextCreatorPayout, sortByNewest, sumCreatorGenerated, uniqueByMint } from "@/lib/launch/claim";
+import { claimableCreator, claimButtonSol, claimHint, fmtClaimSol, nextCreatorPayout, sortByNewest, sumCreatorGenerated, uniqueByMint, vaultClaimHint } from "@/lib/launch/claim";
 import { preferLiveLabel } from "@/lib/launch/labels";
 import { clearPending, loadPending, savePending, type PendingLaunch } from "@/lib/launch/pending";
 import { hideLaunch, loadHidden } from "@/lib/launch/hidden";
@@ -372,6 +372,7 @@ export default function LaunchPage() {
   const [ownerWallet, setOwnerWallet] = useState("");
   const [treasuryWallet, setTreasuryWallet] = useState("");
   const [protocol, setProtocol] = useState<{ partnerUnclaimedSol: number; partnerFeesSol: number } | null>(null);
+  const [vault, setVault] = useState<{ pk: string; sol: number; claimableSol: number } | null>(null);
   const lastMintRef = useRef("");
   const finishPhantomRef = useRef<(sig: string, after: PhAfter) => Promise<void>>(async () => {});
   const cropUrlRef = useRef<string>("");
@@ -517,6 +518,15 @@ export default function LaunchPage() {
       });
     } else {
       setProtocol(null);
+    }
+    if (pad.vault && typeof pad.vault === "object" && typeof pad.vault.pk === "string") {
+      setVault({
+        pk: pad.vault.pk,
+        sol: Number(pad.vault.sol) || 0,
+        claimableSol: Number(pad.vault.claimableSol) || 0,
+      });
+    } else {
+      setVault(null);
     }
     const d = pad.draft as Record<string, unknown> | null | undefined;
     if (!tookDraft.current && d && typeof d === "object" && typeof d.name === "string" && d.name) {
@@ -1421,6 +1431,42 @@ export default function LaunchPage() {
     }
   }
 
+  async function claimVault(mints: string[]): Promise<{ sol: number; harvested: number } | null> {
+    if (!owner) return null;
+    setBusy(true);
+    setWork("claim");
+    setTab("mine");
+    writeLaunchTab("mine");
+    setMsg("Harvesting unpaid pools into your vault…");
+    setErr("");
+    try {
+      const r = await fetch("/api/launch", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "claim_vault", pubkey: owner, mints }),
+      });
+      const j = await r.json().catch(() => null);
+      if (!r.ok) return null;
+      const sol = Number(j?.sol) || 0;
+      const harvested = Number(j?.harvested?.claimed) || 0;
+      await Promise.all([refreshPad(true), refreshTape()]).catch(() => {});
+      if (sol > 0) {
+        setMsg(`Claimed ${fmtClaimSol(sol)} SOL into this wallet.`);
+        return { sol, harvested };
+      }
+      if (harvested > 0) {
+        setMsg("Harvested into your vault. Tap Claim to drain it in one transfer.");
+        return { sol: 0, harvested };
+      }
+      return null;
+    } catch {
+      return null;
+    } finally {
+      setBusy(false);
+      setWork("");
+    }
+  }
+
   const mine = uniqueByMint(
     (owner && treasuryWallet && owner === treasuryWallet
       ? coins.filter((c) => c.born)
@@ -1985,51 +2031,41 @@ export default function LaunchPage() {
                 <p className="font-mono text-[11px] tracking-[0.28em] text-acid">TREASURY + OWNER</p>
                 <h2 className="mt-1 text-[22px] font-semibold tracking-tight text-white">Protocol cut</h2>
                 <p className="mt-1 text-[14px] leading-snug text-white/45">
-                  Curve swaps split the protocol half 25/25 owner and treasury. Unclaimed sits on-chain until this is claimed.
+                  Curve swaps split 25/25 owner and treasury into paired vaults. Claim drains your vault into this Phantom in one transfer.
                 </p>
                 <div className="mt-4 grid grid-cols-2 gap-3">
                   <div>
-                    <p className="font-mono text-[10px] text-white/40">GENERATED</p>
-                    <p className="stat-num text-[18px] text-acid">{fmtSol(protocol.partnerFeesSol, 4)} SOL</p>
+                    <p className="font-mono text-[10px] text-white/40">IN VAULT</p>
+                    <p className="stat-num text-[18px] text-acid">{fmtSol(vault?.claimableSol || 0, 4)} SOL</p>
                   </div>
                   <div>
-                    <p className="font-mono text-[10px] text-white/40">UNCLAIMED</p>
+                    <p className="font-mono text-[10px] text-white/40">STILL IN POOLS</p>
                     <p className="stat-num text-[18px] text-white">{fmtSol(protocol.partnerUnclaimedSol, 4)} SOL</p>
                   </div>
                 </div>
                 <button
                   type="button"
-                  disabled={busy || !((protocol.partnerUnclaimedSol || 0) > 1e-6 || coins.some((c) => (c.partnerUnclaimedSol || 0) > 1e-6))}
+                  disabled={busy || !((vault?.claimableSol || 0) > 1e-6 || (protocol.partnerUnclaimedSol || 0) > 1e-6 || coins.some((c) => (c.partnerUnclaimedSol || 0) > 1e-6))}
                   onClick={() => {
-                    claimSeqRef.current = 0;
-                    claimLock.current = "";
-                    const unpaid = coins.filter((c) => (c.partnerUnclaimedSol || 0) > 1e-6).map((c) => c.mint).filter(Boolean);
+                    const unpaid = coins
+                      .filter((c) => (c.partnerUnclaimedSol || 0) > 1e-6)
+                      .map((c) => c.mint)
+                      .filter((m): m is string => Boolean(m));
                     void (async () => {
-                      const r = await fetch("/api/launch", {
-                        method: "POST",
-                        headers: { "content-type": "application/json" },
-                        body: JSON.stringify({ action: "sweep_partner", pubkey: owner, mints: unpaid }),
-                      });
-                      const j = await r.json().catch(() => null);
-                      if (j?.swept?.claimed) {
-                        setMsg(`Routed ${fmtClaimSol(Number(j.swept.sol) || 0)} SOL to treasury and owner.`);
-                        await Promise.all([refreshPad(true), refreshTape()]).catch(() => {});
-                        return;
-                      }
-                      const first = unpaid[0] || coins.find((c) => (c.partnerUnclaimedSol || 0) > 1e-6)?.mint;
-                      if (owner === treasuryWallet && first) {
-                        act({ action: "withdraw_partner", mint: first, mints: unpaid, claimAll: true });
-                      } else {
-                        setErr("Protocol fees need the treasury wallet or TREASURY_SECRET to land.");
-                      }
+                      const got = await claimVault(unpaid);
+                      if (got) return;
+                      setErr("Protocol fees need TREASURY_SECRET on the server so unpaid pools can harvest into the vault.");
                     })();
                   }}
                   className="mt-4 rounded-full bg-[#14f195] px-4 py-2 text-[14px] font-semibold text-[#04000a] disabled:opacity-40"
                 >
-                  {(protocol.partnerUnclaimedSol || 0) > 0
-                    ? `Claim all ${fmtSol(protocol.partnerUnclaimedSol, 4)} SOL`
+                  {(vault?.claimableSol || 0) + (protocol.partnerUnclaimedSol || 0) > 0
+                    ? `Claim ${(vault?.claimableSol || 0) > 0 ? fmtSol(vault?.claimableSol || 0, 4) : fmtSol(protocol.partnerUnclaimedSol, 4)} SOL`
                     : "Claim protocol fees"}
                 </button>
+                {(vault?.claimableSol || 0) > 0 ? (
+                  <p className="mt-2 text-[12px] text-white/40">{vaultClaimHint(vault?.claimableSol || 0)}</p>
+                ) : null}
               </div>
             )}
             {!isSwap && (
@@ -2037,7 +2073,9 @@ export default function LaunchPage() {
                 <p className="font-mono text-[11px] tracking-[0.28em] text-acid">DEV REWARDS</p>
                 <h2 className="mt-1 text-[22px] font-semibold tracking-tight text-white">Claim fees</h2>
                 <p className="mt-1 text-[14px] leading-snug text-white/45">
-                  Unclaimed is every unpaid token added up. Claim all — Phantom asks once per token until this hits 0.
+                  {vault
+                    ? "Fees land in your Solphia vault as pools are harvested. Claim sends the full vault into this Phantom in one transfer."
+                    : "Unclaimed is every unpaid token added up. Claim all — Phantom asks once per token until this hits 0."}
                 </p>
                 <div className="mt-4 grid grid-cols-2 gap-3">
                   <div>
@@ -2046,34 +2084,47 @@ export default function LaunchPage() {
                   </div>
                   <div>
                     <p className="font-mono text-[10px] text-white/40">UNCLAIMED</p>
-                    <p className="stat-num text-[18px] text-white">{fmtClaimSol(unclaimedSol)} SOL</p>
+                    <p className="stat-num text-[18px] text-white">
+                      {fmtClaimSol(Math.max(vault?.claimableSol || 0, unclaimedSol))} SOL
+                    </p>
                   </div>
                 </div>
                 <div className="mt-4 flex flex-wrap gap-2">
                   <button
                     type="button"
-                    disabled={busy || claimable.length === 0}
+                    disabled={busy || ((vault?.claimableSol || 0) <= 0 && claimable.length === 0)}
                     onClick={() => {
-                      const mint = payout.next?.mint;
-                      if (!mint) return;
-                      claimSeqRef.current = 0;
-                      claimLock.current = "";
-                      setTab("mine");
-                      writeLaunchTab("mine");
-                      act({
-                        action: "withdraw_dev",
-                        id: payout.next?.id,
-                        mint,
-                        mints: claimable.map((c) => c.mint).filter(Boolean),
-                        claimAll: true,
-                      });
+                      const mints = claimable.map((c) => c.mint).filter(Boolean) as string[];
+                      void (async () => {
+                        const got = await claimVault(mints);
+                        if (got?.sol) return;
+                        const mint = payout.next?.mint;
+                        if (!mint) return;
+                        claimSeqRef.current = 0;
+                        claimLock.current = "";
+                        setTab("mine");
+                        writeLaunchTab("mine");
+                        act({
+                          action: "withdraw_dev",
+                          id: payout.next?.id,
+                          mint,
+                          mints,
+                          claimAll: true,
+                        });
+                      })();
                     }}
                     className="rounded-full bg-[#14f195] px-4 py-2 text-[14px] font-semibold text-[#04000a] disabled:opacity-40"
                   >
-                    {claimButtonSol(payout) > 0 ? `Claim all ${fmtClaimSol(claimButtonSol(payout))} SOL` : "Claim creator fees"}
+                    {(vault?.claimableSol || 0) > 0
+                      ? `Claim ${fmtClaimSol(vault?.claimableSol || 0)} SOL`
+                      : claimButtonSol(payout) > 0
+                        ? `Claim all ${fmtClaimSol(claimButtonSol(payout))} SOL`
+                        : "Claim creator fees"}
                   </button>
                 </div>
-                {unclaimedSol > 0 ? (
+                {(vault?.claimableSol || 0) > 0 ? (
+                  <p className="mt-2 text-[12px] text-white/40">{vaultClaimHint(vault?.claimableSol || 0)}</p>
+                ) : unclaimedSol > 0 ? (
                   <p className="mt-2 text-[12px] text-white/40">{claimHint(payout)}</p>
                 ) : null}
                 {tab === "mine" && (msg || err) ? (
