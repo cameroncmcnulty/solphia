@@ -13,10 +13,12 @@ import { encodeTx } from "../token/mint";
 import { bytesToB64 } from "../solana/wire";
 import { treasuryAddress } from "../treasury";
 import { liveDbcConfig, dbcEnabled } from "./dbcIds";
-import { MIN_TRADE_SOL } from "./curve";
+import { emptyCurve, MIN_TRADE_SOL, quoteBuy } from "./curve";
 import { CLAIM_DUST_SOL, feesFromPoolAccount } from "./claim";
 
 const WSOL = "So11111111111111111111111111111111111111112";
+/** Unsigned mint/config signers make RPC sim a false fail. Size is the real gate. */
+const LEGACY_MAX = 1232;
 
 export { dbcEnabled };
 
@@ -142,6 +144,42 @@ async function readyTx(tx: Transaction, payer: PublicKey): Promise<Transaction> 
   return tx;
 }
 
+function asTransaction(raw: unknown): Transaction {
+  if (raw instanceof Transaction) return raw;
+  if (raw && typeof raw === "object" && Array.isArray((raw as Transaction).instructions)) {
+    return raw as Transaction;
+  }
+  if (raw && typeof raw === "object") {
+    const o = raw as {
+      createConfigTx?: Transaction;
+      createPoolWithFirstBuyTx?: Transaction;
+      createPoolTx?: Transaction;
+    };
+    const tx = new Transaction();
+    for (const part of [o.createConfigTx, o.createPoolWithFirstBuyTx, o.createPoolTx]) {
+      if (part?.instructions) for (const ix of part.instructions) tx.add(ix);
+    }
+    if (tx.instructions.length) return tx;
+  }
+  throw new Error("Launch builder did not encode a transaction.");
+}
+
+function firstBuyParam(payer: PublicKey, buySol: number) {
+  return {
+    buyer: payer,
+    receiver: payer,
+    buyAmount: new BN(Math.round(buySol * 1e9)),
+    minimumAmountOut: new BN(1),
+    referralTokenAccount: null,
+  };
+}
+
+function estimateLaunchTokens(buySol: number): number {
+  if (!(buySol >= MIN_TRADE_SOL)) return 0;
+  const q = quoteBuy(emptyCurve(), buySol);
+  return q.ok ? Number(q.tokensOut) || 0 : 0;
+}
+
 export async function dbcPoolByMint(mint: string) {
   if (!dbcEnabled()) return null;
   try {
@@ -175,24 +213,34 @@ export async function buildDbcLaunchTx(opts: {
   feeSol: number;
   config?: string;
   configSecret?: string;
+  firstBuyIncluded: boolean;
 }> {
   if (!dbcEnabled()) throw new Error("DBC config missing.");
   const payer = new PublicKey(opts.payer);
   const mint = new PublicKey(opts.mint);
   const buySol = Math.max(0, Number(opts.buySol) || 0);
+  const wantBuy = buySol >= MIN_TRADE_SOL;
   const existing = await dbcConfigOnchain(opts.config);
   const name = opts.name.slice(0, 32);
   const symbol = opts.symbol.slice(0, 10);
   const uri = opts.uri.slice(0, 255);
-  const firstBuy =
-    buySol >= MIN_TRADE_SOL
-      ? {
-          buyer: payer,
-          buyAmount: new BN(Math.round(buySol * 1e9)),
-          minimumAmountOut: new BN(1),
-          referralTokenAccount: null,
-        }
-      : undefined;
+  const tokensOut = estimateLaunchTokens(buySol);
+  const feeSol = wantBuy ? buySol * 0.01 : 0;
+  const firstBuy = wantBuy ? firstBuyParam(payer, buySol) : undefined;
+
+  async function pack(raw: unknown, firstBuyIncluded: boolean, extra?: { config?: string; configSecret?: string }) {
+    const tx = await readyTx(asTransaction(raw), payer);
+    const encoded = encodeTx(tx);
+    if (Buffer.from(encoded, "base64").length > LEGACY_MAX) return null;
+    return {
+      transaction: encoded,
+      mint: mint.toBase58(),
+      tokensOut: firstBuyIncluded ? tokensOut : 0,
+      feeSol: firstBuyIncluded ? feeSol : 0,
+      firstBuyIncluded,
+      ...extra,
+    };
+  }
 
   if (existing) {
     const createPoolParam = {
@@ -204,17 +252,26 @@ export async function buildDbcLaunchTx(opts: {
       config: new PublicKey(existing),
       baseMint: mint,
     };
-    const raw = firstBuy
-      ? await client().creator.createPoolWithFirstBuy({ createPoolParam, firstBuyParam: firstBuy })
-      : await client().creator.createPool(createPoolParam);
-    const tx = await readyTx(raw as Transaction, payer);
-    return { transaction: encodeTx(tx), mint: mint.toBase58(), tokensOut: 0, feeSol: buySol * 0.01, config: existing };
+    if (firstBuy) {
+      try {
+        const raw = await client().creator.createPoolWithFirstBuy({ createPoolParam, firstBuyParam: firstBuy });
+        const hit = await pack(raw, true, { config: existing });
+        if (hit) return hit;
+      } catch {
+        /* first buy ix did not fit — pool still launches, client follows with a buy */
+      }
+    }
+    const raw = await client().creator.createPool(createPoolParam);
+    const launched = await pack(raw, false, { config: existing });
+    if (!launched) throw new Error("Could not build the launch.");
+    return launched;
   }
 
   const configKp = Keypair.generate();
   const treasury = new PublicKey(treasuryAddress());
   const curve = await solphiaCurveConfig();
-  const raw = await client().partner.createConfigAndPool({
+  const extra = { config: configKp.publicKey.toBase58(), configSecret: bytesToB64(configKp.secretKey) };
+  const base = {
     ...curve,
     config: configKp.publicKey,
     feeClaimer: treasury,
@@ -228,16 +285,20 @@ export async function buildDbcLaunchTx(opts: {
       poolCreator: payer,
       baseMint: mint,
     },
-  });
-  const tx = await readyTx(raw as Transaction, payer);
-  return {
-    transaction: encodeTx(tx),
-    mint: mint.toBase58(),
-    tokensOut: 0,
-    feeSol: buySol * 0.01,
-    config: configKp.publicKey.toBase58(),
-    configSecret: bytesToB64(configKp.secretKey),
   };
+  if (firstBuy) {
+    try {
+      const raw = await client().partner.createConfigAndPoolWithFirstBuy({ ...base, firstBuyParam: firstBuy });
+      const hit = await pack(raw, true, extra);
+      if (hit) return hit;
+    } catch {
+      /* config+pool+buy too big — launch the pool, then buy */
+    }
+  }
+  const raw = await client().partner.createConfigAndPool(base);
+  const launched = await pack(raw, false, extra);
+  if (!launched) throw new Error("Could not build the launch.");
+  return launched;
 }
 
 export type DbcFees = {
@@ -387,25 +448,27 @@ export async function chainPartnerTotals(config: string): Promise<{
 }> {
   const empty = { unclaimedSol: 0, totalSol: 0, byMint: {} as Record<string, DbcFees> };
   if (!dbcEnabled() || !config) return empty;
-  const dbc = client();
-  let pools: { publicKey: PublicKey; account: any }[] = [];
-  try {
-    pools = await dbc.state.getPoolsByConfig(config);
-  } catch {
-    return empty;
-  }
-  let unclaimedSol = 0;
-  let totalSol = 0;
-  const byMint: Record<string, DbcFees> = {};
-  for (const row of pools) {
-    const mint = mintOfPool(row);
-    if (!mint) continue;
-    const fees = feesFromPoolAccount(poolInner(row));
-    byMint[mint] = fees;
-    unclaimedSol += fees.partnerUnclaimedSol;
-    totalSol += fees.partnerFeesSol;
-  }
-  return { unclaimedSol, totalSol, byMint };
+  return cached("partner:" + config, 15_000, async () => {
+    const dbc = client();
+    let pools: { publicKey: PublicKey; account: any }[] = [];
+    try {
+      pools = await dbc.state.getPoolsByConfig(config);
+    } catch {
+      return empty;
+    }
+    let unclaimedSol = 0;
+    let totalSol = 0;
+    const byMint: Record<string, DbcFees> = {};
+    for (const row of pools) {
+      const mint = mintOfPool(row);
+      if (!mint) continue;
+      const fees = feesFromPoolAccount(poolInner(row));
+      byMint[mint] = fees;
+      unclaimedSol += fees.partnerUnclaimedSol;
+      totalSol += fees.partnerFeesSol;
+    }
+    return { unclaimedSol, totalSol, byMint };
+  });
 }
 
 export type DbcClaimBatch = {
@@ -540,9 +603,11 @@ export async function buildDbcClaimPartnerBatch(opts: {
   mints: string[];
   owner: string;
   receiver?: string;
+  payer?: string;
 }): Promise<DbcClaimBatch | { ok: false; error: string }> {
   const dbc = client();
   const claimer = new PublicKey(opts.owner);
+  const payer = new PublicKey(opts.payer || opts.owner);
   const max = new BN("1000000000000000");
   const wanted = (opts.mints || []).map((m) => String(m || "").trim()).filter(Boolean);
   const unpaid: { mint: string; unclaimedSol: number; pool: PublicKey }[] = [];
@@ -600,13 +665,13 @@ export async function buildDbcClaimPartnerBatch(opts: {
     try {
       const raw = await dbc.partner.claimPartnerTradingFee({
         feeClaimer: claimer,
-        payer: claimer,
+        payer,
         pool: hit.pool,
         maxBaseAmount: max,
         maxQuoteAmount: max,
         receiver: opts.receiver ? new PublicKey(opts.receiver) : undefined,
       });
-      const tx = await readyTx(raw as Transaction, claimer);
+      const tx = await readyTx(raw as Transaction, payer);
       if (!(await simulateClaim(tx))) continue;
       const rest = unpaid.filter((p) => p.mint !== hit.mint);
       return {

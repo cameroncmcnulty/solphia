@@ -35,12 +35,12 @@ export function creditPartnerClaim(book: LaunchBook, claimSol: number, partnerOn
   creditProtocol(book, { ownerSol: s.owner, treasurySol: s.treasury, kind: "swap", grossSol: claimSol });
 }
 
-/** Jupiter / open-market 1% has no Solphia creator: 25% owner (12.5% if referred) / rest protocol. */
-export function creditSwapHold(book: LaunchBook, feeSol: number, referred: boolean) {
-  const s = splitFee(Math.max(0, feeSol), referred);
+/** Widget open-market 1% has no Solphia creator: 50% owner / 50% treasury live. */
+export function creditSwapHold(book: LaunchBook, feeSol: number, _referred: boolean) {
+  const s = evenShare(Math.max(0, feeSol));
   creditProtocol(book, {
     ownerSol: s.owner,
-    treasurySol: s.treasury + s.dev,
+    treasurySol: s.treasury,
     kind: "swap",
     grossSol: feeSol,
   });

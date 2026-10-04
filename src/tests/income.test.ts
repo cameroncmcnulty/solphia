@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { creditEvenIncome, creditPartnerClaim, creditSwapHold, evenShare } from "../lib/fees/income";
 import { emptyLaunchBook } from "../lib/launch/engine";
-import { feeOn, splitFee } from "../lib/launch/curve";
+import { feeOn } from "../lib/launch/curve";
 
 describe("protocol income accrual", () => {
   it("splits boosts and pins 50/50", () => {
@@ -29,24 +29,20 @@ describe("protocol income accrual", () => {
     assert.equal(book.swapFeesSol, 0.004);
   });
 
-  it("holds Jupiter / open-market 1% as 25% owner when nobody invited the swapper", () => {
+  it("holds widget open-market 1% as 50/50 owner and treasury", () => {
     const book = emptyLaunchBook();
     const fee = feeOn(1);
     creditSwapHold(book, fee, false);
-    const s = splitFee(fee, false);
-    assert.equal(book.ownerEarningsSol, s.owner);
-    assert.equal(book.treasuryFeesSol, s.treasury + s.dev);
+    assert.equal(book.ownerEarningsSol, 0.005);
+    assert.equal(book.treasuryFeesSol, 0.005);
     assert.equal(book.swapFeesSol, fee);
   });
 
-  it("cuts only the owner share when the swapper was invited", () => {
+  it("keeps open-market 50/50 even when the swapper was invited (referral is curve-only)", () => {
     const book = emptyLaunchBook();
     const fee = feeOn(1);
     creditSwapHold(book, fee, true);
-    const s = splitFee(fee, true);
-    assert.equal(book.ownerEarningsSol, s.owner);
-    assert.equal(s.owner, 0.00125);
-    assert.equal(s.referral, 0.00125);
-    assert.equal(s.treasury, 0.0025);
+    assert.equal(book.ownerEarningsSol, 0.005);
+    assert.equal(book.treasuryFeesSol, 0.005);
   });
 });

@@ -236,6 +236,7 @@ async function prepareMint(b: LaunchBody) {
       uri: art.uri,
       image: art.image,
       tokensOut: built.tokensOut,
+      firstBuyIncluded: "firstBuyIncluded" in built ? Boolean(built.firstBuyIncluded) : (Number(b.launchBuySol) || 0) > 0,
       config: "config" in built ? built.config : undefined,
       configSecret: "configSecret" in built ? built.configSecret : undefined,
     });
@@ -406,7 +407,8 @@ async function getLaunch(req: NextRequest) {
   }
   tickBoosts(book);
   const treas = treasuryAddress();
-  const isProtocol = Boolean(viewer && (viewer === treas || viewer === book.ownerWallet || viewer === DEFAULT_OWNER));
+  const ownerPk = (book.ownerWallet || DEFAULT_OWNER).trim();
+  const isProtocol = Boolean(viewer && (viewer === treas || viewer === ownerPk || viewer === DEFAULT_OWNER));
   const wantChain = dbcEnabled() && Boolean(viewer && isSolanaAddress(viewer) && (!listAll || sync));
   let chainFees: Awaited<ReturnType<typeof hydrateViewerFromChain>> = [];
   if (wantChain) {
@@ -467,19 +469,21 @@ async function getLaunch(req: NextRequest) {
       rows.push(extra);
     }
   }
-  let protocol: { treasury: string; partnerUnclaimedSol: number; partnerFeesSol: number } | null = null;
-  if (sync && isProtocol && dbcEnabled()) {
+  let protocol: { treasury: string; owner: string; partnerUnclaimedSol: number; partnerFeesSol: number } | null = null;
+  if (isProtocol && dbcEnabled() && !listAll) {
     const dbc = await dbcApi();
     const cfg = liveDbcConfig(fresh.dbcConfig);
     try {
       const tot = cfg ? await dbc.chainPartnerTotals(cfg) : { unclaimedSol: 0, totalSol: 0, byMint: {} };
-      for (const row of rows) {
-        const f = row.mint ? tot.byMint[row.mint] : undefined;
-        if (f) Object.assign(row, f);
+      if (sync) {
+        for (const row of rows) {
+          const f = row.mint ? tot.byMint[row.mint] : undefined;
+          if (f) Object.assign(row, f);
+        }
       }
-      protocol = { treasury: treas, partnerUnclaimedSol: tot.unclaimedSol, partnerFeesSol: tot.totalSol };
+      protocol = { treasury: treas, owner: ownerPk, partnerUnclaimedSol: tot.unclaimedSol, partnerFeesSol: tot.totalSol };
     } catch {
-      protocol = { treasury: treas, partnerUnclaimedSol: 0, partnerFeesSol: 0 };
+      protocol = { treasury: treas, owner: ownerPk, partnerUnclaimedSol: 0, partnerFeesSol: 0 };
     }
   }
   let vault: { pk: string; sol: number; claimableSol: number } | null = null;
@@ -492,7 +496,7 @@ async function getLaunch(req: NextRequest) {
   return NextResponse.json({
     coins: rows,
     solUsd,
-    ownerWallet: fresh.ownerWallet || null,
+    ownerWallet: fresh.ownerWallet || DEFAULT_OWNER,
     ownerEarningsSol: fresh.ownerEarningsSol,
     treasuryWallet: treas,
     boosts: liveBoosts(fresh).map((b) => publicLiveBoost(b)),
@@ -741,8 +745,6 @@ async function postLaunch(req: NextRequest) {
   if (b.action === "withdraw_partner") {
     const snap = await withLaunch((st) => st, false);
     const book = bookOf(snap);
-    const treas = treasuryAddress();
-    if (b.pubkey !== treas) return fail("not_owner");
     const mint =
       (b.mint && isSolanaAddress(b.mint) ? b.mint : "") ||
       (b.mints || []).find((m) => isSolanaAddress(m)) ||
@@ -750,21 +752,25 @@ async function postLaunch(req: NextRequest) {
       "";
     if (!dbcEnabled()) return fail("not_found", 404);
     const mints = [mint, ...(b.mints || []), ...book.coins.map((c) => c.mint || "")].filter((m) => isSolanaAddress(m));
-    const built = await (await dbcApi()).buildDbcClaimPartnerBatch({ mints, owner: b.pubkey });
+    const { buildProtocolPartnerClaim } = await import("@/lib/launch/partnerSweep");
+    const built = await buildProtocolPartnerClaim({ pubkey: b.pubkey, mints });
     if (!built.ok) return fail(built.error);
-    const { decoratePartnerClaimTx } = await import("@/lib/launch/partnerSweep");
-    const transaction = await decoratePartnerClaimTx(built.transaction, b.pubkey, {
-      claimSol: built.claimSol,
-      partnerOnly: built.partnerOnly,
-      creator: built.creator,
-    });
+    if (!built.needsSign) {
+      return NextResponse.json({
+        ok: true,
+        claimed: true,
+        partner: true,
+        sol: built.sol,
+        swept: built,
+      });
+    }
     const coin = book.coins.find((c) => c.mint && built.mints.includes(c.mint));
     return NextResponse.json({
       ok: true,
       needsSign: true,
       claim: true,
       partner: true,
-      transaction,
+      transaction: built.transaction,
       claimSol: built.claimSol,
       claimMints: built.mints,
       remaining: built.remaining,

@@ -13,6 +13,7 @@ import { withLaunch } from "../store";
 import { connection } from "../solana/connection";
 import { encodeTx } from "../token/mint";
 import { simulateUnsignedB64 } from "../solana/simulate";
+import { DEFAULT_OWNER } from "../protocolWallets";
 
 const TREASURY_KEEP_LAMPORTS = 2_000_000;
 
@@ -101,6 +102,107 @@ function harvestLegs(
   add(opts.owner, opts.split.owner);
   add(opts.treasury, opts.split.treasury);
   return rows;
+}
+
+/**
+ * Owner and treasury are different Phantoms. Either can pull the partner half.
+ * DBC feeClaimer is still the treasury; owner claims co-sign or sweep when TREASURY_SECRET
+ * is set, otherwise owner signs if they are the claimer. After the pull, the other
+ * wallet's 50% of that partner half is transferred live in the same tx.
+ */
+export async function buildProtocolPartnerClaim(opts: {
+  pubkey: string;
+  mints: string[];
+}): Promise<
+  | {
+      ok: true;
+      needsSign: true;
+      transaction: string;
+      claimSol: number;
+      mints: string[];
+      creator?: string;
+      partnerOnly: boolean;
+      remaining: number;
+      remainingSol: number;
+      remainingMints: string[];
+    }
+  | {
+      ok: true;
+      needsSign: false;
+      claimed: number;
+      sol: number;
+      ownerSol: number;
+      signatures: string[];
+    }
+  | { ok: false; error: string }
+> {
+  const treas = treasuryAddress();
+  const ownerPk = ownerAddress() || DEFAULT_OWNER;
+  const pubkey = (opts.pubkey || "").trim();
+  const isTreas = pubkey === treas;
+  const isOwner = pubkey === ownerPk || pubkey === DEFAULT_OWNER;
+  if (!isTreas && !isOwner) return { ok: false, error: "not_owner" };
+
+  const { buildDbcClaimPartnerBatch } = await import("./dbc");
+  const mints = opts.mints;
+
+  if (isOwner && !isTreas) {
+    const hot = harvestKeypair();
+    if (hot) {
+      const swept = await sweepPartnerFees({ mints, limit: 4 });
+      if (swept.claimed > 0) {
+        return {
+          ok: true,
+          needsSign: false,
+          claimed: swept.claimed,
+          sol: swept.ownerSol,
+          ownerSol: swept.ownerSol,
+          signatures: swept.signatures,
+        };
+      }
+    }
+  }
+
+  const claimers = isTreas ? [treas] : [...new Set([pubkey, treas].filter(Boolean))];
+  const hot = harvestKeypair();
+  for (const claimer of claimers) {
+    if (claimer !== pubkey && !hot) continue;
+    const built = await buildDbcClaimPartnerBatch({
+      mints,
+      owner: claimer,
+      payer: pubkey,
+      receiver: pubkey,
+    });
+    if (!built.ok) continue;
+    let b64 = built.transaction;
+    if (claimer !== pubkey && hot) {
+      try {
+        const tx = Transaction.from(Buffer.from(b64, "base64"));
+        tx.partialSign(hot);
+        b64 = encodeTx(tx);
+      } catch {
+        continue;
+      }
+    }
+    const transaction = await decoratePartnerClaimTx(b64, pubkey, {
+      claimSol: built.claimSol,
+      partnerOnly: built.partnerOnly,
+      creator: built.creator,
+    });
+    return {
+      ok: true,
+      needsSign: true,
+      transaction,
+      claimSol: built.claimSol,
+      mints: built.mints,
+      creator: built.creator,
+      partnerOnly: built.partnerOnly,
+      remaining: built.remaining,
+      remainingSol: built.remainingSol,
+      remainingMints: built.remainingMints,
+    };
+  }
+  return { ok: false, error: "empty" };
 }
 
 /** Pack owner (and creator, if any) live transfers onto a Phantom-signed partner claim. */

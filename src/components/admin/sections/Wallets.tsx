@@ -258,7 +258,7 @@ export function WalletsSection() {
         <WalletCard
           kicker="OWNER · OUT"
           title="Owner"
-          blurb="Live 25% of house fees and 50% of boosts/pins. Pad 25% is sent here when treasury claims."
+          blurb="Live 25% of curve fees and 50% of widget open-market / boosts / pins. Claim pad share on /launch with this owner Phantom."
           pk={pack?.owner.pk || data.ownerWallet}
           sol={pack?.owner.sol ?? 0}
           solUsd={solUsd}
@@ -634,29 +634,30 @@ function ProfitsPanel() {
       <div className="font-mono text-[10px] tracking-[0.28em] text-acid">PROFITS</div>
       <h2 className="mt-1 font-display text-2xl text-ghost">What we take, where it lands</h2>
       <p className="mt-2 max-w-2xl text-sm text-mute">
-        Split is 50% creator / 25% owner / 25% treasury (owner 12.5% if referred). Boosts and pins: 50/50 live to those
-        Phantoms. Pad 1% stays in the pool until the treasury Phantom claims — Phantom asks once per unpaid token, and
-        the owner 25% is transferred in that same approval.
+        Split is 50% creator / 25% owner / 25% treasury (owner 12.5% if referred). Boosts, pins, and widget open-market
+        swaps: 50/50 live to those Phantoms. Curve swaps keep the on-chain 1% (creator 50%). Owner and treasury are
+        different wallets — each claims its own share from /launch.
       </p>
       <div className="mt-4 grid gap-3 md:grid-cols-2">
         <div className="rounded-2xl border border-acid/25 bg-acid/[0.04] p-4">
           <div className="font-mono text-[10px] tracking-[0.2em] text-acid">TREASURY · LIVE</div>
           <div className="mt-2 font-display text-3xl text-ghost">{money(p.accrued.treasurySol)}</div>
           <p className="mt-1 text-sm text-mute">
-            25% of swap and launch fees, 50% of boosts and pins, live in this Phantom.
+            25% of curve fees, 50% of widget open-market / boosts / pins, live in this Phantom.
             {claim?.dbcPartnerSol
-              ? ` ${claim.dbcPartnerSol.toFixed(4)} SOL still sitting in pad pools — connect the treasury Phantom on /launch to claim.`
+              ? ` ${claim.dbcPartnerSol.toFixed(4)} SOL still sitting in pad pools — claim on /launch with this treasury Phantom.`
               : hot
                 ? " Optional cron can harvest pad partner fees into this Phantom."
-                : " Pad partner fees claim with the treasury Phantom on /launch."}
+                : " Pad partner fees claim with this treasury Phantom on /launch. Owner claims its share from the owner Phantom."}
           </p>
         </div>
         <div className="rounded-2xl border border-violet/25 bg-void/40 p-4">
           <div className="font-mono text-[10px] tracking-[0.2em] text-mute">OWNER · LIVE</div>
           <div className="mt-2 font-display text-3xl text-ghost">{money(p.accrued.ownerSol)}</div>
           <p className="mt-1 text-sm text-mute">
-            25% of swaps and launches (12.5% if the trader was invited) and 50% of boosts and pins, live to{" "}
-            {p.ownerWallet ? shortPk(p.ownerWallet, 4) : "the owner Phantom"}. Pad 25% arrives when treasury claims.
+            25% of curve swaps and launches (12.5% if the trader was invited) and 50% of widget open-market / boosts /
+            pins, live to {p.ownerWallet ? shortPk(p.ownerWallet, 4) : "the owner Phantom"}. Claim pad share on /launch
+            while connected to that owner Phantom — not the treasury.
           </p>
         </div>
       </div>

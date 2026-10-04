@@ -53,6 +53,7 @@ import type { BoostRank } from "@/lib/launch/boost";
 import { filterTape, sortByTrending, sortTape, type AgeFilter, type VolWindow } from "@/lib/launch/tape";
 import { isSolanaAddress } from "@/lib/wallet/addr";
 import { peekRef } from "@/components/ReferralCapture";
+import { DEFAULT_OWNER, DEFAULT_TREASURY } from "@/lib/protocolWallets";
 
 
 const PRESETS = [0.1, 0.25, 0.5, 1];
@@ -369,8 +370,8 @@ export default function LaunchPage() {
   const [snapAt, setSnapAt] = useState(0);
   const [pending, setPending] = useState<PendingLaunch[]>([]);
   const [hidden, setHidden] = useState<string[]>([]);
-  const [ownerWallet, setOwnerWallet] = useState("");
-  const [treasuryWallet, setTreasuryWallet] = useState("");
+  const [ownerWallet, setOwnerWallet] = useState(DEFAULT_OWNER);
+  const [treasuryWallet, setTreasuryWallet] = useState(DEFAULT_TREASURY);
   const [protocol, setProtocol] = useState<{ partnerUnclaimedSol: number; partnerFeesSol: number } | null>(null);
   const [vault, setVault] = useState<{ pk: string; sol: number; claimableSol: number } | null>(null);
   const lastMintRef = useRef("");
@@ -516,8 +517,6 @@ export default function LaunchPage() {
         partnerUnclaimedSol: Number(pad.protocol.partnerUnclaimedSol) || 0,
         partnerFeesSol: Number(pad.protocol.partnerFeesSol) || 0,
       });
-    } else {
-      setProtocol(null);
     }
     if (pad.vault && typeof pad.vault === "object" && typeof pad.vault.pk === "string") {
       setVault({
@@ -921,6 +920,7 @@ export default function LaunchPage() {
         telegram,
         discord,
         launchBuySol: devBuy,
+        firstBuyIncluded: Boolean(pj.firstBuyIncluded),
       });
       savePending({ mint: mintPk, name: name.trim(), symbol: symbol.trim().toUpperCase(), image, at: Date.now(), sig });
       setPending(loadPending());
@@ -1011,6 +1011,14 @@ export default function LaunchPage() {
       window.setTimeout(() => {
         document.getElementById("your-tokens")?.scrollIntoView({ behavior: "smooth", block: "start" });
       }, 80);
+      if (devBuy >= 0.01 && !pj.firstBuyIncluded) {
+        try {
+          await signDevBuy(owner, mintPk, typeof j.coin?.id === "string" ? j.coin.id : undefined, devBuy);
+        } catch (buyErr) {
+          if (isPhantomRedirect(buyErr)) throw buyErr;
+          setErr(buyErr instanceof Error ? buyErr.message : "First buy did not land. Buy it from Your tokens.");
+        }
+      }
       setMsg(
         devBuy > 0
           ? `Live on the Solphia curve. CA ${mintPk}. First buy is in this wallet. If Phantom hides it: Manage Tokens, toggle on, Report as not spam.`
@@ -1102,6 +1110,7 @@ export default function LaunchPage() {
         ...after,
         kind: "launch_pool",
         tokensOut: Number(p2.tokensOut) || 0,
+        firstBuyIncluded: Boolean(p2.firstBuyIncluded),
         uri: typeof p2.uri === "string" ? p2.uri : after.uri,
         image: typeof p2.image === "string" ? p2.image : after.image,
         config: typeof p2.config === "string" ? p2.config : after.config,
@@ -1162,6 +1171,14 @@ export default function LaunchPage() {
       clearPending(mintPk);
       setPending(loadPending());
       await Promise.all([refreshPad(), refreshTape()]).catch(() => {});
+      if ((Number(after.launchBuySol) || 0) >= 0.01 && !after.firstBuyIncluded) {
+        try {
+          await signDevBuy(ownerPk, mintPk, typeof j.coin?.id === "string" ? j.coin.id : undefined, Number(after.launchBuySol) || 0);
+        } catch (buyErr) {
+          if (isPhantomRedirect(buyErr)) throw buyErr;
+          setErr(buyErr instanceof Error ? buyErr.message : "First buy did not land. Buy it from Your tokens.");
+        }
+      }
       createErr.ok();
       setName("");
       setSymbol("");
@@ -1280,6 +1297,42 @@ export default function LaunchPage() {
   }
 
   finishPhantomRef.current = finishPhantomLaunch;
+
+  async function signDevBuy(payer: string, mint: string, id: string | undefined, sol: number) {
+    if (!(sol >= 0.01) || !mint || !payer) return;
+    setBusy(true);
+    setWork("swap");
+    setMsg(`Live. Sign the ${sol} SOL first buy in Phantom…`);
+    let last = "curve_missing";
+    for (let i = 0; i < 8; i++) {
+      if (i) await new Promise((r) => setTimeout(r, 2000));
+      const r = await fetch("/api/launch", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "buy", pubkey: payer, mint, id, sol }),
+      });
+      const j = await r.json();
+      if (r.ok && j.needsSign && j.transaction) {
+        await signPhantomAndSend(j.transaction, undefined, {
+          kind: "swap",
+          owner: payer,
+          mint,
+          id,
+          side: "buy",
+          sol,
+          tokens: Number(j.tokensOut) || 0,
+        });
+        setBusy(false);
+        setWork("");
+        return;
+      }
+      last = typeof j.error === "string" ? j.error : last;
+      if (last !== "curve_missing" && last !== "chain_failed") break;
+    }
+    setBusy(false);
+    setWork("");
+    throw new Error(launchError(last) || "First buy did not land. Buy it from Your tokens.");
+  }
 
   async function act(body: Record<string, unknown>) {
     if (!owner) {
@@ -2026,61 +2079,63 @@ export default function LaunchPage() {
               </div>
             </div>
             )}
-            {!isSwap && owner && protocol && (owner === treasuryWallet || owner === ownerWallet) && (
+            {!isSwap && owner && (owner === treasuryWallet || owner === ownerWallet) && (
               <div className="mb-4 rounded-3xl border border-white/10 bg-black/30 p-4">
-                <p className="font-mono text-[11px] tracking-[0.28em] text-acid">TREASURY + OWNER</p>
-                <h2 className="mt-1 text-[22px] font-semibold tracking-tight text-white">Protocol cut</h2>
+                <p className="font-mono text-[11px] tracking-[0.28em] text-acid">
+                  {owner === treasuryWallet ? "TREASURY" : "OWNER"}
+                </p>
+                <h2 className="mt-1 text-[22px] font-semibold tracking-tight text-white">
+                  {owner === treasuryWallet ? "Treasury cut" : "Owner cut"}
+                </h2>
                 <p className="mt-1 text-[14px] leading-snug text-white/45">
                   {owner === treasuryWallet
-                    ? "Connect this treasury Phantom to claim. Phantom asks once per unpaid token. Each claim lands here and sends the owner 25% in the same approval."
-                    : "Partner fees claim with the treasury Phantom. Your 25% is transferred to this wallet in that same approval."}
+                    ? "This Phantom is treasury — a different wallet from owner. Claim your 25% of unpaid pad curve fees here. Widget open-market swaps already land 50/50 here live."
+                    : "This Phantom is owner — a different wallet from treasury. Claim your 25% of unpaid pad curve fees here. Widget open-market swaps already land 50/50 here live. Curve swaps keep 50% for the coin creator."}
                 </p>
                 <div className="mt-4 grid grid-cols-2 gap-3">
                   <div>
-                    <p className="font-mono text-[10px] text-white/40">STILL IN POOLS</p>
-                    <p className="stat-num text-[18px] text-acid">{fmtSol(protocol.partnerUnclaimedSol, 4)} SOL</p>
+                    <p className="font-mono text-[10px] text-white/40">YOUR PAD SHARE</p>
+                    <p className="stat-num text-[18px] text-acid">
+                      {fmtSol((protocol?.partnerUnclaimedSol || 0) / 2, 4)} SOL
+                    </p>
                   </div>
                   <div>
-                    <p className="font-mono text-[10px] text-white/40">TREASURY WALLET</p>
-                    <p className="stat-num text-[14px] text-white">{treasuryWallet.slice(0, 4)}…{treasuryWallet.slice(-4)}</p>
+                    <p className="font-mono text-[10px] text-white/40">STILL IN POOLS</p>
+                    <p className="stat-num text-[18px] text-white">{fmtSol(protocol?.partnerUnclaimedSol || 0, 4)} SOL</p>
                   </div>
                 </div>
-                {owner === treasuryWallet ? (
-                  <button
-                    type="button"
-                    disabled={busy || !((protocol.partnerUnclaimedSol || 0) > 1e-6 || coins.some((c) => (c.partnerUnclaimedSol || 0) > 1e-6))}
-                    onClick={() => {
-                      const unpaid = coins
-                        .filter((c) => (c.partnerUnclaimedSol || 0) > 1e-6)
-                        .map((c) => c.mint)
-                        .filter((m): m is string => Boolean(m));
-                      const mint = unpaid[0];
-                      if (!mint) {
-                        setErr("No unpaid partner fees on listed tokens.");
-                        return;
-                      }
-                      claimSeqRef.current = 0;
-                      claimLock.current = "";
-                      setTab("mine");
-                      writeLaunchTab("mine");
-                      act({
-                        action: "withdraw_partner",
-                        mint,
-                        mints: unpaid,
-                        claimAll: true,
-                      });
-                    }}
-                    className="mt-4 rounded-full bg-[#14f195] px-4 py-2 text-[14px] font-semibold text-[#04000a] disabled:opacity-40"
-                  >
-                    {(protocol.partnerUnclaimedSol || 0) > 0
-                      ? `Claim ${fmtSol(protocol.partnerUnclaimedSol, 4)} SOL`
-                      : "Claim protocol fees"}
-                  </button>
-                ) : (
-                  <p className="mt-4 text-[12px] text-white/40">
-                    Switch to the treasury Phantom to claim unpaid pools.
-                  </p>
-                )}
+                <button
+                  type="button"
+                  disabled={busy || !((protocol?.partnerUnclaimedSol || 0) > 1e-6 || coins.some((c) => (c.partnerUnclaimedSol || 0) > 1e-6))}
+                  onClick={() => {
+                    const unpaid = coins
+                      .filter((c) => (c.partnerUnclaimedSol || 0) > 1e-6)
+                      .map((c) => c.mint)
+                      .filter((m): m is string => Boolean(m));
+                    const mint = unpaid[0];
+                    if (!mint) {
+                      setErr("No unpaid partner fees on listed tokens.");
+                      return;
+                    }
+                    claimSeqRef.current = 0;
+                    claimLock.current = "";
+                    setTab("mine");
+                    writeLaunchTab("mine");
+                    act({
+                      action: "withdraw_partner",
+                      mint,
+                      mints: unpaid,
+                      claimAll: true,
+                    });
+                  }}
+                  className="mt-4 rounded-full bg-[#14f195] px-4 py-2 text-[14px] font-semibold text-[#04000a] disabled:opacity-40"
+                >
+                  {(protocol?.partnerUnclaimedSol || 0) > 0
+                    ? `Claim ${fmtSol((protocol?.partnerUnclaimedSol || 0) / 2, 4)} SOL`
+                    : owner === treasuryWallet
+                      ? "Claim treasury fees"
+                      : "Claim owner fees"}
+                </button>
               </div>
             )}
             {!isSwap && (

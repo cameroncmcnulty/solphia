@@ -28,6 +28,7 @@ export type PhAfter = {
   telegram?: string;
   discord?: string;
   launchBuySol?: number;
+  firstBuyIncluded?: boolean;
   id?: string;
   claim?: boolean;
   partner?: boolean;

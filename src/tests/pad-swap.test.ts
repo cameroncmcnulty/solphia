@@ -73,6 +73,12 @@ describe("open market swap fees", () => {
     assert.match(src, /assemblePhantomSwapTx/);
     assert.equal(/assembleSwapTx/.test(src), false);
     assert.match(src, /liveSwapFeeSol/);
+    const phantom = readFileSync(path.join(process.cwd(), "src/lib/swap/build.ts"), "utf8");
+    assert.match(phantom, /assemblePhantomSwapTx/);
+    assert.match(phantom, /mode: "even"/);
+    assert.equal(phantom.includes("if (packed !== built.transaction)"), false);
+    const swapBuild = readFileSync(path.join(process.cwd(), "src/app/api/swap/build/route.ts"), "utf8");
+    assert.match(swapBuild, /creditSwapHold/);
     assert.match(src, /Not enough SOL in this wallet/);
     assert.equal(liveSwapFeeSol(1), 0.01);
     const pair = readFileSync(path.join(process.cwd(), "src/app/api/pair/swap/route.ts"), "utf8");

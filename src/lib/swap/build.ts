@@ -10,7 +10,7 @@ import {
 } from "@solana/web3.js";
 import { rpcUrl } from "../config";
 import { buildSwapTx, type JupiterQuote } from "../pair/jupiter";
-import { boundReferrer, houseFeeIxs } from "../fees/payout";
+import { boundReferrer, houseFeeIxs, type HouseFeeMode } from "../fees/payout";
 import { simulateUnsignedB64 } from "../solana/simulate";
 
 const IX_URLS = ["https://lite-api.jup.ag/swap/v1/swap-instructions", "https://api.jup.ag/swap/v1/swap-instructions"];
@@ -90,9 +90,9 @@ export function appendLegacyFee(b64: string, feeIx: TransactionInstruction, feeA
 }
 
 /**
- * Phantom / Blowfish path. Jupiter's own swapTransaction, unchanged v0.
- * 1% SOL skim is only attached when Jupiter can still return a legacy tx that fits.
- * Live bot still uses assembleSwapTx (no Blowfish).
+ * Phantom path. Widget open-market 1% is 50/50 owner / treasury live.
+ * Prefer a legacy Jupiter tx with those legs attached. Never fall back to a bare
+ * swap that skips the split. v0 + house legs is last resort (Blowfish-sensitive).
  */
 export async function assemblePhantomSwapTx(opts: {
   owner: string;
@@ -107,26 +107,46 @@ export async function assemblePhantomSwapTx(opts: {
     from: opts.owner,
     feeSol: opts.feeSol || 0,
     referrer: boundReferrer(person),
-    mode: "split",
+    mode: "even",
   });
   let last = "Could not build the swap.";
+  const preferAfter = Boolean(opts.feeAfter);
   for (const asLegacy of [true, false]) {
     const built = await buildSwapTx(opts.quote, opts.owner, { asLegacy });
     if (!built.ok) {
       last = built.reason;
       continue;
     }
-    let packed = built.transaction;
     if (feeIxs.length && asLegacy) {
-      packed = appendLegacyFees(packed, feeIxs, Boolean(opts.feeAfter)) || packed;
+      for (const feeAfter of [preferAfter, !preferAfter]) {
+        const packed = appendLegacyFees(built.transaction, feeIxs, feeAfter);
+        if (!packed) continue;
+        const sim = await simulateUnsignedB64(packed);
+        if (sim.ok) return { ok: true, transaction: packed };
+        last = sim.reason;
+      }
+      continue;
     }
-    const sim = await simulateUnsignedB64(packed);
-    if (sim.ok) return { ok: true, transaction: packed };
-    last = sim.reason;
-    if (packed !== built.transaction) {
-      const bare = await simulateUnsignedB64(built.transaction);
-      if (bare.ok) return { ok: true, transaction: built.transaction };
+    if (!feeIxs.length) {
+      const sim = await simulateUnsignedB64(built.transaction);
+      if (sim.ok) return { ok: true, transaction: built.transaction };
+      last = sim.reason;
     }
+  }
+  if (feeIxs.length) {
+    const v0 = await assembleSwapTx({
+      owner: opts.owner,
+      quote: opts.quote,
+      feeSol: opts.feeSol,
+      feeAfter: opts.feeAfter,
+      person: opts.person,
+      mode: "even",
+    });
+    if (v0.ok) {
+      const sim = await simulateUnsignedB64(v0.transaction);
+      if (sim.ok) return v0;
+      last = sim.reason;
+    } else last = v0.reason;
   }
   return { ok: false, reason: last };
 }
@@ -140,6 +160,8 @@ export async function assembleSwapTx(opts: {
   feeAfter?: boolean;
   /** Human generating the fee. Trading-wallet swaps pass the Phantom owner here. */
   person?: string;
+  /** Default split (bot clips). Widget open-market passes even (50/50). */
+  mode?: HouseFeeMode;
 }): Promise<{ ok: true; transaction: string } | { ok: false; reason: string }> {
   const ixPayload = await fetchSwapInstructions(opts.quote, opts.owner);
   if (!ixPayload) return { ok: false, reason: "Could not build the swap." };
@@ -154,7 +176,7 @@ export async function assembleSwapTx(opts: {
     from: opts.owner,
     feeSol: opts.feeSol || 0,
     referrer: boundReferrer(opts.person || opts.owner),
-    mode: "split",
+    mode: opts.mode || "split",
   });
   if (feeIxs.length && !opts.feeAfter) ixs.push(...feeIxs);
   ixs.push(...setup, swap);

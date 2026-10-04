@@ -89,11 +89,11 @@ export function buildProfitDesk(state: AppState): ProfitDesk {
     {
       id: "swap",
       feature: "Open-market / Jupiter swaps",
-      rate: "1% of SOL · 25% owner / 75% protocol (no token creator)",
+      rate: "1% of SOL · 50% owner / 50% treasury",
       wallet: "treasury",
       walletPk: treasury,
       accruedSol: swapSolAccrued,
-      settlement: "Native SOL skim sends 25% owner / 75% protocol in the swap tx when Phantom can carry it. Jupiter's 1% referral sits at referral.jup.ag.",
+      settlement: "Widget open-market swaps send 50% owner / 50% treasury live in the Phantom tx. Jupiter plugin referral stays at referral.jup.ag — not stacked on this skim.",
     },
     {
       id: "pad-treasury",
@@ -102,7 +102,7 @@ export function buildProfitDesk(state: AppState): ProfitDesk {
       wallet: "treasury",
       walletPk: treasury,
       accruedSol: padTreasury,
-      settlement: "Sits in the pad until the treasury Phantom claims. Phantom asks once per unpaid token. Owner 25% is sent in that same tx.",
+      settlement: "Sits in the pad until claimed. Owner Phantom and treasury Phantom each claim their 25% separately. The on-chain pull still needs the DBC fee claimer, then the other wallet is paid live in that same approval.",
     },
     {
       id: "pad-owner",
@@ -111,7 +111,7 @@ export function buildProfitDesk(state: AppState): ProfitDesk {
       wallet: "owner",
       walletPk: ownerWallet,
       accruedSol: padOwner,
-      settlement: "Owner 25% of the 1% is transferred live to the owner Phantom when treasury claims the partner half.",
+      settlement: "Owner 25% of the 1% is paid to the owner Phantom (not the treasury). Owner can claim from /launch while connected to that Phantom.",
     },
     {
       id: "pad-creator",

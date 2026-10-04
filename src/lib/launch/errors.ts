@@ -34,7 +34,7 @@ export const LAUNCH_ERRORS: Record<string, string> = {
   fee_eats_trade: "Fee would eat the whole trade.",
   not_creator: "Only the creator can withdraw dev rewards.",
   empty: "Nothing to withdraw.",
-  not_owner: "Owner wallet only.",
+  not_owner: "Owner or treasury Phantom only — two different wallets, each claims its own share.",
   self_referral: "You cannot invite yourself.",
   already_referred: "This wallet already has an inviter.",
   bad_username: "Username must be 3–20 letters, start with a letter, and use only letters, numbers, or _.",

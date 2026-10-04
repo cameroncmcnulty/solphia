@@ -6,6 +6,7 @@ import { buildAnySwapTx } from "@/lib/swap/open";
 import { withLaunch } from "@/lib/store";
 import { emptyLaunchBook } from "@/lib/launch/engine";
 import { creditRank } from "@/lib/rank/engine";
+import { creditSwapHold } from "@/lib/fees/income";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -46,6 +47,7 @@ export async function POST(req: NextRequest) {
     await withLaunch((s) => {
       if (!s.launch) s.launch = emptyLaunchBook();
       creditRank(s.launch, b.owner, "swap", { sol: inputMint === SOL_MINT ? b.amount : 0 });
+      if (tx.via === "jupiter" && tx.feeSol > 0) creditSwapHold(s.launch, tx.feeSol, false);
     }, true);
   } catch {
     /* swap still goes out */
