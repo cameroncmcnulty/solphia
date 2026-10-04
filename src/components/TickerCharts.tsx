@@ -29,7 +29,10 @@ export function TickerCharts() {
       }
     }
     load();
-    const id = setInterval(load, 25_000);
+    const id = setInterval(() => {
+      if (document.hidden) return;
+      load();
+    }, 25_000);
     return () => {
       stop = true;
       clearInterval(id);

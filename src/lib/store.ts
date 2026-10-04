@@ -39,7 +39,7 @@ let boot: Promise<AppState> | null = null;
 let knownTraderOwners: string[] = [];
 let lastOpsPull = 0;
 let lastMutateAt = 0;
-const OPS_PULL_MS = 800;
+const OPS_PULL_MS = 2500;
 
 function touchMutate(state?: AppState) {
   lastMutateAt = Date.now();
@@ -736,7 +736,7 @@ export async function withCircle<T>(fn: (state: AppState) => T | Promise<T>, wri
 }
 
 let shillPullAt = 0;
-const SHILL_PULL_MS = 400;
+const SHILL_PULL_MS = 1800;
 
 async function saveShillOnly(next: AppState): Promise<void> {
   mem = next;

@@ -113,6 +113,7 @@ export function PumpLoop() {
       })
       .catch(() => {});
     const tick = window.setInterval(() => {
+      if (document.hidden) return;
       const p = player.current;
       if (!p?.getCurrentTime) return;
       try {

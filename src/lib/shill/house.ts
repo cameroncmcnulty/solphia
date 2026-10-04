@@ -67,6 +67,20 @@ const LINES = [
   (s: string, ca: string) => `don't fade ${s} ${ca}`,
   (s: string, ca: string) => `chart on ${s} ${ca}`,
   (s: string, ca: string) => `${s} ${ca} stays`,
+  (s: string, ca: string) => `${s} needs a reclaim ${ca}`,
+  (s: string, ca: string) => `not chasing ${s} ${ca}`,
+  (s: string, ca: string) => `${s} bid is there ${ca}`,
+  (s: string, ca: string) => `${s} ${ca} nfa`,
+  (s: string, ca: string) => `same ${s} ${ca}`,
+  (s: string, ca: string) => `${s} or nothing ${ca}`,
+  (s: string, ca: string) => `watching the wick on ${s} ${ca}`,
+  (s: string, ca: string) => `${s} ${ca} if it holds`,
+  (s: string, ca: string) => `same ${s} level ${ca}`,
+  (s: string, ca: string) => `${s} reclaim or nothing ${ca}`,
+  (s: string, ca: string) => `not fading ${s} ${ca}`,
+  (s: string, ca: string) => `${s} ${ca} volume first`,
+  (s: string, ca: string) => `bid is there on ${s} ${ca}`,
+  (s: string, ca: string) => `${s} ${ca} nfa imo`,
 ];
 
 export type Rng = () => number;

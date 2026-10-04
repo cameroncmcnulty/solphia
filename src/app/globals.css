@@ -1085,3 +1085,20 @@ body.shill-kbd .bottom-nav {
   transform: translateY(110%);
   pointer-events: none;
 }
+
+/* Mobile first: composer sits above BottomNav (58px) + home indicator + browser chrome. */
+.shill-dock {
+  padding-bottom: calc(7.5rem + env(safe-area-inset-bottom, 0px));
+}
+.shill-overlay-dock {
+  bottom: calc(7.5rem + env(safe-area-inset-bottom, 0px));
+}
+/* Web/desktop: BottomNav is hidden; raise the typing bar off the OS taskbar. */
+@media (min-width: 768px) {
+  .shill-dock {
+    padding-bottom: 6rem;
+  }
+  .shill-overlay-dock {
+    bottom: 6rem;
+  }
+}

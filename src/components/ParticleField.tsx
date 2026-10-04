@@ -48,13 +48,23 @@ export function ParticleField() {
       return () => window.removeEventListener("resize", resize);
     }
     const loop = () => {
+      if (document.hidden) {
+        raf = 0;
+        return;
+      }
       draw(true);
       raf = requestAnimationFrame(loop);
     };
+    const vis = () => {
+      if (!document.hidden && !raf) loop();
+    };
+    document.addEventListener("visibilitychange", vis);
     loop();
     return () => {
       cancelAnimationFrame(raf);
+      raf = 0;
       window.removeEventListener("resize", resize);
+      document.removeEventListener("visibilitychange", vis);
     };
   }, []);
 

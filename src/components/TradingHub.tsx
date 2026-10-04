@@ -135,7 +135,10 @@ export function TradingHub() {
 
   useEffect(() => {
     if (!owner) return;
-    const id = setInterval(() => refreshAuto(owner), 12_000);
+    const id = setInterval(() => {
+      if (document.hidden) return;
+      refreshAuto(owner);
+    }, 12_000);
     return () => clearInterval(id);
   }, [owner]);
 

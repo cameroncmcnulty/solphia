@@ -68,7 +68,10 @@ function CircleInner() {
 
   useEffect(() => {
     load().catch(() => setReady(true));
-    const t = setInterval(() => load().catch(() => {}), 6000);
+    const t = setInterval(() => {
+      if (document.hidden) return;
+      load().catch(() => {});
+    }, 10_000);
     return () => clearInterval(t);
   }, [load]);
 

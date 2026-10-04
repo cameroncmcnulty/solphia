@@ -220,7 +220,7 @@ function Sheet({
   if (!open) return null;
   return (
     <div
-      className="fixed inset-x-0 top-0 z-[45] flex items-end justify-center bg-black/70 bottom-[calc(4.85rem+env(safe-area-inset-bottom))] md:bottom-[4.25rem] md:items-center md:p-4"
+      className="shill-overlay-dock fixed inset-x-0 top-0 z-[45] flex items-end justify-center bg-black/70 md:items-center md:p-4"
       onClick={onClose}
     >
       <div
@@ -398,11 +398,11 @@ export default function ShillPage() {
         .catch(() => {})
         .finally(() => {
           if (stop) return;
-          timer = window.setTimeout(tick, document.hidden ? 8000 : 700);
+          timer = window.setTimeout(tick, document.hidden ? 12_000 : 1200);
         });
     };
     load(true).catch(() => {});
-    timer = window.setTimeout(tick, 700);
+    timer = window.setTimeout(tick, 1200);
     const vis = () => {
       if (!document.hidden) load(false).catch(() => {});
     };
@@ -416,8 +416,15 @@ export default function ShillPage() {
   }, [load]);
 
   useEffect(() => {
-    const t = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(t);
+    const tick = () => {
+      if (!document.hidden) setNow(Date.now());
+    };
+    const t = window.setInterval(tick, 1000);
+    document.addEventListener("visibilitychange", tick);
+    return () => {
+      window.clearInterval(t);
+      document.removeEventListener("visibilitychange", tick);
+    };
   }, []);
 
   useEffect(() => {
@@ -668,7 +675,7 @@ export default function ShillPage() {
   const live = pack?.members || 0;
 
   return (
-    <main ref={frame} className="fixed inset-0 z-10 flex flex-col overflow-hidden pb-[calc(4.85rem+env(safe-area-inset-bottom))] md:pb-[4.25rem]">
+    <main ref={frame} className="shill-dock fixed inset-0 z-10 flex flex-col overflow-hidden">
       {!entered ? (
         <HumanGate
           everyVisit
@@ -947,7 +954,7 @@ export default function ShillPage() {
           </div>
         )}
 
-        <div className={`relative z-[60] shrink-0 border-t border-white/10 bg-[#04000a] pb-1 md:pb-2 ${tab === "chat" ? "" : "hidden"}`}>
+        <div className={`relative z-[60] shrink-0 border-t border-white/10 bg-[#04000a] pb-3 md:pb-6 ${tab === "chat" ? "" : "hidden"}`}>
           {!owner ? (
             <div className="flex items-center gap-3 px-3 py-3">
               <input
@@ -1052,7 +1059,7 @@ export default function ShillPage() {
 
         {openPin && (
           <div
-            className="fixed inset-x-0 top-0 z-[46] flex items-end justify-center bg-black/55 p-3 bottom-[calc(4.85rem+env(safe-area-inset-bottom))] backdrop-blur-sm md:bottom-[4.25rem] md:items-center"
+            className="shill-overlay-dock fixed inset-x-0 top-0 z-[46] flex items-end justify-center bg-black/55 p-3 backdrop-blur-sm md:items-center"
             onClick={() => setOpenPin(null)}
           >
             <div className="panel-bubble w-full max-w-sm rounded-3xl p-4" onClick={(e) => e.stopPropagation()}>

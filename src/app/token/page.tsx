@@ -39,7 +39,10 @@ export default function TokenPage() {
     load();
     const onFocus = () => load();
     window.addEventListener("focus", onFocus);
-    const tick = window.setInterval(load, 20_000);
+    const tick = window.setInterval(() => {
+      if (document.hidden) return;
+      load();
+    }, 20_000);
     return () => {
       live = false;
       window.removeEventListener("focus", onFocus);

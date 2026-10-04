@@ -33,7 +33,10 @@ export function useMarket(pollMs = 15000) {
       return;
     }
     refresh();
-    const id = setInterval(refresh, pollMs);
+    const id = setInterval(() => {
+      if (document.hidden) return;
+      refresh();
+    }, pollMs);
     return () => clearInterval(id);
   }, [refresh, pollMs]);
 

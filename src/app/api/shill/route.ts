@@ -53,7 +53,7 @@ type LightSnap = {
   members: number;
 };
 let lightSnap: LightSnap | null = null;
-const LIGHT_MS = 280;
+const LIGHT_MS = 900;
 
 function paintMsg(m: ShillMessage) {
   return {

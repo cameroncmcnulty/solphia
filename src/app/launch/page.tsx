@@ -702,10 +702,24 @@ export default function LaunchPage() {
     }
     refreshTape().catch(() => setTapeLoading(false));
     refreshBoosts().catch(() => {});
-    const padT = setInterval(() => refreshPad(false).catch(() => {}), 20_000);
-    const tapeT = setInterval(() => refreshTape().catch(() => {}), 60_000);
-    const boostT = setInterval(() => refreshBoosts().catch(() => {}), 20_000);
-    const syncT = isSwap ? null : setInterval(() => refreshPad(true).catch(() => {}), 90_000);
+    const padT = setInterval(() => {
+      if (document.hidden) return;
+      refreshPad(false).catch(() => {});
+    }, 20_000);
+    const tapeT = setInterval(() => {
+      if (document.hidden) return;
+      refreshTape().catch(() => {});
+    }, 60_000);
+    const boostT = setInterval(() => {
+      if (document.hidden) return;
+      refreshBoosts().catch(() => {});
+    }, 20_000);
+    const syncT = isSwap
+      ? null
+      : setInterval(() => {
+          if (document.hidden) return;
+          refreshPad(true).catch(() => {});
+        }, 90_000);
     return () => {
       clearInterval(padT);
       clearInterval(tapeT);

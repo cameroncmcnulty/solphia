@@ -6,7 +6,7 @@ import { isSolanaAddress } from "../lib/security";
 import { emptyLaunchBook } from "../lib/launch/engine";
 import { emptyShill, liveRoomCount, mergeShill } from "../lib/shill/engine";
 import { SHILL_PRESENCE_MS } from "../lib/shill/types";
-import { composeHouseChat, phraseCardinality } from "../lib/shill/phrases";
+import { composeHouseChat, phraseCardinality, PHRASE_HOOK, PHRASE_MOVE, PHRASE_TAG } from "../lib/shill/phrases";
 import {
   HOUSE_ACTOR_N,
   HOUSE_CYCLE_MIN_LIFE_MS,
@@ -346,6 +346,22 @@ describe("house chat phrases", () => {
     const seen = new Set<string>();
     for (let i = 0; i < 2500; i++) seen.add(composeHouseChat(rng).text);
     assert.ok(seen.size > 400);
+  });
+
+  it("adds 50000 more combinatorial takes and talks back", () => {
+    assert.ok(PHRASE_HOOK.length * PHRASE_MOVE.length * PHRASE_TAG.length >= 50_000);
+    assert.ok(phraseCardinality() >= 390_000);
+    const rng = mulberry32(7);
+    let replies = 0;
+    for (let i = 0; i < 400; i++) {
+      const m = composeHouseChat(
+        rng,
+        { lastText: "thoughts on this reclaim?", lastId: "m1", lastOwner: "other" },
+        "me",
+      );
+      if (m.replyTo === "m1") replies += 1;
+    }
+    assert.ok(replies > 120);
   });
 });
 
