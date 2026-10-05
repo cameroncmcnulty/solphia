@@ -1,6 +1,7 @@
 import { isSolanaAddress } from "./addr";
 import { persistOwner } from "./owner";
 import { PHANTOM_PARAMS, decryptBox, isPhJob, isPhSession, type PhAfter, type PhJob, type PhSession } from "./phantomBox";
+import { markActionSpot, spotFromAfter } from "./actionSpot";
 
 export type { PhAfter };
 
@@ -256,6 +257,7 @@ export async function openPhantomUl(opts?: {
   after?: PhAfter;
   pubkey?: string | null;
 }): Promise<never> {
+  markActionSpot(spotFromAfter(opts?.after));
   const r = await fetch("/api/phantom", {
     method: "POST",
     headers: { "content-type": "application/json" },

@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { b58dec, b58enc, decryptBox, encryptBox, isPhJob, newDappKey, slimAfter } from "../lib/wallet/phantomBox";
 import { isPhantomUnauthorized, phantomAppUrl, phantomSignError, signerPage } from "../lib/wallet/phantomConnect";
+import { spotFromAfter, spotIsFresh } from "../lib/wallet/actionSpot";
 
 describe("phantom box", () => {
   it("round-trips base58", () => {
@@ -44,6 +45,17 @@ describe("phantom box", () => {
     assert.equal(signerPage("/shill"), true);
     assert.equal(signerPage("/launch"), true);
     assert.equal(signerPage("/admin"), false);
+  });
+
+  it("maps a Phantom after-kind back to the UI that started the action", () => {
+    assert.equal(spotFromAfter({ kind: "claim" }), "creator-fees");
+    assert.equal(spotFromAfter({ kind: "claim", partner: true }), "protocol-fees");
+    assert.equal(spotFromAfter({ kind: "swap" }), "swap-widget");
+    assert.equal(spotFromAfter({ kind: "jup_swap" }), "swap-widget");
+    assert.equal(spotFromAfter({ kind: "launch_pool" }), "solphia-launch");
+    assert.equal(spotFromAfter({ kind: "generic" }), undefined);
+    assert.equal(spotIsFresh(Date.now()), true);
+    assert.equal(spotIsFresh(Date.now() - 4 * 60 * 1000), false);
   });
 
   it("maps Phantom 4001 unauthorized into a connect-again prompt", () => {

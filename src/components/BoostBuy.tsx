@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Rocket } from "lucide-react";
 import { TokenArt } from "@/components/TokenArt";
 import { paySeatFromPhantom, signAndSendPhantom } from "@/lib/wallet/trading";
+import { markActionSpot } from "@/lib/wallet/actionSpot";
 import { isSolanaAddress } from "@/lib/wallet/addr";
 import { MEGA_ROCKETS, ROCKET_PACKS, rocketSol, type BoostRank, type BoostSort } from "@/lib/launch/boost";
 
@@ -91,6 +92,7 @@ export function BoostBuy({
       return;
     }
     setBusy(true);
+    markActionSpot("boost-desk");
     try {
       const body = {
         pubkey: owner,

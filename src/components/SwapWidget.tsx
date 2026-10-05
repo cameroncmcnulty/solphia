@@ -11,6 +11,7 @@ import { useOwner } from "@/lib/hooks";
 import { loadOwner } from "@/lib/wallet/owner";
 import { signPhantomAndSend } from "@/lib/wallet/trading";
 import { isPhantomRedirect, PHANTOM_EVENT } from "@/lib/wallet/phantomConnect";
+import { markActionSpot } from "@/lib/wallet/actionSpot";
 import type { PhAfter } from "@/lib/wallet/phantomBox";
 import { isSolanaAddress } from "@/lib/wallet/addr";
 import { MIN_TRADE_SOL } from "@/lib/launch/curve";
@@ -208,9 +209,19 @@ export function SwapWidget({
   const rootRef = useRef<HTMLDivElement | null>(null);
   const liveRef = useRef(false);
   const lookedUpMint = useRef("");
+  const loadBalsRef = useRef<() => void>(() => undefined);
 
   function stayOnCard() {
-    rootRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    markActionSpot("swap-widget");
+    const go = (n = 0) => {
+      const el = rootRef.current || document.getElementById("swap-widget");
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "start" });
+        return;
+      }
+      if (n < 16) requestAnimationFrame(() => go(n + 1));
+    };
+    go();
   }
 
   const payNum = Number(String(amount).replace(",", "."));
@@ -294,30 +305,53 @@ export function SwapWidget({
   useEffect(() => {
     if (!pk) {
       setBals({});
+      loadBalsRef.current = () => undefined;
       return;
     }
-    const ctrl = new AbortController();
-    const mints = [...new Set([pay.mint, recv.mint, SOL_MINT])];
-    void (async () => {
-      const next: Record<string, number> = {};
-      const sol = await fetch(`/api/sol/balance?pubkey=${encodeURIComponent(pk)}`, { signal: ctrl.signal })
-        .then((r) => r.json())
-        .catch(() => null);
-      next[SOL_MINT] = Number(sol?.sol) || 0;
-      await Promise.all(
-        mints
-          .filter((m) => m !== SOL_MINT)
-          .map(async (m) => {
-            const j = await fetch(`/api/sol/token?owner=${encodeURIComponent(pk)}&mint=${encodeURIComponent(m)}`, { signal: ctrl.signal })
-              .then((r) => r.json())
-              .catch(() => null);
-            next[m] = Number(j?.amount) || 0;
-          }),
-      );
-      if (!ctrl.signal.aborted) setBals(next);
-    })();
+    let ctrl = new AbortController();
+    const load = () => {
+      ctrl.abort();
+      ctrl = new AbortController();
+      const signal = ctrl.signal;
+      const mints = [...new Set([pay.mint, recv.mint, SOL_MINT])];
+      void (async () => {
+        const next: Record<string, number> = {};
+        const sol = await fetch(`/api/sol/balance?pubkey=${encodeURIComponent(pk)}`, { signal, cache: "no-store" })
+          .then((r) => r.json())
+          .catch(() => null);
+        next[SOL_MINT] = Number(sol?.sol) || 0;
+        await Promise.all(
+          mints
+            .filter((m) => m !== SOL_MINT)
+            .map(async (m) => {
+              const j = await fetch(`/api/sol/token?owner=${encodeURIComponent(pk)}&mint=${encodeURIComponent(m)}`, {
+                signal,
+                cache: "no-store",
+              })
+                .then((r) => r.json())
+                .catch(() => null);
+              next[m] = Number(j?.amount) || 0;
+            }),
+        );
+        if (!signal.aborted) setBals(next);
+      })();
+    };
+    loadBalsRef.current = load;
+    load();
     return () => ctrl.abort();
-  }, [pk, pay.mint, recv.mint, notice?.kind]);
+  }, [pk, pay.mint, recv.mint, notice?.kind, notice?.at]);
+
+  useEffect(() => {
+    if (!notice) return;
+    stayOnCard();
+    if (notice.kind !== "ok") return;
+    const t1 = window.setTimeout(() => loadBalsRef.current(), 800);
+    const t2 = window.setTimeout(() => loadBalsRef.current(), 2500);
+    return () => {
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+    };
+  }, [notice?.kind, notice?.at]);
 
   useEffect(() => {
     if (!(payNum > 0) || !pay.mint || !recv.mint || pay.mint === recv.mint || short) {
@@ -442,6 +476,7 @@ export function SwapWidget({
     }
     setBusy(true);
     liveRef.current = true;
+    markActionSpot("swap-widget");
     stayOnCard();
     try {
       const r = await fetch("/api/swap/build", {
@@ -508,7 +543,7 @@ export function SwapWidget({
         : `Swap ${tick(pay.symbol) || pay.symbol} → ${tick(recv.symbol) || recv.symbol}`;
 
   return (
-    <div ref={rootRef} className="relative z-20 w-full min-w-0 scroll-mt-20">
+    <div ref={rootRef} id="swap-widget" className="relative z-20 w-full min-w-0 scroll-mt-20">
       <div className="overflow-hidden rounded-[28px] border border-white/10 bg-[#0b0714] shadow-[0_20px_60px_rgba(0,0,0,0.45)]">
         <div className="flex items-center justify-between gap-3 px-4 pb-1 pt-4 sm:px-5">
           <p className="text-[18px] font-semibold tracking-tight text-white">Swap</p>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Rocket } from "lucide-react";
+import { RefreshCw, Rocket } from "lucide-react";
 import { Keypair } from "@solana/web3.js";
 import { usePathname } from "next/navigation";
 import { CopyCa } from "@/components/CopyCa";
@@ -31,6 +31,7 @@ import {
 import { FieldError, FormAlert, SafeField, fieldClass, useConfirmErrors } from "@/components/form/confirm";
 import { loadOwner, phantomProvider, signPhantomAndSend } from "@/lib/wallet/trading";
 import { clearPhantomWaiting, inPhantomWebView, isPhantomRedirect, PHANTOM_EVENT, phantomWaitingAt, readPhantomReturn, waitForInjected } from "@/lib/wallet/phantomConnect";
+import { markActionSpot, readActionSpot, restoreActionSpot, scrollToSpot } from "@/lib/wallet/actionSpot";
 import type { PhAfter } from "@/lib/wallet/phantomBox";
 import { asTxB64, b64ToBytes, bytesToB64 } from "@/lib/solana/wire";
 import { mintPda, newMintNonce, nonceToB64 } from "@/lib/launch/pda";
@@ -374,6 +375,7 @@ export default function LaunchPage() {
   const [treasuryWallet, setTreasuryWallet] = useState(DEFAULT_TREASURY);
   const [protocol, setProtocol] = useState<{ partnerUnclaimedSol: number; partnerFeesSol: number } | null>(null);
   const [vault, setVault] = useState<{ pk: string; sol: number; claimableSol: number } | null>(null);
+  const [feesSyncing, setFeesSyncing] = useState(false);
   const lastMintRef = useRef("");
   const finishPhantomRef = useRef<(sig: string, after: PhAfter) => Promise<void>>(async () => {});
   const cropUrlRef = useRef<string>("");
@@ -475,6 +477,34 @@ export default function LaunchPage() {
       window.removeEventListener(PHANTOM_EVENT, onPh);
       window.removeEventListener("pageshow", unstick);
       document.removeEventListener("visibilitychange", onVis);
+    };
+  }, []);
+
+  useEffect(() => {
+    const spot = readActionSpot();
+    if (spot?.id === "creator-fees" || spot?.id === "protocol-fees" || spot?.id === "your-tokens") {
+      setTab("mine");
+      writeLaunchTab("mine");
+    }
+    const run = () => restoreActionSpot();
+    const t = window.setTimeout(run, 60);
+    const onPhRestore = () => {
+      const next = readActionSpot();
+      if (next?.id === "creator-fees" || next?.id === "protocol-fees" || next?.id === "your-tokens") {
+        setTab("mine");
+        writeLaunchTab("mine");
+      }
+      window.setTimeout(run, 40);
+    };
+    const onShow = (e: PageTransitionEvent) => {
+      if (e.persisted) run();
+    };
+    window.addEventListener(PHANTOM_EVENT, onPhRestore);
+    window.addEventListener("pageshow", onShow);
+    return () => {
+      window.clearTimeout(t);
+      window.removeEventListener(PHANTOM_EVENT, onPhRestore);
+      window.removeEventListener("pageshow", onShow);
     };
   }, []);
 
@@ -850,6 +880,7 @@ export default function LaunchPage() {
       createErr.fail({ wallet: "Connect your wallet to launch." });
       return;
     }
+    markActionSpot("solphia-launch");
     const art = pinnedUrl || image;
     saveLaunchDraft({ name, symbol, blurb, image: art, website, x, telegram, discord, devBuy });
     void postLaunch({
@@ -1022,6 +1053,7 @@ export default function LaunchPage() {
       setBusy(false);
       setWork("");
       setSnapAt(Date.now());
+      markActionSpot("your-tokens");
       window.setTimeout(() => {
         document.getElementById("your-tokens")?.scrollIntoView({ behavior: "smooth", block: "start" });
       }, 80);
@@ -1227,6 +1259,7 @@ export default function LaunchPage() {
       setBusy(false);
       setWork("");
       setSnapAt(Date.now());
+      markActionSpot("your-tokens");
       window.setTimeout(() => {
         document.getElementById("your-tokens")?.scrollIntoView({ behavior: "smooth", block: "start" });
       }, 80);
@@ -1275,6 +1308,8 @@ export default function LaunchPage() {
       );
       setBusy(false);
       setWork("");
+      markActionSpot(after.partner ? "protocol-fees" : "creator-fees");
+      scrollToSpot(after.partner ? "protocol-fees" : "creator-fees");
       return;
     }
     if (after.kind === "jup_swap") {
@@ -1307,6 +1342,8 @@ export default function LaunchPage() {
       setMsg(`Filled · ${sig.slice(0, 8)}… Tokens landed in your wallet.`);
       await Promise.all([refreshPad(), refreshTape()]).catch(() => {});
       setBusy(false);
+      markActionSpot("swap-widget");
+      scrollToSpot("swap-widget");
     }
   }
 
@@ -1359,6 +1396,11 @@ export default function LaunchPage() {
     if (body.action === "withdraw_dev" || body.action === "withdraw_partner") {
       setTab("mine");
       writeLaunchTab("mine");
+      markActionSpot(body.action === "withdraw_partner" ? "protocol-fees" : "creator-fees");
+    } else if (body.action === "create") {
+      markActionSpot("solphia-launch");
+    } else {
+      markActionSpot("swap-widget");
     }
     setMsg("");
     setErr("");
@@ -1435,6 +1477,8 @@ export default function LaunchPage() {
                   : "All creator fees claimed into this wallet.",
           );
           await Promise.all([refreshPad(true), refreshTape()]);
+          markActionSpot(j.partner ? "protocol-fees" : "creator-fees");
+          scrollToSpot(j.partner ? "protocol-fees" : "creator-fees");
           return;
         }
         const conf = await fetch("/api/launch", {
@@ -1477,8 +1521,13 @@ export default function LaunchPage() {
         setDevBuy(0);
         setTab("mine");
         setMsg("Live on the Solphia curve. If Phantom hides it: Manage Tokens, toggle on, Report as not spam.");
-      } else if (body.action === "withdraw_dev" || body.action === "withdraw_partner") setMsg("Fees claimed.");
-      else setMsg("Filled. Tokens are in your wallet.");
+      } else if (body.action === "withdraw_dev" || body.action === "withdraw_partner") {
+        setMsg("Fees claimed.");
+        scrollToSpot(body.action === "withdraw_partner" ? "protocol-fees" : "creator-fees");
+      } else {
+        setMsg("Filled. Tokens are in your wallet.");
+        scrollToSpot("swap-widget");
+      }
     } catch (e) {
       if (isPhantomRedirect(e)) {
         redirected = true;
@@ -1504,6 +1553,7 @@ export default function LaunchPage() {
     setWork("claim");
     setTab("mine");
     writeLaunchTab("mine");
+    markActionSpot("creator-fees");
     setMsg("Harvesting unpaid pools into your vault…");
     setErr("");
     try {
@@ -1519,10 +1569,12 @@ export default function LaunchPage() {
       await Promise.all([refreshPad(true), refreshTape()]).catch(() => {});
       if (sol > 0) {
         setMsg(`Claimed ${fmtClaimSol(sol)} SOL into this wallet.`);
+        scrollToSpot("creator-fees");
         return { sol, harvested };
       }
       if (harvested > 0) {
         setMsg("Harvested into your vault. Tap Claim to drain it in one transfer.");
+        scrollToSpot("creator-fees");
         return { sol: 0, harvested };
       }
       return null;
@@ -1634,13 +1686,15 @@ export default function LaunchPage() {
                 setLookedMint(mint);
               }}
               onDone={() => {
+                markActionSpot("swap-widget");
+                scrollToSpot("swap-widget");
                 void Promise.all([refreshPad(), refreshTape()]).catch(() => {});
               }}
             />
           </div>
         )}
         {isSwap && (
-          <div className="mt-4 overflow-hidden rounded-[28px] border border-white/10 bg-[#0b0714] shadow-[0_20px_60px_rgba(0,0,0,0.45)]">
+          <div id="boost-desk" className="mt-4 scroll-mt-20 overflow-hidden rounded-[28px] border border-white/10 bg-[#0b0714] shadow-[0_20px_60px_rgba(0,0,0,0.45)]">
             <div className="flex items-center justify-between gap-3 px-4 pt-4 sm:px-5">
               <div className="flex items-center gap-2.5">
                 <span className="flex h-9 w-9 items-center justify-center rounded-full bg-acid/15 text-acid">
@@ -1691,7 +1745,11 @@ export default function LaunchPage() {
                     name={open?.name}
                     image={open?.image}
                     mint={open?.mint}
-                    onDone={() => refreshBoosts().catch(() => {})}
+                    onDone={() => {
+                      markActionSpot("boost-desk");
+                      scrollToSpot("boost-desk");
+                      refreshBoosts().catch(() => {});
+                    }}
                     onPick={(token) => {
                       if (token.mint) searchMint(token.mint).catch(() => {});
                     }}
@@ -1725,7 +1783,7 @@ export default function LaunchPage() {
                 setTab("mine");
                 writeLaunchTab("mine");
               }}
-              className={`pb-2 ${tab === "mine" ? "border-b-2 border-white font-medium text-white" : "text-white/40"}`}
+              className={`scroll-mt-20 pb-2 ${tab === "mine" ? "border-b-2 border-white font-medium text-white" : "text-white/40"}`}
             >
               Your tokens
             </button>
@@ -1736,7 +1794,7 @@ export default function LaunchPage() {
           {!isSwap && tab === "tape" && (
           <div className="space-y-5">
           <PadPitch />
-          <section id="solphia-launch" className="overflow-hidden rounded-3xl border border-white/10 bg-black/30 p-5">
+          <section id="solphia-launch" className="scroll-mt-20 overflow-hidden rounded-3xl border border-white/10 bg-black/30 p-5">
             <h2 className="mb-1 text-[22px] font-semibold text-white">Create a coin</h2>
             <p className="mb-4 text-[15px] text-white/45">Name, ticker, art. Phantom signs. It lives on the Solphia curve.</p>
             {!owner ? (
@@ -2094,7 +2152,7 @@ export default function LaunchPage() {
             </div>
             )}
             {!isSwap && owner && (owner === treasuryWallet || owner === ownerWallet) && (
-              <div className="mb-4 rounded-3xl border border-white/10 bg-black/30 p-4">
+              <div id="protocol-fees" className="mb-4 scroll-mt-20 rounded-3xl border border-white/10 bg-black/30 p-4">
                 <p className="font-mono text-[11px] tracking-[0.28em] text-acid">
                   {owner === treasuryWallet ? "TREASURY" : "OWNER"}
                 </p>
@@ -2118,6 +2176,7 @@ export default function LaunchPage() {
                     <p className="stat-num text-[18px] text-white">{fmtSol(protocol?.partnerUnclaimedSol || 0, 4)} SOL</p>
                   </div>
                 </div>
+                <div className="mt-4 flex flex-wrap gap-2">
                 <button
                   type="button"
                   disabled={busy || !((protocol?.partnerUnclaimedSol || 0) > 1e-6 || coins.some((c) => (c.partnerUnclaimedSol || 0) > 1e-6))}
@@ -2135,6 +2194,7 @@ export default function LaunchPage() {
                     claimLock.current = "";
                     setTab("mine");
                     writeLaunchTab("mine");
+                    markActionSpot("protocol-fees");
                     act({
                       action: "withdraw_partner",
                       mint,
@@ -2142,7 +2202,7 @@ export default function LaunchPage() {
                       claimAll: true,
                     });
                   }}
-                  className="mt-4 rounded-full bg-[#14f195] px-4 py-2 text-[14px] font-semibold text-[#04000a] disabled:opacity-40"
+                  className="rounded-full bg-[#14f195] px-4 py-2 text-[14px] font-semibold text-[#04000a] disabled:opacity-40"
                 >
                   {(protocol?.partnerUnclaimedSol || 0) > 0
                     ? `Claim ${fmtSol((protocol?.partnerUnclaimedSol || 0) / 2, 4)} SOL`
@@ -2150,10 +2210,31 @@ export default function LaunchPage() {
                       ? "Claim treasury fees"
                       : "Claim owner fees"}
                 </button>
+                <button
+                  type="button"
+                  disabled={busy || feesSyncing}
+                  onClick={() => {
+                    markActionSpot("protocol-fees");
+                    void (async () => {
+                      setFeesSyncing(true);
+                      try {
+                        await refreshPad(true);
+                      } finally {
+                        setFeesSyncing(false);
+                        scrollToSpot("protocol-fees");
+                      }
+                    })();
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-4 py-2 text-[14px] font-semibold text-white disabled:opacity-40"
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 ${feesSyncing ? "animate-spin" : ""}`} />
+                  {feesSyncing ? "Refreshing…" : "Refresh"}
+                </button>
+                </div>
               </div>
             )}
             {!isSwap && (
-              <div className="mb-4 rounded-3xl border border-white/10 bg-black/30 p-4">
+              <div id="creator-fees" className="mb-4 scroll-mt-20 rounded-3xl border border-white/10 bg-black/30 p-4">
                 <p className="font-mono text-[11px] tracking-[0.28em] text-acid">DEV REWARDS</p>
                 <h2 className="mt-1 text-[22px] font-semibold tracking-tight text-white">Claim fees</h2>
                 <p className="mt-1 text-[14px] leading-snug text-white/45">
@@ -2179,6 +2260,7 @@ export default function LaunchPage() {
                     disabled={busy || ((vault?.claimableSol || 0) <= 0 && claimable.length === 0)}
                     onClick={() => {
                       const mints = claimable.map((c) => c.mint).filter(Boolean) as string[];
+                      markActionSpot("creator-fees");
                       void (async () => {
                         const got = await claimVault(mints);
                         if (got?.sol) return;
@@ -2204,6 +2286,26 @@ export default function LaunchPage() {
                       : claimButtonSol(payout) > 0
                         ? `Claim all ${fmtClaimSol(claimButtonSol(payout))} SOL`
                         : "Claim creator fees"}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy || feesSyncing}
+                    onClick={() => {
+                      markActionSpot("creator-fees");
+                      void (async () => {
+                        setFeesSyncing(true);
+                        try {
+                          await refreshPad(true);
+                        } finally {
+                          setFeesSyncing(false);
+                          scrollToSpot("creator-fees");
+                        }
+                      })();
+                    }}
+                    className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-4 py-2 text-[14px] font-semibold text-white disabled:opacity-40"
+                  >
+                    <RefreshCw className={`h-3.5 w-3.5 ${feesSyncing ? "animate-spin" : ""}`} />
+                    {feesSyncing ? "Refreshing…" : "Refresh"}
                   </button>
                 </div>
                 {(vault?.claimableSol || 0) > 0 ? (
@@ -2326,7 +2428,19 @@ export default function LaunchPage() {
                         solUsd={solUsd}
                         hideTrade={isSwap}
                         onClose={() => setOpen(null)}
+                        onBuy={
+                          isSwap
+                            ? () => {
+                                if (open.mint) setLookedMint(open.mint);
+                                setOpen(null);
+                                markActionSpot("swap-widget");
+                                window.setTimeout(() => scrollToSpot("swap-widget"), 50);
+                              }
+                            : undefined
+                        }
                         onSwapDone={() => {
+                          markActionSpot("swap-widget");
+                          scrollToSpot("swap-widget");
                           void Promise.all([refreshPad(), refreshTape()]).catch(() => {});
                         }}
                       />
@@ -2362,6 +2476,7 @@ function CoinDesk({
   solUsd,
   hideTrade,
   onClose,
+  onBuy,
   onSwapDone,
 }: {
   open: Coin;
@@ -2369,6 +2484,7 @@ function CoinDesk({
   solUsd: number;
   hideTrade?: boolean;
   onClose: () => void;
+  onBuy?: () => void;
   onSwapDone?: () => void;
 }) {
   const audit = useMemo(() => auditLaunchCoin(open, solUsd), [open, solUsd]);
@@ -2394,9 +2510,16 @@ function CoinDesk({
             </div>
           </div>
         </div>
-        <button type="button" onClick={onClose} className="btn-ghost min-h-[44px] shrink-0 rounded-full px-4 py-2 text-sm">
-          Close
-        </button>
+        <div className="flex shrink-0 items-center gap-2">
+          {hideTrade && onBuy ? (
+            <button type="button" onClick={onBuy} className="btn-acid min-h-[44px] shrink-0 rounded-full px-4 py-2 text-sm">
+              Buy
+            </button>
+          ) : null}
+          <button type="button" onClick={onClose} className="btn-ghost min-h-[44px] shrink-0 rounded-full px-4 py-2 text-sm">
+            Close
+          </button>
+        </div>
       </div>
 
       <TokenChart
@@ -2460,7 +2583,7 @@ function CoinDesk({
 
         {hideTrade ? (
           <div className="min-w-0 rounded-2xl border border-white/10 bg-void/40 p-4">
-            <p className="text-[14px] text-white/55">Use the swap card above. This token is loaded there.</p>
+            <p className="text-[14px] text-white/55">Buy opens the swap card above with this token loaded.</p>
           </div>
         ) : (
           <SwapWidget

@@ -448,6 +448,13 @@ describe("launch create validation", () => {
     assert.equal(src.includes("Open a token below"), false);
     assert.match(src, /onPick/);
     assert.match(src, /Approve this claim in Phantom/);
+    assert.match(src, /id="creator-fees"/);
+    assert.match(src, /id="protocol-fees"/);
+    assert.match(src, /scrollToSpot\("swap-widget"\)/);
+    assert.match(src, /Refreshing…/);
+    assert.match(src, /RefreshCw/);
+    assert.match(src, /onBuy/);
+    assert.match(src, /hideTrade && onBuy/);
   });
 
   it("rejects a 1-character name or ticker with an explicit too-short message", () => {
