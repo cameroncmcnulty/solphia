@@ -142,6 +142,29 @@ describe("rocket boosts", () => {
     assert.ok(ids.every((id) => liveBoosts(book, t0 + HOUSE_STAGGER_MS).some((b) => b.id === id)));
   });
 
+  it("replants a mixed house batch when the rail is empty even after a prior plant", () => {
+    const book = emptyLaunchBook();
+    const t0 = 20_000_000;
+    const market = Array.from({ length: 12 }, (_, i) => ({
+      id: `r${i}`,
+      mint: `RefillMint${i}1111111111111111111111111111`.slice(0, 44),
+      symbol: `R${i}`,
+      name: `Refill${i}`,
+    }));
+    assert.equal(fillHouseBoosts(book, market, t0), true);
+    book.boosts = [];
+    book.nextHouseBoostAt = t0 + HOUSE_STAGGER_MS;
+    assert.equal(fillHouseBoosts(book, market, t0 + 60_000), true);
+    const live = liveBoosts(book, t0 + 60_000).filter((b) => b.house);
+    assert.equal(live.length, HOUSE_INITIAL);
+    const packs = new Set(live.map((b) => b.rockets));
+    assert.ok(packs.size >= 2, "house boosts should mix rocket packs");
+    const bought = live.map((b) => b.boughtAt).sort((a, b) => a - b);
+    for (let i = 1; i < bought.length; i++) {
+      assert.ok(bought[i] > bought[i - 1]);
+    }
+  });
+
   it("never house-boosts pad launches and drops ones that slipped in", () => {
     const book = bookWithCoins();
     const t0 = 12_000_000;

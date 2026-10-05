@@ -351,10 +351,17 @@ export function fillHouseBoosts(book: LaunchBook, candidates: HouseCoin[], now =
     return dirty;
   }
   const taken = new Set(ranked.map((r) => r.mint || r.coinId));
-  const pool = houseMarketPool(book, candidates, taken);
+  const recentDone = ensureBoosts(book)
+    .filter((b) => b.house && b.status === "done" && (b.endsAt || 0) > now - 6 * 3600_000)
+    .map((b) => b.mint || b.coinId);
+  const takenWithRecent = new Set(taken);
+  for (const id of recentDone) takenWithRecent.add(id);
+  const varied = houseMarketPool(book, candidates, takenWithRecent);
+  const pool = varied.length ? varied : houseMarketPool(book, candidates, taken);
   if (!pool.length) return dirty;
 
-  if (houseN === 0 && !book.lastHouseBoostAt) {
+  // Empty rail: replant a small mixed batch even if we had planted before.
+  if (houseN === 0) {
     const add = Math.min(HOUSE_INITIAL, pool.length);
     if (!add) return dirty;
     const megaN = Math.min(1, add);
@@ -367,15 +374,17 @@ export function fillHouseBoosts(book: LaunchBook, candidates: HouseCoin[], now =
   }
 
   const due = book.nextHouseBoostAt || 0;
-  if (due && now < due) return dirty;
+  const sparse = houseN < HOUSE_INITIAL;
+  if (due && now < due && !(sparse && due - now > HOUSE_REPLACE_MS)) return dirty;
   if (!due) {
-    book.nextHouseBoostAt = now + HOUSE_REPLACE_MS;
+    book.nextHouseBoostAt = now + (sparse ? HOUSE_REPLACE_MS : HOUSE_STAGGER_MS);
     return dirty;
   }
   const hasMega = ranked.some((r) => r.mega || r.rockets >= MEGA_ROCKETS);
   if (plantHouseBoost(book, pool[0], now, 0, false, !hasMega && Math.random() < 0.25)) dirty = true;
   book.lastHouseBoostAt = now;
-  book.nextHouseBoostAt = now + HOUSE_STAGGER_MS;
+  const nextN = liveBoosts(book, now).filter((b) => b.house).length;
+  book.nextHouseBoostAt = now + (nextN < HOUSE_INITIAL ? HOUSE_REPLACE_MS : HOUSE_STAGGER_MS);
   return dirty;
 }
 

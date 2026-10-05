@@ -2,15 +2,15 @@ import { createHash } from "crypto";
 import { Keypair } from "@solana/web3.js";
 import { isSolanaAddress } from "../security";
 import { emptyLaunchBook, type LaunchBook } from "../launch/engine";
-import { padLaunchMints } from "../launch/boost";
+import { fillHouseBoosts, HOUSE_INITIAL, padLaunchMints } from "../launch/boost";
 import { loadMarketTape } from "../launch/market";
 import { setUsername, usernameOk } from "../launch/username";
 import { creditRank, rankFromXp, resetRank } from "../rank/engine";
 import { GLDX_MINT_OFFICIAL, QQQX_MINT_OFFICIAL, SOL_MINT, SPYX_MINT_OFFICIAL, USDC_MINT, USDT_MINT } from "../pair/mints";
 import { withLaunch, withShill } from "../store";
-import { ensureShill, postShill, touchMember, voteShill, type HousePinCoin } from "./engine";
+import { ensureShill, fillHousePins, postShill, touchMember, voteShill, type HousePinCoin } from "./engine";
 import { composeHouseChat } from "./phrases";
-import { type HouseActor, type ShillBook, type ShillMessage } from "./types";
+import { SHILL_HOUSE_PIN_MIN, type HouseActor, type ShillBook, type ShillMessage } from "./types";
 
 export const HOUSE_ACTOR_N = 87;
 export const HOUSE_NAME_MIN = 0.6;
@@ -741,7 +741,14 @@ export async function persistHouseXpAndCycles(
 export async function runHouseShill(now = Date.now()): Promise<{ shares: number; votes: number; chats: number; planted: boolean; recycled: number }> {
   const peek = await withShill((st) => {
     const book = ensureShill(st.shill);
-    return { due: houseWorkDue(book, now), n: (book.houseActors || []).length, actors: book.houseActors || [], tape: houseNeedsTape(book, now) };
+    const housePins = (book.pins || []).filter((p) => p.house && p.endsAt > now).length;
+    return {
+      due: houseWorkDue(book, now),
+      n: (book.houseActors || []).length,
+      actors: book.houseActors || [],
+      tape: houseNeedsTape(book, now),
+      pins: housePins < SHILL_HOUSE_PIN_MIN,
+    };
   }, false);
 
   let planted = false;
@@ -765,14 +772,42 @@ export async function runHouseShill(now = Date.now()): Promise<{ shares: number;
     }, true);
   }
 
-  if (!peek.due && peek.n >= HOUSE_ACTOR_N) return { shares: 0, votes: 0, chats: 0, planted, recycled: 0 };
+  const houseBoosts = await withLaunch((st) => {
+    const rows = st.launch?.boosts || [];
+    return rows.filter((b) => b.house && b.status === "live" && (b.endsAt || 0) > now).length;
+  }, false);
+  const boostsLow = houseBoosts < HOUSE_INITIAL;
+  if (!peek.due && peek.n >= HOUSE_ACTOR_N && !peek.pins && !boostsLow) {
+    return { shares: 0, votes: 0, chats: 0, planted, recycled: 0 };
+  }
 
-  const coins = peek.tape || planted ? await loadHouseMarketCoins() : [];
+  const coins = peek.tape || planted || peek.pins || boostsLow ? await loadHouseMarketCoins() : [];
   const out = await withShill((st) => {
     st.shill = ensureShill(st.shill);
     if ((st.shill.houseActors || []).length < HOUSE_ACTOR_N) plantHouseSchedules(st.shill, now);
+    if (coins.length) fillHousePins(st.shill, coins, now);
     return tickHouseActions(st.shill, coins, now);
   }, true);
+  if (coins.length) {
+    const boostDirty = await withLaunch((st) => {
+      if (!st.launch) st.launch = emptyLaunchBook();
+      return fillHouseBoosts(
+        st.launch,
+        coins.map((c) => ({
+          id: c.mint,
+          mint: c.mint,
+          symbol: c.symbol,
+          name: c.name,
+          image: c.image,
+          born: false,
+        })),
+        now,
+      );
+    }, false);
+    if (boostDirty) {
+      await withLaunch((st) => st, true);
+    }
+  }
   const recycled = await persistHouseXpAndCycles(out.xpOwners, now);
   return { ...out, planted, recycled };
 }

@@ -159,6 +159,23 @@ describe("shill zone", () => {
     assert.deepEqual(book.pins.map((p) => p.id), order);
   });
 
+  it("replants two staggered house pins when the rail is empty even after a prior plant", () => {
+    const book = emptyShill();
+    const coins = [
+      { mint: CA, symbol: "SOL", name: "Solana" },
+      { mint: A, symbol: "AAA", name: "Alpha" },
+      { mint: B, symbol: "BBB", name: "Beta" },
+    ];
+    const t0 = 50_000;
+    fillHousePins(book, coins, t0);
+    book.pins = [];
+    book.nextHousePinAt = t0 + SHILL_HOUSE_STAGGER_MS;
+    assert.equal(fillHousePins(book, coins, t0 + 1_000), true);
+    const house = book.pins.filter((p) => p.house).sort((a, b) => a.at - b.at);
+    assert.equal(house.length, SHILL_HOUSE_PIN_MIN);
+    assert.ok(house[1].at - house[0].at >= SHILL_HOUSE_SPREAD_MS - 1);
+  });
+
   it("staggers initial house pins so they expire hours apart", () => {
     const book = emptyShill();
     const coins = [

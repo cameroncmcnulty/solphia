@@ -361,16 +361,26 @@ function plantHousePins(book: ShillBook, picks: HousePinCoin[], now: number) {
   book.nextHousePinAt = now + SHILL_HOUSE_STAGGER_MS;
 }
 
+function shufflePool<T>(arr: T[]): T[] {
+  const pool = arr.slice();
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  return pool;
+}
+
 export function fillHousePins(book: ShillBook, candidates: HousePinCoin[], now = Date.now()): boolean {
   pruneShill(book, now);
   const house = book.pins.filter((p) => p.house);
   const n = house.length;
   if (n >= SHILL_HOUSE_PIN_MIN) return false;
   const taken = new Set(book.pins.map((p) => p.mint));
-  const pool = candidates.filter((c) => c.mint && !taken.has(c.mint)).sort((a, b) => a.mint.localeCompare(b.mint));
+  const pool = shufflePool(candidates.filter((c) => c.mint && !taken.has(c.mint)));
   if (!pool.length) return false;
 
-  if (n === 0 && !book.lastHousePinAt) {
+  // Empty rail: always restock 2 with staggered clocks, even if we planted before.
+  if (n === 0) {
     const count = Math.min(SHILL_HOUSE_PIN_MIN, pool.length);
     plantHousePins(book, pool.slice(0, count), now);
     return count > 0;
