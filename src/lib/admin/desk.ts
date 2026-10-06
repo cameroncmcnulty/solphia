@@ -17,18 +17,19 @@ import { activeMembers, ensureCircle, spotsLeft } from "../circle/engine";
 import { seatSol } from "../seat";
 import { promoDataUrl, promoViewToken } from "./promoFile";
 import { bookHoldingUsd, sumWindows, tradingNow, uniqueWallets } from "./stats";
+import { buildPlatformSnapshot } from "./platform";
 import { buildAdminUsers } from "./users";
 import { ensureShill, livePins } from "../shill/engine";
 import { leaderboard } from "../rank/engine";
 import { emptyLaunchBook } from "../launch/engine";
 import { buildProfitDesk, type ProfitDesk } from "../profit/catalog";
-import type { AdminDesk, AdminPromo, AdminSeat, AdminSleeve, AdminTrader } from "./types";
+import type { AdminDesk, AdminPlatformOnchain, AdminPromo, AdminSeat, AdminSleeve, AdminTrader } from "./types";
 import { adminOtpEmailOf } from "./otp";
 import { mailConfigured } from "../email/send";
 
 export type { AdminDesk, AdminSeat, AdminSleeve, AdminTrader } from "./types";
 
-export function buildAdminDesk(opts?: { light?: boolean; profits?: ProfitDesk }): AdminDesk {
+export function buildAdminDesk(opts?: { light?: boolean; profits?: ProfitDesk; onchain?: AdminPlatformOnchain | null }): AdminDesk {
   const s = loadState();
   const paper = publicBook(s.paper);
   const pair = (lastPairDesk() || (s.lastPair as PairDeskPublic | null) || null) as PairDeskPublic | null;
@@ -189,6 +190,7 @@ export function buildAdminDesk(opts?: { light?: boolean; profits?: ProfitDesk })
       newWallets24,
       solIn: round2(solIn),
     },
+    platform: buildPlatformSnapshot(s, now, prices, opts?.onchain),
     promos,
     promoPending: Boolean(s.promoPending),
     lastPromoDay: s.lastPromoDay || "",

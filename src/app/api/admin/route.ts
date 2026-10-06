@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/admin/auth";
 import { buildAdminDesk } from "@/lib/admin/desk";
+import { loadPlatformOnchain, withTimeout } from "@/lib/admin/onchain";
+import { protocolWalletsOf, userWalletsOf } from "@/lib/admin/platform";
 import { enrichProfitDesk } from "@/lib/profit/onchain";
 import { buildProfitDesk } from "@/lib/profit/catalog";
 import { grantFounder, grantMod, revokeFounder, revokeMod } from "@/lib/access";
@@ -31,7 +33,13 @@ export async function GET(req: NextRequest) {
   } catch {
     /* ledger still loads */
   }
-  return NextResponse.json(buildAdminDesk({ profits }));
+  let onchain = null;
+  try {
+    onchain = await withTimeout(loadPlatformOnchain(userWalletsOf(state), protocolWalletsOf(state)), 4000);
+  } catch {
+    /* snapshot still loads without RPC */
+  }
+  return NextResponse.json(buildAdminDesk({ profits, onchain }));
 }
 
 const Patch = z.object({

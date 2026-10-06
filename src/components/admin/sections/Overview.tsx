@@ -1,12 +1,13 @@
 "use client";
 
 import { useAdmin } from "../AdminProvider";
-import { Mini, Stat, money } from "../ui";
+import { Mini, Stat, money, solAmt } from "../ui";
 
 export function OverviewSection() {
   const { data, pnlWin, setPnlWin, patch, busy } = useAdmin();
   if (!data) return null;
   const ops = data.ops;
+  const plat = data.platform;
   const win = pnlWin === "d30" ? ops.d30 : pnlWin === "d7" ? ops.d7 : ops.h24;
   const pnlLabel = pnlWin === "d30" ? "Month PnL" : pnlWin === "d7" ? "7d PnL" : "24h PnL";
   const live = data.traders.filter((t) => t.mode === "live" && !t.killed);
@@ -45,6 +46,50 @@ export function OverviewSection() {
         <Mini k="24h trades" v={String(ops.h24.trades)} />
         <Mini k="7d trades" v={String(ops.d7.trades)} />
       </div>
+
+      {plat ? (
+      <section className="panel mt-6 rounded-2xl p-5">
+        <div className="font-mono text-[10px] tracking-[0.3em] text-acid">PLATFORM · SPONSOR SNAPSHOT</div>
+        <p className="mt-1 max-w-2xl text-sm text-mute">
+          Activity and assets on Solphia. Wallet SOL is on-chain in known user and protocol addresses — keys stay with
+          the user. Pad TVL is SOL sitting in live bonding curves.
+        </p>
+        <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <Stat
+            k="Assets on platform"
+            v={money(plat.assetsUsd)}
+            sub={plat.solUsd ? `SOL ${money(plat.solUsd)}` : "desk + pad + wallets"}
+          />
+          <Stat
+            k="SOL in wallets"
+            v={solAmt(plat.userWalletSol)}
+            sub={
+              plat.sampledWallets
+                ? `${plat.sampledWallets} of ${plat.wallets} sampled`
+                : `${plat.wallets} known wallets`
+            }
+          />
+          <Stat k="Pad TVL" v={solAmt(plat.padTvlSol)} sub={`${plat.liveLaunches} live · ${plat.graduated} graduated`} />
+          <Stat k="Protocol SOL" v={solAmt(plat.protocolSol)} sub="treasury · owner · foundation" />
+        </div>
+        <div className="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <Stat k="Users" v={String(plat.wallets + plat.logins)} sub={`${plat.wallets} wallets · ${plat.logins} logins`} />
+          <Stat k="Active 24h" v={String(plat.active24h)} sub={`${plat.active7d} in 7d · ${plat.new24h} new`} />
+          <Stat
+            k="Pad volume 24h"
+            v={solAmt(plat.padVolSol24h)}
+            sub={`${plat.padTxns24h} swaps · ${plat.padTraders24h} traders`}
+          />
+          <Stat k="Launches" v={String(plat.launches)} sub={`${plat.liveLaunches} on the curve`} />
+        </div>
+        <div className="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <Mini k="Shill 24h" v={`${plat.shillMsgs24h} msgs · ${plat.shillMembers} in room`} />
+          <Mini k="Circle" v={`${plat.circleMembers} members`} />
+          <Mini k="Swaps 24h" v={String(plat.swaps24h)} />
+          <Mini k="Ranked" v={String(plat.ranked)} />
+        </div>
+      </section>
+      ) : null}
 
       <section className="panel mt-6 rounded-2xl p-5">
         <div className="flex flex-wrap items-end justify-between gap-3">

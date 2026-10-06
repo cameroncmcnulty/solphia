@@ -57,8 +57,16 @@ export function Panel({ kicker, children }: { kicker: string; children: ReactNod
 
 export function money(n: number) {
   const abs = Math.abs(n);
+  if (abs >= 1_000_000) return `$${(abs / 1_000_000).toFixed(2)}M`;
   if (abs >= 1000) return `$${(abs / 1000).toFixed(1)}k`;
   return `$${abs.toFixed(2)}`;
+}
+
+export function solAmt(n: number) {
+  const abs = Math.abs(n);
+  if (abs >= 1_000) return `${(abs / 1_000).toFixed(1)}k SOL`;
+  if (abs >= 10) return `${abs.toFixed(2)} SOL`;
+  return `${abs.toFixed(4)} SOL`;
 }
 
 export function fmtQty(n: number, id: string) {

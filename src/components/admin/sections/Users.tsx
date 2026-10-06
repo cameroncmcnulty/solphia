@@ -6,7 +6,7 @@ import { launchError } from "@/lib/launch/errors";
 import { usernameIssue } from "@/lib/launch/username";
 import { FieldError, fieldClass, useConfirmErrors } from "@/components/form/confirm";
 import { useAdmin } from "../AdminProvider";
-import { shortPk } from "../ui";
+import { Mini, money, shortPk, solAmt } from "../ui";
 
 type Filter = "all" | "paid" | "admin" | "live" | "paper" | "launched" | "referred" | "email" | "google" | "unverified";
 type Sort = "seen" | "created" | "rewards" | "launches" | "rank";
@@ -95,10 +95,19 @@ export function UsersSection() {
   }
 
   if (!data) return null;
+  const plat = data.platform;
 
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
       <section className="panel rounded-2xl p-5">
+        {plat ? (
+          <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <Mini k="Wallets" v={String(plat.wallets)} />
+            <Mini k="Active 24h" v={String(plat.active24h)} />
+            <Mini k="Assets" v={money(plat.assetsUsd)} />
+            <Mini k="Pad TVL" v={solAmt(plat.padTvlSol)} />
+          </div>
+        ) : null}
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <div className="font-mono text-[10px] tracking-[0.3em] text-mute">ACCOUNTS</div>

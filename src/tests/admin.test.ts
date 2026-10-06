@@ -4,6 +4,8 @@ import path from "node:path";
 import { describe, it } from "node:test";
 import { PNG } from "pngjs";
 import { bookHoldingUsd, sumWindows, windowClip } from "../lib/admin/stats";
+import { buildPlatformSnapshot, userWalletsOf } from "../lib/admin/platform";
+import { emptyCurve } from "../lib/launch/curve";
 import { prunePromos, PROMO_CAP } from "../lib/admin/promo";
 import { localPack } from "../lib/content/copy";
 import { coverBlit, loadPng } from "../lib/content/crop";
@@ -66,6 +68,79 @@ describe("admin stats", () => {
     book.pair = { solQty: 2, spyxQty: 0, qqqxQty: 0, gldxQty: 0, usdcQty: 100 };
     const v = bookHoldingUsd(book, { solUsd: 150, spyxUsd: 1, qqqxUsd: 1, gldxUsd: 1 });
     assert.equal(v, 400);
+  });
+});
+
+const WALLET_A = "CyaE1VxvBrahnPWkqm5VsdCvyS2QmNht2UFrKJHga54o";
+const WALLET_B = "D4uCNcBKAbG9NAkmhQg7pBiztuejNzbWrZDcZmFGut81";
+
+describe("platform snapshot", () => {
+  it("counts pad TVL, 24h volume, users, and on-chain wallet SOL", () => {
+    const s = emptyState();
+    const now = Date.parse("2026-10-06T12:00:00Z");
+    s.users = [{ pubkey: WALLET_A, createdAt: now - 1000, lastSeen: now - 1000, alertsEnabled: true }];
+    s.accounts = [
+      {
+        id: "acct1",
+        email: "a@b.com",
+        emailNorm: "a@b.com",
+        wallets: [WALLET_B],
+        createdAt: now - 2000,
+        lastSeen: now - 500,
+      },
+    ];
+    s.launch = {
+      ...s.launch!,
+      coins: [
+        {
+          id: "c1",
+          mint: WALLET_B,
+          name: "Bag",
+          symbol: "BAG",
+          blurb: "",
+          links: {},
+          mintAuthority: "revoked",
+          freezeAuthority: "revoked",
+          creator: WALLET_A,
+          createdAt: now - 10_000,
+          curve: { ...emptyCurve(), realSol: 12.5 },
+          status: "curve",
+          holders: {},
+          fills: [
+            { id: "f1", at: now - 1000, owner: WALLET_A, side: "buy", sol: 1.25, tokens: 1000, feeSol: 0.0125, priceSol: 0.001 },
+            { id: "f2", at: now - 3 * 86_400_000, owner: WALLET_B, side: "sell", sol: 9, tokens: 1000, feeSol: 0.09, priceSol: 0.001 },
+          ],
+          devRewardsSol: 0,
+          ownerFeesSol: 0,
+          treasuryFeesSol: 0,
+          referralFeesSol: 0,
+        },
+      ],
+      accounts: { [WALLET_A]: { pubkey: WALLET_A, referralRewardsSol: 0, xp: 10 } },
+    };
+    const snap = buildPlatformSnapshot(s, now, { solUsd: 200, spyxUsd: 0, qqqxUsd: 0, gldxUsd: 0 });
+    assert.equal(snap.padTvlSol, 12.5);
+    assert.equal(snap.padVolSol24h, 1.25);
+    assert.equal(snap.padTxns24h, 1);
+    assert.equal(snap.padTraders24h, 1);
+    assert.equal(snap.liveLaunches, 1);
+    assert.equal(snap.launches, 1);
+    assert.ok(userWalletsOf(s).includes(WALLET_A));
+    assert.ok(userWalletsOf(s).includes(WALLET_B));
+    assert.ok(snap.active24h >= 1);
+    assert.equal(snap.ranked, 1);
+    assert.equal(snap.assetsUsd, 2500);
+    const withChain = buildPlatformSnapshot(s, now, { solUsd: 200, spyxUsd: 0, qqqxUsd: 0, gldxUsd: 0 }, {
+      userSol: 3,
+      protocolSol: 1,
+      sampled: 2,
+    });
+    assert.equal(withChain.userWalletSol, 3);
+    assert.equal(withChain.protocolSol, 1);
+    assert.equal(withChain.assetsUsd, 3300);
+    const overview = fs.readFileSync(path.join(process.cwd(), "src/components/admin/sections/Overview.tsx"), "utf8");
+    assert.match(overview, /PLATFORM · SPONSOR SNAPSHOT/);
+    assert.match(overview, /SOL in wallets/);
   });
 });
 

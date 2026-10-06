@@ -102,6 +102,41 @@ export type AdminOps = {
   solIn: number;
 };
 
+/** Live on-chain sample of known Solphia + protocol wallets. */
+export type AdminPlatformOnchain = {
+  userSol: number;
+  protocolSol: number;
+  sampled: number;
+};
+
+/** Sponsor snapshot: activity and assets on the Solphia platform. */
+export type AdminPlatform = {
+  wallets: number;
+  logins: number;
+  active24h: number;
+  active7d: number;
+  new24h: number;
+  launches: number;
+  liveLaunches: number;
+  graduated: number;
+  padTvlSol: number;
+  padVolSol24h: number;
+  padTxns24h: number;
+  padTraders24h: number;
+  shillMembers: number;
+  shillMsgs24h: number;
+  circleMembers: number;
+  ranked: number;
+  swaps24h: number;
+  deskUsd: number;
+  userWalletSol: number;
+  protocolSol: number;
+  sampledWallets: number;
+  knownWallets: number;
+  assetsUsd: number;
+  solUsd: number;
+};
+
 export type AdminPaper = {
   startingUsd: number;
   startedAt?: number;
@@ -190,6 +225,7 @@ export type AdminDesk = {
   users: AdminUser[];
   adminWallets: string[];
   ops: AdminOps;
+  platform: AdminPlatform;
   promos: AdminPromo[];
   promoPending: boolean;
   lastPromoDay: string;
