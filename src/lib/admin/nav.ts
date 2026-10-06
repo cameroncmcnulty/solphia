@@ -99,7 +99,7 @@ export const ADMIN_NAV = [
     id: "users",
     group: "people",
     label: "Users",
-    hint: "Search, seats, mods, and delete",
+    hint: "Email, Google, wallets, seats, mods, and delete",
     icon: "users" as const,
     badge: (d: AdminDesk) => d.users?.length || null,
   },

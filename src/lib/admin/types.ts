@@ -37,6 +37,7 @@ export type AdminSeat = {
 
 export type AdminUser = {
   pubkey: string;
+  accountId: string | null;
   username: string | null;
   email: string | null;
   notes: string | null;
@@ -64,6 +65,10 @@ export type AdminUser = {
   killed: boolean;
   liveDelegate: boolean;
   tradingPubkey: string | null;
+  emailVerified: boolean;
+  google: boolean;
+  walletCount: number;
+  auth: "email" | "google" | "wallet";
 };
 
 export type AdminWindow = {

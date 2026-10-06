@@ -87,7 +87,15 @@ export function buildAdminDesk(opts?: { light?: boolean; profits?: ProfitDesk })
     solIn += t.depositedSol || 0;
   }
   const now = Date.now();
-  const newWallets24 = (s.users || []).filter((u) => now - (u.createdAt || 0) < 86_400_000).length;
+  const newLoginIds = new Set(
+    (s.accounts || []).filter((a) => now - (a.createdAt || 0) < 86_400_000).map((a) => a.id),
+  );
+  const newWalletOnly = (s.users || []).filter((u) => {
+    if (now - (u.createdAt || 0) >= 86_400_000) return false;
+    if (u.accountId && newLoginIds.has(u.accountId)) return false;
+    return true;
+  }).length;
+  const newWallets24 = newLoginIds.size + newWalletOnly;
   const treasury = treasuryAddress();
   const promos: AdminPromo[] = (s.promos || [])
     .slice()
@@ -163,7 +171,10 @@ export function buildAdminDesk(opts?: { light?: boolean; profits?: ProfitDesk })
     adminWallets: s.adminWallets || [],
     ops: {
       holdingUsd: round2(holdingUsd),
-      wallets: uniqueWallets(s.users || [], s.traders || {}).length,
+      wallets: uniqueWallets(
+        [...(s.users || []), ...(s.accounts || []).flatMap((a) => (a.wallets || []).map((pubkey) => ({ pubkey })))],
+        s.traders || {},
+      ).length,
       trading: tradingNow(s.traders || {}, Boolean(s.paper.killed)),
       h24: roundWindow(windows.h24),
       d7: roundWindow(windows.d7),

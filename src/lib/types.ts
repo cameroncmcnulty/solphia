@@ -490,6 +490,8 @@ export interface AppState {
   users: AppUser[];
   /** Email / Google logins. Public addresses only — never seeds or PINs. */
   accounts?: import("./auth/accounts").LoginAccount[];
+  /** Short-lived email signup codes. Hashed. */
+  signupPending?: import("./auth/otp").SignupPending[];
   alerts: AlertEvent[];
   emails: EmailRecord[];
   audit: AuditEvent[];

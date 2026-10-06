@@ -161,7 +161,7 @@ export const SERVICES: ServiceDef[] = [
   {
     id: "smtp",
     name: "Email (SMTP)",
-    why: "Alert mail. No host means seats and alerts stay on-site only.",
+    why: "Alert mail and signup one-time codes. No host means codes land in the admin outbox.",
     defaultTier: "none",
     tiers: [
       {
@@ -169,7 +169,7 @@ export const SERVICES: ServiceDef[] = [
         label: "Off",
         price: "$0",
         limits: { mailPerDay: 0 },
-        notes: "Set SMTP_HOST to send alert mail.",
+        notes: "Set SMTP_HOST to send alert mail and account verification codes.",
         next: "set",
       },
       {

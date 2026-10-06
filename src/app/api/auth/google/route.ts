@@ -1,9 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 import { SITE_URL } from "@/lib/config";
+import { verifyBot } from "@/lib/auth/challenge";
 import { OAUTH_COOKIE, shortCookieOpts, signOauthState } from "@/lib/auth/session";
 import { clientIp, rateLimit } from "@/lib/security";
 
 export const dynamic = "force-dynamic";
+
+const Body = z.object({
+  tos: z.boolean().optional(),
+  privacy: z.boolean().optional(),
+  website: z.string().optional(),
+  challengeToken: z.string().optional(),
+  challengeAnswer: z.string().optional(),
+  turnstile: z.string().optional(),
+});
 
 function googleId(): string {
   return (process.env.GOOGLE_CLIENT_ID || "").trim();
@@ -14,16 +25,8 @@ function redirectUri(req: NextRequest): string {
   return `${origin.replace(/\/$/, "")}/api/auth/google/callback`;
 }
 
-export async function GET(req: NextRequest) {
-  if (!rateLimit(clientIp(req) + ":google", 20, 10 * 60_000)) {
-    return NextResponse.redirect(new URL("/?auth_error=rate", req.url));
-  }
+function googleUrl(req: NextRequest, tos: boolean, privacy: boolean) {
   const id = googleId();
-  if (!id || !process.env.GOOGLE_CLIENT_SECRET) {
-    return NextResponse.redirect(new URL("/?auth_error=google_off", req.url));
-  }
-  const tos = req.nextUrl.searchParams.get("tos") === "1";
-  const privacy = req.nextUrl.searchParams.get("privacy") === "1";
   const state = signOauthState(tos, privacy);
   const url = new URL("https://accounts.google.com/o/oauth2/v2/auth");
   url.searchParams.set("client_id", id);
@@ -32,7 +35,28 @@ export async function GET(req: NextRequest) {
   url.searchParams.set("scope", "openid email profile");
   url.searchParams.set("state", state);
   url.searchParams.set("prompt", "select_account");
-  const res = NextResponse.redirect(url.toString());
+  return { url: url.toString(), state };
+}
+
+export async function POST(req: NextRequest) {
+  const ip = clientIp(req);
+  if (!rateLimit(ip + ":google", 20, 10 * 60_000)) {
+    return NextResponse.json({ error: "rate_limited", message: "Too many tries. Wait a bit." }, { status: 429 });
+  }
+  const id = googleId();
+  if (!id || !process.env.GOOGLE_CLIENT_SECRET) {
+    return NextResponse.json({ error: "google_off", message: "Google sign-in is not configured yet." }, { status: 400 });
+  }
+  const parsed = Body.safeParse(await req.json().catch(() => null));
+  if (!parsed.success) {
+    return NextResponse.json({ error: "bad_request", message: "Complete the bot check." }, { status: 400 });
+  }
+  const bot = await verifyBot(parsed.data, ip);
+  if (!bot.ok) return NextResponse.json({ error: "bot", message: bot.error }, { status: 400 });
+  const tos = Boolean(parsed.data.tos);
+  const privacy = Boolean(parsed.data.privacy);
+  const { url, state } = googleUrl(req, tos, privacy);
+  const res = NextResponse.json({ ok: true, url });
   res.cookies.set(OAUTH_COOKIE, state, shortCookieOpts(15 * 60));
   return res;
 }

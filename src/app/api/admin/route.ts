@@ -5,6 +5,7 @@ import { buildAdminDesk } from "@/lib/admin/desk";
 import { enrichProfitDesk } from "@/lib/profit/onchain";
 import { buildProfitDesk } from "@/lib/profit/catalog";
 import { grantFounder, grantMod, revokeFounder, revokeMod } from "@/lib/access";
+import { accountsOf, findAccount, normalizeEmail } from "@/lib/auth/accounts";
 import { isSolanaAddress, isEmail, clientIp } from "@/lib/security";
 import { lockedAuto } from "@/lib/auto";
 import { runBacktest } from "@/lib/pair/backtest";
@@ -64,7 +65,8 @@ const Patch = z.object({
   runBacktest: z.boolean().optional(),
   user: z
     .object({
-      pubkey: z.string(),
+      pubkey: z.string().optional(),
+      accountId: z.string().optional(),
       username: z.string().max(32).optional(),
       email: z.string().max(120).nullable().optional(),
       notes: z.string().max(500).nullable().optional(),
@@ -73,6 +75,7 @@ const Patch = z.object({
       comped: z.boolean().optional(),
       alertsEnabled: z.boolean().optional(),
       clearUsername: z.boolean().optional(),
+      verifyEmail: z.boolean().optional(),
       delete: z.boolean().optional(),
     })
     .optional(),
@@ -236,17 +239,35 @@ export async function POST(req: NextRequest) {
   }
   if (body.user) {
     const u = body.user;
-    if (!isSolanaAddress(u.pubkey)) return NextResponse.json({ error: "bad_wallet", desk: buildAdminDesk() }, { status: 400 });
-    if (u.delete) {
+    const pk = u.pubkey && isSolanaAddress(u.pubkey) ? u.pubkey : "";
+    const accountId = (u.accountId || "").trim();
+    if (!pk && !accountId) return NextResponse.json({ error: "bad_wallet", desk: buildAdminDesk() }, { status: 400 });
+    if (u.delete && accountId && !pk) {
+      await mutateState((s) => {
+        const row = findAccount(s, accountId);
+        const email = row?.emailNorm;
+        s.accounts = accountsOf(s).filter((a) => a.id !== accountId);
+        if (email) s.signupPending = (s.signupPending || []).filter((p) => p.emailNorm !== email);
+        for (const usr of s.users || []) {
+          if (usr.accountId === accountId) usr.accountId = undefined;
+        }
+        pushBounded(s.audit, audit("admin", "login_delete", accountId, ip), 400);
+      });
+      return NextResponse.json({ ok: true, note: "Email login deleted. Wallets on-chain were not touched.", desk: buildAdminDesk() });
+    }
+    if (u.delete && pk) {
       await withLaunch((s) => {
-        if (s.launch?.accounts) delete s.launch.accounts[u.pubkey];
-        s.users = (s.users || []).filter((row) => row.pubkey !== u.pubkey);
-        revokeFounder(s, u.pubkey);
-        pushBounded(s.audit, audit("admin", "user_delete", u.pubkey, ip), 400);
+        if (s.launch?.accounts) delete s.launch.accounts[pk];
+        s.users = (s.users || []).filter((row) => row.pubkey !== pk);
+        for (const a of accountsOf(s)) {
+          a.wallets = (a.wallets || []).filter((w) => w !== pk);
+        }
+        revokeFounder(s, pk);
+        pushBounded(s.audit, audit("admin", "user_delete", pk, ip), 400);
       }, true);
-      await deleteTrader(u.pubkey);
+      await deleteTrader(pk);
       try {
-        await revokeDelegatedSigner(u.pubkey);
+        await revokeDelegatedSigner(pk);
       } catch {
         /* missing key is fine */
       }
@@ -257,21 +278,35 @@ export async function POST(req: NextRequest) {
     }
     const named = await withLaunch((s) => {
       if (!s.launch) s.launch = emptyLaunchBook();
+      const login = accountId ? findAccount(s, accountId) : null;
+      if (login) {
+        if (u.email !== undefined) {
+          const next = u.email ? normalizeEmail(u.email) : "";
+          login.email = next || undefined;
+          login.emailNorm = next || undefined;
+        }
+        if (u.notes !== undefined) login.notes = u.notes || undefined;
+        if (u.verifyEmail) login.emailVerifiedAt = Date.now();
+      }
+      if (!pk) {
+        pushBounded(s.audit, audit("admin", "login_edit", accountId, ip), 400);
+        return { ok: true as const };
+      }
       if (u.clearUsername) {
-        const r = setUsername(s.launch, u.pubkey, "");
+        const r = setUsername(s.launch, pk, "");
         if (!r.ok) return r;
       } else if (typeof u.username === "string") {
-        const r = setUsername(s.launch, u.pubkey, u.username);
+        const r = setUsername(s.launch, pk, u.username);
         if (!r.ok) return r;
       }
       if (typeof u.notes === "string" || u.notes === null) {
-        const acc = s.launch.accounts[u.pubkey] || (s.launch.accounts[u.pubkey] = { pubkey: u.pubkey, referralRewardsSol: 0 });
+        const acc = s.launch.accounts[pk] || (s.launch.accounts[pk] = { pubkey: pk, referralRewardsSol: 0 });
         acc.notes = u.notes || undefined;
       }
-      let user = (s.users || []).find((row) => row.pubkey === u.pubkey);
+      let user = (s.users || []).find((row) => row.pubkey === pk);
       if (!user) {
         user = {
-          pubkey: u.pubkey,
+          pubkey: pk,
           createdAt: Date.now(),
           lastSeen: Date.now(),
           alertsEnabled: true,
@@ -282,25 +317,26 @@ export async function POST(req: NextRequest) {
       if (u.clearUsername) user.username = undefined;
       if (u.email !== undefined) user.email = u.email || undefined;
       if (u.notes !== undefined) user.notes = u.notes || undefined;
+      if (accountId) user.accountId = accountId;
       if (typeof u.alertsEnabled === "boolean") user.alertsEnabled = u.alertsEnabled;
       if (typeof u.comped === "boolean") {
         user.comped = u.comped;
         if (u.comped) {
           user.plan = user.plan === "paper" ? "live" : user.plan;
           user.subscribedUntil = Date.now() + 10 * 365 * 24 * 60 * 60 * 1000;
-        } else if (!s.adminWallets?.includes(u.pubkey)) {
+        } else if (!s.adminWallets?.includes(pk)) {
           user.subscribedUntil = Date.now();
         }
       }
       if (typeof u.grantAdmin === "boolean") {
-        if (u.grantAdmin) grantFounder(s, u.pubkey);
-        else revokeFounder(s, u.pubkey);
+        if (u.grantAdmin) grantFounder(s, pk);
+        else revokeFounder(s, pk);
       }
       if (typeof u.grantMod === "boolean") {
-        if (u.grantMod) grantMod(s, u.pubkey);
-        else revokeMod(s, u.pubkey);
+        if (u.grantMod) grantMod(s, pk);
+        else revokeMod(s, pk);
       }
-      pushBounded(s.audit, audit("admin", "user_edit", u.pubkey, ip), 400);
+      pushBounded(s.audit, audit("admin", "user_edit", pk, ip), 400);
       return { ok: true as const };
     }, true);
     if (named && "ok" in named && !named.ok) {

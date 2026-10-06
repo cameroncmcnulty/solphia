@@ -10,6 +10,8 @@ export type LoginAccount = {
   passwordHash?: string;
   tosAcceptedAt?: number;
   privacyAcceptedAt?: number;
+  emailVerifiedAt?: number;
+  notes?: string;
   wallets: string[];
   createdAt: number;
   lastSeen: number;
@@ -19,6 +21,7 @@ export type PublicAccount = {
   id: string;
   email: string | null;
   google: boolean;
+  emailVerified: boolean;
   tosAcceptedAt: number;
   wallets: string[];
   createdAt: number;
@@ -46,6 +49,7 @@ export function publicAccount(row: LoginAccount): PublicAccount {
     id: row.id,
     email: row.email || null,
     google: Boolean(row.googleId),
+    emailVerified: Boolean(row.emailVerifiedAt || row.googleId),
     tosAcceptedAt: row.tosAcceptedAt || 0,
     wallets: row.wallets.filter((pk) => isSolanaAddress(pk)),
     createdAt: row.createdAt,
@@ -76,22 +80,35 @@ export function acceptLegal(row: LoginAccount, at = Date.now()) {
 
 export function createEmailAccount(
   state: AppState,
-  opts: { email: string; password: string; tos: boolean; privacy: boolean },
+  opts: { email: string; password?: string; passwordHash?: string; tos: boolean; privacy: boolean; verified?: boolean },
 ): { ok: true; account: LoginAccount } | { ok: false; error: string } {
   if (!opts.tos || !opts.privacy) return { ok: false, error: "Agree to the terms and privacy policy." };
   if (!emailOk(opts.email)) return { ok: false, error: "Enter a valid email." };
-  if (!passwordOk(opts.password)) return { ok: false, error: "Password is 8–72 characters." };
-  if (findByEmail(state, opts.email)) return { ok: false, error: "That email already has an account. Sign in." };
+  const existing = findByEmail(state, opts.email);
   const now = Date.now();
   const email = normalizeEmail(opts.email);
+  if (existing) {
+    if (existing.emailVerifiedAt) return { ok: false, error: "That email already has an account. Sign in." };
+    if (opts.passwordHash) existing.passwordHash = opts.passwordHash;
+    else if (opts.password) {
+      if (!passwordOk(opts.password)) return { ok: false, error: "Password is 8–72 characters." };
+      existing.passwordHash = hashPassword(opts.password);
+    }
+    if (opts.verified) existing.emailVerifiedAt = now;
+    acceptLegal(existing, now);
+    existing.lastSeen = now;
+    return { ok: true, account: existing };
+  }
+  if (!opts.passwordHash && !passwordOk(opts.password || "")) return { ok: false, error: "Password is 8–72 characters." };
   const row: LoginAccount = {
     id: randomNonce(),
     email,
     emailNorm: email,
-    passwordHash: hashPassword(opts.password),
+    passwordHash: opts.passwordHash || hashPassword(opts.password || ""),
     wallets: [],
     createdAt: now,
     lastSeen: now,
+    emailVerifiedAt: opts.verified ? now : undefined,
   };
   acceptLegal(row, now);
   accountsOf(state).push(row);
@@ -105,6 +122,7 @@ export function loginEmail(
   const row = findByEmail(state, opts.email);
   if (!row?.passwordHash) return { ok: false, error: "Email or password is wrong." };
   if (!verifyPassword(opts.password, row.passwordHash)) return { ok: false, error: "Email or password is wrong." };
+  if (!row.emailVerifiedAt && !row.googleId) return { ok: false, error: "verify_email" };
   row.lastSeen = Date.now();
   return { ok: true, account: row };
 }
@@ -124,6 +142,7 @@ export function upsertGoogleAccount(
       existing.emailNorm = existing.email;
     }
     existing.lastSeen = now;
+    if (opts.email && emailOk(opts.email)) existing.emailVerifiedAt = existing.emailVerifiedAt || now;
     if (!existing.tosAcceptedAt) {
       if (!opts.tos || !opts.privacy) return { ok: false, error: "Agree to the terms and privacy policy." };
       acceptLegal(existing, now);
@@ -140,6 +159,7 @@ export function upsertGoogleAccount(
     wallets: [],
     createdAt: now,
     lastSeen: now,
+    emailVerifiedAt: email ? now : undefined,
   };
   acceptLegal(row, now);
   accountsOf(state).push(row);
