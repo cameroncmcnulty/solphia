@@ -15,7 +15,8 @@ import { setUsername } from "@/lib/launch/username";
 import { launchError } from "@/lib/launch/errors";
 import { IMAGE_DATA_MAX } from "@/lib/launch/validate";
 import { lastPairPrices } from "@/lib/tick";
-import { creditRank, publicRank } from "@/lib/rank/engine";
+import { airdropMultiplier, referralBoostPct } from "@/lib/circle/types";
+import { payReferralXp, publicRank } from "@/lib/rank/engine";
 
 export const dynamic = "force-dynamic";
 
@@ -49,6 +50,8 @@ function pack(book: ReturnType<typeof emptyLaunchBook>, pubkey: string, solUsd: 
     referredAt: acc.referredAt || null,
     referralRewardsSol: acc.referralRewardsSol || 0,
     referredCount: invited.length,
+    airdropBoostPct: referralBoostPct(invited.length),
+    airdropMultiplier: airdropMultiplier(invited.length),
     invited: invited.map((pk) => ({
       pubkey: pk,
       launched: book.coins.filter((c) => c.creator === pk).length,
@@ -93,7 +96,7 @@ export async function POST(req: NextRequest) {
     const book = bookOf(s);
     if (b.action === "hello") {
       const r = bindReferrer(book, b.pubkey, sanitizeText(b.referrer || "", 48));
-      if (r.ok && r.bound && r.account.referrer) creditRank(book, r.account.referrer, "referral");
+      if (r.ok) payReferralXp(book, b.pubkey);
       return r;
     }
     if (b.action === "pfp") {

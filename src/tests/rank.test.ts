@@ -5,6 +5,7 @@ import {
   RANK_MAX,
   creditRank,
   leaderboard,
+  payReferralXp,
   rankFromXp,
   rankTier,
   resetRank,
@@ -57,15 +58,32 @@ describe("rank engine", () => {
     const again = creditRank(book, A, "circle", { now });
     assert.equal(again.ok, true);
     if (again.ok) assert.equal(again.added, 0);
-    const ref = creditRank(book, B, "referral", { now });
+    const ref = creditRank(book, B, "referral", { now, count: 1 });
     assert.equal(ref.ok, true);
-    if (ref.ok) assert.equal(ref.added, 1600);
+    if (ref.ok) assert.equal(ref.added, 2400);
+    const mile = creditRank(book, B, "referral", { now, count: 5 });
+    assert.equal(mile.ok, true);
+    if (mile.ok) assert.equal(mile.added, 4200);
     let swap = 0;
     for (let i = 0; i < 20; i++) {
       const r = creditRank(book, A, "swap", { sol: 1, now });
       if (r.ok) swap += r.added;
     }
     assert.equal(swap, 420);
+  });
+
+  it("pays referral XP once per invitee and adds a milestone at 5 invites", () => {
+    const book = emptyLaunchBook();
+    const first = payReferralXp(book, A, B);
+    assert.equal(first.ok, true);
+    if (!first.ok) return;
+    assert.equal(first.added, 2400);
+    assert.equal(book.accounts[B].xp, 2400);
+    const again = payReferralXp(book, A, B);
+    assert.equal(again.ok, true);
+    if (!again.ok) return;
+    assert.equal(again.added, 0);
+    assert.equal(book.accounts[B].xp, 2400);
   });
 
   it("can hide a wallet from the public board", () => {

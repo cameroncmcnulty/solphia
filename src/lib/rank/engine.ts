@@ -1,5 +1,5 @@
 import { isSolanaAddress, sanitizeText } from "../security";
-import { ensureAccount, type LaunchAccount, type LaunchBook } from "../launch/engine";
+import { bindReferrer, ensureAccount, referredBy, type LaunchAccount, type LaunchBook } from "../launch/engine";
 
 export const RANK_MAX = 100;
 export type RankKind = "launch" | "chat" | "circle" | "referral" | "swap";
@@ -81,7 +81,8 @@ const XP_LAUNCH = 2400;
 const XP_LAUNCH_EXTRA = 400;
 const XP_CHAT = 14;
 const XP_CIRCLE = 2200;
-const XP_REFERRAL = 1600;
+export const XP_REFERRAL = 2400;
+export const XP_REFERRAL_MILESTONE = 1800;
 const XP_SWAP = 45;
 
 function ymd(now: number) {
@@ -112,7 +113,7 @@ export function creditRank(
   book: LaunchBook,
   pubkey: string,
   kind: RankKind,
-  opts?: { sol?: number; now?: number },
+  opts?: { sol?: number; now?: number; count?: number },
 ): { ok: true; xp: number; added: number; rank: number; leveled: boolean; skipped?: string } | { ok: false; error: string } {
   if (!isSolanaAddress(pubkey)) return { ok: false, error: "bad_wallet" };
   const acc = ensureAccount(book, pubkey);
@@ -136,6 +137,8 @@ export function creditRank(
     acc.circleCredited = true;
   } else if (kind === "referral") {
     add = XP_REFERRAL;
+    const n = Math.max(0, Math.floor(Number(opts?.count) || 0));
+    if (n === 5 || n === 10 || n === 25) add += XP_REFERRAL_MILESTONE;
   } else if (kind === "swap") {
     if (day.swapXp >= DAY_SWAP) return { ok: true, xp: acc.xp || 0, added: 0, rank: before, leveled: false, skipped: "daily_swap" };
     const vol = Math.max(0, Number(opts?.sol) || 0);
@@ -148,6 +151,23 @@ export function creditRank(
   pushEvent(acc, kind, add, now);
   const rank = rankFromXp(acc.xp);
   return { ok: true, xp: acc.xp, added: add, rank, leveled: rank > before };
+}
+
+/** One XP grant per invitee. Count is how many wallets this inviter has bonded. */
+export function payReferralXp(
+  book: LaunchBook,
+  invitee: string,
+  referrer?: string,
+): { ok: true; added: number } | { ok: false; error: string } {
+  if (referrer) bindReferrer(book, invitee, referrer);
+  const acc = book.accounts?.[invitee];
+  if (!acc?.referrer) return { ok: true, added: 0 };
+  if (acc.referralXpPaid) return { ok: true, added: 0 };
+  acc.referralXpPaid = true;
+  const n = referredBy(book, acc.referrer).length;
+  const r = creditRank(book, acc.referrer, "referral", { count: n });
+  if (!r.ok) return r;
+  return { ok: true, added: r.added };
 }
 
 export function setRankXp(book: LaunchBook, pubkey: string, xp: number): { ok: true; xp: number; rank: number } | { ok: false; error: string } {

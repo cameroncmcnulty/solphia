@@ -9,7 +9,6 @@ export type HangoutJob = { id: string; title: string; blurb: string; href?: stri
 export function CircleHangout({
   seed,
   pfpSrc,
-  members,
   refs,
   boostPct,
   unclaimed,
@@ -60,7 +59,7 @@ export function CircleHangout({
           dedication to Solphia — and you already belong in this room.
         </p>
         <p className="mt-3 font-mono text-[12px] text-[#e8c35a]/80">
-          {members} founders · {refs} invited · {boostPct}% airdrop boost
+          Limited spots · {refs} referred · {(1 + (boostPct || 0) / 100).toFixed(2)}× airdrop
         </p>
         <div className="mt-5 flex flex-wrap gap-2">
           {!hideWithdraw && (

@@ -105,6 +105,8 @@ export type LaunchAccount = {
   rankDay?: { ymd: string; chat: number; swapXp: number; launches: number };
   rankEvents?: { id: string; kind: string; xp: number; at: number }[];
   circleCredited?: boolean;
+  /** Rank XP already paid to the inviter for this wallet. */
+  referralXpPaid?: boolean;
   /** Phantom UL session so Chrome iOS can sign without the in-app browser. */
   phSession?: { dappSk: string; phantomPk: string; session: string };
   draft?: {
@@ -412,6 +414,7 @@ export function mergeAccount(remote: LaunchAccount, local: LaunchAccount, key: s
     rankDay,
     rankEvents: eventsA.length >= eventsB.length ? eventsA : eventsB,
     circleCredited: Boolean(local.circleCredited || remote.circleCredited),
+    referralXpPaid: Boolean(local.referralXpPaid || remote.referralXpPaid),
     phSession: local.phSession?.session ? local.phSession : remote.phSession,
   };
 }

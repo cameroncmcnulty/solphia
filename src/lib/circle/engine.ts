@@ -1,9 +1,10 @@
 import { isEmail, isSolanaAddress } from "../security";
 import {
   CIRCLE_AIRDROP_MAX,
-  CIRCLE_BOOST_PCT,
   CIRCLE_COLORS,
   CIRCLE_DEFAULT_CAP,
+  airdropMultiplier,
+  referralBoostPct,
   CIRCLE_KEEP_MS,
   CIRCLE_MSG_MAX,
   CIRCLE_JOB_MAX,
@@ -48,7 +49,7 @@ export function mergeCircle(local: CircleBook, remote: CircleBook): CircleBook {
   const jobs = new Map((b.jobs || []).map((j) => [j.id, j]));
   for (const j of a.jobs || []) jobs.set(j.id, j);
   const out: CircleBook = {
-    cap: Math.max(a.cap || 0, b.cap || 0) || CIRCLE_DEFAULT_CAP,
+    cap: Math.min(CIRCLE_DEFAULT_CAP, Math.max(a.cap || 0, b.cap || 0) || CIRCLE_DEFAULT_CAP),
     members,
     messages: a.messages.length >= b.messages.length ? a.messages : b.messages,
     airdrops: a.airdrops.length >= b.airdrops.length ? a.airdrops : b.airdrops,
@@ -68,16 +69,15 @@ export function ensureCircle(book?: CircleBook | null): CircleBook {
   if (!b.promos) b.promos = [];
   if (!b.jobs) b.jobs = [];
   b.typing = {};
-  if (!(b.cap > 0)) b.cap = CIRCLE_DEFAULT_CAP;
+  if (!(b.cap > 0) || b.cap > CIRCLE_DEFAULT_CAP) b.cap = CIRCLE_DEFAULT_CAP;
   pruneCircle(b);
   return b;
 }
 
-/** Old seats without access are already in. Pending until one invite lands. */
+/** No invite gate. Banned wallets stay out. */
 export function hasAccess(m: CircleMember | undefined): boolean {
   if (!m || m.status === "banned") return false;
-  if (m.role === "admin") return true;
-  return m.access !== "pending";
+  return true;
 }
 
 export function inviteUrl(origin: string, pubkey: string): string {
@@ -123,12 +123,12 @@ export function referralCount(book: CircleBook, pubkey: string): number {
 }
 
 export function boostPct(book: CircleBook, pubkey: string): number {
-  return referralCount(book, pubkey) * CIRCLE_BOOST_PCT;
+  return referralBoostPct(referralCount(book, pubkey));
 }
 
-/** Weight 1.00 + 5% per qualified referral. */
+/** Weight 1.00 + 10% per referred founder, capped at 3×. */
 export function airdropWeight(book: CircleBook, pubkey: string): number {
-  return 1 + boostPct(book, pubkey) / 100;
+  return airdropMultiplier(referralCount(book, pubkey));
 }
 
 export function isMuted(m: CircleMember, now = Date.now()): boolean {
@@ -159,15 +159,15 @@ export function joinCircle(
     if (existing.status === "banned") return { ok: false, error: "banned" };
     existing.email = email;
     existing.lastReadAt = now;
-    if (opts.vip) existing.access = "ready";
+    existing.access = "ready";
     return { ok: true, member: existing, created: false };
   }
+  if (spotsLeft(book) <= 0 && !opts.vip) return { ok: false, error: "full" };
   let referrer = (opts.referrer || "").trim();
   if (referrer === pubkey || !isSolanaAddress(referrer) || !book.members[referrer] || book.members[referrer].status === "banned") {
     referrer = "";
   }
   const host = referrer ? book.members[referrer] : undefined;
-  const hostOpen = Boolean(host && host.status !== "banned" && !host.invitedPubkey);
   const member: CircleMember = {
     pubkey,
     email,
@@ -175,15 +175,15 @@ export function joinCircle(
     referrer: referrer || undefined,
     role: "member",
     status: "ok",
-    access: opts.vip || hostOpen ? "ready" : "pending",
+    access: "ready",
     color: circleColor(pubkey),
     lastReadAt: now,
     unclaimed: 0,
     claimed: 0,
   };
   book.members[pubkey] = member;
-  if (hostOpen && host) {
-    host.invitedPubkey = pubkey;
+  if (host) {
+    if (!host.invitedPubkey) host.invitedPubkey = pubkey;
     host.access = "ready";
   }
   return { ok: true, member, created: true };

@@ -39,7 +39,7 @@ describe("founder access", () => {
     assert.equal(levSeatOk(s, pk), true);
   });
 
-  it("treats project wallets as founders so they skip Circle invite and the seat", () => {
+  it("treats project wallets as founders so they skip the Circle seat cap", () => {
     const s = emptyState();
     const pk = "CyaE1VxvBrahnPWkqm5VsdCvyS2QmNht2UFrKJHga54o";
     s.ownerWallet = pk;

@@ -26,7 +26,7 @@ import type { CircleRole } from "@/lib/circle/types";
 export const dynamic = "force-dynamic";
 
 const Patch = z.object({
-  cap: z.number().int().min(1).max(10_000).optional(),
+  cap: z.number().int().min(1).max(1000).optional(),
   pubkey: z.string().optional(),
   role: z.enum(["member", "mod", "admin"]).optional(),
   ban: z.boolean().optional(),

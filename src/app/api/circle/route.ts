@@ -9,7 +9,7 @@ import { displayMedia } from "@/lib/pinata";
 import { treasuryAddress } from "@/lib/treasury";
 import { circleVip } from "@/lib/access";
 import { emptyLaunchBook } from "@/lib/launch/engine";
-import { creditRank } from "@/lib/rank/engine";
+import { creditRank, payReferralXp } from "@/lib/rank/engine";
 import {
   activeMembers,
   airdropWeight,
@@ -156,7 +156,7 @@ export async function POST(req: NextRequest) {
       const r = joinCircle(s.circle, {
         pubkey: b.pubkey,
         email: b.email || "",
-        referrer: b.referrer,
+        referrer: b.referrer || s.launch?.accounts?.[b.pubkey]?.referrer,
         vip: circleVip(s, b.pubkey),
       });
       if (r.ok) {
@@ -178,7 +178,9 @@ export async function POST(req: NextRequest) {
     if (!out.ok) {
       const message =
         out.error === "banned"
-            ? "This wallet is banned from Founders Circle."
+          ? "This wallet is banned from Founders Circle."
+          : out.error === "full"
+            ? "Limited spots. This class is full."
             : "Could not join.";
       return NextResponse.json({ error: out.error, message }, { status: 400 });
     }
@@ -186,7 +188,7 @@ export async function POST(req: NextRequest) {
       await withLaunch((st) => {
         if (!st.launch) st.launch = emptyLaunchBook();
         creditRank(st.launch, b.pubkey, "circle");
-        if (out.created && out.member.referrer) creditRank(st.launch, out.member.referrer, "referral");
+        if (out.created && out.member.referrer) payReferralXp(st.launch, b.pubkey, out.member.referrer);
       }, true);
     }
     return NextResponse.json({

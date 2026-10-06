@@ -29,7 +29,7 @@ export function isFounder(state: AppState, pubkey?: string | null): boolean {
   return Boolean(u?.comped);
 }
 
-/** Owner / project / admin wallets skip the Circle invite gate. */
+/** Owner / project / admin wallets skip the Circle seat cap. */
 export function circleVip(state: AppState, pubkey?: string | null): boolean {
   return isFounder(state, pubkey);
 }

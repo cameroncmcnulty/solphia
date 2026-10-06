@@ -153,7 +153,7 @@ function CircleInner() {
         ) : !member ? (
           <Gate
             title="Take your seat among the early BELIEVERS"
-            body="This room is elite on purpose. Email gets you project updates. Then invite one believer. Commitment and dedication is how this class is built — and how true greatness is earned."
+            body="Limited spots. Email gets you project updates. Commitment and dedication is how this class is built — and how true greatness is earned."
           >
             <input
               value={email}
@@ -167,24 +167,7 @@ function CircleInner() {
             {err && <p className="mt-2 text-sm text-blood">{err}</p>}
           </Gate>
         ) : !inCircle ? (
-          <Gate
-            title="One invite unlocks the room"
-            body="You are almost in. Copy your link. When they connect a wallet, drop their email, and register, you both stand with the early BELIEVERS."
-          >
-            <button
-              type="button"
-              className="w-full max-w-lg truncate rounded-full border border-acid/40 bg-acid/10 px-4 py-3 font-mono text-[12px] text-ghost"
-              onClick={async () => {
-                await navigator.clipboard.writeText(link);
-                setCopied(true);
-                setTimeout(() => setCopied(false), 1400);
-              }}
-            >
-              {copied ? "copied" : link.replace(/^https?:\/\//, "")}
-            </button>
-            <p className="mt-3 max-w-md text-sm text-mute">Waiting on your invitee. This seat is saved to your wallet.</p>
-            {err && <p className="mt-2 text-sm text-blood">{err}</p>}
-          </Gate>
+          <Gate title="Not this door" body="This wallet cannot enter Founders Circle." />
         ) : (
           <CircleHangout
             seed={owner}

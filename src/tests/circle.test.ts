@@ -15,14 +15,14 @@ import {
   removeJob,
   runAirdrop,
 } from "../lib/circle/engine";
-import { CIRCLE_BOOST_PCT } from "../lib/circle/types";
+import { CIRCLE_BOOST_PCT, airdropMultiplier } from "../lib/circle/types";
 
 const A = "CyaE1VxvBrahnPWkqm5VsdCvyS2QmNht2UFrKJHga54o";
 const B = "D4uCNcBKAbG9NAkmhQg7pBiztuejNzbWrZDcZmFGut81";
 const C = "2jNYVsfptvRLrg8V8AoLMVq6pnmpi7BHVo7Hsx5PTpma";
 
 describe("founders circle", () => {
-  it("does not hard-cap seats and weights airdrops by referral boost", () => {
+  it("lets people in without an invite and weights airdrops by referral count", () => {
     const book = emptyCircle();
     const a = joinCircle(book, { pubkey: A, email: "a@solphia.io" });
     const b = joinCircle(book, { pubkey: B, email: "b@solphia.io", referrer: A });
@@ -30,15 +30,35 @@ describe("founders circle", () => {
     assert.equal(a.ok, true);
     assert.equal(b.ok, true);
     assert.equal(c.ok, true);
+    if (!a.ok) return;
+    assert.equal(hasAccess(a.member), true);
     assert.equal(boostPct(book, A), CIRCLE_BOOST_PCT);
-    assert.equal(airdropWeight(book, A), 1.05);
+    assert.equal(airdropWeight(book, A), 1.1);
     assert.equal(airdropWeight(book, B), 1);
-    const drop = runAirdrop(book, 205);
+    const drop = runAirdrop(book, 210);
     assert.equal(drop.ok, true);
     if (!drop.ok) return;
     const shareA = drop.shares.find((s) => s.pubkey === A)?.amount || 0;
     const shareB = drop.shares.find((s) => s.pubkey === B)?.amount || 0;
     assert.ok(shareA > shareB);
+  });
+
+  it("caps seats and hides the cap number from public copy", () => {
+    const book = emptyCircle();
+    book.cap = 2;
+    assert.equal(joinCircle(book, { pubkey: A, email: "a@solphia.io" }).ok, true);
+    assert.equal(joinCircle(book, { pubkey: B, email: "b@solphia.io" }).ok, true);
+    const full = joinCircle(book, { pubkey: C, email: "c@solphia.io" });
+    assert.equal(full.ok, false);
+    if (!full.ok) assert.equal(full.error, "full");
+    const vip = joinCircle(book, { pubkey: C, email: "c@solphia.io", vip: true });
+    assert.equal(vip.ok, true);
+    const page = readFileSync(join(process.cwd(), "src/app/circle/page.tsx"), "utf8");
+    const hang = readFileSync(join(process.cwd(), "src/components/CircleHangout.tsx"), "utf8");
+    assert.match(page, /Limited spots/);
+    assert.match(hang, /Limited spots/);
+    assert.equal(page.includes("1000"), false);
+    assert.equal(hang.includes("1000"), false);
   });
 
   it("blocks empty chat from non-members", () => {
@@ -81,6 +101,9 @@ describe("founders circle", () => {
     assert.match(hang, /FOUNDING CLASS/);
     assert.match(page, /early BELIEVERS/);
     assert.match(page, /Enter the founding class/);
+    assert.match(page, /Limited spots/);
+    assert.equal(page.includes("One invite unlocks"), false);
+    assert.equal(page.includes("invite one believer"), false);
   });
 
   it("lets a vip wallet in without inviting anyone", () => {
@@ -91,12 +114,12 @@ describe("founders circle", () => {
     assert.equal(hasAccess(a.member), true);
   });
 
-  it("unlocks both seats when the invitee registers", () => {
+  it("counts every invite for airdrop weight without locking the next person out", () => {
     const book = emptyCircle();
     const a = joinCircle(book, { pubkey: A, email: "a@solphia.io" });
     assert.equal(a.ok, true);
     if (!a.ok) return;
-    assert.equal(hasAccess(a.member), false);
+    assert.equal(hasAccess(a.member), true);
     const b = joinCircle(book, { pubkey: B, email: "b@solphia.io", referrer: A });
     assert.equal(b.ok, true);
     if (!b.ok) return;
@@ -106,7 +129,12 @@ describe("founders circle", () => {
     const c = joinCircle(book, { pubkey: C, email: "c@solphia.io", referrer: A });
     assert.equal(c.ok, true);
     if (!c.ok) return;
-    assert.equal(hasAccess(c.member), false);
+    assert.equal(hasAccess(c.member), true);
+    assert.equal(boostPct(book, A), CIRCLE_BOOST_PCT * 2);
+    assert.equal(airdropWeight(book, A), 1.2);
+    assert.equal(airdropMultiplier(1), 1.1);
+    assert.equal(airdropMultiplier(20), 3);
+    assert.equal(airdropMultiplier(99), 3);
   });
 
   it("toggles reactions as grouped emoji chips", () => {
