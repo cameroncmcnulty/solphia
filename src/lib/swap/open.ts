@@ -124,8 +124,9 @@ export async function buildAnySwapTx(opts: {
   outputMint: string;
   amount: number;
   slippageBps?: number;
+  priority?: "auto" | "low" | "medium" | "high";
 }): Promise<{ ok: true; transaction: string; via: "curve" | "jupiter"; outAmount: number; feeSol: number } | { ok: false; reason: string }> {
-  if (!isSolanaAddress(opts.owner)) return { ok: false, reason: "Connect Phantom first." };
+  if (!isSolanaAddress(opts.owner)) return { ok: false, reason: "Connect a wallet first." };
   if (opts.inputMint === SOL_MINT) {
     try {
       const lamports = await connection().getBalance(new PublicKey(opts.owner));
@@ -181,6 +182,7 @@ export async function buildAnySwapTx(opts: {
     quote: jup.quote,
     feeSol,
     feeAfter,
+    priority: opts.priority,
   });
   if (!built.ok) return built;
   const sim = await simulateUnsignedB64(built.transaction);

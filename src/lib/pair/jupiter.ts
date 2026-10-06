@@ -297,10 +297,19 @@ export async function quoteFromUsdc(outputMint: string, usdcAmount: number, slip
 
 export type SwapTxResult = { ok: true; transaction: string } | { ok: false; reason: string };
 
+export type SwapPriority = "auto" | "low" | "medium" | "high";
+
+function jupPriority(level?: SwapPriority) {
+  if (level === "low") return { priorityLevelWithMaxLamports: { maxLamports: 50_000, priorityLevel: "medium" as const } };
+  if (level === "medium") return { priorityLevelWithMaxLamports: { maxLamports: 200_000, priorityLevel: "high" as const } };
+  if (level === "high") return { priorityLevelWithMaxLamports: { maxLamports: 2_000_000, priorityLevel: "veryHigh" as const } };
+  return { priorityLevelWithMaxLamports: { maxLamports: 1_000_000, priorityLevel: "high" as const } };
+}
+
 export async function buildSwapTx(
   quote: JupiterQuote,
   userPublicKey: string,
-  opts?: { asLegacy?: boolean },
+  opts?: { asLegacy?: boolean; priority?: SwapPriority },
 ): Promise<SwapTxResult> {
   let last = "Could not build the swap.";
   const asLegacy = Boolean(opts?.asLegacy);
@@ -314,9 +323,7 @@ export async function buildSwapTx(
   const bodies = [
     {
       ...base,
-      prioritizationFeeLamports: {
-        priorityLevelWithMaxLamports: { maxLamports: 1_000_000, priorityLevel: "high" },
-      },
+      prioritizationFeeLamports: jupPriority(opts?.priority),
     },
     { ...base },
   ];

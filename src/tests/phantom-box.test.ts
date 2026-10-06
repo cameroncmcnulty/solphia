@@ -44,6 +44,7 @@ describe("phantom box", () => {
   it("treats Shill as a Phantom return page so connect persists there", () => {
     assert.equal(signerPage("/shill"), true);
     assert.equal(signerPage("/launch"), true);
+    assert.equal(signerPage("/wallet"), true);
     assert.equal(signerPage("/admin"), false);
   });
 

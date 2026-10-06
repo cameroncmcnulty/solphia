@@ -9,6 +9,7 @@ import { LiveRunner } from "./LiveRunner";
 import { SeatRunner } from "./SeatRunner";
 import { ReferralCapture } from "./ReferralCapture";
 import { WalletKeepalive } from "./WalletConnect";
+import { WalletHost } from "./wallet/WalletHost";
 import { TosGate } from "./TosGate";
 import { SiteFooter } from "./SiteFooter";
 import { clearScrollLock, lockPageScroll } from "@/lib/scrollLock";
@@ -30,6 +31,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
     <>
       <TosGate />
       <WalletKeepalive />
+      <WalletHost />
       <LiveRunner />
       <SeatRunner />
     </>

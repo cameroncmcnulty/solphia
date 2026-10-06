@@ -3,15 +3,18 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
-import { CircleUser, Gift, Rocket, Users } from "lucide-react";
+import { CircleUser, Gift, Rocket, Users, Wallet } from "lucide-react";
 import { useOwner } from "@/lib/hooks";
 import { CartoonPfp } from "./CartoonPfp";
 import { PhantomMark } from "./PhantomMark";
 import { WalletConnect, switchPhantom } from "./WalletConnect";
+import { openWalletSwitcher } from "./wallet/WalletHost";
+import { useActiveWallet } from "@/lib/wallet/useVault";
 
 type Desk = { pfp?: string; username?: string };
 
 const LINKS = [
+  { href: "/wallet", label: "Wallet", Icon: Wallet },
   { href: "/account", label: "Account", Icon: CircleUser },
   { href: "/account#launches", label: "Launched coins", Icon: Rocket },
   { href: "/account#referrals", label: "Referrals", Icon: Users },
@@ -20,6 +23,7 @@ const LINKS = [
 
 export function AccountMenu() {
   const owner = useOwner();
+  const vault = useActiveWallet();
   const [open, setOpen] = useState(false);
   const [desk, setDesk] = useState<Desk | null>(null);
   const [busy, setBusy] = useState(false);
@@ -69,6 +73,8 @@ export function AccountMenu() {
 
   if (!owner) return <WalletConnect />;
 
+  const nickname = desk?.username ? `@${desk.username}` : vault?.nickname || `${owner.slice(0, 4)}…${owner.slice(-4)}`;
+
   const menu = open && mounted && createPortal(
     <div
       ref={box}
@@ -79,11 +85,10 @@ export function AccountMenu() {
       <div className="flex items-center gap-3 border-b border-violet/20 px-3 py-3">
         <CartoonPfp seed={owner} src={desk?.pfp} className="h-11 w-11" />
         <div className="min-w-0">
-          <div className="truncate font-mono text-xs text-ghost">
-            {desk?.username ? `@${desk.username}` : `${owner.slice(0, 6)}…${owner.slice(-6)}`}
-          </div>
+          <div className="truncate font-mono text-xs text-ghost">{nickname}</div>
           <div className="truncate font-mono text-[10px] text-mute">
             {owner.slice(0, 4)}…{owner.slice(-4)}
+            {vault?.kind === "phantom" ? " · Phantom" : vault ? " · Solphia" : ""}
           </div>
         </div>
       </div>
@@ -106,21 +111,35 @@ export function AccountMenu() {
         <button
           type="button"
           role="menuitem"
-          disabled={busy}
-          onClick={async () => {
-            setBusy(true);
-            try {
-              await switchPhantom();
-            } finally {
-              setBusy(false);
-              setOpen(false);
-            }
+          onClick={() => {
+            setOpen(false);
+            openWalletSwitcher();
           }}
-          className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left text-sm text-mute hover:bg-white/5 hover:text-ghost disabled:opacity-40"
+          className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left text-sm text-mute hover:bg-white/5 hover:text-ghost"
         >
-          <PhantomMark className="h-4 w-4 shrink-0 text-white" />
-          {busy ? "Opening Phantom…" : "Switch wallet"}
+          <Wallet className="h-4 w-4 shrink-0 text-acid" />
+          Switch wallet
         </button>
+        {vault?.kind === "phantom" ? (
+          <button
+            type="button"
+            role="menuitem"
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true);
+              try {
+                await switchPhantom();
+              } finally {
+                setBusy(false);
+                setOpen(false);
+              }
+            }}
+            className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left text-sm text-mute hover:bg-white/5 hover:text-ghost disabled:opacity-40"
+          >
+            <PhantomMark className="h-4 w-4 shrink-0 text-white" />
+            {busy ? "Opening Phantom…" : "Switch Phantom account"}
+          </button>
+        ) : null}
       </nav>
     </div>,
     document.body,
@@ -138,9 +157,7 @@ export function AccountMenu() {
         className="inline-flex items-center gap-2 rounded-full border border-violet/30 bg-void/60 p-0.5 pr-2.5 hover:border-acid/40"
       >
         <CartoonPfp seed={owner} src={desk?.pfp} className="h-9 w-9" />
-        <span className="hidden font-mono text-[11px] text-ghost sm:inline">
-          {desk?.username ? `@${desk.username}` : `${owner.slice(0, 4)}…${owner.slice(-4)}`}
-        </span>
+        <span className="hidden max-w-[7rem] truncate font-mono text-[11px] text-ghost sm:inline">{nickname}</span>
       </button>
       {menu}
     </div>

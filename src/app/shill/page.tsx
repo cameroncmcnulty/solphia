@@ -513,7 +513,7 @@ export default function ShillPage() {
 
   async function send(extra?: Record<string, unknown>) {
     if (!owner) {
-      setErr("Connect Phantom to chat.");
+      setErr("Connect a wallet to chat.");
       return;
     }
     const bodyText = extra?.sticker ? "" : text.trim();
@@ -616,7 +616,7 @@ export default function ShillPage() {
 
   async function upvote(mint: string) {
     if (!owner) {
-      setErr("Connect Phantom to vote.");
+      setErr("Connect a wallet to vote.");
       return;
     }
     try {
@@ -959,7 +959,7 @@ export default function ShillPage() {
             <div className="flex items-center gap-3 px-3 py-3">
               <input
                 disabled
-                placeholder="Connect Phantom to chat"
+                placeholder="Connect a wallet to chat"
                 className="h-11 min-w-0 flex-1 rounded-full border border-white/10 bg-white/[0.06] px-4 text-[16px] text-white/40 outline-none"
               />
               <WalletConnect />

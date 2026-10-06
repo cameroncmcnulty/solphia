@@ -60,7 +60,7 @@ export function randomNonce(): string {
 }
 
 export function neverCustody(): void {
-  // Solphia never asks for, stores, or transmits a private key or seed phrase.
+  // Keys never sit on Solphia servers. Seed, PIN, and spending authority stay on the device.
 }
 
 export function assertNoSecretLeak(obj: unknown): void {

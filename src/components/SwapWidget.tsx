@@ -18,6 +18,10 @@ import { MIN_TRADE_SOL } from "@/lib/launch/curve";
 import { SOL_MINT, USDC_MINT } from "@/lib/pair/mints";
 import { amountExceedsBalance, maxPayString, spendableAmount } from "@/lib/swap/spendable";
 import { isPlaceholderLabel } from "@/lib/launch/labels";
+import { feeBreakout, minReceived } from "@/lib/wallet/feeBreakout";
+import { FOCUS_MINT_KEY, FOCUS_SIDE_KEY, solscanTx } from "@/lib/wallet/paths";
+import { useActiveWallet } from "@/lib/wallet/useVault";
+import { WalletSheet } from "./wallet/sheet";
 import {
   clearSwapNotice,
   loadSwapNotice,
@@ -78,7 +82,7 @@ function tokenFromMint(mint: string, symbol?: string, name?: string, image?: str
 
 export function SwapShell({
   title = "Swap",
-  subtitle = "Solphia curve. You sign. Tokens land in the wallet you connected.",
+  subtitle = "Solphia curve. You sign. Tokens land in the active wallet.",
   children,
 }: {
   title?: string;
@@ -191,6 +195,7 @@ export function SwapWidget({
   onMint?: (mint: string) => void;
 }) {
   const siteOwner = useOwner();
+  const vault = useActiveWallet();
   const pk = owner || siteOwner || (typeof window !== "undefined" ? loadOwner() : null);
   const seeded = defaultMint && defaultMint.length > 30
     ? tokenFromMint(defaultMint, defaultSymbol, defaultName, defaultImage)
@@ -198,11 +203,17 @@ export function SwapWidget({
   const [pay, setPay] = useState<SwapToken>(SOL_TOKEN);
   const [recv, setRecv] = useState<SwapToken>(seeded);
   const [amount, setAmount] = useState("");
+  const [slipBps, setSlipBps] = useState(100);
+  const [slipOpen, setSlipOpen] = useState(false);
+  const [priority, setPriority] = useState<"auto" | "low" | "medium" | "high">("auto");
+  const [quote, setQuote] = useState<{ outAmount: number; via: string; impactPct: number; feeSol: number } | null>(null);
+  const [review, setReview] = useState(false);
+  const [bonded, setBonded] = useState(false);
+  const [spha, setSpha] = useState<SwapToken | null>(null);
   const [picker, setPicker] = useState<"pay" | "recv" | null>(null);
   const [ca, setCa] = useState("");
   const [caBusy, setCaBusy] = useState(false);
   const [bals, setBals] = useState<Record<string, number>>({});
-  const [out, setOut] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<SwapNotice | null>(() => (typeof window !== "undefined" ? loadSwapNotice() : null));
   const noticeRef = useRef<(n: SwapNotice) => void>(() => undefined);
@@ -232,6 +243,10 @@ export function SwapWidget({
   const balKnown = Boolean(pk) && Object.prototype.hasOwnProperty.call(bals, payIsSol ? SOL_MINT : pay.mint);
   const spendable = spendableAmount(payBal, pay.mint);
   const short = Boolean(pk && balKnown && amountExceedsBalance(payNum, spendable));
+  const out = quote?.outAmount ?? null;
+  const fees = feeBreakout(quote?.feeSol || (payNum > 0 ? payNum * 0.01 : 0), bonded);
+  const minOut = out != null ? minReceived(out, slipBps) : 0;
+  const embedded = vault?.kind === "embedded";
 
   const showNotice = useCallback((n: SwapNotice) => {
     setNotice(saveSwapNotice(n));
@@ -244,6 +259,54 @@ export function SwapWidget({
     setRecv((cur) => (cur.mint === defaultMint ? { ...cur, ...next } : next));
     setPay((cur) => (cur.mint === defaultMint ? SOL_TOKEN : cur));
   }, [defaultMint, defaultSymbol, defaultName, defaultImage]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const mint = sessionStorage.getItem(FOCUS_MINT_KEY) || "";
+      const side = sessionStorage.getItem(FOCUS_SIDE_KEY) === "sell" ? "sell" : "buy";
+      if (!isSolanaAddress(mint)) return;
+      sessionStorage.removeItem(FOCUS_MINT_KEY);
+      sessionStorage.removeItem(FOCUS_SIDE_KEY);
+      const next = tokenFromMint(mint);
+      if (side === "sell") {
+        setPay(next);
+        setRecv(SOL_TOKEN);
+      } else {
+        setRecv(next);
+        setPay((cur) => (cur.mint === mint ? SOL_TOKEN : cur));
+      }
+      onMint?.(mint);
+    } catch {
+      /* ignore */
+    }
+  }, [onMint]);
+
+  useEffect(() => {
+    if (!pk) {
+      setBonded(false);
+      return;
+    }
+    const ctrl = new AbortController();
+    void fetch(`/api/account?pubkey=${encodeURIComponent(pk)}`, { signal: ctrl.signal, cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => setBonded(Boolean(j?.referrer && isSolanaAddress(j.referrer))))
+      .catch(() => {});
+    return () => ctrl.abort();
+  }, [pk]);
+
+  useEffect(() => {
+    const ctrl = new AbortController();
+    void fetch("/api/spha", { signal: ctrl.signal, cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => {
+        const mint = typeof j?.mint === "string" ? j.mint : "";
+        if (!isSolanaAddress(mint)) return;
+        setSpha({ mint, symbol: "SPHA", name: "Solphia", image: j?.image });
+      })
+      .catch(() => {});
+    return () => ctrl.abort();
+  }, []);
 
   useEffect(() => {
     const mint = recv.mint;
@@ -355,7 +418,7 @@ export function SwapWidget({
 
   useEffect(() => {
     if (!(payNum > 0) || !pay.mint || !recv.mint || pay.mint === recv.mint || short) {
-      setOut(null);
+      setQuote(null);
       return;
     }
     const ctrl = new AbortController();
@@ -367,22 +430,28 @@ export function SwapWidget({
           inputMint: pay.mint,
           outputMint: recv.mint,
           amount: payNum,
-          slippageBps: 100,
+          slippageBps: slipBps,
         }),
         signal: ctrl.signal,
       })
         .then((r) => r.json())
         .then((j) => {
-          if (j.ok) setOut(Number(j.outAmount) || 0);
-          else setOut(null);
+          if (j.ok) {
+            setQuote({
+              outAmount: Number(j.outAmount) || 0,
+              via: typeof j.via === "string" ? j.via : "",
+              impactPct: Number(j.impactPct) || 0,
+              feeSol: Number(j.feeSol) || 0,
+            });
+          } else setQuote(null);
         })
-        .catch(() => setOut(null));
+        .catch(() => setQuote(null));
     }, 280);
     return () => {
       window.clearTimeout(t);
       ctrl.abort();
     };
-  }, [pay.mint, recv.mint, payNum, short]);
+  }, [pay.mint, recv.mint, payNum, short, slipBps]);
 
   const catalog = useMemo(() => {
     const rows: SwapToken[] = [];
@@ -395,11 +464,12 @@ export function SwapWidget({
     };
     push(SOL_TOKEN);
     push(USDC_TOKEN);
+    push(spha);
     push(pay);
     push(recv);
     for (const row of tokens || []) push(row);
     return rows;
-  }, [pay, recv, tokens]);
+  }, [pay, recv, tokens, spha]);
 
   function applyPick(next: SwapToken) {
     const slot = picker;
@@ -448,8 +518,9 @@ export function SwapWidget({
   }
 
   async function go() {
+    if (busy) return;
     if (!pk) {
-      showNotice({ kind: "error", text: "Connect Phantom to swap.", at: Date.now() });
+      showNotice({ kind: "error", text: "Connect a wallet to swap.", at: Date.now() });
       return;
     }
     if (!pay.mint || !recv.mint || pay.mint === recv.mint) {
@@ -474,6 +545,10 @@ export function SwapWidget({
       });
       return;
     }
+    if (!review) {
+      setReview(true);
+      return;
+    }
     setBusy(true);
     liveRef.current = true;
     markActionSpot("swap-widget");
@@ -487,7 +562,8 @@ export function SwapWidget({
           inputMint: pay.mint,
           outputMint: recv.mint,
           amount: payNum,
-          slippageBps: 100,
+          slippageBps: slipBps,
+          priority,
         }),
       });
       const j = await r.json();
@@ -506,8 +582,9 @@ export function SwapWidget({
         { skipPreflight: false },
       );
       liveRef.current = false;
+      setReview(false);
       stayOnCard();
-      showNotice({ kind: "ok", text: `Swap landed. ${sig}`, at: Date.now() });
+      showNotice({ kind: "ok", text: "Swap landed.", at: Date.now(), sig });
       const feeMint = pay.mint === SOL_MINT ? recv.mint : pay.mint;
       void fetch("/api/launch", {
         method: "POST",
@@ -517,6 +594,7 @@ export function SwapWidget({
       onDone?.();
     } catch (e) {
       if (isPhantomRedirect(e)) {
+        setReview(false);
         showNotice({
           kind: "pending",
           text: "Approve in Phantom. You'll come back here.",
@@ -533,9 +611,11 @@ export function SwapWidget({
   }
 
   const cta = !pk
-    ? "Connect Phantom"
+    ? "Connect wallet"
     : busy
-      ? "Swapping…"
+      ? embedded
+        ? "Signing…"
+        : "Swapping…"
       : short
         ? payIsSol
           ? "Not enough SOL"
@@ -561,7 +641,17 @@ export function SwapWidget({
             }`}
             role="status"
           >
-            <p className="min-w-0 flex-1 break-all text-left text-[13px] leading-snug">{notice.text}</p>
+            <p className="min-w-0 flex-1 break-all text-left text-[13px] leading-snug">
+              {notice.text}
+              {notice.sig ? (
+                <>
+                  {" "}
+                  <a href={solscanTx(notice.sig)} target="_blank" rel="noreferrer" className="underline">
+                    {notice.sig.slice(0, 8)}…
+                  </a>
+                </>
+              ) : null}
+            </p>
             <button
               type="button"
               onClick={() => {
@@ -677,6 +767,61 @@ export function SwapWidget({
                 : `This wallet does not have ${fmtTok(payNum)} ${pay.symbol.replace(/^\$+/, "")}.`}
             </p>
           ) : null}
+
+          {quote && out != null && !short ? (
+            <div className="mt-3 space-y-1 rounded-2xl bg-black/25 px-3 py-2 font-mono text-[11px] text-white/55">
+              <div className="flex justify-between"><span>Route</span><span>{quote.via === "curve" ? "Solphia curve" : "Jupiter"}</span></div>
+              <div className="flex justify-between"><span>Price impact</span><span>{(quote.impactPct * 100).toFixed(2)}%</span></div>
+              <div className="flex justify-between"><span>Min received</span><span>{recvIsSol ? fmtSol(minOut, 4) : fmtTok(minOut)}</span></div>
+              <div className="flex justify-between text-white/80"><span>Fee 1.00%</span><span>{fmtSol(fees.totalSol, 5)} SOL</span></div>
+              <div className="flex justify-between pl-2"><span>Creator 0.50%</span><span>{fmtSol(fees.creatorSol, 5)}</span></div>
+              <div className="flex justify-between pl-2"><span>House 0.50%</span><span>{fmtSol(fees.houseSol, 5)}</span></div>
+              {bonded ? (
+                <div className="flex justify-between pl-4 text-acid/80"><span>Invite (inside house)</span><span>{fmtSol(fees.inviteSol, 5)}</span></div>
+              ) : null}
+            </div>
+          ) : null}
+
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+            <button type="button" onClick={() => setSlipOpen((v) => !v)} className="rounded-full bg-white/8 px-3 py-1.5 font-mono text-[11px] text-white/55">
+              Slip {slipBps / 100}%
+            </button>
+            <div className="flex gap-1">
+              {(["auto", "low", "medium", "high"] as const).map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => setPriority(p)}
+                  className={`rounded-full px-2.5 py-1.5 font-mono text-[10px] ${priority === p ? "bg-acid text-void" : "bg-white/8 text-white/50"}`}
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
+          </div>
+          {slipOpen ? (
+            <div className="mt-2 flex items-center gap-2">
+              {[50, 100, 200].map((bps) => (
+                <button
+                  key={bps}
+                  type="button"
+                  onClick={() => setSlipBps(bps)}
+                  className={`rounded-full px-3 py-1 text-[12px] ${slipBps === bps ? "bg-white text-void" : "bg-white/10 text-white/60"}`}
+                >
+                  {bps / 100}%
+                </button>
+              ))}
+              <input
+                inputMode="decimal"
+                placeholder="custom %"
+                className="min-h-[36px] w-20 rounded-full border border-white/10 bg-white/[0.06] px-3 font-mono text-[12px] text-white outline-none"
+                onBlur={(e) => {
+                  const n = Number(e.target.value);
+                  if (n > 0 && n <= 10) setSlipBps(Math.round(n * 100));
+                }}
+              />
+            </div>
+          ) : null}
         </div>
 
         <div className="px-3 pb-4 sm:px-4">
@@ -691,11 +836,13 @@ export function SwapWidget({
               onClick={() => void go()}
               className="flex min-h-[52px] w-full items-center justify-center gap-2 rounded-full bg-[#14f195] text-[16px] font-semibold text-[#04000a] disabled:opacity-40"
             >
-              <PhantomMark className="h-4 w-4" />
+              {embedded ? <SphaMark className="h-4 w-4" /> : <PhantomMark className="h-4 w-4" />}
               {cta}
             </button>
           )}
-          <p className="mt-3 text-center text-[13px] text-white/45">Tokens land in your connected wallet.</p>
+          <p className="mt-3 text-center text-[13px] text-white/45">
+            {embedded ? "Signs in-app. Keys stay on this device." : "Tokens land in the active wallet."}
+          </p>
           <div className="mt-4 flex items-center justify-center gap-2 text-white/35">
             <SphaMark className="h-5 w-5 opacity-80" />
             <p className="font-mono text-[10px] tracking-[0.18em]">POWERED BY SOLPHIA</p>
@@ -759,6 +906,35 @@ export function SwapWidget({
             </div>
           </div>
         </div>
+      ) : null}
+
+      {review ? (
+        <WalletSheet
+          title="Review swap"
+          subtitle={embedded ? "Sign in-app. Solphia never holds this key." : "Phantom will pop up to sign."}
+          onClose={() => !busy && setReview(false)}
+        >
+          <div className="space-y-1 font-mono text-[12px] text-white/70">
+            <div className="flex justify-between text-white"><span>Pay</span><span>{fmtTok(payNum)} {tick(pay.symbol) || pay.symbol}</span></div>
+            <div className="flex justify-between text-white"><span>Receive</span><span>{out == null ? "—" : recvIsSol ? fmtSol(out, 4) : fmtTok(out)} {tick(recv.symbol) || recv.symbol}</span></div>
+            <div className="flex justify-between"><span>Route</span><span>{quote?.via === "curve" ? "Solphia curve" : "Jupiter"}</span></div>
+            <div className="flex justify-between"><span>Min received</span><span>{recvIsSol ? fmtSol(minOut, 4) : fmtTok(minOut)}</span></div>
+            <div className="flex justify-between"><span>Slippage</span><span>{slipBps / 100}%</span></div>
+            <div className="flex justify-between"><span>Priority</span><span>{priority}</span></div>
+            <div className="flex justify-between text-white"><span>Fee 1.00%</span><span>{fmtSol(fees.totalSol, 5)} SOL</span></div>
+            <div className="flex justify-between pl-2"><span>Creator 0.50%</span><span>{fmtSol(fees.creatorSol, 5)}</span></div>
+            <div className="flex justify-between pl-2"><span>House 0.50%</span><span>{fmtSol(fees.houseSol, 5)}</span></div>
+            {bonded ? <div className="flex justify-between pl-4 text-acid/80"><span>Invite (inside house)</span><span>{fmtSol(fees.inviteSol, 5)}</span></div> : null}
+          </div>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void go()}
+            className="btn-acid mt-4 min-h-[48px] w-full rounded-full disabled:opacity-40"
+          >
+            {busy ? "Signing…" : embedded ? "Sign in Solphia" : "Sign in Phantom"}
+          </button>
+        </WalletSheet>
       ) : null}
     </div>
   );

@@ -102,7 +102,7 @@ export async function buildPadSwapTx(opts: {
   amount: number;
   creator?: string;
 }): Promise<{ ok: true; transaction: string } | { ok: false; reason: string }> {
-  if (!isSolanaAddress(opts.owner)) return { ok: false, reason: "Connect Phantom first." };
+  if (!isSolanaAddress(opts.owner)) return { ok: false, reason: "Connect a wallet first." };
   if (dbcEnabled()) {
     const { buildDbcTradeTx } = await import("../launch/dbc");
     const dbc = await buildDbcTradeTx({

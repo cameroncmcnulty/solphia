@@ -133,9 +133,11 @@ export function signerPage(pathname?: string): boolean {
     p === "/launch" ||
     p === "/swap" ||
     p === "/shill" ||
+    p === "/wallet" ||
     p.startsWith("/launch/") ||
     p.startsWith("/swap/") ||
-    p.startsWith("/shill/")
+    p.startsWith("/shill/") ||
+    p.startsWith("/wallet/")
   );
 }
 

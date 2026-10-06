@@ -179,7 +179,7 @@ export default function AccountPage() {
       <main className="pump-shell">
         <div className="pump-wrap py-16">
         <h1 className="pump-h1">Account</h1>
-        <p className="pump-p mt-2">Connect Phantom to manage PFP, launches, and referrals.</p>
+        <p className="pump-p mt-2">Connect a wallet to manage PFP, launches, and referrals. Rank and profile follow that address.</p>
         <div className="mt-6">
           <WalletConnect />
         </div>

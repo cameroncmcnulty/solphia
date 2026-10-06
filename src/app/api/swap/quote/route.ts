@@ -12,7 +12,7 @@ const Body = z.object({
   inputMint: z.string().optional(),
   outputMint: z.string().optional(),
   amount: z.number().positive(),
-  slippageBps: z.number().min(50).max(300).optional(),
+  slippageBps: z.number().min(10).max(1000).optional(),
 });
 
 export async function POST(req: NextRequest) {

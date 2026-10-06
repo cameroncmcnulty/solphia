@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { PhantomMark } from "./PhantomMark";
+import { SphaMark } from "./SphaMark";
 import { loadOwner, persistOwner, OWNER_EVENT } from "@/lib/wallet/owner";
-import { beginPhantomConnect, completePhantomConnect, completePhantomUl, hasPhantomSigner, inPhantomWebView, injectedProvider, openPhantomLink, openPhantomUl, PHANTOM_EVENT, readPhantomReturn } from "@/lib/wallet/phantomConnect";
+import { beginPhantomConnect, completePhantomConnect, completePhantomUl, injectedProvider, openPhantomLink, PHANTOM_EVENT, readPhantomReturn } from "@/lib/wallet/phantomConnect";
+import { ensurePhantomStub, followInjectedPhantom } from "@/lib/wallet/vault";
+import { openWalletOnboard } from "./wallet/WalletHost";
 
 type Provider = {
   isPhantom?: boolean;
@@ -27,7 +29,10 @@ function phantom(): Provider | null {
 }
 
 function keep(pubkey: string | null | undefined) {
-  if (pubkey) persistOwner(pubkey);
+  if (!pubkey) return;
+  if (!followInjectedPhantom()) return;
+  persistOwner(pubkey);
+  ensurePhantomStub(pubkey);
 }
 
 function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
@@ -47,28 +52,6 @@ function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
 }
 
 let switching = false;
-
-function waitForPhantom(ms = 900): Promise<Provider | null> {
-  const found = phantom();
-  if (found) return Promise.resolve(found);
-  return new Promise((resolve) => {
-    const start = Date.now();
-    const tick = () => {
-      const p = phantom();
-      if (p) {
-        resolve(p);
-        return;
-      }
-      if (Date.now() - start >= ms) {
-        resolve(null);
-        return;
-      }
-      window.setTimeout(tick, 80);
-    };
-    window.addEventListener("phantom#initialized", () => resolve(phantom()), { once: true });
-    tick();
-  });
-}
 
 function openPhantomBrowse() {
   beginPhantomConnect();
@@ -102,6 +85,7 @@ export async function switchPhantom(): Promise<string | null> {
     const res = await withTimeout(found.connect(), 20000, "connect");
     const pubkey = res.publicKey.toString();
     persistOwner(pubkey);
+    ensurePhantomStub(pubkey);
     return pubkey;
   } catch {
     const cur = found.publicKey?.toString() || previous;
@@ -120,12 +104,13 @@ export function WalletKeepalive() {
 
     const onAccount = (pk?: { toString(): string } | null) => {
       if (switching) return;
+      if (!followInjectedPhantom()) return;
       if (!pk) {
         const saved = loadOwner();
         if (saved) persistOwner(saved, { server: false });
         return;
       }
-      persistOwner(pk.toString());
+      keep(pk.toString());
     };
 
     const bind = (p: Provider | null) => {
@@ -140,7 +125,10 @@ export function WalletKeepalive() {
       const p = phantom();
       bind(p);
       if (p?.publicKey) {
-        persistOwner(p.publicKey.toString(), { server: opts?.server !== false });
+        if (followInjectedPhantom()) {
+          persistOwner(p.publicKey.toString(), { server: opts?.server !== false });
+          ensurePhantomStub(p.publicKey.toString());
+        }
         return;
       }
       const saved = loadOwner();
@@ -187,14 +175,14 @@ export function WalletKeepalive() {
       const p = phantom();
       bind(p);
       if (p?.publicKey) {
-        persistOwner(p.publicKey.toString(), { server: tries % 8 === 0 });
+        if (followInjectedPhantom()) persistOwner(p.publicKey.toString(), { server: tries % 8 === 0 });
         if (tries > 20 && poll) {
           clearInterval(poll);
           poll = setInterval(() => wake({ server: false }), 8000);
         }
         return;
       }
-      if (document.visibilityState === "visible" && tries % 5 === 1) silentTrusted(p);
+      if (document.visibilityState === "visible" && tries % 5 === 1 && followInjectedPhantom()) silentTrusted(p);
       if (tries > 40 && poll) {
         clearInterval(poll);
         poll = setInterval(() => wake({ server: false }), 8000);
@@ -234,18 +222,18 @@ export function WalletConnect({ compact: _compact = false }: { compact?: boolean
     const saved = fromUl || loadOwner();
     if (saved) setAddr(saved);
     const found = phantom();
-    if (found?.publicKey) {
+    if (found?.publicKey && followInjectedPhantom()) {
       const pubkey = found.publicKey.toString();
       setAddr(pubkey);
-      persistOwner(pubkey);
-    } else {
+      keep(pubkey);
+    } else if (followInjectedPhantom()) {
       silentTrusted(found);
     }
     const onAccount = (pk?: { toString(): string } | null) => {
-      if (!pk) return;
+      if (!pk || !followInjectedPhantom()) return;
       const next = pk.toString();
       setAddr(next);
-      persistOwner(next);
+      keep(next);
     };
     found?.on?.("accountChanged", onAccount);
     const onOwner = (e: Event) => {
@@ -260,25 +248,8 @@ export function WalletConnect({ compact: _compact = false }: { compact?: boolean
     };
   }, []);
 
-  async function connect() {
-    setBusy(true);
-    try {
-      let found = phantom() || (await waitForPhantom(inPhantomWebView() || hasPhantomSigner() ? 4000 : 400));
-      if (!found && inPhantomWebView()) found = await waitForPhantom(8000);
-      if (!found) {
-        if (inPhantomWebView()) return;
-        await openPhantomUl({ pubkey: loadOwner() });
-        return;
-      }
-      const res = await withTimeout(found.connect(), 20000, "connect");
-      const pubkey = res.publicKey.toString();
-      setAddr(pubkey);
-      persistOwner(pubkey);
-    } catch {
-      /* user closed Phantom */
-    } finally {
-      if (mounted.current) setBusy(false);
-    }
+  function connect() {
+    openWalletOnboard();
   }
 
   if (addr) return null;
@@ -292,10 +263,10 @@ export function WalletConnect({ compact: _compact = false }: { compact?: boolean
         e.stopPropagation();
         connect();
       }}
-      title="Connect Phantom"
+      title="Connect a wallet"
       className="relative z-[70] btn-ghost inline-flex h-10 shrink-0 items-center gap-1.5 rounded-full px-2.5 py-2 font-mono text-[10px] tracking-widest sm:h-11 sm:gap-2 sm:px-4 sm:text-[11px]"
     >
-      <PhantomMark className="h-4 w-4 shrink-0 text-white sm:h-5 sm:w-5" />
+      <SphaMark className="h-4 w-4 shrink-0 sm:h-5 sm:w-5" />
       <span className="whitespace-nowrap">{busy ? "…" : "CONNECT"}</span>
     </button>
   );

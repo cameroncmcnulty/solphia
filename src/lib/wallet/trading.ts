@@ -6,6 +6,7 @@ import { loadOwner as readOwner, persistOwner } from "./owner";
 import { asTxB64, b64ToBytes, bytesToB64 } from "../solana/wire";
 import { applyExtras, extraKeys, parseTx, serializeTx } from "../solana/extraSign";
 import { inPhantomWebView, injectedProvider, openPhantomUl, phantomSignError, waitForInjected, type PhAfter } from "./phantomConnect";
+import { activeIsEmbedded, ensureUnlockedSigner } from "./vault";
 
 const SECRET = "solphia_trading_secret";
 
@@ -163,6 +164,19 @@ async function connectInjected(): Promise<void> {
   }
 }
 
+function signWithKeypair(packed: string, kp: Keypair, extra?: Keypair | Keypair[]) {
+  const tx = parseTx(b64ToBytes(packed));
+  const extras = extraKeys(extra);
+  if ("instructions" in tx && Array.isArray((tx as Transaction).instructions)) {
+    (tx as Transaction).partialSign(kp);
+    applyExtras(tx, extras);
+    return toB64(serializeTx(tx));
+  }
+  (tx as VersionedTransaction).sign([kp]);
+  applyExtras(tx, extras);
+  return toB64(serializeTx(tx));
+}
+
 export async function signPhantomAndSend(
   transactionB64: string,
   extra?: Keypair | Keypair[],
@@ -171,6 +185,11 @@ export async function signPhantomAndSend(
 ): Promise<string> {
   const packed = asTxB64(transactionB64);
   const extras = extraKeys(extra);
+  if (activeIsEmbedded()) {
+    const kp = await ensureUnlockedSigner();
+    if (!kp) throw new Error("Unlock your Solphia wallet to sign.");
+    return sendSignedB64(signWithKeypair(packed, kp, extras), opts);
+  }
   const provider = await waitForPhantomProvider();
   if (provider) {
     await connectInjected();
@@ -199,6 +218,11 @@ export async function signPhantomAndSend(
 
 /** Sign only — Jupiter /execute lands the tx. Do not broadcast yourself. */
 export async function signPhantomTxB64(transactionB64: string): Promise<string> {
+  if (activeIsEmbedded()) {
+    const kp = await ensureUnlockedSigner();
+    if (!kp) throw new Error("Unlock your Solphia wallet to sign.");
+    return signWithKeypair(asTxB64(transactionB64), kp);
+  }
   const provider = await waitForPhantomProvider();
   if (!provider) throw new Error("Open Swap inside Phantom to sign.");
   await connectInjected();

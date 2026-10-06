@@ -18,7 +18,8 @@ const Body = z.object({
   inputMint: z.string().optional(),
   outputMint: z.string().optional(),
   amount: z.number().positive(),
-  slippageBps: z.number().min(50).max(300).optional(),
+  slippageBps: z.number().min(10).max(1000).optional(),
+  priority: z.enum(["auto", "low", "medium", "high"]).optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -41,6 +42,7 @@ export async function POST(req: NextRequest) {
     outputMint,
     amount: b.amount,
     slippageBps: b.slippageBps,
+    priority: b.priority,
   });
   if (!tx.ok) return NextResponse.json({ error: tx.reason }, { status: 400 });
   try {

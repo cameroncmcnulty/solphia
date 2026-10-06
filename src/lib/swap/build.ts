@@ -101,6 +101,7 @@ export async function assemblePhantomSwapTx(opts: {
   feeAfter?: boolean;
   /** Human generating the fee (Phantom owner). Defaults to `owner`. */
   person?: string;
+  priority?: "auto" | "low" | "medium" | "high";
 }): Promise<{ ok: true; transaction: string } | { ok: false; reason: string }> {
   const person = opts.person || opts.owner;
   const feeIxs = houseFeeIxs({
@@ -112,7 +113,7 @@ export async function assemblePhantomSwapTx(opts: {
   let last = "Could not build the swap.";
   const preferAfter = Boolean(opts.feeAfter);
   for (const asLegacy of [true, false]) {
-    const built = await buildSwapTx(opts.quote, opts.owner, { asLegacy });
+    const built = await buildSwapTx(opts.quote, opts.owner, { asLegacy, priority: opts.priority });
     if (!built.ok) {
       last = built.reason;
       continue;

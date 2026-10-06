@@ -1094,7 +1094,7 @@ export default function LaunchPage() {
 
   async function finishPhantomLaunch(sig: string, after: PhAfter) {
     const ownerPk = after.owner || loadOwner() || owner;
-    if (!ownerPk) throw new Error("Connect Phantom, then tap Launch again.");
+    if (!ownerPk) throw new Error("Connect a wallet, then tap Launch again.");
     if (after.kind === "launch_config") {
       setBusy(true);
       setMsg("Installing the Solphia curve…");
@@ -1755,7 +1755,7 @@ export default function LaunchPage() {
                     }}
                   />
                 ) : (
-                  <p className="px-1 py-2 text-center text-[13px] text-white/45">Connect Phantom to boost.</p>
+                  <p className="px-1 py-2 text-center text-[13px] text-white/45">Connect a wallet to boost.</p>
                 )}
               </div>
             )}
@@ -1796,10 +1796,10 @@ export default function LaunchPage() {
           <PadPitch />
           <section id="solphia-launch" className="scroll-mt-20 overflow-hidden rounded-3xl border border-white/10 bg-black/30 p-5">
             <h2 className="mb-1 text-[22px] font-semibold text-white">Create a coin</h2>
-            <p className="mb-4 text-[15px] text-white/45">Name, ticker, art. Phantom signs. It lives on the Solphia curve.</p>
+            <p className="mb-4 text-[15px] text-white/45">Name, ticker, art. You sign. It lives on the Solphia curve.</p>
             {!owner ? (
               <div className="mt-6 space-y-3">
-                <p className="text-sm text-mute">Launch signs in Phantom. Connect opens this pad inside the app.</p>
+                <p className="text-sm text-mute">Launch signs in your wallet. Connect a Solphia wallet or Phantom.</p>
                 <WalletConnect />
               </div>
             ) : (
@@ -2373,7 +2373,7 @@ export default function LaunchPage() {
                     {!isSwap
                       ? owner
                         ? "Launch a coin on the Launch tab. It will show up here to manage and claim rewards."
-                        : "Connect Phantom, then launch a coin."
+                        : "Connect a wallet, then launch a coin."
                       : "No coins in this window."}
                   </p>
                 </div>

@@ -5,7 +5,7 @@ export const PHANTOM_SWAP_PENDING =
   "Opening Phantom to sign. Come back here — the swap lands after you approve.";
 
 export type SwapNoticeKind = "error" | "ok" | "pending";
-export type SwapNotice = { kind: SwapNoticeKind; text: string; at: number };
+export type SwapNotice = { kind: SwapNoticeKind; text: string; at: number; sig?: string };
 
 function store(): Storage | null {
   try {
@@ -63,10 +63,15 @@ export function loadSwapNotice(): SwapNotice | null {
   try {
     const raw = s.getItem(SWAP_NOTICE_KEY);
     if (!raw) return null;
-    const j = JSON.parse(raw) as { kind?: unknown; text?: unknown; at?: unknown };
+    const j = JSON.parse(raw) as { kind?: unknown; text?: unknown; at?: unknown; sig?: unknown };
     if (j.kind !== "error" && j.kind !== "ok" && j.kind !== "pending") return null;
     if (typeof j.text !== "string" || !j.text.trim()) return null;
-    return { kind: j.kind, text: j.text.trim().slice(0, 500), at: Number(j.at) || 0 };
+    return {
+      kind: j.kind,
+      text: j.text.trim().slice(0, 500),
+      at: Number(j.at) || 0,
+      sig: typeof j.sig === "string" && j.sig.length > 20 ? j.sig : undefined,
+    };
   } catch {
     return null;
   }
@@ -77,6 +82,7 @@ export function saveSwapNotice(n: SwapNotice): SwapNotice {
     kind: n.kind,
     text: n.text.trim().slice(0, 500),
     at: n.at || Date.now(),
+    sig: n.sig,
   };
   try {
     store()?.setItem(SWAP_NOTICE_KEY, JSON.stringify(next));
