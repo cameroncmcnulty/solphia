@@ -1,13 +1,10 @@
 import { randomBytes, scryptSync, timingSafeEqual } from "crypto";
+export { PASSWORD_HINT, passwordIssue, passwordOk, passwordRules } from "./passwordPolicy";
 
 const N = 16384;
 const R = 8;
 const P = 1;
 const DK = 32;
-
-export function passwordOk(password: string): boolean {
-  return password.length >= 8 && password.length <= 72;
-}
 
 export function hashPassword(password: string): string {
   const salt = randomBytes(16);

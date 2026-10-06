@@ -1,6 +1,6 @@
 import { randomNonce, isEmail, isSolanaAddress, sanitizeText } from "@/lib/security";
 import type { AppState } from "@/lib/types";
-import { hashPassword, passwordOk, verifyPassword } from "./password";
+import { hashPassword, passwordIssue, passwordOk, verifyPassword } from "./password";
 
 export type LoginAccount = {
   id: string;
@@ -91,7 +91,7 @@ export function createEmailAccount(
     if (existing.emailVerifiedAt) return { ok: false, error: "That email already has an account. Sign in." };
     if (opts.passwordHash) existing.passwordHash = opts.passwordHash;
     else if (opts.password) {
-      if (!passwordOk(opts.password)) return { ok: false, error: "Password is 8–72 characters." };
+      if (!passwordOk(opts.password)) return { ok: false, error: passwordIssue(opts.password) || "Password needs upper, lower, and a symbol." };
       existing.passwordHash = hashPassword(opts.password);
     }
     if (opts.verified) existing.emailVerifiedAt = now;
@@ -99,7 +99,9 @@ export function createEmailAccount(
     existing.lastSeen = now;
     return { ok: true, account: existing };
   }
-  if (!opts.passwordHash && !passwordOk(opts.password || "")) return { ok: false, error: "Password is 8–72 characters." };
+  if (!opts.passwordHash && !passwordOk(opts.password || "")) {
+    return { ok: false, error: passwordIssue(opts.password || "") || "Password needs upper, lower, and a symbol." };
+  }
   const row: LoginAccount = {
     id: randomNonce(),
     email,

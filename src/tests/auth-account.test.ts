@@ -24,20 +24,24 @@ function blank(): AppState {
 }
 
 describe("account login", () => {
-  it("hashes passwords and rejects short ones", () => {
+  it("hashes passwords and requires upper, lower, and a symbol", () => {
     assert.equal(passwordOk("1234567"), false);
-    assert.equal(passwordOk("12345678"), true);
-    const hash = hashPassword("hunter22");
+    assert.equal(passwordOk("12345678"), false);
+    assert.equal(passwordOk("Hunter22"), false);
+    assert.equal(passwordOk("hunter22!"), false);
+    assert.equal(passwordOk("HUNTER22!"), false);
+    assert.equal(passwordOk("Hunter22!"), true);
+    const hash = hashPassword("Hunter22!");
     assert.equal(hash.startsWith("scrypt$"), true);
-    assert.equal(verifyPassword("hunter22", hash), true);
-    assert.equal(verifyPassword("hunter23", hash), false);
+    assert.equal(verifyPassword("Hunter22!", hash), true);
+    assert.equal(verifyPassword("Hunter23!", hash), false);
   });
 
   it("creates an email account only with TOS and never puts the hash in the public shape", () => {
     const s = blank();
-    const denied = createEmailAccount(s, { email: "a@solphia.io", password: "hunter22", tos: false, privacy: true });
+    const denied = createEmailAccount(s, { email: "a@solphia.io", password: "Hunter22!", tos: false, privacy: true });
     assert.equal(denied.ok, false);
-    const out = createEmailAccount(s, { email: "A@Solphia.io", password: "hunter22", tos: true, privacy: true, verified: true });
+    const out = createEmailAccount(s, { email: "A@Solphia.io", password: "Hunter22!", tos: true, privacy: true, verified: true });
     assert.equal(out.ok, true);
     if (!out.ok) return;
     assert.equal(out.account.emailNorm, "a@solphia.io");
@@ -46,17 +50,17 @@ describe("account login", () => {
     assert.equal(JSON.stringify(pub).includes("password"), false);
     assert.equal(JSON.stringify(pub).includes("scrypt"), false);
     assert.equal(pub.email, "a@solphia.io");
-    const dup = createEmailAccount(s, { email: "a@solphia.io", password: "hunter22", tos: true, privacy: true });
+    const dup = createEmailAccount(s, { email: "a@solphia.io", password: "Hunter22!", tos: true, privacy: true });
     assert.equal(dup.ok, false);
   });
 
   it("logs in with email and attaches public wallets only", () => {
     const s = blank();
-    const made = createEmailAccount(s, { email: "b@solphia.io", password: "hunter22", tos: true, privacy: true, verified: true });
+    const made = createEmailAccount(s, { email: "b@solphia.io", password: "Hunter22!", tos: true, privacy: true, verified: true });
     assert.equal(made.ok, true);
     const bad = loginEmail(s, { email: "b@solphia.io", password: "nope-nope" });
     assert.equal(bad.ok, false);
-    const ok = loginEmail(s, { email: "b@solphia.io", password: "hunter22" });
+    const ok = loginEmail(s, { email: "b@solphia.io", password: "Hunter22!" });
     assert.equal(ok.ok, true);
     if (!ok.ok) return;
     const pk = "D4uCNcBKAbG9NAkmhQg7pBiztuejNzbWrZDcZmFGut81";
@@ -96,9 +100,9 @@ describe("account login", () => {
 
   it("blocks login until the email one-time code is verified", () => {
     const s = blank();
-    const made = createEmailAccount(s, { email: "raw@solphia.io", password: "hunter22", tos: true, privacy: true });
+    const made = createEmailAccount(s, { email: "raw@solphia.io", password: "Hunter22!", tos: true, privacy: true });
     assert.equal(made.ok, true);
-    const blocked = loginEmail(s, { email: "raw@solphia.io", password: "hunter22" });
+    const blocked = loginEmail(s, { email: "raw@solphia.io", password: "Hunter22!" });
     assert.equal(blocked.ok, false);
     if (!blocked.ok) assert.equal(blocked.error, "verify_email");
   });
@@ -147,21 +151,21 @@ describe("signup bot check and OTP", () => {
     const s = blank();
     const g = upsertGoogleAccount(s, { googleId: "g2", email: "g2@solphia.io", tos: true, privacy: true });
     assert.equal(g.ok, true);
-    const started = startSignupOtp(s, { email: "g2@solphia.io", password: "hunter22", tos: true, privacy: true });
+    const started = startSignupOtp(s, { email: "g2@solphia.io", password: "Hunter22!", tos: true, privacy: true });
     assert.equal(started.ok, false);
   });
 
   it("enforces a resend cooldown on the same email", () => {
     const s = blank();
-    const first = startSignupOtp(s, { email: "cd@solphia.io", password: "hunter22", tos: true, privacy: true });
+    const first = startSignupOtp(s, { email: "cd@solphia.io", password: "Hunter22!", tos: true, privacy: true });
     assert.equal(first.ok, true);
-    const again = startSignupOtp(s, { email: "cd@solphia.io", password: "hunter22", tos: true, privacy: true });
+    const again = startSignupOtp(s, { email: "cd@solphia.io", password: "Hunter22!", tos: true, privacy: true });
     assert.equal(again.ok, false);
   });
 
   it("emails a hashed one-time code and only then creates a verified account", () => {
     const s = blank();
-    const started = startSignupOtp(s, { email: "otp@solphia.io", password: "hunter22", tos: true, privacy: true });
+    const started = startSignupOtp(s, { email: "otp@solphia.io", password: "Hunter22!", tos: true, privacy: true });
     assert.equal(started.ok, true);
     if (!started.ok) return;
     assert.equal(s.signupPending?.length, 1);
@@ -182,7 +186,7 @@ describe("signup bot check and OTP", () => {
     assert.equal(made.ok, true);
     if (!made.ok) return;
     assert.ok(made.account.emailVerifiedAt);
-    const login = loginEmail(s, { email: "otp@solphia.io", password: "hunter22" });
+    const login = loginEmail(s, { email: "otp@solphia.io", password: "Hunter22!" });
     assert.equal(login.ok, true);
   });
 });
@@ -192,7 +196,7 @@ describe("admin user desk", () => {
     const s = emptyState();
     const made = createEmailAccount(s, {
       email: "desk@solphia.io",
-      password: "hunter22",
+      password: "Hunter22!",
       tos: true,
       privacy: true,
       verified: true,
@@ -211,7 +215,7 @@ describe("admin user desk", () => {
     const s = emptyState();
     const made = createEmailAccount(s, {
       email: "rawdesk@solphia.io",
-      password: "hunter22",
+      password: "Hunter22!",
       tos: true,
       privacy: true,
     });

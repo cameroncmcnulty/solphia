@@ -1,6 +1,6 @@
 import { createHmac, randomBytes, timingSafeEqual } from "crypto";
 import type { AppState } from "@/lib/types";
-import { hashPassword, passwordOk } from "./password";
+import { hashPassword, passwordIssue, passwordOk } from "./password";
 import { emailOk, findByEmail, normalizeEmail } from "./accounts";
 
 const secret = process.env.ADMIN_SECRET || "solphia-dev-only";
@@ -58,7 +58,7 @@ export function startSignupOtp(
 ): { ok: true; email: string; otp: string } | { ok: false; error: string } {
   if (!opts.tos || !opts.privacy) return { ok: false, error: "Agree to the terms and privacy policy." };
   if (!emailOk(opts.email)) return { ok: false, error: "Enter a valid email." };
-  if (!passwordOk(opts.password)) return { ok: false, error: "Password is 8–72 characters." };
+  if (!passwordOk(opts.password)) return { ok: false, error: passwordIssue(opts.password) || "Password needs upper, lower, and a symbol." };
   const email = normalizeEmail(opts.email);
   const existing = findByEmail(state, email);
   if (existing?.emailVerifiedAt) return { ok: false, error: "That email already has an account. Sign in." };
