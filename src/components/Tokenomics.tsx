@@ -7,10 +7,10 @@ function tok(n: number) {
 export function Tokenomics({ compact = false }: { compact?: boolean }) {
   return (
     <div className={compact ? "" : "rounded-3xl border border-violet/20 bg-void/40 p-5 sm:p-7"}>
-      <div className="font-mono text-[10px] tracking-[0.22em] text-acid">TOKENOMICS · 100,000,000 $SPHA</div>
+      <div className="font-mono text-[10px] tracking-[0.22em] text-acid">TOKENOMICS · 200,000,000 $SPHA</div>
       <p className="mt-2 max-w-2xl text-sm text-mute sm:text-base">
-        At launch the mint fills four wallets. Mint and freeze are then revoked. The public-market share is the
-        tradeable float released into circulation.
+        At launch, 8.6 / 9.7 / 4.6 land in the owner, foundation, and treasury wallets. The remaining 77.1% hits the
+        Solphia bonding curve like every other pad token — same swap, same graduate, 1% after listing.
       </p>
       <div className="mt-5 flex h-4 overflow-hidden rounded-full">
         {SPHA_SLICES.map((s) => (

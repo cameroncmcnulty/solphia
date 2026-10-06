@@ -36,7 +36,10 @@ export type MailBook = {
 };
 
 export function defaultIdentities(): MailIdentity[] {
-  return [{ local: "admin", name: "Solphia", createdAt: 0 }];
+  return [
+    { local: "admin", name: "Solphia", createdAt: 0 },
+    { local: "hello", name: "Solphia", createdAt: 0 },
+  ];
 }
 
 export function emptyMail(): MailBook {
@@ -49,6 +52,9 @@ export function ensureMail(book?: MailBook | null): MailBook {
   if (!Array.isArray(b.messages)) b.messages = [];
   if (!b.identities.some((i) => i.local === "admin")) {
     b.identities.unshift({ local: "admin", name: "Solphia", createdAt: 0 });
+  }
+  if (!b.identities.some((i) => i.local === "hello")) {
+    b.identities.push({ local: "hello", name: "Solphia", createdAt: 0 });
   }
   return b;
 }

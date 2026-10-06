@@ -6,7 +6,7 @@ import { isSolanaAddress } from "../security";
 import { loadState } from "../store";
 import { payoutAddress } from "./vault";
 
-/** Dust below this is folded into treasury so Phantom does not see empty transfers. */
+/** Dust below this is folded into treasury so empty transfers are not sent. */
 export const FEE_DUST_LAMPORTS = 5_000;
 
 export type HouseLeg = { to: string; lamports: number };
@@ -28,7 +28,7 @@ export type HouseFeeOpts = {
    * even: boosts / pins — live 50% owner / 50% treasury of the full payment.
    */
   mode?: HouseFeeMode;
-  /** Vault creator/referrer only when configured. Owner and treasury always stay the Phantom wallets. */
+  /** Vault creator/referrer only when configured. Owner and treasury always stay the project wallets. */
   vaults?: boolean;
 };
 
@@ -77,7 +77,7 @@ export function houseFeeLegs(opts: HouseFeeOpts): HouseLeg[] {
     opts.creator && isSolanaAddress(opts.creator) && opts.creator !== opts.from ? opts.creator : "";
   const s = houseShare(feeSol, Boolean(referrer), Boolean(creator));
   const toVault = opts.vaults !== false;
-  /** Owner and treasury always get the Phantom wallets they set. Vaults are creator/referrer only. */
+  /** Owner and treasury always get the project wallets they set. Vaults are creator/referrer only. */
   const destVault = (pk: string) => (toVault ? payoutAddress(pk) : pk);
   const owner = (opts.owner && isSolanaAddress(opts.owner) ? opts.owner : ownerAddress()).trim();
   const treasury = (opts.treasury && isSolanaAddress(opts.treasury) ? opts.treasury : treasuryAddress()).trim();

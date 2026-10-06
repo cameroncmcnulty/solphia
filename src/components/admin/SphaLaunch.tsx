@@ -2,15 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { Keypair } from "@solana/web3.js";
-import { Connection } from "@solana/web3.js";
 import { SPHA_NAME, SPHA_SUPPLY, SPHA_SYMBOL, type SphaNetwork } from "@/lib/token/omics";
-import { buildSphaLaunchTxs, encodeTx } from "@/lib/token/mint";
-import { signAndSendPhantom, signPumpLaunch } from "@/lib/wallet/trading";
 import { useAdmin } from "./AdminProvider";
 import { Tokenomics } from "@/components/Tokenomics";
-import { Field, shortPk } from "./ui";
-import { FieldError, useConfirmErrors } from "@/components/form/confirm";
-import { walletOk } from "@/lib/launch/validate";
+import { shortPk } from "./ui";
+import { b64ToBytes } from "@/lib/solana/wire";
+import { ensureProjectSigner, projectWallet, signAndSendProjectTx } from "@/lib/wallet/projectVault";
 
 type Prep = {
   network: SphaNetwork;
@@ -19,30 +16,24 @@ type Prep = {
   missing: string[];
   allocations: { id: string; label: string; pct: string; tokens: number; wallet: string }[];
   launch: { mint: string; network: string; launchedAt: number; name: string; symbol: string } | null;
+  testLaunch?: { mint: string; network: string; launchedAt: number; name: string; symbol: string } | null;
+  reserved?: number;
+  curve?: number;
+  dbc?: boolean;
 };
 
 export function SphaLaunch() {
-  const { data, owner, patch, busy } = useAdmin();
+  const { data, patch, busy } = useAdmin();
   const [prep, setPrep] = useState<Prep | null>(null);
-  const [name, setName] = useState(SPHA_NAME);
-  const [symbol, setSymbol] = useState(SPHA_SYMBOL);
+  const [mode, setMode] = useState<"test" | "official">("test");
+  const [name, setName] = useState("Solphia Test");
+  const [symbol, setSymbol] = useState("SPT");
   const [blurb, setBlurb] = useState("");
   const [website, setWebsite] = useState("https://solphia.io");
   const [art, setArt] = useState<{ image: string; uri: string } | null>(null);
   const [run, setRun] = useState(false);
   const [log, setLog] = useState("");
   const [err, setErr] = useState("");
-  const fErr = useConfirmErrors<"foundation" | "airdrop" | "lp">();
-  const [foundation, setFoundation] = useState("");
-  const [airdrop, setAirdrop] = useState("");
-  const [lp, setLp] = useState("");
-
-  useEffect(() => {
-    if (!data) return;
-    setFoundation(data.foundationWallet || "");
-    setAirdrop(data.airdropWallet || "");
-    setLp(data.lpWallet || "");
-  }, [data?.foundationWallet, data?.airdropWallet, data?.lpWallet]);
 
   async function loadPrep() {
     const r = await fetch("/api/admin/spha", { cache: "no-store" });
@@ -52,94 +43,86 @@ export function SphaLaunch() {
 
   useEffect(() => {
     loadPrep().catch(() => {});
-  }, [data?.devWallet, data?.foundationWallet, data?.airdropWallet, data?.treasury, data?.lpWallet, data?.sphaNetwork]);
+  }, [data?.ownerWallet, data?.foundationWallet, data?.treasury, data?.sphaNetwork, data?.sphaMint]);
 
-  async function saveDest() {
-    const issues: Partial<Record<"foundation" | "airdrop" | "lp", string>> = {};
-    if (foundation && !walletOk(foundation)) issues.foundation = "Invalid address.";
-    if (airdrop && !walletOk(airdrop)) issues.airdrop = "Invalid address.";
-    if (lp && !walletOk(lp)) issues.lp = "Invalid address.";
-    if (Object.keys(issues).length) {
-      fErr.fail(issues);
-      return;
+  useEffect(() => {
+    if (mode === "official") {
+      setName(SPHA_NAME);
+      setSymbol(SPHA_SYMBOL);
+    } else {
+      setName("Solphia Test");
+      setSymbol("SPT");
     }
-    fErr.ok();
-    await patch({
-      foundationWallet: foundation || null,
-      airdropWallet: airdrop || null,
-      lpWallet: lp || null,
-    });
-    loadPrep().catch(() => {});
-  }
+  }, [mode]);
 
   async function launch() {
     setErr("");
     setLog("");
-    if (!owner) {
-      setErr("Connect the payer Phantom. It pays rent, then mint and freeze are revoked.");
+    const ownerW = projectWallet("owner");
+    const payer = ownerW?.pubkey || data?.ownerWallet || "";
+    if (!payer) {
+      setErr("Create the owner project wallet first. It signs the launch — not Phantom.");
       return;
     }
-    if (prep?.missing?.length) {
-      setErr(`Set wallets first: ${prep.missing.join(", ")}`);
+    if (mode === "official" && prep?.missing?.length) {
+      setErr(`Set project wallets first: ${prep.missing.join(", ")}`);
       return;
     }
     const net = data?.sphaNetwork === "mainnet-beta" ? "mainnet-beta" : "devnet";
-    if (net === "mainnet-beta" && !confirm("MAINNET. This creates a live mint and sends the full allocation. Continue?")) {
+    if (mode === "official" && net === "mainnet-beta" && !confirm("MAINNET $SPHA. 200,000,000 supply. 77.1% on the curve. Continue?")) {
+      return;
+    }
+    const signer = await ensureProjectSigner("owner");
+    if (!signer) {
+      setErr("Unlock the owner project wallet to sign.");
       return;
     }
     setRun(true);
     try {
-      const fresh = await fetch("/api/admin/spha", { cache: "no-store" }).then((r) => r.json());
-      if (!fresh.ok) throw new Error("prepare failed");
-      if (fresh.missing?.length) throw new Error(`Set wallets: ${fresh.missing.join(", ")}`);
-      const conn = new Connection(fresh.rpc, "confirmed");
-      if (net === "devnet") {
-        setLog("Requesting devnet airdrop for rent…");
-        try {
-          const { PublicKey, LAMPORTS_PER_SOL } = await import("@solana/web3.js");
-          const sig = await conn.requestAirdrop(new PublicKey(owner), 2 * LAMPORTS_PER_SOL);
-          await conn.confirmTransaction(sig, "confirmed");
-        } catch {
-          /* already funded */
-        }
-      }
       const mint = Keypair.generate();
-      setLog(`Mint ${mint.publicKey.toBase58().slice(0, 8)}… building launch txs`);
-      const set = await buildSphaLaunchTxs({
-        conn,
-        payer: owner,
-        mint,
-        dest: fresh.dest,
-        name,
-        symbol,
-        uri: art?.uri,
+      setLog(`Mint ${mint.publicKey.toBase58().slice(0, 8)}… building ${mode} launch`);
+      const prepR = await fetch("/api/admin/spha", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          action: "prepare",
+          mode,
+          payer,
+          mint: mint.publicKey.toBase58(),
+          name,
+          symbol,
+          uri: art?.uri,
+        }),
       });
-      const sigs: string[] = [];
-      for (let i = 0; i < set.txs.length; i++) {
-        const tx = set.txs[i];
-        setLog(`Sign tx ${i + 1} of ${set.txs.length} in Phantom…`);
-        const encoded = encodeTx(tx);
-        const sig = i === 0 ? await signPumpLaunch(encoded, mint) : await signAndSendPhantom(encoded);
-        sigs.push(sig);
-      }
+      const pj = await prepR.json();
+      if (!prepR.ok) throw new Error(pj.message || pj.error || "prepare failed");
+      const extras: Keypair[] = [mint];
+      if (typeof pj.configSecret === "string") extras.push(Keypair.fromSecretKey(b64ToBytes(pj.configSecret)));
+      setLog("Sign with the owner project wallet…");
+      const sig = await signAndSendProjectTx("owner", pj.tx, extras);
+      setLog("On-chain. Recording…");
       await fetch("/api/admin/spha", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          mint: set.mint,
+          action: "record",
+          mode,
+          mint: mint.publicKey.toBase58(),
           network: net,
           name,
           symbol,
-          supply: SPHA_SUPPLY,
-          sigs,
-          allocations: set.allocations.map((a) => ({ id: a.id, wallet: a.wallet, tokens: a.tokens })),
+          supply: mode === "official" ? SPHA_SUPPLY : 1_000_000_000,
+          sigs: [sig],
+          allocations: (prep?.allocations || []).map((a) => ({ id: a.id, wallet: a.wallet, tokens: a.tokens })),
           image: art?.image,
           blurb,
           uri: art?.uri,
           website,
+          config: pj.config,
+          payer,
         }),
       });
-      setLog(`Live. CA ${set.mint}`);
+      setLog(mode === "official" ? `Official $SPHA live. CA ${mint.publicKey.toBase58()}` : `Test token live. CA ${mint.publicKey.toBase58()} — official $SPHA is unchanged.`);
       loadPrep().catch(() => {});
     } catch (e) {
       setErr(e instanceof Error ? e.message : "launch failed");
@@ -149,6 +132,7 @@ export function SphaLaunch() {
   }
 
   const network = data?.sphaNetwork === "mainnet-beta" ? "mainnet-beta" : "devnet";
+  const ownerPk = projectWallet("owner")?.pubkey || data?.ownerWallet || "";
 
   return (
     <div className="space-y-5">
@@ -159,9 +143,9 @@ export function SphaLaunch() {
           <div>
             <div className="font-mono text-[10px] tracking-[0.22em] text-acid">SOLPHIA TOKEN LAUNCHER</div>
             <p className="mt-1 max-w-xl text-sm text-mute">
-              Same data as the public pad: art, name, ticker, blurb, socials. Creates the mint with Metaplex metadata,
-              sends 8.6 / 9.7 / 4.6 / 77.1 into the launch wallets, then revokes mint and freeze. Community-market
-              tokens are the tradeable float. Switch to mainnet only after a burner test.
+              Official $SPHA is 200,000,000. 8.6 / 9.7 / 4.6 leftover to owner, foundation, and treasury. 77.1% on the
+              same bonding curve as every other pad token so the 1% lasts after graduate. Sign with the owner project
+              wallet — not Phantom. Run a test ticker first.
             </p>
           </div>
           <div className="flex rounded-full border border-violet/30 p-0.5">
@@ -179,15 +163,44 @@ export function SphaLaunch() {
           </div>
         </div>
 
+        <div className="mt-4 flex rounded-full border border-violet/30 p-0.5">
+          {(["test", "official"] as const).map((m) => (
+            <button
+              key={m}
+              type="button"
+              disabled={run}
+              onClick={() => setMode(m)}
+              className={`flex-1 rounded-full px-3 py-1.5 font-mono text-[11px] ${mode === m ? "bg-acid/20 text-acid" : "text-mute"}`}
+            >
+              {m === "test" ? "TEST TOKEN" : "OFFICIAL $SPHA"}
+            </button>
+          ))}
+        </div>
+
         {prep?.launch && (
           <p className="mt-3 font-mono text-[12px] text-acid">
-            Last mint {shortPk(prep.launch.mint, 6)} on {prep.launch.network}
+            Official CA {shortPk(prep.launch.mint, 6)} on {prep.launch.network}
+          </p>
+        )}
+        {prep?.testLaunch && (
+          <p className="mt-1 font-mono text-[12px] text-mute">
+            Last test {shortPk(prep.testLaunch.mint, 6)} on {prep.testLaunch.network}
           </p>
         )}
 
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <Field value={name} onChange={setName} placeholder="Name (Solphia or a test ticker)" />
-          <Field value={symbol} onChange={setSymbol} placeholder="Symbol (SPHA or TEST)" />
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value.slice(0, 32))}
+            placeholder="Name"
+            className="w-full rounded-full border border-violet/30 bg-void px-4 py-2 text-sm text-ghost outline-none"
+          />
+          <input
+            value={symbol}
+            onChange={(e) => setSymbol(e.target.value.slice(0, 10).toUpperCase())}
+            placeholder="Symbol"
+            className="w-full rounded-full border border-violet/30 bg-void px-4 py-2 text-sm text-ghost outline-none"
+          />
         </div>
         <textarea
           value={blurb}
@@ -196,7 +209,12 @@ export function SphaLaunch() {
           className="mt-3 w-full rounded-2xl border border-violet/30 bg-void px-4 py-2 text-sm text-ghost outline-none"
           rows={2}
         />
-        <Field value={website} onChange={setWebsite} placeholder="https://solphia.io" className="mt-3" />
+        <input
+          value={website}
+          onChange={(e) => setWebsite(e.target.value)}
+          placeholder="https://solphia.io"
+          className="mt-3 w-full rounded-full border border-violet/30 bg-void px-4 py-2 text-sm text-ghost outline-none"
+        />
         <div className="mt-3 flex flex-wrap items-center gap-3">
           <label className="btn-ghost cursor-pointer rounded-full px-4 py-2 text-sm">
             {art ? "Replace art" : "Upload token art"}
@@ -236,27 +254,6 @@ export function SphaLaunch() {
           )}
         </div>
 
-        <div className="mt-4 grid gap-3 sm:grid-cols-3">
-          <div>
-            <div className="font-mono text-[10px] text-mute">FOUNDATION</div>
-            <Field field="foundation" value={foundation} error={fErr.errors.foundation} onChange={(v) => { setFoundation(v.trim()); fErr.clear("foundation"); }} placeholder="Community / ecosystem" />
-            <FieldError error={fErr.errors.foundation} />
-          </div>
-          <div>
-            <div className="font-mono text-[10px] text-mute">AIRDROP</div>
-            <Field field="airdrop" value={airdrop} error={fErr.errors.airdrop} onChange={(v) => { setAirdrop(v.trim()); fErr.clear("airdrop"); }} placeholder="Defaults to foundation" />
-            <FieldError error={fErr.errors.airdrop} />
-          </div>
-          <div>
-            <div className="font-mono text-[10px] text-mute">COMMUNITY MARKET</div>
-            <Field field="lp" value={lp} error={fErr.errors.lp} onChange={(v) => { setLp(v.trim()); fErr.clear("lp"); }} placeholder="Tradeable float wallet" />
-            <FieldError error={fErr.errors.lp} />
-          </div>
-        </div>
-        <button type="button" disabled={busy} onClick={saveDest} className="btn-ghost mt-3 rounded-full px-5 py-2 text-sm">
-          Save launch wallets
-        </button>
-
         <div className="mt-4 overflow-x-auto">
           <table className="w-full min-w-[520px] text-left text-sm">
             <thead className="font-mono text-[10px] tracking-[0.14em] text-mute">
@@ -273,7 +270,9 @@ export function SphaLaunch() {
                     {a.label} <span className="font-mono text-[11px] text-acid">{a.pct}</span>
                   </td>
                   <td className="py-2 pr-3 font-mono text-[12px]">{a.tokens.toLocaleString("en-US")}</td>
-                  <td className="py-2 font-mono text-[11px] text-mute">{a.wallet ? shortPk(a.wallet, 6) : "missing"}</td>
+                  <td className="py-2 font-mono text-[11px] text-mute">
+                    {a.wallet === "curve" ? "bonding curve" : a.wallet ? shortPk(a.wallet, 6) : "missing"}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -281,21 +280,22 @@ export function SphaLaunch() {
         </div>
 
         <p className="mt-3 text-sm text-mute">
-          Dev 8.6% uses the <span className="text-ghost">dev holdings</span> wallet. Treasury 4.6% uses the treasury
-          address. Set those above. For a mainnet dry-run, point every wallet at burners first.
+          Payer is the owner project wallet {ownerPk ? shortPk(ownerPk, 4) : "(create it above)"}. Fund it with a little
+          SOL for rent. Official leftover 22.9% lands in treasury, then split 8.6 / 9.7 / 4.6 with the send widget. Test
+          launches use the shared pad 1B config (no leftover) and do not set the official CA.
         </p>
 
         <button
           type="button"
-          disabled={run || Boolean(prep?.missing?.length)}
-          onClick={launch}
+          disabled={run || (mode === "official" && Boolean(prep?.missing?.length))}
+          onClick={() => void launch()}
           className="btn-acid mt-4 rounded-full px-6 py-2 text-sm disabled:opacity-40"
         >
-          {run ? "Launching…" : network === "devnet" ? "Launch on devnet" : "Launch on mainnet"}
+          {run ? "Launching…" : mode === "test" ? `Launch test on ${network}` : `Launch official $SPHA on ${network}`}
         </button>
         {log && <p className="mt-2 font-mono text-[12px] text-acid">{log}</p>}
         {err && <p className="mt-2 text-sm text-blood">{err}</p>}
-        {prep?.missing?.length ? (
+        {mode === "official" && prep?.missing?.length ? (
           <p className="mt-2 text-sm text-mute">Need: {prep.missing.join(", ")}</p>
         ) : null}
       </div>

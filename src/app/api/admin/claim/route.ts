@@ -97,7 +97,7 @@ async function claimTreasury(
     remaining: built.remaining,
     remainingSol: built.remainingSol,
     remainingMints: built.remainingMints,
-    message: "Connect the treasury Phantom to pull partner fees into treasury.",
+    message: "Unlock the treasury project wallet to pull partner fees into treasury.",
   });
 }
 
@@ -144,7 +144,7 @@ async function claimOwner(treasury: string, owner: string, ownerUnclaimed: numbe
     to: owner,
     transaction: Buffer.from(unsigned).toString("base64"),
     claimSol: plan.sol,
-    message: "Connect the treasury Phantom to send the owner share.",
+    message: "Unlock the treasury project wallet to send the owner share.",
   });
 }
 

@@ -23,6 +23,8 @@ import { leaderboard } from "../rank/engine";
 import { emptyLaunchBook } from "../launch/engine";
 import { buildProfitDesk, type ProfitDesk } from "../profit/catalog";
 import type { AdminDesk, AdminPromo, AdminSeat, AdminSleeve, AdminTrader } from "./types";
+import { adminOtpEmailOf } from "./otp";
+import { mailConfigured } from "../email/send";
 
 export type { AdminDesk, AdminSeat, AdminSleeve, AdminTrader } from "./types";
 
@@ -132,6 +134,11 @@ export function buildAdminDesk(opts?: { light?: boolean; profits?: ProfitDesk })
     lpWallet: s.lpWallet || "",
     sphaNetwork: s.sphaNetwork === "mainnet-beta" ? "mainnet-beta" : "devnet",
     sphaLaunch: s.sphaLaunch || null,
+    sphaTestLaunch: s.sphaTestLaunch || null,
+    sphaDbcConfig: s.sphaDbcConfig || "",
+    adminOtpEmail: adminOtpEmailOf(s),
+    mailReady: mailConfigured(),
+    googleEnabled: Boolean((process.env.GOOGLE_CLIENT_ID || "").trim() && (process.env.GOOGLE_CLIENT_SECRET || "").trim()),
     circle: (() => {
       const c = ensureCircle(s.circle);
       return { cap: c.cap, members: activeMembers(c).length, spots: spotsLeft(c) };

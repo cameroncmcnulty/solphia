@@ -162,6 +162,11 @@ export type AdminDesk = {
     sigs: string[];
     allocations: { id: string; wallet: string; tokens: number }[];
   } | null;
+  sphaTestLaunch: AdminDesk["sphaLaunch"];
+  sphaDbcConfig: string;
+  adminOtpEmail: string;
+  mailReady: boolean;
+  googleEnabled: boolean;
   sphaSocials: { x: string; telegram: string; discord: string };
   circle: { cap: number; members: number; spots: number };
   ownerEarningsSol: number;

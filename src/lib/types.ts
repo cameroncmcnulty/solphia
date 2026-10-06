@@ -492,6 +492,10 @@ export interface AppState {
   accounts?: import("./auth/accounts").LoginAccount[];
   /** Short-lived email signup codes. Hashed. */
   signupPending?: import("./auth/otp").SignupPending[];
+  /** Where admin-dashboard OTP is delivered. Editable in System. */
+  adminOtpEmail?: string;
+  /** Hashed pending admin login code. Never plaintext. */
+  adminOtpPending?: import("./admin/otp").AdminOtpPending | null;
   alerts: AlertEvent[];
   emails: EmailRecord[];
   audit: AuditEvent[];
@@ -545,6 +549,10 @@ export interface AppState {
     uri?: string;
     website?: string;
   } | null;
+  /** Dry-run pad launch. Does not set sphaMint. */
+  sphaTestLaunch?: AppState["sphaLaunch"];
+  /** Dedicated $SPHA DBC config. Never overwrite the shared pad config with this. */
+  sphaDbcConfig?: string;
   sphaSocials?: { x?: string; telegram?: string; discord?: string; website?: string };
   /** Last admin-ops write. Serverless instances overlay KEYS.ops when this is newer. */
   opsUpdatedAt?: number;

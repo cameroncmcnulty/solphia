@@ -15,6 +15,13 @@ type AdminContextValue = {
   noteErr: boolean;
   secret: string;
   setSecret: (v: string) => void;
+  otp: string;
+  setOtp: (v: string) => void;
+  otpPending: boolean;
+  otpEmail: string;
+  otpHint: string;
+  verifyOtp: () => Promise<void>;
+  resendOtp: () => Promise<void>;
   now: number;
   streamOn: boolean;
   section: AdminSectionId;
@@ -62,6 +69,10 @@ export function useAdmin() {
 
 export function AdminProvider({ children }: { children: ReactNode }) {
   const [secret, setSecret] = useState("");
+  const [otp, setOtp] = useState("");
+  const [otpPending, setOtpPending] = useState(false);
+  const [otpEmail, setOtpEmail] = useState("");
+  const [otpHint, setOtpHint] = useState("");
   const [data, setData] = useState<AdminDesk | null>(null);
   const [authed, setAuthed] = useState(false);
   const [err, setErr] = useState("");
@@ -130,14 +141,22 @@ export function AdminProvider({ children }: { children: ReactNode }) {
   const login = useCallback(async () => {
     setBusy(true);
     setErr("");
+    setOtpHint("");
     try {
       const r = await fetch("/api/admin/login", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ secret }),
+        body: JSON.stringify({ secret, action: "start" }),
       });
+      const j = (await r.json().catch(() => ({}))) as { pending?: boolean; email?: string; message?: string; devCode?: string };
       if (!r.ok) {
-        setErr("Wrong password.");
+        setErr(j.message || "Wrong password.");
+        return;
+      }
+      if (j.pending) {
+        setOtpPending(true);
+        setOtpEmail(typeof j.email === "string" ? j.email : "");
+        setOtpHint(j.devCode ? `Dev preview code: ${j.devCode}` : "We emailed a 6-digit code. It expires in 15 minutes.");
         return;
       }
       await reload();
@@ -149,11 +168,64 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     }
   }, [reload, secret]);
 
+  const verifyOtp = useCallback(async () => {
+    setBusy(true);
+    setErr("");
+    try {
+      const r = await fetch("/api/admin/login", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "verify", otp }),
+      });
+      const j = (await r.json().catch(() => ({}))) as { message?: string };
+      if (!r.ok) {
+        setErr(j.message || "That code is wrong.");
+        return;
+      }
+      await reload();
+      setAuthed(true);
+      setOtpPending(false);
+      setOtp("");
+    } catch {
+      setErr("Could not verify the code.");
+    } finally {
+      setBusy(false);
+    }
+  }, [otp, reload]);
+
+  const resendOtp = useCallback(async () => {
+    setBusy(true);
+    setErr("");
+    setOtpHint("");
+    try {
+      const r = await fetch("/api/admin/login", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "resend" }),
+      });
+      const j = (await r.json().catch(() => ({}))) as { message?: string; email?: string; devCode?: string };
+      if (!r.ok) {
+        setErr(j.message || "Could not resend the code.");
+        return;
+      }
+      if (typeof j.email === "string") setOtpEmail(j.email);
+      setOtpHint(j.devCode ? `Dev preview code: ${j.devCode}` : "We emailed a new 6-digit code.");
+    } catch {
+      setErr("Could not resend the code.");
+    } finally {
+      setBusy(false);
+    }
+  }, []);
+
   const logout = useCallback(async () => {
     await fetch("/api/admin/login", { method: "DELETE" });
     setAuthed(false);
     setData(null);
     setSecret("");
+    setOtp("");
+    setOtpPending(false);
+    setOtpEmail("");
+    setOtpHint("");
   }, []);
 
   const patch = useCallback(async (body: Record<string, unknown>) => {
@@ -234,6 +306,13 @@ export function AdminProvider({ children }: { children: ReactNode }) {
       noteErr,
       secret,
       setSecret,
+      otp,
+      setOtp,
+      otpPending,
+      otpEmail,
+      otpHint,
+      verifyOtp,
+      resendOtp,
       now,
       streamOn,
       section,
@@ -278,6 +357,12 @@ export function AdminProvider({ children }: { children: ReactNode }) {
       note,
       noteErr,
       secret,
+      otp,
+      otpPending,
+      otpEmail,
+      otpHint,
+      verifyOtp,
+      resendOtp,
       now,
       streamOn,
       section,

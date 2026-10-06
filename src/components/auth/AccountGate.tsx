@@ -78,6 +78,7 @@ export function AccountGate({
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [hint, setHint] = useState("");
+  const [googleOn, setGoogleOn] = useState(true);
   const onBot = useCallback((fields: BotFields) => setBot(fields), []);
   const rules = passwordRules(password);
 
@@ -95,6 +96,7 @@ export function AccountGate({
     fetch("/api/auth/me", { credentials: "include", cache: "no-store" })
       .then((r) => r.json())
       .then((j) => {
+        if (typeof j?.googleEnabled === "boolean") setGoogleOn(j.googleEnabled);
         if (j?.account?.id) onReady(j.account as PublicAccount);
       })
       .catch(() => undefined);
@@ -423,7 +425,7 @@ export function AccountGate({
       {err ? <p className="mb-3 font-mono text-[13px] text-blood">{err}</p> : null}
       <button
         type="button"
-        disabled={busy}
+        disabled={busy || !googleOn}
         onClick={() => {
           setErr("");
           setScreen("google");
@@ -431,7 +433,7 @@ export function AccountGate({
         className="flex min-h-[52px] w-full items-center justify-center gap-2 rounded-full border border-white/15 bg-white text-[15px] font-semibold text-void disabled:opacity-40"
       >
         <GoogleMark />
-        {mode === "signup" ? "Sign up with Google" : "Sign in with Google"}
+        {!googleOn ? "Google is still wiring up" : mode === "signup" ? "Sign up with Google" : "Sign in with Google"}
       </button>
       <div className="my-4 flex items-center gap-3">
         <div className="h-px flex-1 bg-white/10" />

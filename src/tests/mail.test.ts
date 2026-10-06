@@ -7,10 +7,11 @@ describe("solphia mail", () => {
     const book = emptyMail();
     assert.ok(book.identities.some((i) => i.local === "admin"));
     assert.equal(mailAddress("admin"), "admin@solphia.io");
-    const r = createIdentity(book, { local: "hello", name: "Hello" });
+    const r = createIdentity(book, { local: "codes", name: "Codes" });
     assert.equal(r.ok, true);
-    const dup = createIdentity(book, { local: "hello" });
+    const dup = createIdentity(book, { local: "codes" });
     assert.equal(dup.ok, false);
+    assert.ok(book.identities.some((i) => i.local === "hello"));
   });
 
   it("signs outgoing mail with the SPHA mark, not Solana", () => {

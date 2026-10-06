@@ -56,12 +56,15 @@ export async function quoteAnySwap(opts: {
   outputMint: string;
   amount: number;
   slippageBps?: number;
+  /** Protocol wallets skip the widget 1% so they do not skim themselves. Curve 1% stays on-chain. */
+  skipHouse?: boolean;
 }): Promise<AnyQuote> {
   if (!isSolanaAddress(opts.inputMint) || !isSolanaAddress(opts.outputMint) || opts.inputMint === opts.outputMint) {
     return { ok: false, reason: "Pick two different tokens." };
   }
   if (!(opts.amount > 0)) return { ok: false, reason: "Enter an amount." };
   const slip = opts.slippageBps ?? 100;
+  const skipHouse = Boolean(opts.skipHouse);
   const pair = padPair(opts.inputMint, opts.outputMint);
   if (pair && !isDeskMint(pair.mint)) {
     try {
@@ -86,7 +89,7 @@ export async function quoteAnySwap(opts: {
     }
   }
   const [inDecimals, outDecimals] = await Promise.all([mintDecimals(opts.inputMint), mintDecimals(opts.outputMint)]);
-  const buyFee = opts.inputMint === SOL_MINT ? liveSwapFeeSol(opts.amount) : 0;
+  const buyFee = skipHouse || opts.inputMint !== SOL_MINT ? 0 : liveSwapFeeSol(opts.amount);
   const quoteAmount = buyFee > 0 ? Math.max(0, opts.amount - buyFee) : opts.amount;
   let q: Awaited<ReturnType<typeof quoteOpenSwap>>;
   try {
@@ -102,8 +105,13 @@ export async function quoteAnySwap(opts: {
     return { ok: false, reason: e instanceof Error ? e.message : "No swap route." };
   }
   if (!q.ok) return { ok: false, reason: q.reason };
-  const feeSol =
-    opts.inputMint === SOL_MINT ? liveSwapFeeSol(opts.amount) : opts.outputMint === SOL_MINT ? liveSwapFeeSol(q.outAmount) : 0;
+  const feeSol = skipHouse
+    ? 0
+    : opts.inputMint === SOL_MINT
+      ? liveSwapFeeSol(opts.amount)
+      : opts.outputMint === SOL_MINT
+        ? liveSwapFeeSol(q.outAmount)
+        : 0;
   return {
     ok: true,
     via: "jupiter",
@@ -125,6 +133,7 @@ export async function buildAnySwapTx(opts: {
   amount: number;
   slippageBps?: number;
   priority?: "auto" | "low" | "medium" | "high";
+  skipHouse?: boolean;
 }): Promise<{ ok: true; transaction: string; via: "curve" | "jupiter"; outAmount: number; feeSol: number } | { ok: false; reason: string }> {
   if (!isSolanaAddress(opts.owner)) return { ok: false, reason: "Connect a wallet first." };
   if (opts.inputMint === SOL_MINT) {
@@ -147,7 +156,8 @@ export async function buildAnySwapTx(opts: {
       /* sim below still catches a short bag */
     }
   }
-  const q = await quoteAnySwap(opts);
+  const skipHouse = Boolean(opts.skipHouse);
+  const q = await quoteAnySwap({ ...opts, skipHouse });
   if (!q.ok) return q;
   const slip = opts.slippageBps ?? 100;
   if (q.via === "curve") {
@@ -164,7 +174,7 @@ export async function buildAnySwapTx(opts: {
     if (!sim.ok) return sim;
     return { ok: true, transaction: tx.transaction, via: "curve", outAmount: q.outAmount, feeSol: q.feeSol };
   }
-  const buyFee = opts.inputMint === SOL_MINT ? liveSwapFeeSol(opts.amount) : 0;
+  const buyFee = skipHouse || opts.inputMint !== SOL_MINT ? 0 : liveSwapFeeSol(opts.amount);
   const quoteAmount = buyFee > 0 ? Math.max(0, opts.amount - buyFee) : opts.amount;
   const jup = await quoteOpenSwap({
     inputMint: opts.inputMint,
@@ -176,7 +186,7 @@ export async function buildAnySwapTx(opts: {
   });
   if (!jup.ok) return { ok: false, reason: jup.reason };
   const feeAfter = opts.outputMint === SOL_MINT && opts.inputMint !== SOL_MINT;
-  const feeSol = buyFee > 0 ? buyFee : feeAfter ? liveSwapFeeSol(jup.outAmount) : 0;
+  const feeSol = skipHouse ? 0 : buyFee > 0 ? buyFee : feeAfter ? liveSwapFeeSol(jup.outAmount) : 0;
   const built = await assemblePhantomSwapTx({
     owner: opts.owner,
     quote: jup.quote,

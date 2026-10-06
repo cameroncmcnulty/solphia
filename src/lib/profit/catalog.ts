@@ -93,7 +93,7 @@ export function buildProfitDesk(state: AppState): ProfitDesk {
       wallet: "treasury",
       walletPk: treasury,
       accruedSol: swapSolAccrued,
-      settlement: "Widget open-market swaps send 50% owner / 50% treasury live in the Phantom tx. Jupiter plugin referral stays at referral.jup.ag — not stacked on this skim.",
+      settlement: "Widget open-market swaps send 50% owner / 50% treasury live into those project wallets. Jupiter plugin referral stays at referral.jup.ag — not stacked on this skim.",
     },
     {
       id: "pad-treasury",
@@ -102,7 +102,7 @@ export function buildProfitDesk(state: AppState): ProfitDesk {
       wallet: "treasury",
       walletPk: treasury,
       accruedSol: padTreasury,
-      settlement: "Sits in the pad until claimed. Owner Phantom and treasury Phantom each claim their 25% separately. The on-chain pull still needs the DBC fee claimer, then the other wallet is paid live in that same approval.",
+      settlement: "Sits in the pad until claimed with the treasury project wallet. Owner 25% is sent live from treasury to owner in that same claim. Claim from the admin dashboard.",
     },
     {
       id: "pad-owner",
@@ -111,7 +111,7 @@ export function buildProfitDesk(state: AppState): ProfitDesk {
       wallet: "owner",
       walletPk: ownerWallet,
       accruedSol: padOwner,
-      settlement: "Owner 25% of the 1% is paid to the owner Phantom (not the treasury). Owner can claim from /launch while connected to that Phantom.",
+      settlement: "Owner 25% of the 1% is paid to the owner project wallet (not the treasury). Claim the owner share from the admin dashboard after treasury pulls pad fees.",
     },
     {
       id: "pad-creator",
@@ -138,7 +138,7 @@ export function buildProfitDesk(state: AppState): ProfitDesk {
       wallet: "treasury",
       walletPk: treasury,
       accruedSol: seatSolAccrued,
-      settlement: "Sent live in the seat Phantom tx to the owner and treasury Phantoms (12.5% owner if referred).",
+      settlement: "Sent live in the seat tx to the owner and treasury project wallets (12.5% owner if referred).",
     },
     {
       id: "pin",
@@ -147,7 +147,7 @@ export function buildProfitDesk(state: AppState): ProfitDesk {
       wallet: "treasury",
       walletPk: treasury,
       accruedSol: pinSolAccrued,
-      settlement: "Sent live in the pin Phantom tx to the owner and treasury Phantoms 50/50.",
+      settlement: "Sent live in the pin tx to the owner and treasury project wallets 50/50.",
     },
     {
       id: "boost",
@@ -156,7 +156,7 @@ export function buildProfitDesk(state: AppState): ProfitDesk {
       wallet: "treasury",
       walletPk: treasury,
       accruedSol: boostSolAccrued,
-      settlement: "Sent live in the boost Phantom tx to the owner and treasury Phantoms 50/50.",
+      settlement: "Sent live in the boost tx to the owner and treasury project wallets 50/50.",
     },
   ];
   const treasurySol = padTreasury + pinSolAccrued + boostSolAccrued + seatSolAccrued + swapSolAccrued;

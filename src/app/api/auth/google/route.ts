@@ -44,7 +44,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "rate_limited", message: "Too many tries. Wait a bit." }, { status: 429 });
   }
   const id = googleId();
-  if (!id || !process.env.GOOGLE_CLIENT_SECRET) {
+  const secret = (process.env.GOOGLE_CLIENT_SECRET || "").trim();
+  if (!id || !secret) {
     return NextResponse.json({ error: "google_off", message: "Google sign-in is not configured yet." }, { status: 400 });
   }
   const parsed = Body.safeParse(await req.json().catch(() => null));

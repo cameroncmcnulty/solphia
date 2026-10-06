@@ -9,7 +9,7 @@ export const VAULT_KEEP_LAMPORTS = 2_000_000;
 const DUST_LAMPORTS = 5_000;
 
 /**
- * HD fee vaults for creators / referrers only. Owner and treasury are Phantom wallets.
+ * HD fee vaults for creators / referrers only. Owner and treasury are in-house project wallets.
  * Seed is FEE_VAULT_SECRET, else LIVE_SIGNER_SECRET. Do not rotate the seed or addresses move.
  */
 function vaultSeed(): string {

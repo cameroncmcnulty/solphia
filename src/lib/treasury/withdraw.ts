@@ -30,9 +30,9 @@ function keypairFromTreasurySecret(): Keypair | null {
 }
 
 /**
- * Optional hot key for the displayed treasury Phantom.
+ * Optional hot key for the displayed treasury project wallet.
  * Only signs when TREASURY_SECRET's pubkey equals treasuryAddress().
- * Not required: feeClaimer is that Phantom, and partner claims are Phantom-signed.
+ * Not required: feeClaimer is that treasury, and partner claims sign with the project wallet.
  * Never log this.
  */
 export function treasuryKeypair(): Keypair | null {
@@ -47,7 +47,7 @@ export function harvestKeypair(): Keypair | null {
   return treasuryKeypair();
 }
 
-/** Always the Phantom treasury they set. Never a different harvest wallet. */
+/** Always the treasury they set. Never a different harvest wallet. */
 export function harvestAddress(): string {
   return treasuryAddress();
 }

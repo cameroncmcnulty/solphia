@@ -164,7 +164,7 @@ export async function POST(req: NextRequest) {
     ...preview,
     needsSignature: true,
     transaction: Buffer.from(unsigned).toString("base64"),
-    message: "Connect the treasury Phantom to sign this send.",
+    message: "Unlock the treasury project wallet to sign this send.",
   });
 }
 

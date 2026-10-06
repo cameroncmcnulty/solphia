@@ -8,6 +8,7 @@ import { connection } from "../solana/connection";
 import { pushBounded } from "../store";
 import type { AppState } from "../types";
 import { SERVICES, tierOf, type HealthTiers, type ServiceId } from "./catalog";
+import { mailConfigured } from "../email/send";
 
 export type HealthSample = {
   t: number;
@@ -177,7 +178,7 @@ export function inferredTiers(): HealthTiers {
     helius: HELIUS_API_KEY ? "developer" : "free",
     pinata: pinataConfigured() ? "free" : "free",
     xai: XAI_API_KEY ? "grok" : "none",
-    smtp: process.env.SMTP_HOST ? "set" : "none",
+    smtp: mailConfigured() ? "set" : "none",
     signer: signerConfigured() ? "on" : "off",
   };
 }

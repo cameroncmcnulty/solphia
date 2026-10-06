@@ -3,7 +3,7 @@ export const SOLPHIA_TOKEN = {
   name: "Solphia",
   symbol: "SPHA",
   mint: "",
-  decimals: 9,
+  decimals: 6,
   website: "https://solphia.io",
   x: "",
   telegram: "",

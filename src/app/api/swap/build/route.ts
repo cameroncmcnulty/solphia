@@ -3,7 +3,8 @@ import { z } from "zod";
 import { clientIp, isSolanaAddress, rateLimit } from "@/lib/security";
 import { SOL_MINT } from "@/lib/pair/mints";
 import { buildAnySwapTx } from "@/lib/swap/open";
-import { withLaunch } from "@/lib/store";
+import { isProjectProtocolWallet } from "@/lib/projectDest";
+import { readyState, withLaunch } from "@/lib/store";
 import { emptyLaunchBook } from "@/lib/launch/engine";
 import { creditRank } from "@/lib/rank/engine";
 import { creditSwapHold } from "@/lib/fees/income";
@@ -36,6 +37,8 @@ export async function POST(req: NextRequest) {
   if (!isSolanaAddress(inputMint) || !isSolanaAddress(outputMint)) {
     return NextResponse.json({ error: "bad_request" }, { status: 400 });
   }
+  await readyState();
+  const skipHouse = isProjectProtocolWallet(b.owner);
   const tx = await buildAnySwapTx({
     owner: b.owner,
     inputMint,
@@ -43,13 +46,14 @@ export async function POST(req: NextRequest) {
     amount: b.amount,
     slippageBps: b.slippageBps,
     priority: b.priority,
+    skipHouse,
   });
   if (!tx.ok) return NextResponse.json({ error: tx.reason }, { status: 400 });
   try {
     await withLaunch((s) => {
       if (!s.launch) s.launch = emptyLaunchBook();
       creditRank(s.launch, b.owner, "swap", { sol: inputMint === SOL_MINT ? b.amount : 0 });
-      if (tx.via === "jupiter" && tx.feeSol > 0) creditSwapHold(s.launch, tx.feeSol, false);
+      if (!skipHouse && tx.via === "jupiter" && tx.feeSol > 0) creditSwapHold(s.launch, tx.feeSol, false);
     }, true);
   } catch {
     /* swap still goes out */

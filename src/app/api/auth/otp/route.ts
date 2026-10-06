@@ -5,7 +5,7 @@ import { verifyBot } from "@/lib/auth/challenge";
 import { consumeSignupOtp, otpEmailHtml, startSignupOtp } from "@/lib/auth/otp";
 import { setAccountCookie } from "@/lib/auth/session";
 import { withSignature } from "@/lib/email/desk";
-import { queueEmail } from "@/lib/email/send";
+import { mailConfigured, queueEmail } from "@/lib/email/send";
 import { clientIp, rateLimit } from "@/lib/security";
 import { mutateState } from "@/lib/store";
 
@@ -73,10 +73,21 @@ export async function POST(req: NextRequest) {
     code = started.otp;
     const html = withSignature(otpEmailHtml(started.otp));
     const mail = await queueEmail(s, started.email, "Your Solphia code", html);
-    return { ok: true as const, email: started.email, mailStatus: mail.status };
+    return { ok: true as const, email: started.email, mailStatus: mail.status, mailError: mail.error };
   });
   if (!out.ok) {
     return NextResponse.json({ error: "otp_failed", message: out.error }, { status: 400 });
+  }
+  if (out.mailStatus !== "sent" && process.env.NODE_ENV === "production") {
+    return NextResponse.json(
+      {
+        error: "mail_off",
+        message: mailConfigured()
+          ? out.mailError || "Could not send the code. Try again in a minute."
+          : "Email is not sending yet. Set MAIL_USER and MAIL_APP_PASSWORD (Gmail app password) on Vercel.",
+      },
+      { status: 503 },
+    );
   }
   const preview = process.env.NODE_ENV !== "production" && out.mailStatus !== "sent";
   return NextResponse.json({

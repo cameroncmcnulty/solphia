@@ -79,3 +79,13 @@ export function signedTxB64(raw: Uint8Array, extra?: Keypair | Keypair[]): strin
   applyExtras(tx, extra);
   return bytesToB64(serializeTx(tx));
 }
+
+/** Sign a packed tx with local keypairs (project wallets, mint, config). Never upload secrets. */
+export function signPackedB64(packed: string, signers: Keypair[]): string {
+  const keys = extraKeys(signers);
+  if (!keys.length) throw new Error("No signers.");
+  const tx = parseTx(b64ToBytes(packed));
+  if (isLegacy(tx)) tx.partialSign(...keys);
+  else tx.sign(keys);
+  return bytesToB64(serializeTx(tx));
+}

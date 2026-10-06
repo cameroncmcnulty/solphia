@@ -19,8 +19,8 @@ const TREASURY_KEEP_LAMPORTS = 2_000_000;
 
 /**
  * Optional cron: server-sign partner claims one pool at a time when TREASURY_SECRET
- * is the displayed Phantom treasury. Phantom Blowfish flags packed multi-pool claims.
- * Claim lands in treasury; owner 25% is transferred live. Creators stay on Phantom claim.
+ * is the displayed treasury. Packed multi-pool claims are flagged malicious.
+ * Claim lands in treasury; owner 25% is transferred live. Creators stay on their own claim.
  */
 export async function sweepPartnerFees(opts?: {
   mints?: string[];
@@ -105,7 +105,7 @@ function harvestLegs(
 }
 
 /**
- * Owner and treasury are different Phantoms. Either can pull the partner half.
+ * Owner and treasury are different project wallets. Either can pull the partner half.
  * DBC feeClaimer is still the treasury; owner claims co-sign or sweep when TREASURY_SECRET
  * is set, otherwise owner signs if they are the claimer. After the pull, the other
  * wallet's 50% of that partner half is transferred live in the same tx.

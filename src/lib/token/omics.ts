@@ -1,7 +1,7 @@
-/** $SPHA launch tokenomics. bps are out of 10_000 (100%). */
+/** $SPHA launch tokenomics. bps are out of 10_000 (100%). DBC pad uses 6 decimals. */
 
-export const SPHA_SUPPLY = 100_000_000;
-export const SPHA_DECIMALS = 9;
+export const SPHA_SUPPLY = 200_000_000;
+export const SPHA_DECIMALS = 6;
 export const SPHA_NAME = "Solphia";
 export const SPHA_SYMBOL = "SPHA";
 
@@ -22,28 +22,28 @@ export const SPHA_SLICES: SphaSlice[] = [
     label: "Dev team",
     pct: "8.6%",
     bps: 860,
-    note: "Team allocation. Lands in the dev holdings wallet at launch.",
+    note: "Team allocation. Lands in the owner project wallet at leftover / split.",
   },
   {
     id: "foundation",
     label: "Solphia Foundation",
     pct: "9.7%",
     bps: 970,
-    note: "Community, ecosystem, airdrops, and rewards. Lands in the airdrop wallet.",
+    note: "Community, ecosystem, airdrops, and rewards. Lands in the foundation project wallet.",
   },
   {
     id: "treasury",
     label: "Treasury",
     pct: "4.6%",
     bps: 460,
-    note: "Strategic partnerships, growth, and marketing.",
+    note: "Strategic partnerships, growth, and marketing. Lands in the treasury project wallet.",
   },
   {
     id: "lp",
-    label: "Public market",
+    label: "Bonding curve",
     pct: "77.1%",
     bps: 7710,
-    note: "Tradeable float released into circulation. Lands in the public-market wallet so anyone can buy and sell.",
+    note: "Tradeable float on the Solphia pad from block one. Same curve, swap, and graduate path as every other launch.",
   },
 ];
 
@@ -79,13 +79,25 @@ export type SphaAllocation = {
   note: string;
 };
 
-/** Foundation slice pays the airdrop wallet when set, else the foundation wallet. */
+export function sphaReservedBps(): number {
+  return SPHA_SLICES.filter((s) => s.id !== "lp").reduce((n, s) => n + s.bps, 0);
+}
+
+export function sphaReservedTokens(supply = SPHA_SUPPLY): number {
+  return sphaTokensFor(sphaReservedBps(), supply);
+}
+
+export function sphaCurveTokens(supply = SPHA_SUPPLY): number {
+  return supply - sphaReservedTokens(supply);
+}
+
+/** Foundation slice pays the airdrop wallet when set, else the foundation wallet. Curve slice has no wallet. */
 export function sphaAllocations(dest: SphaDestinations, supply = SPHA_SUPPLY): SphaAllocation[] {
   const walletOf: Record<SphaSliceId, string> = {
     owner: dest.owner,
     foundation: dest.airdrop || dest.foundation,
     treasury: dest.treasury,
-    lp: dest.lp,
+    lp: dest.lp || "curve",
   };
   return SPHA_SLICES.map((s) => ({
     ...s,
@@ -96,11 +108,10 @@ export function sphaAllocations(dest: SphaDestinations, supply = SPHA_SUPPLY): S
 
 export function sphaMissingDest(dest: Partial<SphaDestinations>): SphaSliceId[] {
   const foundationPay = dest.airdrop || dest.foundation;
-  const need: Record<SphaSliceId, string | undefined> = {
+  const need: Partial<Record<SphaSliceId, string | undefined>> = {
     owner: dest.owner,
     foundation: foundationPay,
     treasury: dest.treasury,
-    lp: dest.lp,
   };
   return (Object.keys(need) as SphaSliceId[]).filter((k) => !need[k]);
 }

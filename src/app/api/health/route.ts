@@ -6,6 +6,7 @@ import { pinataConfigured } from "@/lib/pinata";
 import { readyState, storeInfo } from "@/lib/store";
 import { heliusEnabled } from "@/lib/solana/connection";
 import { treasuryAddress } from "@/lib/treasury";
+import { mailConfigured } from "@/lib/email/send";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +20,8 @@ export async function GET() {
     mode: liveTradingEnabled() ? "LIVE" : "PAPER",
     helius: heliusEnabled(),
     xai: Boolean(process.env.XAI_API_KEY),
-    smtp: Boolean(process.env.SMTP_HOST),
+    smtp: mailConfigured(),
+    google: Boolean((process.env.GOOGLE_CLIENT_ID || "").trim() && (process.env.GOOGLE_CLIENT_SECRET || "").trim()),
     lastTickAt: state.lastTickAt,
     tickAgeMs: state.lastTickAt ? Date.now() - state.lastTickAt : null,
     engine: Date.now() - (state.lastTickAt || 0) < 3 * 60_000 ? "live" : "stale",

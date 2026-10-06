@@ -161,7 +161,7 @@ export const SERVICES: ServiceDef[] = [
   {
     id: "smtp",
     name: "Email (SMTP)",
-    why: "Alert mail and signup one-time codes. No host means codes land in the admin outbox.",
+    why: "Signup codes, admin login codes, and alert mail. Gmail app password is free — no paid SMTP.",
     defaultTier: "none",
     tiers: [
       {
@@ -169,7 +169,7 @@ export const SERVICES: ServiceDef[] = [
         label: "Off",
         price: "$0",
         limits: { mailPerDay: 0 },
-        notes: "Set SMTP_HOST to send alert mail and account verification codes.",
+        notes: "Set MAIL_USER and MAIL_APP_PASSWORD (Gmail → Security → App passwords). Codes will not reach inboxes until this is set.",
         next: "set",
       },
       {
@@ -177,7 +177,7 @@ export const SERVICES: ServiceDef[] = [
         label: "Configured",
         price: "your host",
         limits: { mailPerDay: 500 },
-        notes: "Host is set. Watch the provider's send cap.",
+        notes: "Mailer is set (Gmail app password, SMTP, or Resend). Watch the provider's send cap.",
       },
     ],
   },

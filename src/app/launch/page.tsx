@@ -2161,8 +2161,8 @@ export default function LaunchPage() {
                 </h2>
                 <p className="mt-1 text-[14px] leading-snug text-white/45">
                   {owner === treasuryWallet
-                    ? "This Phantom is treasury — a different wallet from owner. Claim your 25% of unpaid pad curve fees here. Widget open-market swaps already land 50/50 here live."
-                    : "This Phantom is owner — a different wallet from treasury. Claim your 25% of unpaid pad curve fees here. Widget open-market swaps already land 50/50 here live. Curve swaps keep 50% for the coin creator."}
+                    ? "This wallet is treasury — a different wallet from owner. Claim unpaid pad partner fees here, or from the admin dashboard project wallet. Widget open-market swaps already land 50/50 here live."
+                    : "This wallet is owner — a different wallet from treasury. Claim unpaid pad partner fees here, or from the admin dashboard project wallet. Widget open-market swaps already land 50/50 here live. Curve swaps keep 50% for the coin creator."}
                 </p>
                 <div className="mt-4 grid grid-cols-2 gap-3">
                   <div>

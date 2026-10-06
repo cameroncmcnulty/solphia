@@ -10,6 +10,7 @@ import { pinataConfigured } from "@/lib/pinata";
 import { durableKind } from "@/lib/persist";
 import { HELIUS_API_KEY, XAI_API_KEY } from "@/lib/config";
 import { jupFeeAccounts, jupFeeStatus } from "@/lib/jup/swapV2";
+import { mailConfigured } from "@/lib/email/send";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -57,7 +58,8 @@ export async function GET(req: NextRequest) {
       xai: Boolean(XAI_API_KEY),
       pinata: pinataConfigured(),
       signer: signerConfigured(),
-      smtp: Boolean(process.env.SMTP_HOST),
+      smtp: mailConfigured(),
+      google: Boolean((process.env.GOOGLE_CLIENT_ID || "").trim() && (process.env.GOOGLE_CLIENT_SECRET || "").trim()),
       jupiter: jupFeeStatus().hasApiKey,
     },
     jup: { ...jupFeeStatus(), ...(await jupFeeAccounts().catch(() => ({ sol: false, usdc: false, collecting: false }))) },

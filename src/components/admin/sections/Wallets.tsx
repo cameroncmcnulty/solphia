@@ -6,8 +6,10 @@ import { FieldError, useConfirmErrors } from "@/components/form/confirm";
 import { walletOk } from "@/lib/launch/validate";
 import { planTreasuryWithdraw } from "@/lib/treasury/plan";
 import { signAndSendPhantom } from "@/lib/wallet/trading";
+import { ensureProjectSigner, projectKeypair, sendProjectSol, signAndSendProjectTx } from "@/lib/wallet/projectVault";
 import { useAdmin } from "../AdminProvider";
 import { SphaLaunch } from "../SphaLaunch";
+import { ProjectWallets } from "../ProjectWallets";
 import { SphaSection } from "./Spha";
 import { Field, Mini, shortPk } from "../ui";
 import { BuybackPanel } from "../BuybackPanel";
@@ -170,7 +172,7 @@ export function WalletsSection() {
 
   useEffect(() => {
     loadBal().catch(() => {});
-  }, [loadBal, data?.treasury, data?.ownerWallet, data?.devWallet, data?.sphaMint]);
+  }, [loadBal, data?.treasury, data?.ownerWallet, data?.devWallet, data?.foundationWallet, data?.sphaMint]);
 
   const treasSol = pack?.treasury.sol ?? 0;
   const solUsd = pack?.solUsd || data?.prices.solUsd || 0;
@@ -194,6 +196,12 @@ export function WalletsSection() {
     if (!confirm(`Send ${preview.sol.toFixed(4)} SOL from treasury to owner?`)) return;
     setWBusy(true);
     try {
+      if (projectKeypair("treasury") && data.ownerWallet) {
+        const sig = await sendProjectSol("treasury", data.ownerWallet, preview.sol);
+        setMsg(`Sent ${preview.sol.toFixed(4)} SOL · ${sig.slice(0, 8)}…`);
+        await loadBal();
+        return;
+      }
       const r = await fetch("/api/admin/wallets", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -207,8 +215,20 @@ export function WalletsSection() {
         return;
       }
       if (j.needsSignature && j.transaction) {
+        const tx = j.transaction as string;
+        if (projectKeypair("treasury")) {
+          const sig = await signAndSendProjectTx("treasury", tx);
+          await fetch("/api/admin/wallets", {
+            method: "PUT",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ signature: sig }),
+          });
+          setMsg(`Signed ${j.sol.toFixed(4)} SOL · ${sig.slice(0, 8)}…`);
+          await loadBal();
+          return;
+        }
         if (owner && owner !== j.from) {
-          throw new Error("Connect the treasury Phantom to sign this send.");
+          throw new Error("Unlock the treasury project wallet to sign this send.");
         }
         const sig = await signAndSendPhantom(j.transaction);
         await fetch("/api/admin/wallets", {
@@ -220,7 +240,7 @@ export function WalletsSection() {
         await loadBal();
         return;
       }
-      throw new Error(j.message || "Connect the treasury Phantom to sign this send.");
+      throw new Error(j.message || "Unlock the treasury project wallet to sign this send.");
     } catch (e) {
       setErr(e instanceof Error ? e.message : "withdraw failed");
     } finally {
@@ -236,10 +256,18 @@ export function WalletsSection() {
         <div className="font-mono text-[10px] tracking-[0.28em] text-mute">PROTOCOL WALLETS</div>
         <h2 className="mt-1 font-display text-3xl text-ghost">Where SOL sits</h2>
         <p className="mt-1 max-w-2xl text-sm text-mute">
-          Boosts, pins, and seats land live in the owner and treasury Phantoms. Pad 1% sits in the pool until the
-          treasury Phantom claims. Dev holdings are team $SPHA. Trading keys are bot-only — never mix them with protocol SOL.
+          Boosts, pins, seats, and swap 1% land in the in-house treasury and owner wallets. Pad partner fees claim with
+          the treasury project wallet. Trading keys are bot-only — never mix them with protocol SOL.
         </p>
       </div>
+
+      <ProjectWallets
+        balances={{
+          [pack?.treasury.pk || ""]: pack?.treasury.sol ?? 0,
+          [pack?.owner.pk || ""]: pack?.owner.sol ?? 0,
+          [pack?.foundation?.pk || ""]: pack?.foundation?.sol ?? 0,
+        }}
+      />
 
       <ProfitsPanel />
 
@@ -247,18 +275,18 @@ export function WalletsSection() {
         <WalletCard
           kicker="TREASURY · IN"
           title="Treasury"
-          blurb={`${data.seatSol} SOL spot seats, ${data.seatSolLev} SOL lev seats, 1% live clips, 1% in-house swaps, pins, and boosts. Pad partner fees claim with this Phantom.`}
+          blurb={`${data.seatSol} SOL spot seats, ${data.seatSolLev} SOL lev seats, 1% live clips, 1% in-house swaps, pins, and boosts. Pad partner fees claim with this project wallet.`}
           pk={pack?.treasury.pk || data.treasury}
           sol={treasSol}
           solUsd={solUsd}
           tone="acid"
         >
-          {pack?.hot ? <p className="mt-2 font-mono text-[10px] text-acid">Optional hot signer matches this Phantom</p> : null}
+          {pack?.hot ? <p className="mt-2 font-mono text-[10px] text-acid">Optional hot signer matches this treasury</p> : null}
         </WalletCard>
         <WalletCard
           kicker="OWNER · OUT"
           title="Owner"
-          blurb="Live 25% of curve fees and 50% of widget open-market / boosts / pins. Claim pad share on /launch with this owner Phantom."
+          blurb="Live 25% of curve fees and 50% of widget open-market / boosts / pins. Claim pad share on /launch with this owner project wallet."
           pk={pack?.owner.pk || data.ownerWallet}
           sol={pack?.owner.sol ?? 0}
           solUsd={solUsd}
@@ -283,10 +311,10 @@ export function WalletsSection() {
           )}
         </WalletCard>
         <WalletCard
-          kicker="PUBLIC MARKET · 77.1%"
-          title="Public market"
-          blurb="Tradeable float released into circulation after launch. Tokens sit here so the public can buy and sell."
-          pk={pack?.lp?.pk || data.lpWallet}
+          kicker="BONDING CURVE · 77.1%"
+          title="Bonding curve"
+          blurb="Tradeable float on the Solphia pad from block one. Same curve, swap, and graduate path as every other launch."
+          pk={pack?.lp?.pk || ""}
           sol={pack?.lp?.sol ?? 0}
           solUsd={solUsd}
         />
@@ -307,7 +335,7 @@ export function WalletsSection() {
         <div className="font-mono text-[10px] tracking-[0.22em] text-acid">WITHDRAW TREASURY → OWNER</div>
         <p className="mt-1 text-sm text-mute">
           Pull a percent of spendable SOL, or an exact amount. 0.002 SOL stays in treasury so the account does not close.
-          {pack?.hot ? " Server can sign as this Phantom." : " Sign with the treasury Phantom."}
+          Sign with the treasury project wallet.
         </p>
         <div className="mt-4 flex flex-wrap gap-2">
           {PCTS.map((n) => (
@@ -356,8 +384,8 @@ export function WalletsSection() {
         </button>
         {msg && <p className="mt-2 text-sm text-acid">{msg}</p>}
         {err && <p className="mt-2 text-sm text-blood">{err}</p>}
-        {!owner && !pack?.hot && (
-          <p className="mt-2 text-sm text-mute">Connect the treasury Phantom below to sign.</p>
+        {!projectKeypair("treasury") && !pack?.hot && (
+          <p className="mt-2 text-sm text-mute">Unlock the treasury project wallet above to sign.</p>
         )}
       </div>
 
@@ -619,6 +647,9 @@ export function WalletsSection() {
 
 function ProfitsPanel() {
   const { data } = useAdmin();
+  const [claimBusy, setClaimBusy] = useState(false);
+  const [claimMsg, setClaimMsg] = useState("");
+  const [claimErr, setClaimErr] = useState("");
   const p = data?.profits;
   if (!p) return null;
   const solUsd = data.prices?.solUsd || 0;
@@ -629,38 +660,97 @@ function ProfitsPanel() {
     const usd = solUsd > 0 ? ` · $${(sol * solUsd).toFixed(2)}` : "";
     return `${sol.toFixed(4)} SOL${usd}`;
   }
+  async function claimPad(wallet: "treasury" | "owner") {
+    setClaimErr("");
+    setClaimMsg("");
+    setClaimBusy(true);
+    try {
+      if (!(await ensureProjectSigner("treasury"))) {
+        throw new Error("Unlock the treasury project wallet to claim.");
+      }
+      const r = await fetch("/api/admin/claim", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ wallet }),
+      });
+      const j = (await r.json().catch(() => ({}))) as {
+        message?: string;
+        error?: string;
+        needsSignature?: boolean;
+        transaction?: string;
+        claimSol?: number;
+        remaining?: number;
+      };
+      if (!r.ok) throw new Error(j.message || j.error || "claim failed");
+      if (!j.needsSignature || !j.transaction) throw new Error(j.message || "Nothing to sign.");
+      const sig = await signAndSendProjectTx("treasury", j.transaction);
+      await fetch("/api/admin/claim", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ wallet, signature: sig, claimSol: j.claimSol || 0 }),
+      });
+      const amt = Number(j.claimSol || 0);
+      setClaimMsg(
+        wallet === "treasury"
+          ? `Claimed ${amt.toFixed(4)} SOL into treasury${j.remaining ? ` · ${j.remaining} pools left — claim again` : ""}.`
+          : `Sent ${amt.toFixed(4)} SOL owner share to the owner project wallet.`,
+      );
+    } catch (e) {
+      setClaimErr(e instanceof Error ? e.message : "claim failed");
+    } finally {
+      setClaimBusy(false);
+    }
+  }
   return (
     <section className="panel rounded-2xl p-5">
       <div className="font-mono text-[10px] tracking-[0.28em] text-acid">PROFITS</div>
       <h2 className="mt-1 font-display text-2xl text-ghost">What we take, where it lands</h2>
       <p className="mt-2 max-w-2xl text-sm text-mute">
         Split is 50% creator / 25% owner / 25% treasury (owner 12.5% if referred). Boosts, pins, and widget open-market
-        swaps: 50/50 live to those Phantoms. Curve swaps keep the on-chain 1% (creator 50%). Owner and treasury are
-        different wallets — each claims its own share from /launch.
+        swaps: 50/50 live to those project wallets. Curve swaps keep the on-chain 1% (creator 50%). Claim pad partner fees
+        with the treasury project wallet below, then send the owner share.
       </p>
       <div className="mt-4 grid gap-3 md:grid-cols-2">
         <div className="rounded-2xl border border-acid/25 bg-acid/[0.04] p-4">
           <div className="font-mono text-[10px] tracking-[0.2em] text-acid">TREASURY · LIVE</div>
           <div className="mt-2 font-display text-3xl text-ghost">{money(p.accrued.treasurySol)}</div>
           <p className="mt-1 text-sm text-mute">
-            25% of curve fees, 50% of widget open-market / boosts / pins, live in this Phantom.
+            25% of curve fees, 50% of widget open-market / boosts / pins, live in this project wallet.
             {claim?.dbcPartnerSol
-              ? ` ${claim.dbcPartnerSol.toFixed(4)} SOL still sitting in pad pools — claim on /launch with this treasury Phantom.`
+              ? ` ${claim.dbcPartnerSol.toFixed(4)} SOL still sitting in pad pools — claim with the treasury project wallet.`
               : hot
-                ? " Optional cron can harvest pad partner fees into this Phantom."
-                : " Pad partner fees claim with this treasury Phantom on /launch. Owner claims its share from the owner Phantom."}
+                ? " Optional cron can harvest pad partner fees into this treasury."
+                : " Pad partner fees claim with this treasury project wallet. Then send the owner share."}
           </p>
+          <button
+            type="button"
+            disabled={claimBusy}
+            onClick={() => void claimPad("treasury")}
+            className="btn-acid mt-3 rounded-full px-4 py-2 text-sm disabled:opacity-40"
+          >
+            {claimBusy ? "Claiming…" : "Claim pad fees"}
+          </button>
         </div>
         <div className="rounded-2xl border border-violet/25 bg-void/40 p-4">
           <div className="font-mono text-[10px] tracking-[0.2em] text-mute">OWNER · LIVE</div>
           <div className="mt-2 font-display text-3xl text-ghost">{money(p.accrued.ownerSol)}</div>
           <p className="mt-1 text-sm text-mute">
             25% of curve swaps and launches (12.5% if the trader was invited) and 50% of widget open-market / boosts /
-            pins, live to {p.ownerWallet ? shortPk(p.ownerWallet, 4) : "the owner Phantom"}. Claim pad share on /launch
-            while connected to that owner Phantom — not the treasury.
+            pins, live to {p.ownerWallet ? shortPk(p.ownerWallet, 4) : "the owner project wallet"}. After a treasury claim,
+            send the booked owner share with the treasury project wallet.
           </p>
+          <button
+            type="button"
+            disabled={claimBusy || !(claim?.ownerSol > 0)}
+            onClick={() => void claimPad("owner")}
+            className="btn-ghost mt-3 rounded-full px-4 py-2 text-sm disabled:opacity-40"
+          >
+            {claimBusy ? "Sending…" : "Send owner share"}
+          </button>
         </div>
       </div>
+      {claimMsg ? <p className="mt-3 text-sm text-acid">{claimMsg}</p> : null}
+      {claimErr ? <p className="mt-3 text-sm text-blood">{claimErr}</p> : null}
       {(claim?.jupSol || claim?.jupUsdc) ? (
         <p className="mt-3 text-sm text-mute">
           Jupiter plugin 1% is sitting in the referral account

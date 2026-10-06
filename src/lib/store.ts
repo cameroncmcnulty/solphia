@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import { DEFAULT_SETTINGS } from "./config";
 import { DEFAULT_FUND, DEFAULT_OWNER, DEFAULT_TREASURY } from "./protocolWallets";
+import { DEFAULT_ADMIN_OTP_EMAIL } from "./admin/otp";
 import { emptyBook, emptyTrader, lockedAuto } from "./auto";
 import { emptyLaunchBook, mergeAccountMaps, mergeLaunch, slimLaunch, type LaunchAccount, type LaunchBook } from "./launch/engine";
 import { emptyLab, mergeLab } from "./desk/shadow";
@@ -66,7 +67,9 @@ export function applyOpsConfig(local: AppState, remote: Partial<AppState>): bool
       dirty = true;
     }
   }
-  const copyStr = (key: "sphaMint" | "treasuryWallet" | "ownerWallet" | "devWallet" | "foundationWallet" | "airdropWallet" | "lpWallet") => {
+  const copyStr = (
+    key: "sphaMint" | "treasuryWallet" | "ownerWallet" | "devWallet" | "foundationWallet" | "airdropWallet" | "lpWallet" | "adminOtpEmail" | "sphaDbcConfig",
+  ) => {
     if (typeof remote[key] !== "string") return;
     if (local[key] === remote[key]) return;
     local[key] = remote[key];
@@ -79,6 +82,8 @@ export function applyOpsConfig(local: AppState, remote: Partial<AppState>): bool
   copyStr("foundationWallet");
   copyStr("airdropWallet");
   copyStr("lpWallet");
+  copyStr("adminOtpEmail");
+  copyStr("sphaDbcConfig");
   if (remote.sphaNetwork === "devnet" || remote.sphaNetwork === "mainnet-beta") {
     if (local.sphaNetwork !== remote.sphaNetwork) {
       local.sphaNetwork = remote.sphaNetwork;
@@ -87,6 +92,10 @@ export function applyOpsConfig(local: AppState, remote: Partial<AppState>): bool
   }
   if (remote.sphaLaunch !== undefined && JSON.stringify(local.sphaLaunch) !== JSON.stringify(remote.sphaLaunch)) {
     local.sphaLaunch = remote.sphaLaunch || null;
+    dirty = true;
+  }
+  if (remote.sphaTestLaunch !== undefined && JSON.stringify(local.sphaTestLaunch) !== JSON.stringify(remote.sphaTestLaunch)) {
+    local.sphaTestLaunch = remote.sphaTestLaunch || null;
     dirty = true;
   }
   if (typeof remote.liveTrading === "boolean" && local.liveTrading !== remote.liveTrading) {
@@ -167,6 +176,10 @@ export function emptyState(): AppState {
     lpWallet: "",
     sphaNetwork: "devnet",
     sphaLaunch: null,
+    sphaTestLaunch: null,
+    sphaDbcConfig: "",
+    adminOtpEmail: DEFAULT_ADMIN_OTP_EMAIL,
+    adminOtpPending: null,
     circle: emptyCircle(),
     shill: emptyShill(),
     mail: emptyMail(),
@@ -235,6 +248,10 @@ function hydrateFromRaw(raw: AppState): AppState {
     lpWallet: raw.lpWallet || "",
     sphaNetwork: raw.sphaNetwork === "mainnet-beta" ? "mainnet-beta" : "devnet",
     sphaLaunch: raw.sphaLaunch || null,
+    sphaTestLaunch: raw.sphaTestLaunch || null,
+    sphaDbcConfig: raw.sphaDbcConfig || "",
+    adminOtpEmail: raw.adminOtpEmail || DEFAULT_ADMIN_OTP_EMAIL,
+    adminOtpPending: raw.adminOtpPending || null,
     circle: ensureCircle(raw.circle),
     shill: ensureShill(raw.shill),
     mail: ensureMail(raw.mail),

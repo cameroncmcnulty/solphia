@@ -15,6 +15,7 @@ import { treasuryAddress } from "../treasury";
 import { liveDbcConfig, dbcEnabled } from "./dbcIds";
 import { emptyCurve, MIN_TRADE_SOL, quoteBuy } from "./curve";
 import { CLAIM_DUST_SOL, feesFromPoolAccount } from "./claim";
+import { SPHA_SUPPLY, sphaReservedTokens } from "../token/omics";
 
 const WSOL = "So11111111111111111111111111111111111111112";
 /** Unsigned mint/config signers make RPC sim a false fail. Size is the real gate. */
@@ -54,7 +55,7 @@ export async function solphiaCurveConfig() {
       },
       dynamicFeeEnabled: false,
       collectFeeMode: m.CollectFeeMode.QuoteToken,
-      /** 50% creator on-chain; partner 50% is the displayed Phantom treasury (feeClaimer). */
+      /** 50% creator on-chain; partner 50% is the displayed treasury project wallet (feeClaimer). */
       creatorTradingFeePercentage: 50,
       poolCreationFee: 0,
       enableFirstSwapWithMinFee: false,
@@ -80,6 +81,62 @@ export async function solphiaCurveConfig() {
     },
     activationType: m.ActivationType.Timestamp,
     /** Quote mint is SOL. 40 SOL FDV ≈ $4.7k; 585 SOL ≈ $69k graduate. Not USD. */
+    initialMarketCap: 40,
+    migrationMarketCap: 585,
+  });
+}
+
+/**
+ * Dedicated $SPHA curve. Same 1% / 50% creator / DAMM 100 bps as the pad.
+ * Only supply and leftover change — leftover is the 22.9% team slices (owner + foundation + treasury).
+ * Never write this config onto the shared pad dbcConfig.
+ */
+export async function sphaCurveConfig() {
+  const m = sdk();
+  return m.buildCurveWithMarketCap({
+    token: {
+      tokenType: m.TokenType.SPLToken,
+      tokenBaseDecimal: m.TokenDecimal.SIX,
+      tokenQuoteDecimal: m.TokenDecimal.NINE,
+      tokenAuthorityOption: m.TokenAuthorityOption.Immutable,
+      totalTokenSupply: SPHA_SUPPLY,
+      leftover: sphaReservedTokens(SPHA_SUPPLY),
+    },
+    fee: {
+      baseFeeParams: {
+        baseFeeMode: m.BaseFeeMode.FeeSchedulerLinear,
+        feeSchedulerParam: {
+          startingFeeBps: 100,
+          endingFeeBps: 100,
+          numberOfPeriod: 0,
+          totalDuration: 0,
+        },
+      },
+      dynamicFeeEnabled: false,
+      collectFeeMode: m.CollectFeeMode.QuoteToken,
+      creatorTradingFeePercentage: 50,
+      poolCreationFee: 0,
+      enableFirstSwapWithMinFee: false,
+    },
+    migration: {
+      migrationOption: m.MigrationOption.MET_DAMM_V2,
+      migrationFeeOption: m.MigrationFeeOption.FixedBps100,
+      migrationFee: { feePercentage: 0, creatorFeePercentage: 0 },
+    },
+    liquidityDistribution: {
+      partnerLiquidityPercentage: 0,
+      partnerPermanentLockedLiquidityPercentage: 100,
+      creatorLiquidityPercentage: 0,
+      creatorPermanentLockedLiquidityPercentage: 0,
+    },
+    lockedVesting: {
+      totalLockedVestingAmount: 0,
+      numberOfVestingPeriod: 0,
+      cliffUnlockAmount: 0,
+      totalVestingDuration: 0,
+      cliffDurationFromMigrationTime: 0,
+    },
+    activationType: m.ActivationType.Timestamp,
     initialMarketCap: 40,
     migrationMarketCap: 585,
   });
@@ -299,6 +356,57 @@ export async function buildDbcLaunchTx(opts: {
   const launched = await pack(raw, false, extra);
   if (!launched) throw new Error("Could not build the launch.");
   return launched;
+}
+
+/** Official $SPHA: always a fresh 200M config. Does not touch the shared pad config. */
+export async function buildSphaDbcLaunchTx(opts: {
+  payer: string;
+  mint: string;
+  name: string;
+  symbol: string;
+  uri: string;
+}): Promise<{
+  transaction: string;
+  mint: string;
+  tokensOut: number;
+  feeSol: number;
+  config: string;
+  configSecret: string;
+  firstBuyIncluded: boolean;
+}> {
+  if (!dbcEnabled()) throw new Error("DBC config missing.");
+  const payer = new PublicKey(opts.payer);
+  const mint = new PublicKey(opts.mint);
+  const configKp = Keypair.generate();
+  const treasury = new PublicKey(treasuryAddress());
+  const curve = await sphaCurveConfig();
+  const raw = await client().partner.createConfigAndPool({
+    ...curve,
+    config: configKp.publicKey,
+    feeClaimer: treasury,
+    leftoverReceiver: treasury,
+    quoteMint: new PublicKey(WSOL),
+    payer,
+    preCreatePoolParam: {
+      name: opts.name.slice(0, 32),
+      symbol: opts.symbol.slice(0, 10),
+      uri: opts.uri.slice(0, 255),
+      poolCreator: payer,
+      baseMint: mint,
+    },
+  });
+  const tx = await readyTx(asTransaction(raw), payer);
+  const encoded = encodeTx(tx);
+  if (Buffer.from(encoded, "base64").length > LEGACY_MAX) throw new Error("Could not build the $SPHA launch.");
+  return {
+    transaction: encoded,
+    mint: mint.toBase58(),
+    tokensOut: 0,
+    feeSol: 0,
+    config: configKp.publicKey.toBase58(),
+    configSecret: bytesToB64(configKp.secretKey),
+    firstBuyIncluded: false,
+  };
 }
 
 export type DbcFees = {

@@ -44,6 +44,7 @@ const Patch = z.object({
   foundationWallet: z.string().nullable().optional(),
   airdropWallet: z.string().nullable().optional(),
   lpWallet: z.string().nullable().optional(),
+  adminOtpEmail: z.string().nullable().optional(),
   sphaNetwork: z.enum(["devnet", "mainnet-beta"]).optional(),
   sphaSocials: z
     .object({
@@ -135,6 +136,14 @@ export async function POST(req: NextRequest) {
     await mutateState((s) => {
       s.sphaMint = next;
       pushBounded(s.audit, audit("admin", "spha_mint", next ? next : "cleared", ip), 400);
+    });
+  }
+  if (body.adminOtpEmail !== undefined) {
+    const next = (body.adminOtpEmail || "").trim();
+    if (next && !isEmail(next)) return NextResponse.json({ error: "bad_admin_otp_email", message: "Enter a valid email." }, { status: 400 });
+    await mutateState((s) => {
+      s.adminOtpEmail = next;
+      pushBounded(s.audit, audit("admin", "admin_otp_email", next ? next : "cleared", ip), 400);
     });
   }
   for (const key of ["foundationWallet", "airdropWallet", "lpWallet"] as const) {
