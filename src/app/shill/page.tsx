@@ -438,12 +438,19 @@ export default function ShillPage() {
       const vvTop = Math.round(vv?.offsetTop || 0);
       if (h > baseline) baseline = h;
       const keyboard = baseline - Math.min(h, vvH) > 80 || vvTop > 8;
-      el.style.top = "0px";
-      el.style.right = "0px";
       el.style.left = "0px";
-      el.style.bottom = "0px";
-      el.style.height = "";
-      el.style.paddingBottom = keyboard ? "0px" : "";
+      el.style.right = "0px";
+      if (keyboard) {
+        el.style.top = `${vvTop}px`;
+        el.style.bottom = "auto";
+        el.style.height = `${vvH}px`;
+        el.style.paddingBottom = "0px";
+      } else {
+        el.style.top = "0px";
+        el.style.bottom = "0px";
+        el.style.height = "";
+        el.style.paddingBottom = "";
+      }
       document.body.classList.toggle("shill-kbd", keyboard);
     };
     fit();
@@ -687,7 +694,7 @@ export default function ShillPage() {
       <ParticleField />
       <div className="relative z-10 mx-auto flex h-full min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden lg:max-w-6xl">
         <div className="shrink-0">
-          <header className="relative z-[80] flex items-center gap-2 border-b border-white/10 bg-[#04000a]/55 px-2 pb-2 pt-[max(0.4rem,env(safe-area-inset-top))] backdrop-blur-xl">
+          <header className="relative z-[80] flex items-center gap-1 border-b border-white/10 bg-[#04000a]/80 px-1.5 pb-1 pt-[max(0.25rem,env(safe-area-inset-top))] backdrop-blur-xl">
             <Link
               href="/"
               aria-label="Back to home"
@@ -696,12 +703,11 @@ export default function ShillPage() {
               <ChevronLeft className="h-6 w-6" />
             </Link>
             <div className="min-w-0 flex-1 px-1">
-              <div className="flex items-center gap-2">
-                <span className="shill-live" />
-                <p className="font-mono text-[10px] tracking-[0.28em] text-acid">LIVE ROOM</p>
+              <div className="flex items-center gap-1.5">
+                <span className="shill-live shrink-0" />
+                <span className="truncate font-display text-[17px] leading-none text-ghost">Shill</span>
+                <span className="truncate text-[11px] text-white/45">{live ? `${live} in the room` : "waiting"}</span>
               </div>
-              <div className="truncate font-display text-[20px] leading-tight text-ghost">Shill</div>
-              <div className="truncate text-[12px] text-acid/80">{live ? `${live} in the room` : "waiting"}</div>
             </div>
             <button type="button" className="flex h-11 w-11 items-center justify-center rounded-full text-acid hover:bg-acid/10" onClick={() => setSheet("pin")} aria-label="Pin a token">
               <Rocket className="h-5 w-5" />
@@ -711,7 +717,7 @@ export default function ShillPage() {
             </button>
             <AccountMenu />
           </header>
-          <nav className="flex gap-6 border-b border-white/10 bg-[#04000a]/40 px-4 backdrop-blur-md">
+          <nav className="flex gap-5 border-b border-white/10 bg-[#04000a]/55 px-3 backdrop-blur-md">
             {(
               [
                 ["chat", "Chat", MessageCircle],
@@ -733,7 +739,7 @@ export default function ShillPage() {
           </nav>
 
           {pins.length > 0 && tab === "chat" && (
-            <div className="shrink-0 border-b border-white/10 bg-black/15 px-2 py-2 backdrop-blur-sm">
+            <div className="shrink-0 border-b border-white/10 bg-black/15 px-2 py-1.5 backdrop-blur-sm">
               <div className="boost-rail">
                 {pins.map((p) => {
                   const left = Math.max(0, p.endsAt - now);
@@ -761,7 +767,7 @@ export default function ShillPage() {
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <div
           ref={scroller}
-          className={`relative min-h-0 flex-1 overflow-y-auto px-2 py-3 ${tab === "chat" ? "" : "hidden"}`}
+          className={`relative min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 py-2 ${tab === "chat" ? "" : "hidden"}`}
           onClick={() => setPicker(null)}
           onScroll={(e) => {
             const el = e.currentTarget;
@@ -954,9 +960,9 @@ export default function ShillPage() {
           </div>
         )}
 
-        <div className={`relative z-[60] shrink-0 border-t border-white/10 bg-[#04000a] pb-3 md:pb-6 ${tab === "chat" ? "" : "hidden"}`}>
+        <div className={`relative z-[60] shrink-0 border-t border-white/10 bg-[#04000a] md:pb-3 ${tab === "chat" ? "" : "hidden"}`}>
           {!owner ? (
-            <div className="flex items-center gap-3 px-3 py-3">
+            <div className="flex items-center gap-3 px-3 py-1.5">
               <input
                 disabled
                 placeholder="Connect a wallet to chat"
@@ -978,7 +984,7 @@ export default function ShillPage() {
               )}
               <form
                 noValidate
-                className="flex items-center gap-2 px-3 py-2"
+                className="flex items-center gap-2 px-3 py-1.5"
                 onSubmit={(e) => {
                   e.preventDefault();
                   if (text.trim()) send();

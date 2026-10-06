@@ -24,7 +24,7 @@ export function BottomNav() {
               key={href}
               href={href}
               aria-current={active ? "page" : undefined}
-              className={`relative flex min-h-[58px] touch-manipulation flex-col items-center justify-center gap-0.5 pt-1 ${
+              className={`relative flex min-h-[var(--bottom-nav-h)] touch-manipulation flex-col items-center justify-center gap-0.5 pt-1 ${
                 active ? "text-[#14f195]" : "text-white/40"
               }`}
             >

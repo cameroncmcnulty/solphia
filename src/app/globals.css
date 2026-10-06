@@ -6,6 +6,7 @@
   --void: #04000a;
   --sol: #14f195;
   --violet: #9945ff;
+  --bottom-nav-h: 58px;
   --jupiter-plugin-primary: 20, 241, 149;
   --jupiter-plugin-background: 4, 0, 10;
   --jupiter-plugin-primaryText: 255, 255, 255;
@@ -995,9 +996,10 @@ input[type="range"]::-webkit-slider-thumb {
   position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
-  padding: 0.7rem 0.1rem 0.75rem;
-  font-size: 15px;
+  gap: 0.35rem;
+  min-height: 2.75rem;
+  padding: 0.45rem 0.1rem 0.5rem;
+  font-size: 14px;
   color: rgba(255, 255, 255, 0.38);
 }
 .shill-tab-on {
@@ -1086,19 +1088,24 @@ body.shill-kbd .bottom-nav {
   pointer-events: none;
 }
 
-/* Mobile first: composer sits above BottomNav (58px) + home indicator + browser chrome. */
+/* Composer lives inside the dock. Reserve only the tab bar, not a second empty band. */
 .shill-dock {
-  padding-bottom: calc(7.5rem + env(safe-area-inset-bottom, 0px));
+  padding-bottom: calc(var(--bottom-nav-h) + env(safe-area-inset-bottom, 0px));
 }
 .shill-overlay-dock {
-  bottom: calc(7.5rem + env(safe-area-inset-bottom, 0px));
+  bottom: calc(var(--bottom-nav-h) + env(safe-area-inset-bottom, 0px));
 }
-/* Web/desktop: BottomNav is hidden; raise the typing bar off the OS taskbar. */
+body.shill-kbd .shill-dock {
+  padding-bottom: 0;
+}
+body.shill-kbd .shill-overlay-dock {
+  bottom: 0;
+}
 @media (min-width: 768px) {
   .shill-dock {
-    padding-bottom: 6rem;
+    padding-bottom: 0;
   }
   .shill-overlay-dock {
-    bottom: 6rem;
+    bottom: 0;
   }
 }

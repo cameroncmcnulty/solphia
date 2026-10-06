@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { banShill, emptyShill, extractCas, fillHousePins, mergeShill, muteShill, pinToken, postShill, pruneShill, slimShill, touchMember, voteBoard, voteShill } from "../lib/shill/engine";
 import {
   SHILL_CA_COOLDOWN_MS,
@@ -258,5 +260,18 @@ describe("shill zone", () => {
     pruneShill(book, t0 + SHILL_KEEP_MS + 1);
     assert.ok(book.members[A]?.banned);
     assert.ok(book.members[B]);
+  });
+
+  it("docks chat above BottomNav without a second empty band", () => {
+    const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
+    const page = readFileSync(join(process.cwd(), "src/app/shill/page.tsx"), "utf8");
+    const nav = readFileSync(join(process.cwd(), "src/components/BottomNav.tsx"), "utf8");
+    assert.match(css, /--bottom-nav-h:\s*58px/);
+    assert.match(css, /\.shill-dock \{[\s\S]*?padding-bottom:\s*calc\(var\(--bottom-nav-h\) \+ env\(safe-area-inset-bottom/);
+    assert.match(css, /body\.shill-kbd \.shill-dock \{[\s\S]*?padding-bottom:\s*0/);
+    assert.equal(css.includes("7.5rem"), false);
+    assert.match(nav, /min-h-\[var\(--bottom-nav-h\)\]/);
+    assert.match(page, /className="shill-dock /);
+    assert.equal(/pb-3 md:pb-6/.test(page), false);
   });
 });
