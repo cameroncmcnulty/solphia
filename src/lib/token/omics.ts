@@ -22,21 +22,21 @@ export const SPHA_SLICES: SphaSlice[] = [
     label: "Dev team",
     pct: "8.6%",
     bps: 860,
-    note: "Team allocation. Lands in the owner project wallet at leftover / split.",
+    note: "Team allocation. Sent to the owner project wallet at launch.",
   },
   {
     id: "foundation",
     label: "Solphia Foundation",
     pct: "9.7%",
     bps: 970,
-    note: "Community, ecosystem, airdrops, and rewards. Lands in the foundation project wallet.",
+    note: "Community, ecosystem, airdrops, and rewards. Sent to the foundation project wallet at launch.",
   },
   {
     id: "treasury",
     label: "Treasury",
     pct: "4.6%",
     bps: 460,
-    note: "Strategic partnerships, growth, and marketing. Lands in the treasury project wallet.",
+    note: "Strategic partnerships, growth, and marketing. Stays in the treasury project wallet at launch.",
   },
   {
     id: "lp",
@@ -114,4 +114,17 @@ export function sphaMissingDest(dest: Partial<SphaDestinations>): SphaSliceId[] 
     treasury: dest.treasury,
   };
   return (Object.keys(need) as SphaSliceId[]).filter((k) => !need[k]);
+}
+
+/** Owner + foundation leftover legs. Treasury keeps its 4.6% in leftoverReceiver. */
+export function sphaSplitLegs(dest: SphaDestinations, supply = SPHA_SUPPLY): { id: SphaSliceId; to: string; tokens: number }[] {
+  const treasury = (dest.treasury || "").trim();
+  const owner = (dest.owner || "").trim();
+  const foundation = (dest.airdrop || dest.foundation || "").trim();
+  const rows: { id: SphaSliceId; to: string; tokens: number }[] = [];
+  const ownerTok = sphaTokensFor(860, supply);
+  const fndTok = sphaTokensFor(970, supply);
+  if (owner && owner !== treasury && ownerTok > 0) rows.push({ id: "owner", to: owner, tokens: ownerTok });
+  if (foundation && foundation !== treasury && fndTok > 0) rows.push({ id: "foundation", to: foundation, tokens: fndTok });
+  return rows;
 }

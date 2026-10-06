@@ -17,6 +17,7 @@ import { isSolanaAddress } from "@/lib/wallet/addr";
 import { MIN_TRADE_SOL } from "@/lib/launch/curve";
 import { SOL_MINT, USDC_MINT } from "@/lib/pair/mints";
 import { amountExceedsBalance, maxPayString, spendableAmount } from "@/lib/swap/spendable";
+import { swapComplementMint, swapDefaultPair } from "@/lib/swap/pair";
 import { isPlaceholderLabel } from "@/lib/launch/labels";
 import { feeBreakout, minReceived } from "@/lib/wallet/feeBreakout";
 import { FOCUS_MINT_KEY, FOCUS_SIDE_KEY, solscanTx } from "@/lib/wallet/paths";
@@ -147,6 +148,25 @@ export function SwapBox({
 const SOL_TOKEN: SwapToken = { mint: SOL_MINT, symbol: "SOL", name: "Solana" };
 const USDC_TOKEN: SwapToken = { mint: USDC_MINT, symbol: "USDC", name: "USD Coin" };
 
+function tokenFromKnownMint(mint: string, meta?: SwapToken): SwapToken {
+  if (mint === SOL_MINT) return SOL_TOKEN;
+  if (mint === USDC_MINT) return { ...USDC_TOKEN, ...(meta?.mint === USDC_MINT ? meta : {}) };
+  if (meta && meta.mint === mint) return meta;
+  return tokenFromMint(mint);
+}
+
+function complementToken(token: SwapToken): SwapToken {
+  return tokenFromKnownMint(swapComplementMint(token.mint));
+}
+
+function pairTokens(focus: SwapToken | null, side: "buy" | "sell" = "buy"): { pay: SwapToken; recv: SwapToken } {
+  const { pay, recv } = swapDefaultPair(focus?.mint, side);
+  return {
+    pay: tokenFromKnownMint(pay, focus || undefined),
+    recv: tokenFromKnownMint(recv, focus || undefined),
+  };
+}
+
 function TokenChip({ token, onClick }: { token?: SwapToken | null; onClick?: () => void }) {
   const sol = token?.mint === SOL_MINT;
   const inner = sol ? (
@@ -197,11 +217,14 @@ export function SwapWidget({
   const siteOwner = useOwner();
   const vault = useActiveWallet();
   const pk = owner || siteOwner || (typeof window !== "undefined" ? loadOwner() : null);
-  const seeded = defaultMint && defaultMint.length > 30
-    ? tokenFromMint(defaultMint, defaultSymbol, defaultName, defaultImage)
-    : USDC_TOKEN;
-  const [pay, setPay] = useState<SwapToken>(SOL_TOKEN);
-  const [recv, setRecv] = useState<SwapToken>(seeded);
+  const seeded = pairTokens(
+    defaultMint && defaultMint.length > 30
+      ? tokenFromMint(defaultMint, defaultSymbol, defaultName, defaultImage)
+      : null,
+    "buy",
+  );
+  const [pay, setPay] = useState<SwapToken>(seeded.pay);
+  const [recv, setRecv] = useState<SwapToken>(seeded.recv);
   const [amount, setAmount] = useState("");
   const [slipBps, setSlipBps] = useState(100);
   const [slipOpen, setSlipOpen] = useState(false);
@@ -256,8 +279,9 @@ export function SwapWidget({
   useEffect(() => {
     if (!defaultMint || defaultMint.length < 32) return;
     const next = tokenFromMint(defaultMint, defaultSymbol, defaultName, defaultImage);
-    setRecv((cur) => (cur.mint === defaultMint ? { ...cur, ...next } : next));
-    setPay((cur) => (cur.mint === defaultMint ? SOL_TOKEN : cur));
+    const pair = pairTokens(next, "buy");
+    setPay(pair.pay);
+    setRecv(pair.recv);
   }, [defaultMint, defaultSymbol, defaultName, defaultImage]);
 
   useEffect(() => {
@@ -268,19 +292,20 @@ export function SwapWidget({
       if (!isSolanaAddress(mint)) return;
       sessionStorage.removeItem(FOCUS_MINT_KEY);
       sessionStorage.removeItem(FOCUS_SIDE_KEY);
-      const next = tokenFromMint(mint);
-      if (side === "sell") {
-        setPay(next);
-        setRecv(SOL_TOKEN);
-      } else {
-        setRecv(next);
-        setPay((cur) => (cur.mint === mint ? SOL_TOKEN : cur));
-      }
+      const pair = pairTokens(tokenFromMint(mint), side);
+      setPay(pair.pay);
+      setRecv(pair.recv);
       onMint?.(mint);
     } catch {
       /* ignore */
     }
   }, [onMint]);
+
+  useEffect(() => {
+    if (pay.mint && recv.mint && pay.mint === recv.mint) {
+      setRecv(complementToken(pay));
+    }
+  }, [pay, recv]);
 
   useEffect(() => {
     if (!pk) {
@@ -477,11 +502,11 @@ export function SwapWidget({
     setCa("");
     if (!slot) return;
     if (slot === "pay") {
-      if (next.mint === recv.mint) setRecv(pay);
       setPay(next);
+      setRecv((cur) => (cur.mint === next.mint ? complementToken(next) : cur));
     } else {
-      if (next.mint === pay.mint) setPay(recv);
       setRecv(next);
+      setPay((cur) => (cur.mint === next.mint ? complementToken(next) : cur));
     }
     if (next.mint !== SOL_MINT) onMint?.(next.mint);
   }
@@ -512,8 +537,10 @@ export function SwapWidget({
   }
 
   function flip() {
-    setPay(recv);
-    setRecv(pay);
+    const nextPay = recv;
+    const nextRecv = pay.mint === recv.mint ? complementToken(recv) : pay;
+    setPay(nextPay);
+    setRecv(nextRecv);
     if (out != null && out > 0) setAmount(String(out));
   }
 
@@ -539,7 +566,7 @@ export function SwapWidget({
       showNotice({
         kind: "error",
         text: payIsSol
-          ? `Not enough SOL. This wallet has ${fmtSol(payBal, 4)} SOL.`
+          ? `Leave a little SOL for fees. MAX uses ${fmtSol(spendable, 4)} of ${fmtSol(payBal, 4)} SOL.`
           : `Not enough ${pay.symbol.replace(/^\$+/, "")} in this wallet.`,
         at: Date.now(),
       });
@@ -763,7 +790,7 @@ export function SwapWidget({
           {short ? (
             <p className="mt-2 text-center text-[13px] text-blood">
               {payIsSol
-                ? `This wallet has ${fmtSol(payBal, 4)} SOL. Try MAX or a smaller amount.`
+                ? `Leave a little SOL for fees. MAX uses ${fmtSol(spendable, 4)} of ${fmtSol(payBal, 4)} SOL.`
                 : `This wallet does not have ${fmtTok(payNum)} ${pay.symbol.replace(/^\$+/, "")}.`}
             </p>
           ) : null}

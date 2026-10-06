@@ -248,8 +248,14 @@ function ProjectWalletCard({
     setErr("");
     setWork(true);
     try {
-      const inputMint = side === "buy" ? SOL_MINT : mint;
-      const outputMint = side === "buy" ? mint : SOL_MINT;
+      const other = mint.trim() === SOL_MINT || !mint.trim() ? USDC_MINT : mint.trim();
+      const inputMint = side === "buy" ? SOL_MINT : other;
+      const outputMint = side === "buy" ? other : SOL_MINT;
+      if (inputMint === outputMint) {
+        setErr("Pick a token other than SOL.");
+        setWork(false);
+        return;
+      }
       const built = await fetch("/api/swap/build", {
         method: "POST",
         headers: { "content-type": "application/json" },

@@ -21,7 +21,7 @@ import {
   type CurveState,
 } from "./curve";
 import { socialHref } from "./links";
-import { imageOk, storedImage, validateLaunchCreate } from "./validate";
+import { imageOk, PROFILE_DATA_MAX, profileImageOk, storedImage, validateLaunchCreate } from "./validate";
 import { isPlaceholderLabel } from "./labels";
 import { publicImage } from "../token/art";
 import type { LaunchBoost } from "./boost";
@@ -209,10 +209,15 @@ export function setAccountPfp(
   pfp: string,
 ): { ok: true; account: LaunchAccount } | { ok: false; error: string } {
   if (!isSolanaAddress(pubkey)) return { ok: false, error: "bad_wallet" };
-  const img = imageOk(pfp) || (pfp === "" ? "" : "");
-  if (pfp && !img) return { ok: false, error: "bad_image" };
+  const raw = (pfp || "").trim();
   const acc = ensureAccount(book, pubkey);
-  acc.pfp = img || undefined;
+  if (!raw) {
+    acc.pfp = undefined;
+    return { ok: true, account: acc };
+  }
+  const img = profileImageOk(raw);
+  if (!img) return { ok: false, error: "bad_image" };
+  acc.pfp = img;
   return { ok: true, account: acc };
 }
 
@@ -285,8 +290,8 @@ export function slimAccount(a: LaunchAccount, key: string): LaunchAccount {
   return {
     ...a,
     pubkey: a.pubkey || key,
-    pfp: pfp.startsWith("data:") && pfp.length > 90_000 ? "" : pfp,
-    banner: banner.startsWith("data:") && banner.length > 90_000 ? "" : banner,
+    pfp: pfp.startsWith("data:") && pfp.length > PROFILE_DATA_MAX ? "" : pfp,
+    banner: banner.startsWith("data:") && banner.length > PROFILE_DATA_MAX ? "" : banner,
     rankEvents: events && events.length ? events : undefined,
   };
 }

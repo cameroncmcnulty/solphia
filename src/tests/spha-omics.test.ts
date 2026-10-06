@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import {
   SPHA_SLICES,
   SPHA_SUPPLY,
@@ -9,6 +11,7 @@ import {
   sphaMissingDest,
   sphaRawAmount,
   sphaReservedTokens,
+  sphaSplitLegs,
   sphaTokensFor,
 } from "../lib/token/omics";
 
@@ -45,5 +48,26 @@ describe("spha tokenomics", () => {
     assert.equal(sphaMissingDest({ owner: dest.owner, treasury: dest.treasury }).includes("foundation"), true);
     assert.equal(sphaRawAmount(1, 9), 1_000_000_000n);
     assert.equal(sphaRawAmount(1), 1_000_000n);
+  });
+
+  it("splits leftover to owner and foundation and keeps treasury in leftoverReceiver", () => {
+    const dest = {
+      owner: "Own111111111111111111111111111111111111111",
+      foundation: "Fnd111111111111111111111111111111111111111",
+      airdrop: "",
+      treasury: "Trs111111111111111111111111111111111111111",
+      lp: "",
+    };
+    const legs = sphaSplitLegs(dest);
+    assert.equal(legs.length, 2);
+    assert.equal(legs.find((l) => l.id === "owner")?.tokens, 17_200_000);
+    assert.equal(legs.find((l) => l.id === "owner")?.to, dest.owner);
+    assert.equal(legs.find((l) => l.id === "foundation")?.tokens, 19_400_000);
+    assert.equal(legs.find((l) => l.id === "foundation")?.to, dest.foundation);
+    assert.equal(sphaSplitLegs({ ...dest, owner: dest.treasury, foundation: dest.treasury }).length, 0);
+    const src = readFileSync(path.join(process.cwd(), "src/components/admin/SphaLaunch.tsx"), "utf8");
+    assert.match(src, /sphaSplitLegs/);
+    assert.match(src, /Send leftover to owner and foundation/);
+    assert.equal(src.includes("with the send widget"), false);
   });
 });

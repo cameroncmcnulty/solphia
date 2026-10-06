@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { ArrowDownLeft, ArrowUpRight, Plus, Repeat } from "lucide-react";
 import { CartoonPfp } from "@/components/CartoonPfp";
 import { SolanaMark } from "@/components/SolanaMark";
 import { TokenArt } from "@/components/TokenArt";
@@ -212,7 +213,7 @@ export default function WalletPage() {
     <main className="pump-shell">
       <div className="pump-wrap pb-16">
         <div className="flex items-center gap-3">
-          <CartoonPfp seed={owner} className="h-12 w-12" />
+          <CartoonPfp seed={owner} src={`/api/circle/avatar?pk=${encodeURIComponent(owner)}`} className="h-12 w-12" />
           <div className="min-w-0 flex-1">
             <p className="text-[13px] font-medium text-[#14f195]">Wallet</p>
             <h1 className="truncate text-[24px] font-semibold tracking-tight text-white">{nickname}</h1>
@@ -229,15 +230,29 @@ export default function WalletPage() {
         <p className="mt-5 text-[32px] font-semibold tracking-tight text-white">{fmtUsd(totalUsd || null)}</p>
         <p className="font-mono text-[12px] text-white/40">{fmtAmt(holdings.find((h) => h.sol)?.amount || 0)} SOL</p>
 
-        <div className="mt-4 grid grid-cols-4 gap-2">
-          {[
-            ["Receive", () => setSheet("receive")],
-            ["Send", () => { setSendMint(SOL_MINT); setSheet("send"); }],
-            ["Swap", () => { window.location.href = "/swap"; }],
-            ["Add", () => openWalletOnboard()],
-          ].map(([label, fn]) => (
-            <button key={label as string} type="button" onClick={fn as () => void} className="rounded-2xl bg-white/8 py-3 text-[13px] font-medium text-white">
-              {label as string}
+        <div className="mt-5 grid grid-cols-4 gap-2">
+          {(
+            [
+              { label: "Receive", Icon: ArrowDownLeft, tone: "acid" as const, onClick: () => setSheet("receive") },
+              { label: "Send", Icon: ArrowUpRight, tone: "ghost" as const, onClick: () => { setSendMint(SOL_MINT); setSheet("send"); } },
+              { label: "Swap", Icon: Repeat, tone: "ghost" as const, onClick: () => { window.location.href = "/swap"; } },
+              { label: "Add", Icon: Plus, tone: "ghost" as const, onClick: () => openWalletOnboard() },
+            ]
+          ).map((a) => (
+            <button
+              key={a.label}
+              type="button"
+              onClick={a.onClick}
+              className="flex min-h-[76px] flex-col items-center justify-center gap-2 rounded-2xl bg-white/[0.06] px-1 py-3 text-[12px] font-medium text-white hover:bg-white/10 active:scale-[0.98]"
+            >
+              <span
+                className={`grid h-11 w-11 place-items-center rounded-full ${
+                  a.tone === "acid" ? "bg-acid text-void" : "bg-white/10 text-white"
+                }`}
+              >
+                <a.Icon className="h-5 w-5" strokeWidth={2.25} />
+              </span>
+              {a.label}
             </button>
           ))}
         </div>

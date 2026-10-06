@@ -37,6 +37,9 @@ export async function POST(req: NextRequest) {
   if (!isSolanaAddress(inputMint) || !isSolanaAddress(outputMint)) {
     return NextResponse.json({ error: "bad_request" }, { status: 400 });
   }
+  if (inputMint === outputMint) {
+    return NextResponse.json({ error: "same_mint", message: "Pick two different tokens." }, { status: 400 });
+  }
   await readyState();
   const skipHouse = isProjectProtocolWallet(b.owner);
   const tx = await buildAnySwapTx({

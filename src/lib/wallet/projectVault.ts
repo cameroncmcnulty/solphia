@@ -37,7 +37,7 @@ export const PROJECT_ROLES: {
     id: "treasury",
     label: "Treasury",
     kicker: "TREASURY · IN",
-    blurb: "Seats, 25% of curve fees, 50% of widget open-market / boosts / pins, and leftover $SPHA. Claim pad partner fees with this wallet.",
+    blurb: "Seats, 25% of curve fees, 50% of widget open-market / boosts / pins, and the 4.6% $SPHA leftover. Owner and foundation leftover are sent at launch. Claim pad partner fees with this wallet.",
     stateKey: "treasuryWallet",
   },
   {

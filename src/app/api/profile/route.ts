@@ -3,7 +3,7 @@ import { z } from "zod";
 import { clientIp, isSolanaAddress, rateLimit } from "@/lib/security";
 import { withLaunch, withShill } from "@/lib/store";
 import { emptyLaunchBook, referredBy } from "@/lib/launch/engine";
-import { INTRO_MAX, publicCard, setBanner, setFavourite, setIntro } from "@/lib/rank/engine";
+import { INTRO_MAX, profilePhotoUrl, publicCard, setBanner, setFavourite, setIntro } from "@/lib/rank/engine";
 import { displayMedia, pinDataUrl } from "@/lib/pinata";
 import { lookupMarketMint } from "@/lib/launch/market";
 import { staffRole } from "@/lib/access";
@@ -26,10 +26,7 @@ function bookOf(s: { launch?: ReturnType<typeof emptyLaunchBook> }) {
 }
 
 function photo(raw: string | undefined, pubkey: string, kind: "pfp" | "banner") {
-  const v = (raw || "").trim();
-  if (!v) return "";
-  if (v.startsWith("data:")) return `/api/circle/avatar?pk=${encodeURIComponent(pubkey)}&kind=${kind}`;
-  return displayMedia(v);
+  return profilePhotoUrl(raw, pubkey, kind) || displayMedia(raw);
 }
 
 export async function GET(req: NextRequest) {

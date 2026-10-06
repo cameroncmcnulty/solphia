@@ -25,7 +25,7 @@ import {
   splitFee,
   spotPriceSol,
 } from "../lib/launch/curve";
-import { buyCoin, createCoin, emptyLaunchBook, mergeLaunch, publicCoin, sellCoin, sparkCandles, withdrawDev, setOwnerWallet } from "../lib/launch/engine";
+import { buyCoin, createCoin, emptyLaunchBook, mergeLaunch, publicCoin, sellCoin, setAccountPfp, slimAccount, sparkCandles, withdrawDev, setOwnerWallet } from "../lib/launch/engine";
 import { launchError } from "../lib/launch/errors";
 import { yourLaunches } from "../lib/launch/yours";
 import { IMAGE_DATA_MAX, firstErrorKey, validateLaunchCreate } from "../lib/launch/validate";
@@ -455,6 +455,24 @@ describe("launch create validation", () => {
     assert.match(src, /RefreshCw/);
     assert.match(src, /onBuy/);
     assert.match(src, /hideTrade && onBuy/);
+  });
+
+  it("stores a pinned https PFP and drops oversized data URLs on slim", () => {
+    const book = emptyLaunchBook();
+    const url = "https://gateway.pinata.cloud/ipfs/bafytestpfp";
+    const ok = setAccountPfp(book, A, url);
+    assert.equal(ok.ok, true);
+    if (ok.ok) assert.equal(ok.account.pfp, url);
+    const bad = setAccountPfp(book, A, "javascript:alert(1)");
+    assert.equal(bad.ok, false);
+    const data = setAccountPfp(book, A, `data:image/jpeg;base64,${"a".repeat(200)}`);
+    assert.equal(data.ok, true);
+    book.accounts[A].pfp = `data:image/jpeg;base64,${"a".repeat(100_000)}`;
+    const slim = slimAccount(book.accounts[A], A);
+    assert.equal(slim.pfp, "");
+    const wallet = readFileSync(path.join(process.cwd(), "src/app/wallet/page.tsx"), "utf8");
+    assert.match(wallet, /\/api\/circle\/avatar\?pk=/);
+    assert.match(wallet, /ArrowDownLeft/);
   });
 
   it("rejects a 1-character name or ticker with an explicit too-short message", () => {

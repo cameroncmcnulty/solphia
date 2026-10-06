@@ -7,7 +7,6 @@ import { WalletConnect } from "@/components/WalletConnect";
 import { useOwner } from "@/lib/hooks";
 import { exportSecret, importSecret, tradingPubkey } from "@/lib/wallet/trading";
 import { WalletMove } from "@/components/WalletMove";
-import { IMAGE_DATA_MAX } from "@/lib/launch/validate";
 import { launchError } from "@/lib/launch/errors";
 import { usernameIssue } from "@/lib/launch/username";
 import { FieldError, fieldClass, useConfirmErrors } from "@/components/form/confirm";
@@ -345,8 +344,8 @@ export default function AccountPage() {
               </div>
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
-              <button type="button" className="btn-acid rounded-full px-5 py-2 text-sm" onClick={() => bannerRef.current?.click()}>
-                Upload banner
+              <button type="button" disabled={busy} className="btn-acid rounded-full px-5 py-2 text-sm disabled:opacity-40" onClick={() => bannerRef.current?.click()}>
+                {busy ? "Uploading…" : "Upload banner"}
               </button>
               <button
                 type="button"
@@ -377,6 +376,7 @@ export default function AccountPage() {
                 e.target.value = "";
                 if (!f) return;
                 fieldErr.clear("banner");
+                setBusy(true);
                 try {
                   const data = await wideBanner(f);
                   const r = await fetch("/api/profile", {
@@ -391,6 +391,8 @@ export default function AccountPage() {
                   load().catch(() => {});
                 } catch (err) {
                   fieldErr.fail({ banner: err instanceof Error ? err.message : "Could not use that image." });
+                } finally {
+                  setBusy(false);
                 }
               }}
             />
@@ -626,9 +628,9 @@ async function squarePfp(file: File): Promise<string> {
     const ctx = canvas.getContext("2d");
     if (!ctx) throw new Error("Could not crop image.");
     ctx.drawImage(img, (img.naturalWidth - side) / 2, (img.naturalHeight - side) / 2, side, side, 0, 0, 256, 256);
-    for (const q of [0.82, 0.68, 0.5, 0.36]) {
+    for (const q of [0.82, 0.68, 0.5, 0.36, 0.24]) {
       const data = canvas.toDataURL("image/jpeg", q);
-      if (data.length <= IMAGE_DATA_MAX) return data;
+      if (data.length <= 80_000) return data;
     }
     throw new Error("Image is too heavy.");
   } finally {

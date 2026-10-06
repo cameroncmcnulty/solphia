@@ -1,7 +1,7 @@
 import { SOL_DECIMALS, SOL_MINT, USDC_DECIMALS, USDC_MINT } from "../pair/mints";
 
-/** Leave enough SOL for the signature and rent so MAX cannot empty the wallet. */
-export const SOL_GAS_RESERVE = 0.02;
+/** Leave enough SOL for the signature, ATA rent, and a priority tip. 0.02 locked almost the whole bag. */
+export const SOL_GAS_RESERVE = 0.003;
 
 export function spendableAmount(balance: number, mint: string, solMint = SOL_MINT): number {
   if (!(balance > 0)) return 0;

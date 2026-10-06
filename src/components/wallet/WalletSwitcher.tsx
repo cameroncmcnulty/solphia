@@ -53,7 +53,7 @@ export function WalletSwitcher({ onClose, onAdd }: { onClose: () => void; onAdd:
                 onClose();
               }}
             >
-              <CartoonPfp seed={w.pubkey} className="h-10 w-10" />
+              <CartoonPfp seed={w.pubkey} src={`/api/circle/avatar?pk=${encodeURIComponent(w.pubkey)}`} className="h-10 w-10" />
               <span className="min-w-0 flex-1">
                 <span className="flex items-center gap-1.5 text-[15px] font-semibold text-white">
                   {w.nickname}

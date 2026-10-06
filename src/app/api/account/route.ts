@@ -16,9 +16,11 @@ import { launchError } from "@/lib/launch/errors";
 import { IMAGE_DATA_MAX } from "@/lib/launch/validate";
 import { lastPairPrices } from "@/lib/tick";
 import { airdropMultiplier, referralBoostPct } from "@/lib/circle/types";
-import { payReferralXp, publicRank } from "@/lib/rank/engine";
+import { payReferralXp, profilePhotoUrl, publicRank } from "@/lib/rank/engine";
+import { displayMedia, pinDataUrl } from "@/lib/pinata";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 30;
 
 const Body = z.object({
   action: z.enum(["hello", "pfp", "withdraw_referral", "username", "tos"]),
@@ -45,7 +47,7 @@ function pack(book: ReturnType<typeof emptyLaunchBook>, pubkey: string, solUsd: 
   return {
     pubkey,
     username: acc.username || "",
-    pfp: acc.pfp || "",
+    pfp: profilePhotoUrl(acc.pfp, pubkey, "pfp"),
     referrer: acc.referrer || null,
     referredAt: acc.referredAt || null,
     referralRewardsSol: acc.referralRewardsSol || 0,
@@ -60,13 +62,7 @@ function pack(book: ReturnType<typeof emptyLaunchBook>, pubkey: string, solUsd: 
     tosAcceptedAt: 0,
     link: `/r/${pubkey}`,
     intro: acc.intro || "",
-    banner: acc.banner
-      ? acc.banner.startsWith("data:")
-        ? `/api/circle/avatar?pk=${encodeURIComponent(pubkey)}&kind=banner`
-        : acc.banner.startsWith("http")
-          ? `/api/media?u=${encodeURIComponent(acc.banner)}`
-          : acc.banner
-      : "",
+    banner: profilePhotoUrl(acc.banner, pubkey, "banner"),
     favMint: acc.favMint || "",
     favSymbol: acc.favSymbol || "",
     favName: acc.favName || "",
@@ -92,6 +88,16 @@ export async function POST(req: NextRequest) {
   if (!isSolanaAddress(b.pubkey)) return fail("bad_wallet");
   const solUsd = lastPairPrices().solUsd || 0;
 
+  let pfpUrl = (b.pfp || "").trim();
+  if (b.action === "pfp" && pfpUrl.startsWith("data:image/")) {
+    try {
+      const pinned = await pinDataUrl(pfpUrl, `pfp-${b.pubkey.slice(0, 8)}`);
+      if (pinned?.url) pfpUrl = pinned.url.startsWith("http") ? pinned.url : displayMedia(pinned.url) || pinned.url;
+    } catch {
+      /* keep the data URL; slimLaunch drops only huge ones */
+    }
+  }
+
   const out = await withLaunch((s) => {
     const book = bookOf(s);
     if (b.action === "hello") {
@@ -100,7 +106,7 @@ export async function POST(req: NextRequest) {
       return r;
     }
     if (b.action === "pfp") {
-      return setAccountPfp(book, b.pubkey, b.pfp || "");
+      return setAccountPfp(book, b.pubkey, pfpUrl);
     }
     if (b.action === "username") {
       const r = setUsername(book, b.pubkey, b.username || "");

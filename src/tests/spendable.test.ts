@@ -40,4 +40,15 @@ describe("swap spendable", () => {
     assert.equal(amountExceedsBalance(Number(filled), have), false);
     assert.match(filled, /^\d+\.\d+$/);
   });
+
+  it("lets 0.02 SOL swap from a 0.02483 bag after the gas reserve", () => {
+    assert.ok(SOL_GAS_RESERVE < 0.00483);
+    const have = 0.02483;
+    const spendable = spendableAmount(have, SOL_MINT);
+    assert.equal(amountExceedsBalance(0.02, spendable), false);
+    assert.equal(amountExceedsBalance(spendable, spendable), false);
+    const max = maxPayString(spendable, SOL_MINT);
+    assert.equal(amountExceedsBalance(Number(max), spendable), false);
+    assert.ok(Number(max) >= 0.02);
+  });
 });

@@ -9,6 +9,8 @@ import {
   rankFromXp,
   rankTier,
   resetRank,
+  profilePhotoUrl,
+  setBanner,
   setFavourite,
   setIntro,
   setRankTo,
@@ -122,6 +124,12 @@ describe("rank engine", () => {
     const p = xpProgress(0);
     assert.equal(p.rank, 1);
     assert.ok(p.need > 0);
+    const banner = setBanner(book, A, "https://gateway.pinata.cloud/ipfs/bafybanner");
+    assert.equal(banner.ok, true);
+    assert.equal(book.accounts[A].banner, "https://gateway.pinata.cloud/ipfs/bafybanner");
+    assert.match(profilePhotoUrl(book.accounts[A].banner, A, "banner"), /\/api\/media\?u=/);
+    assert.equal(profilePhotoUrl(`data:image/jpeg;base64,aaa`, A, "pfp"), `/api/circle/avatar?pk=${encodeURIComponent(A)}&kind=pfp`);
+    assert.equal(setBanner(book, A, "javascript:alert(1)").ok, false);
   });
 
   it("keeps intro, banner, favourite, and XP across launch merges", () => {

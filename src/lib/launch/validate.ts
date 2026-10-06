@@ -7,6 +7,8 @@ export function walletOk(s: string): boolean {
 
 /** Data-URL cap. 512×512 PNG/JPEG for wallets; also used for profile art. */
 export const IMAGE_DATA_MAX = 360_000;
+/** slimAccount drops data: PFP/banner over this. Pin first; keep a small data URL as fallback. */
+export const PROFILE_DATA_MAX = 90_000;
 
 export type LaunchField =
   | "wallet"
@@ -53,6 +55,16 @@ export function imageOk(raw?: string): string {
   if (!/^data:image\/(png|jpeg|jpg|webp|gif|bmp|heic|heif|avif|tiff|tif);base64,/i.test(s)) return "";
   if (s.length > IMAGE_DATA_MAX) return "";
   return s;
+}
+
+/** PFP / banner: pinned https, avatar proxy, or a small data URL that survives slimAccount. */
+export function profileImageOk(raw?: string): string {
+  const s = (raw || "").trim();
+  if (!s) return "";
+  if (s.startsWith("data:image/") && s.length <= PROFILE_DATA_MAX) return s;
+  if (/^https?:\/\//i.test(s) && s.length <= 2048) return s;
+  if (s.startsWith("/api/media") || s.startsWith("/api/circle/avatar")) return s;
+  return "";
 }
 
 function trustedImageHost(host: string): boolean {

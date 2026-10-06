@@ -1,5 +1,6 @@
 import { isSolanaAddress, sanitizeText } from "../security";
 import { bindReferrer, ensureAccount, referredBy, type LaunchAccount, type LaunchBook } from "../launch/engine";
+import { profileImageOk } from "../launch/validate";
 
 export const RANK_MAX = 100;
 export type RankKind = "launch" | "chat" | "circle" | "referral" | "swap";
@@ -210,11 +211,9 @@ export function setBanner(book: LaunchBook, pubkey: string, banner: string) {
     acc.banner = "";
     return { ok: true as const, account: acc };
   }
-  if (raw.startsWith("data:image/") && raw.length > 400_000) return { ok: false as const, error: "bad_image" };
-  if (!raw.startsWith("data:image/") && !/^https?:\/\//i.test(raw) && !raw.startsWith("/api/media") && !raw.startsWith("/api/circle/avatar")) {
-    return { ok: false as const, error: "bad_image" };
-  }
-  acc.banner = raw;
+  const img = profileImageOk(raw);
+  if (!img) return { ok: false as const, error: "bad_image" };
+  acc.banner = img;
   return { ok: true as const, account: acc };
 }
 
@@ -255,6 +254,16 @@ export function publicRank(acc?: LaunchAccount | null) {
     pct: prog.pct,
     max: RANK_MAX,
   };
+}
+
+/** Browser-safe PFP / banner URL. Data URLs go through the avatar route so Redis JSON stays small. */
+export function profilePhotoUrl(raw: string | undefined, pubkey: string, kind: "pfp" | "banner"): string {
+  const v = (raw || "").trim();
+  if (!v) return "";
+  if (v.startsWith("data:")) return `/api/circle/avatar?pk=${encodeURIComponent(pubkey)}&kind=${kind}`;
+  if (v.startsWith("/")) return v;
+  if (/^https?:\/\//i.test(v)) return `/api/media?u=${encodeURIComponent(v)}`;
+  return v;
 }
 
 export function publicCard(acc?: LaunchAccount | null, pubkey = "") {
