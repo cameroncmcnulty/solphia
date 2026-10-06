@@ -1,16 +1,12 @@
-/** Labels that keep the two connect paths distinct. Phantom keys are never exported. */
+/** Labels that keep the two wallet paths distinct. Phantom is a fund rail, not login. */
 export const WALLET_PATHS = {
   create: {
     title: "Create a Solphia wallet",
-    hint: "Keys stay on this device. Phantom is not involved.",
+    hint: "Keys stay on this device. Phantom is only for sending funds in or out.",
   },
   import: {
-    title: "Import phrase or key",
-    hint: "Client-side only. Never sent to Solphia.",
-  },
-  phantom: {
-    title: "Connect Phantom",
-    hint: "Your Phantom keys stay in Phantom. We do not export them.",
+    title: "Import recovery phrase",
+    hint: "12 or 24 words. Stays on this device. Never sent to Solphia.",
   },
 } as const;
 

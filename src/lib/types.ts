@@ -326,6 +326,7 @@ export interface AppUser {
   unsubscribedAt?: number;
   username?: string;
   notes?: string;
+  accountId?: string;
 }
 
 export interface AutoSettings {
@@ -487,6 +488,8 @@ export interface AppState {
   mind: Mind;
   settings: EngineSettings;
   users: AppUser[];
+  /** Email / Google logins. Public addresses only — never seeds or PINs. */
+  accounts?: import("./auth/accounts").LoginAccount[];
   alerts: AlertEvent[];
   emails: EmailRecord[];
   audit: AuditEvent[];

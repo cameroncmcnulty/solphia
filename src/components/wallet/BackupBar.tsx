@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { CopyButton } from "@/components/CopyButton";
 import { activeWallet, markBackupConfirmed, requestUnlock, unlockedMnemonic } from "@/lib/wallet/vault";
 import { phraseFile, phraseWords, pickConfirmSlots } from "@/lib/wallet/phrase";
 
@@ -72,9 +73,7 @@ export function BackupBar({ onOpen }: { onOpen: () => void }) {
               ))}
             </ol>
             <div className="mt-3 flex gap-2">
-              <button type="button" className="rounded-full bg-white/10 px-3 py-1.5 text-[13px] text-white" onClick={() => void navigator.clipboard.writeText(phrase)}>
-                Copy
-              </button>
+              <CopyButton text={phrase} label="Copy" copiedLabel="Copied" className="rounded-full bg-white/10 px-3 py-1.5 text-[13px] text-white" />
               <button
                 type="button"
                 className="rounded-full bg-white/10 px-3 py-1.5 text-[13px] text-white"

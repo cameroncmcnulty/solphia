@@ -1,32 +1,11 @@
 "use client";
 
 import { useState, type MouseEvent } from "react";
+import { copyText } from "@/lib/copyText";
 
 function shortCa(ca: string) {
   if (ca.length <= 12) return ca;
   return `${ca.slice(0, 4)}…${ca.slice(-4)}`;
-}
-
-async function writeClipboard(text: string) {
-  try {
-    await navigator.clipboard.writeText(text);
-    return true;
-  } catch {
-    try {
-      const el = document.createElement("textarea");
-      el.value = text;
-      el.setAttribute("readonly", "");
-      el.style.position = "fixed";
-      el.style.left = "-9999px";
-      document.body.appendChild(el);
-      el.select();
-      const ok = document.execCommand("copy");
-      el.remove();
-      return ok;
-    } catch {
-      return false;
-    }
-  }
 }
 
 export function CopyCa({
@@ -59,8 +38,7 @@ export function CopyCa({
   async function copy(e: MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
-    const wrote = await writeClipboard(address);
-    if (!wrote) return;
+    if (!copyText(address)) return;
     setOk(true);
     window.setTimeout(() => setOk(false), 1600);
   }

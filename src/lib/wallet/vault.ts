@@ -392,16 +392,12 @@ export function exportSecretB58(id?: string): string | null {
 
 export function followInjectedPhantom(): boolean {
   const active = activeWallet();
-  if (!active) return true;
+  if (!active) return false;
   return active.kind === "phantom";
 }
 
-export function ensurePhantomStub(pubkey: string | null) {
-  if (!pubkey || !isSolanaAddress(pubkey)) return;
-  const meta = readVaultMeta();
-  if (meta.wallets.some((w) => w.pubkey === pubkey)) return;
-  if (meta.wallets.some((w) => w.kind === "embedded")) return;
-  addPhantomWallet(pubkey);
+export function ensurePhantomStub(_pubkey: string | null) {
+  /* Phantom is a send/receive rail, not an identity. Do not auto-stub it as a wallet. */
 }
 
 export function requestUnlock(id?: string): Promise<boolean> {

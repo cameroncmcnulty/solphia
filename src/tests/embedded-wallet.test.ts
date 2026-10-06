@@ -160,6 +160,7 @@ describe("vault localStorage isolation", () => {
 
     const { createEmbeddedWallet, readVaultMeta, followInjectedPhantom, addPhantomWallet, switchWallet, listWallets } =
       await import("../lib/wallet/vault");
+    assert.equal(followInjectedPhantom(), false);
     const phrase = newPhrase();
     const created = await createEmbeddedWallet({ pin: "1357", phrase });
     const metaRaw = mem.get("solphia_vault_meta") || "";
@@ -184,9 +185,10 @@ describe("vault localStorage isolation", () => {
 });
 
 describe("wallet path labels and fees", () => {
-  it("labels Phantom so keys are not mistaken for a Solphia seed", () => {
-    assert.match(WALLET_PATHS.phantom.hint, /do not export/i);
-    assert.match(WALLET_PATHS.create.hint, /Phantom is not involved/i);
+  it("offers create or phrase import, not Phantom login", () => {
+    assert.equal("phantom" in WALLET_PATHS, false);
+    assert.match(WALLET_PATHS.create.hint, /sending funds/i);
+    assert.match(WALLET_PATHS.import.title, /phrase/i);
     assert.equal(CONNECT_WALLET_FIRST, "Connect a wallet first.");
   });
 

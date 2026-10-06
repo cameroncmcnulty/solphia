@@ -132,6 +132,7 @@ export function emptyState(): AppState {
     mind: emptyMind(),
     settings: { ...DEFAULT_SETTINGS },
     users: [],
+    accounts: [],
     alerts: [],
     emails: [],
     audit: [],
@@ -245,6 +246,7 @@ function hydrateFromRaw(raw: AppState): AppState {
     opsUpdatedAt: Number(raw.opsUpdatedAt) || 0,
     publishLiveWallet: Boolean(raw.publishLiveWallet),
     buybacks: Array.isArray(raw.buybacks) ? raw.buybacks.slice(-40) : [],
+    accounts: Array.isArray(raw.accounts) ? raw.accounts : [],
   };
 }
 

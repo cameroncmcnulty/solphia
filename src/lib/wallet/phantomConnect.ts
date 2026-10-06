@@ -1,5 +1,6 @@
 import { isSolanaAddress } from "./addr";
 import { persistOwner } from "./owner";
+import { followInjectedPhantom } from "./vault";
 import { PHANTOM_PARAMS, decryptBox, isPhJob, isPhSession, type PhAfter, type PhJob, type PhSession } from "./phantomBox";
 import { markActionSpot, spotFromAfter } from "./actionSpot";
 
@@ -330,7 +331,7 @@ export async function completePhantomUl(): Promise<{
       job?: PhJob;
       reconnect?: boolean;
     };
-    if (typeof j.pubkey === "string" && isSolanaAddress(j.pubkey)) persistOwner(j.pubkey);
+    if (typeof j.pubkey === "string" && isSolanaAddress(j.pubkey) && followInjectedPhantom()) persistOwner(j.pubkey);
     if (j.reconnect || (typeof j.error === "string" && isPhantomUnauthorized(j.error))) {
       dropLocalPhantomSession();
     }
@@ -365,7 +366,6 @@ export function completePhantomConnect(): string | null {
     window.history.replaceState({}, "", cleanPhantomUrl(url));
     const pubkey = json?.public_key || "";
     if (!isSolanaAddress(pubkey)) return null;
-    persistOwner(pubkey);
     return pubkey;
   } catch {
     return null;

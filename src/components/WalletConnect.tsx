@@ -5,7 +5,7 @@ import { SphaMark } from "./SphaMark";
 import { loadOwner, persistOwner, OWNER_EVENT } from "@/lib/wallet/owner";
 import { beginPhantomConnect, completePhantomConnect, completePhantomUl, injectedProvider, openPhantomLink, PHANTOM_EVENT, readPhantomReturn } from "@/lib/wallet/phantomConnect";
 import { ensurePhantomStub, followInjectedPhantom } from "@/lib/wallet/vault";
-import { openWalletOnboard } from "./wallet/WalletHost";
+import { openConnect } from "./wallet/WalletHost";
 
 type Provider = {
   isPhantom?: boolean;
@@ -151,7 +151,7 @@ export function WalletKeepalive() {
     };
 
     const fromUl = completePhantomConnect();
-    if (fromUl) persistOwner(fromUl);
+    if (fromUl && followInjectedPhantom()) persistOwner(fromUl);
     const ingestReturn = () => {
       if (!readPhantomReturn()) return;
       void completePhantomUl()
@@ -219,8 +219,9 @@ export function WalletConnect({ compact: _compact = false }: { compact?: boolean
   useEffect(() => {
     mounted.current = true;
     const fromUl = completePhantomConnect();
-    const saved = fromUl || loadOwner();
+    const saved = (fromUl && followInjectedPhantom() ? fromUl : null) || loadOwner();
     if (saved) setAddr(saved);
+    if (fromUl && followInjectedPhantom()) persistOwner(fromUl);
     const found = phantom();
     if (found?.publicKey && followInjectedPhantom()) {
       const pubkey = found.publicKey.toString();
@@ -249,7 +250,7 @@ export function WalletConnect({ compact: _compact = false }: { compact?: boolean
   }, []);
 
   function connect() {
-    openWalletOnboard();
+    openConnect();
   }
 
   if (addr) return null;

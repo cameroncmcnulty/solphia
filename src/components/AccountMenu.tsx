@@ -6,10 +6,10 @@ import Link from "next/link";
 import { CircleUser, Gift, Rocket, Users, Wallet } from "lucide-react";
 import { useOwner } from "@/lib/hooks";
 import { CartoonPfp } from "./CartoonPfp";
-import { PhantomMark } from "./PhantomMark";
-import { WalletConnect, switchPhantom } from "./WalletConnect";
-import { openWalletSwitcher } from "./wallet/WalletHost";
+import { WalletConnect } from "./WalletConnect";
+import { openAccountGate, openWalletOnboard, openWalletSwitcher } from "./wallet/WalletHost";
 import { useActiveWallet } from "@/lib/wallet/useVault";
+import { logoutAccount, peekAccount, refreshAccount, AUTH_EVENT } from "@/lib/auth/client";
 
 type Desk = { pfp?: string; username?: string };
 
@@ -26,11 +26,27 @@ export function AccountMenu() {
   const vault = useActiveWallet();
   const [open, setOpen] = useState(false);
   const [desk, setDesk] = useState<Desk | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [email, setEmail] = useState("");
+  const [signedIn, setSignedIn] = useState(() => Boolean(peekAccount()?.id));
   const [mounted, setMounted] = useState(false);
   const [pos, setPos] = useState({ top: 0, right: 0 });
   const box = useRef<HTMLDivElement>(null);
   const btn = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    const sync = () => {
+      const a = peekAccount();
+      setEmail(a?.email || "");
+      setSignedIn(Boolean(a?.id));
+    };
+    sync();
+    void refreshAccount().then((a) => {
+      setEmail(a?.email || "");
+      setSignedIn(Boolean(a?.id));
+    });
+    window.addEventListener(AUTH_EVENT, sync);
+    return () => window.removeEventListener(AUTH_EVENT, sync);
+  }, []);
 
   useEffect(() => {
     if (!owner) {
@@ -87,8 +103,8 @@ export function AccountMenu() {
         <div className="min-w-0">
           <div className="truncate font-mono text-xs text-ghost">{nickname}</div>
           <div className="truncate font-mono text-[10px] text-mute">
-            {owner.slice(0, 4)}…{owner.slice(-4)}
-            {vault?.kind === "phantom" ? " · Phantom" : vault ? " · Solphia" : ""}
+            {email || `${owner.slice(0, 4)}…${owner.slice(-4)}`}
+            {vault ? " · Solphia" : ""}
           </div>
         </div>
       </div>
@@ -120,26 +136,43 @@ export function AccountMenu() {
           <Wallet className="h-4 w-4 shrink-0 text-acid" />
           Switch wallet
         </button>
-        {vault?.kind === "phantom" ? (
+        <button
+          type="button"
+          role="menuitem"
+          onClick={() => {
+            setOpen(false);
+            openWalletOnboard();
+          }}
+          className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left text-sm text-mute hover:bg-white/5 hover:text-ghost"
+        >
+          <Wallet className="h-4 w-4 shrink-0 text-acid" />
+          Add wallet
+        </button>
+        {signedIn ? (
           <button
             type="button"
             role="menuitem"
-            disabled={busy}
-            onClick={async () => {
-              setBusy(true);
-              try {
-                await switchPhantom();
-              } finally {
-                setBusy(false);
-                setOpen(false);
-              }
+            onClick={() => {
+              setOpen(false);
+              void logoutAccount();
             }}
-            className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left text-sm text-mute hover:bg-white/5 hover:text-ghost disabled:opacity-40"
+            className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left text-sm text-mute hover:bg-white/5 hover:text-ghost"
           >
-            <PhantomMark className="h-4 w-4 shrink-0 text-white" />
-            {busy ? "Opening Phantom…" : "Switch Phantom account"}
+            Sign out
           </button>
-        ) : null}
+        ) : (
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              openAccountGate();
+            }}
+            className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left text-sm text-mute hover:bg-white/5 hover:text-ghost"
+          >
+            Sign in
+          </button>
+        )}
       </nav>
     </div>,
     document.body,

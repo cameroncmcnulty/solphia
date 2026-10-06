@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { CartoonPfp } from "@/components/CartoonPfp";
 import { SolanaMark } from "@/components/SolanaMark";
 import { TokenArt } from "@/components/TokenArt";
+import { CopyButton } from "@/components/CopyButton";
+import { copyText } from "@/lib/copyText";
 import { WalletConnect } from "@/components/WalletConnect";
 import { WalletSheet } from "@/components/wallet/sheet";
 import { openWalletOnboard, openWalletSwitcher } from "@/components/wallet/WalletHost";
@@ -197,7 +199,7 @@ export default function WalletPage() {
       <main className="pump-shell">
         <div className="pump-wrap py-16">
           <h1 className="pump-h1">Wallet</h1>
-          <p className="pump-p mt-2">Create a Solphia wallet on this device, or connect Phantom. Keys never sit on Solphia servers.</p>
+          <p className="pump-p mt-2">Create a Solphia wallet or import a recovery phrase. Phantom is only for sending funds in or out. Keys never sit on Solphia servers.</p>
           <div className="mt-6">
             <WalletConnect />
           </div>
@@ -216,7 +218,7 @@ export default function WalletPage() {
             <h1 className="truncate text-[24px] font-semibold tracking-tight text-white">{nickname}</h1>
             <p className="font-mono text-[11px] text-mute">
               {owner.slice(0, 4)}…{owner.slice(-4)}
-              {active?.kind === "phantom" ? " · Phantom" : " · Solphia"}
+              {active?.kind === "phantom" ? " · external" : " · Solphia"}
             </p>
           </div>
           <button type="button" onClick={() => openWalletSwitcher()} className="rounded-full bg-white/10 px-3 py-2 text-[13px] text-white">
@@ -319,14 +321,14 @@ export default function WalletPage() {
       {sheet === "receive" ? (
         <WalletSheet title="Receive" subtitle={nickname} onClose={() => setSheet(null)}>
           <div className="flex justify-center" dangerouslySetInnerHTML={{ __html: qrSvg(owner) }} />
-          <p className="mt-3 break-all text-center font-mono text-[12px] text-white">{owner}</p>
-          <button
-            type="button"
+          <p className="mt-3 break-all text-center font-mono text-[12px] text-white select-all">{owner}</p>
+          <CopyButton
+            text={owner}
+            label="Copy address"
+            copiedLabel="Copied"
             className="btn-acid mt-4 min-h-[48px] w-full rounded-full"
-            onClick={() => void navigator.clipboard.writeText(owner)}
-          >
-            Copy address
-          </button>
+          />
+          <p className="mt-3 text-center text-[13px] text-white/40">Send SOL in from Phantom or any wallet. This address is yours.</p>
           <a href={solscanAccount(owner)} target="_blank" rel="noreferrer" className="mt-3 block text-center text-[13px] text-white/45">
             View on Solscan
           </a>
@@ -465,7 +467,7 @@ export default function WalletPage() {
           <button
             type="button"
             className="mt-3 w-full rounded-2xl bg-white/8 py-2.5 font-mono text-[12px] text-white/70"
-            onClick={() => void navigator.clipboard.writeText(token.mint)}
+            onClick={() => copyText(token.mint)}
           >
             Copy CA · {token.mint.slice(0, 4)}…{token.mint.slice(-4)}
           </button>
@@ -482,9 +484,7 @@ export default function WalletPage() {
               <p className="text-[12px] text-white/45">Recovery phrase</p>
               <p className="mt-1 break-words font-mono text-[14px] text-white">{phrase}</p>
               <div className="mt-2 flex gap-2">
-                <button type="button" className="rounded-full bg-white/10 px-3 py-1.5 text-[13px] text-white" onClick={() => void navigator.clipboard.writeText(phrase)}>
-                  Copy phrase
-                </button>
+                <CopyButton text={phrase} label="Copy phrase" copiedLabel="Copied" className="rounded-full bg-white/10 px-3 py-1.5 text-[13px] text-white" />
                 <button
                   type="button"
                   className="rounded-full bg-white/10 px-3 py-1.5 text-[13px] text-white"
@@ -507,9 +507,7 @@ export default function WalletPage() {
             <>
               <p className="mt-4 text-[12px] text-white/45">Private key</p>
               <p className="mt-1 break-all font-mono text-[12px] text-white/80">{secret}</p>
-              <button type="button" className="mt-2 rounded-full bg-white/10 px-3 py-1.5 text-[13px] text-white" onClick={() => void navigator.clipboard.writeText(secret)}>
-                Copy private key
-              </button>
+              <CopyButton text={secret} label="Copy private key" copiedLabel="Copied" className="mt-2 rounded-full bg-white/10 px-3 py-1.5 text-[13px] text-white" />
             </>
           ) : (
             <p className="text-[13px] text-white/45">Unlock to export. Phantom wallets cannot be exported from Solphia.</p>

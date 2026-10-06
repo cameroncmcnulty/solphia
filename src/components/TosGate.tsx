@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { peekAccount, refreshAccount } from "@/lib/auth/client";
+import { openAccountGate } from "@/components/wallet/WalletHost";
 import { useOwner } from "@/lib/hooks";
 
 function keyOf(pk: string) {
@@ -10,6 +12,7 @@ function keyOf(pk: string) {
 
 export function TosGate() {
   const owner = useOwner();
+  const [needAccount, setNeedAccount] = useState(false);
   const [need, setNeed] = useState(false);
   const [tos, setTos] = useState(false);
   const [privacy, setPrivacy] = useState(false);
@@ -17,39 +20,70 @@ export function TosGate() {
   const [err, setErr] = useState("");
 
   useEffect(() => {
-    if (!owner) {
-      setNeed(false);
-      return;
-    }
-    try {
-      if (localStorage.getItem(keyOf(owner))) {
+    let live = true;
+    void refreshAccount().then((acct) => {
+      if (!live) return;
+      if (acct?.tosAcceptedAt) {
+        setNeedAccount(false);
         setNeed(false);
         return;
       }
-    } catch {
-      /* ignore */
-    }
-    let live = true;
-    fetch(`/api/account?pubkey=${encodeURIComponent(owner)}`, { cache: "no-store" })
-      .then((r) => r.json())
-      .then((j) => {
-        if (!live) return;
-        if (j?.tosAcceptedAt) {
-          try {
-            localStorage.setItem(keyOf(owner), String(j.tosAcceptedAt));
-          } catch {
-            /* ignore */
-          }
+      if (!owner) {
+        setNeedAccount(false);
+        setNeed(false);
+        return;
+      }
+      if (acct && !acct.tosAcceptedAt) {
+        setNeedAccount(true);
+        setNeed(false);
+        return;
+      }
+      try {
+        if (localStorage.getItem(keyOf(owner))) {
           setNeed(false);
-        } else setNeed(true);
-      })
-      .catch(() => {
-        if (live) setNeed(true);
-      });
+          return;
+        }
+      } catch {
+        /* ignore */
+      }
+      fetch(`/api/account?pubkey=${encodeURIComponent(owner)}`, { cache: "no-store" })
+        .then((r) => r.json())
+        .then((j) => {
+          if (!live) return;
+          if (j?.tosAcceptedAt) {
+            try {
+              localStorage.setItem(keyOf(owner), String(j.tosAcceptedAt));
+            } catch {
+              /* ignore */
+            }
+            setNeed(false);
+          } else setNeed(true);
+        })
+        .catch(() => {
+          if (live) setNeed(true);
+        });
+    });
     return () => {
       live = false;
     };
   }, [owner]);
+
+  if (needAccount && !peekAccount()?.tosAcceptedAt) {
+    return (
+      <div className="fixed inset-0 z-[80] flex items-end justify-center bg-void/80 p-4 backdrop-blur-sm sm:items-center">
+        <div className="w-full max-w-md rounded-3xl border border-violet/30 bg-ink p-5 shadow-[0_24px_80px_rgba(0,0,0,0.55)]">
+          <p className="font-mono text-[10px] tracking-[0.22em] text-acid">ACCOUNT</p>
+          <h2 className="mt-2 font-display text-2xl text-ghost">Agree to continue</h2>
+          <p className="mt-2 text-sm leading-relaxed text-mute">
+            Create or sign in to an account to accept the terms. Wallets stay on this device.
+          </p>
+          <button type="button" onClick={() => openAccountGate()} className="btn-acid mt-5 inline-flex min-h-[48px] w-full items-center justify-center rounded-full text-base">
+            Open account
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (!owner || !need) return null;
 
@@ -84,7 +118,7 @@ export function TosGate() {
         <p className="font-mono text-[10px] tracking-[0.22em] text-acid">FIRST CONNECT</p>
         <h2 className="mt-2 font-display text-2xl text-ghost">Before you enter</h2>
         <p className="mt-2 text-sm leading-relaxed text-mute">
-          Solphia is non-custodial. Your wallet is login. Trading activities carry heavy risk. Agree to the terms and privacy policy to continue.
+          Solphia is non-custodial. Trading activities carry heavy risk. Agree to the terms and privacy policy to continue.
         </p>
         <label className="mt-4 flex items-start gap-2 text-sm text-ghost">
           <input type="checkbox" checked={tos} onChange={(e) => setTos(e.target.checked)} className="mt-1" />
