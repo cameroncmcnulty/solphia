@@ -8,6 +8,7 @@ import {
   attachDkim,
   canonicalizeBody,
   canonicalizeHeader,
+  dkimPrivateKeyPem,
   dkimReady,
 } from "../lib/email/dkim";
 import { deliverSolphiaMail } from "../lib/email/mta";
@@ -110,6 +111,15 @@ describe("solphia mail", () => {
     const sent = composeMail(book, { fromLocal: "admin", to: "you@x.com", subject: "gm", html: "<p>hi</p>" });
     assert.equal(sent.ok, true);
     if (sent.ok) assert.match(sent.message.html, /spha-mark\.png/);
+  });
+
+  it("strips quotes and escaped newlines from the DKIM PEM", () => {
+    const prev = process.env.SOLPHIA_DKIM_PRIVATE_KEY;
+    process.env.SOLPHIA_DKIM_PRIVATE_KEY =
+      '"-----BEGIN PRIVATE KEY-----\\nABCD\\n-----END PRIVATE KEY-----"';
+    assert.equal(dkimPrivateKeyPem(), "-----BEGIN PRIVATE KEY-----\nABCD\n-----END PRIVATE KEY-----");
+    if (prev) process.env.SOLPHIA_DKIM_PRIVATE_KEY = prev;
+    else delete process.env.SOLPHIA_DKIM_PRIVATE_KEY;
   });
 
   it("builds quoted-printable MIME from otp@solphia.io", () => {

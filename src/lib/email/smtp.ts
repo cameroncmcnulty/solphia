@@ -10,8 +10,8 @@ try {
   /* node < 16 */
 }
 
-const CONNECT_MS = 12_000;
-const REPLY_MS = 25_000;
+const CONNECT_MS = process.env.VERCEL ? 2_500 : 8_000;
+const REPLY_MS = process.env.VERCEL ? 12_000 : 25_000;
 
 export type SmtpReply = { code: number; text: string; lines: string[] };
 
@@ -288,19 +288,28 @@ export async function smtpSend(input: SmtpSendInput): Promise<{ host: string; po
   }
   const hosts = override ? [stripDot(override)] : await lookupMx(input.mxDomain || "");
   if (!hosts.length) throw new Error("no_mx");
+  const limited = process.env.VERCEL ? hosts.slice(0, 1) : hosts;
   const ports = mailPorts(input.port);
   let last: Error = new Error("smtp_failed");
-  for (const host of hosts) {
+  let blocked25 = false;
+  for (const host of limited) {
     for (const port of ports) {
+      if (port === 25 && blocked25) continue;
       try {
         await sessionOn(host, port, helo, input);
         return { host, port };
       } catch (err) {
         last = err instanceof Error ? err : new Error("smtp_failed");
         const msg = last.message;
+        if (port === 25 && /timeout|ECONNREFUSED|EHOSTUNREACH|ENETUNREACH/i.test(msg)) blocked25 = true;
         if (/\b5\d\d\b/.test(msg) && /mail |rcpt |data /.test(msg)) throw last;
       }
     }
+  }
+  if (process.env.VERCEL && blocked25) {
+    throw new Error(
+      "Vercel blocks outbound port 25, which Gmail needs. Solphia's mailer is on. Same code on a box we control (SOLPHIA_MAIL_HOST) can deliver.",
+    );
   }
   throw last;
 }

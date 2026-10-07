@@ -19,9 +19,17 @@ export {
 const SIGNED = ["from", "to", "subject", "date", "message-id", "mime-version", "content-type"] as const;
 
 export function dkimPrivateKeyPem(): string {
-  const raw = (process.env.SOLPHIA_DKIM_PRIVATE_KEY || "").trim();
+  let raw = (process.env.SOLPHIA_DKIM_PRIVATE_KEY || "").trim();
   if (!raw) return "";
-  return raw.includes("\\n") ? raw.replace(/\\n/g, "\n") : raw;
+  if (
+    (raw.startsWith('"') && raw.endsWith('"')) ||
+    (raw.startsWith("'") && raw.endsWith("'"))
+  ) {
+    raw = raw.slice(1, -1);
+  }
+  raw = raw.replace(/\r\n/g, "\n");
+  if (raw.includes("\\n")) raw = raw.replace(/\\n/g, "\n");
+  return raw.trim();
 }
 
 export function dkimReady(): boolean {

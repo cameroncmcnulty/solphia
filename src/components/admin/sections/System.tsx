@@ -76,22 +76,25 @@ export function SystemSection() {
         </p>
         <ol className="mt-3 list-decimal space-y-2 pl-5 text-[12px] text-mute">
           <li>
-            DNS TXT <span className="font-mono text-ghost">{dkimHost}</span>
+            Vercel → Domain solphia.io → DNS. Name <span className="font-mono text-ghost">solphia._domainkey</span> TXT
             <code className="mt-1 block break-all font-mono text-[10px] text-ghost">{dkimTxt}</code>
           </li>
           <li>
-            DNS TXT <span className="font-mono text-ghost">{dmarcHost}</span>
+            Name <span className="font-mono text-ghost">_dmarc</span> TXT
             <code className="mt-1 block break-all font-mono text-[10px] text-ghost">{dmarcTxt}</code>
           </li>
           <li>
-            DNS TXT solphia.io SPF once mail.solphia.io has an A record
+            Skip SPF until mail.solphia.io has an A record ({dkimHost} / {dmarcHost}).
             <code className="mt-1 block break-all font-mono text-[10px] text-ghost">{spfTxt}</code>
           </li>
           <li>
-            Vercel Production env: SOLPHIA_DKIM_PRIVATE_KEY (PEM, newlines as \n). Generate with{" "}
+            Production env SOLPHIA_DKIM_PRIVATE_KEY is the on-switch. Generate with{" "}
             <span className="font-mono text-ghost">node scripts/gen-dkim.mjs</span>. Never commit the private key.
           </li>
-          <li>Redeploy. Vercel blocks outbound port 25, so Gmail may still refuse from serverless. Same code on a box we control (A record mail.solphia.io) is still our system — set SOLPHIA_MAIL_HOST=mail.solphia.io if that box is ours.</li>
+          <li>
+            Vercel blocks outbound port 25, so Gmail may still refuse from serverless. Same code on a box we control
+            (A record mail.solphia.io) is still our system — set SOLPHIA_MAIL_HOST=mail.solphia.io if that box is ours.
+          </li>
         </ol>
       </div>
       <div className="panel rounded-2xl p-5">

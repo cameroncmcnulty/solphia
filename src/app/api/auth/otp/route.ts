@@ -10,6 +10,7 @@ import { clientIp, rateLimit } from "@/lib/security";
 import { mutateState } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 const Start = z.object({
   action: z.literal("start").optional(),
