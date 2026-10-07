@@ -157,16 +157,32 @@ function TokenBubble({
   votes,
   onVote,
   canVote,
+  pinned,
+  onOpen,
 }: {
   token: ShillToken;
   onCopy: (mint: string) => void;
   votes?: number;
   onVote?: () => void;
   canVote?: boolean;
+  pinned?: boolean;
+  onOpen?: () => void;
 }) {
   const [copied, setCopied] = useState(false);
   return (
-    <div className="mt-2 grid w-full grid-cols-[2.4rem_minmax(0,1fr)_auto_auto] items-center gap-2 rounded-2xl border border-white/10 bg-black/25 px-2 py-1.5">
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={() => onOpen?.()}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") onOpen?.();
+      }}
+      className={`mt-2 grid w-full cursor-pointer grid-cols-[2.4rem_minmax(0,1fr)_auto_auto] items-center gap-2 rounded-2xl px-2 py-1.5 text-left ${
+        pinned
+          ? "border border-[#ffd24a]/45 bg-[#ffd24a]/10 shadow-[0_0_18px_rgba(255,210,74,0.16)]"
+          : "border border-white/10 bg-black/25"
+      }`}
+    >
       <TokenArt src={token.image} mint={token.mint} label={token.symbol} className="h-9 w-9 rounded-xl" />
       <div className="min-w-0 overflow-hidden">
         <div className="truncate text-[14px] font-semibold text-white">{tick(token.symbol)}</div>
@@ -200,6 +216,90 @@ function TokenBubble({
       >
         {copied ? "copied" : "copy"}
       </button>
+    </div>
+  );
+}
+
+function PinSpotlight({
+  pin,
+  now,
+  canVote,
+  onClose,
+  onVote,
+  onCopy,
+  onBuy,
+}: {
+  pin: PinRow;
+  now: number;
+  canVote: boolean;
+  onClose: () => void;
+  onVote: () => void;
+  onCopy: () => void;
+  onBuy: () => void;
+}) {
+  const live = pin.endsAt > now;
+  const left = Math.max(0, pin.endsAt - now);
+  const pct = live ? Math.max(6, Math.min(100, (left / SHILL_PIN_MS) * 100)) : 0;
+  const votes = pin.votes || 0;
+  const ticker = tick(pin.symbol);
+  return (
+    <div className="app-layer shill-overlay-dock z-[80] bg-black/70" onClick={onClose}>
+      <div className="app-layer-card pin-spotlight relative overflow-hidden rounded-[1.75rem]" onClick={(e) => e.stopPropagation()}>
+        <div className="pin-spotlight-wash" />
+        <div className="relative px-5 pb-5 pt-3">
+          <div className="flex items-center justify-between">
+            <p className="font-mono text-[10px] tracking-[0.28em] text-[#ffd24a]">
+              {live ? "PINNED ON THE RAIL" : votes > 0 ? "ON THE BOARD" : "LIVE TOKEN"}
+            </p>
+            <button type="button" onClick={onClose} className="flex h-11 w-11 items-center justify-center rounded-full text-white/70" aria-label="Close">
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+          <div className="mt-1 flex flex-col items-center text-center">
+            <div className="pin-spotlight-art">
+              <TokenArt src={pin.image} mint={pin.mint} label={pin.symbol} className="h-[5.5rem] w-[5.5rem] rounded-[1.55rem]" />
+            </div>
+            <h2 className="mt-3 font-display text-[2.15rem] leading-none tracking-tight text-white">{ticker}</h2>
+            <p className="mt-1 truncate text-[14px] text-white/55">{pin.name}</p>
+            {pin.mcUsd ? <p className="stat-num mt-2 text-[15px] text-acid">{fmtMc(pin.mcUsd)} MC</p> : null}
+          </div>
+          {live ? (
+            <div className="mt-4">
+              <div className="flex items-center justify-between font-mono text-[10px] text-white/45">
+                <span>RAIL TIME</span>
+                <span className="text-[#ffd24a]">{fmtPinLeft(left)} left</span>
+              </div>
+              <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-white/10">
+                <i className="block h-full rounded-full bg-[#ffd24a] shadow-[0_0_10px_rgba(255,210,74,0.7)]" style={{ width: `${pct}%` }} />
+              </div>
+            </div>
+          ) : null}
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            <div className="rounded-2xl border border-white/10 bg-black/25 px-3 py-2.5 text-center">
+              <p className="font-mono text-[9px] tracking-[0.16em] text-white/40">VOTES</p>
+              <p className="stat-num mt-0.5 text-[18px] text-acid">{votes}</p>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-black/25 px-3 py-2.5 text-center">
+              <p className="font-mono text-[9px] tracking-[0.16em] text-white/40">{live ? "SPOT" : "PRICE"}</p>
+              <p className="mt-0.5 text-[15px] font-semibold text-white">
+                {live ? "Paid pin" : pin.priceUsd ? `$${pin.priceUsd < 1 ? pin.priceUsd.toPrecision(3) : pin.priceUsd.toFixed(2)}` : "Market"}
+              </p>
+            </div>
+          </div>
+          <button type="button" onClick={onBuy} className="pin-spotlight-buy mt-4 flex min-h-[52px] w-full items-center justify-center rounded-full text-[17px] font-semibold">
+            Buy {ticker}
+          </button>
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            <button type="button" disabled={!canVote} className="min-h-[44px] rounded-full border border-acid/40 text-[14px] text-acid disabled:opacity-40" onClick={onVote}>
+              Upvote
+            </button>
+            <button type="button" className="min-h-[44px] rounded-full border border-white/15 text-[14px] text-white" onClick={onCopy}>
+              Copy CA
+            </button>
+          </div>
+          <p className="mt-3 break-all text-center font-mono text-[10px] text-white/35">{pin.mint}</p>
+        </div>
+      </div>
     </div>
   );
 }
@@ -652,14 +752,32 @@ export default function ShillPage() {
   }
 
   function openVoteRow(row: VoteRow) {
+    const pinned = pins.find((p) => p.mint === row.mint);
     setOpenPin({
-      id: row.mint,
+      id: pinned?.id || row.mint,
       mint: row.mint,
       symbol: row.symbol,
       name: row.name,
       image: row.image,
-      endsAt: 0,
+      endsAt: pinned?.endsAt || 0,
       votes: row.votes,
+      priceUsd: pinned?.priceUsd,
+      mcUsd: pinned?.mcUsd,
+    });
+  }
+
+  function openTokenCard(token: ShillToken) {
+    const pinned = pins.find((p) => p.mint === token.mint);
+    setOpenPin({
+      id: pinned?.id || token.mint,
+      mint: token.mint,
+      symbol: token.symbol,
+      name: token.name,
+      image: token.image,
+      priceUsd: token.priceUsd || pinned?.priceUsd,
+      mcUsd: token.mcUsd || pinned?.mcUsd,
+      endsAt: pinned?.endsAt || 0,
+      votes: voteByMint[token.mint] || pinned?.votes || 0,
     });
   }
 
@@ -841,7 +959,9 @@ export default function ShillPage() {
                             onCopy={copyMint}
                             votes={voteByMint[m.token.mint] || 0}
                             canVote={canVote}
+                            pinned={pins.some((p) => p.mint === m.token!.mint)}
                             onVote={() => upvote(m.token!.mint)}
+                            onOpen={() => openTokenCard(m.token!)}
                           />
                         )}
                         <div className="mt-0.5 flex items-center justify-end gap-1">
@@ -1059,36 +1179,15 @@ export default function ShillPage() {
         )}
 
         {openPin && (
-          <div
-            className="app-layer shill-overlay-dock z-[80] bg-black/55 backdrop-blur-sm"
-            onClick={() => setOpenPin(null)}
-          >
-            <div className="app-layer-card panel-bubble rounded-[1.5rem] p-4" onClick={(e) => e.stopPropagation()}>
-              <div className="flex items-center gap-3">
-                <TokenArt src={openPin.image} mint={openPin.mint} label={openPin.symbol} className="h-14 w-14 rounded-2xl" />
-                <div className="min-w-0 flex-1">
-                  <div className="truncate font-display text-xl text-white">{tick(openPin.symbol)}</div>
-                  <div className="truncate text-[13px] text-mute">{openPin.name}</div>
-                  {openPin.mcUsd ? <div className="stat-num text-[12px] text-acid">{fmtMc(openPin.mcUsd)}</div> : null}
-                </div>
-                <button type="button" onClick={() => setOpenPin(null)} className="text-white/50" aria-label="Close">
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
-              <p className="mt-3 break-all font-mono text-[11px] text-white/50">{openPin.mint}</p>
-              <div className="mt-4 grid grid-cols-3 gap-2">
-                <button type="button" disabled={!canVote} className="rounded-full border border-acid/40 py-2.5 text-[14px] text-acid disabled:opacity-40" onClick={() => upvote(openPin.mint)}>
-                  Up
-                </button>
-                <button type="button" className="rounded-full border border-white/15 py-2.5 text-[14px] text-white" onClick={() => copyMint(openPin.mint)}>
-                  Copy CA
-                </button>
-                <button type="button" className="rounded-full bg-acid py-2.5 text-[14px] font-semibold text-void" onClick={() => openSwap(openPin.mint)}>
-                  Buy
-                </button>
-              </div>
-            </div>
-          </div>
+          <PinSpotlight
+            pin={{ ...openPin, votes: openPin.votes || voteByMint[openPin.mint] || 0 }}
+            now={now}
+            canVote={canVote}
+            onClose={() => setOpenPin(null)}
+            onVote={() => upvote(openPin.mint)}
+            onCopy={() => copyMint(openPin.mint)}
+            onBuy={() => openSwap(openPin.mint)}
+          />
         )}
 
         <Sheet open={sheet === "pin"} title="Pin to the rail" onClose={() => setSheet(null)}>

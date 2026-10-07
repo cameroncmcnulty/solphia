@@ -1074,6 +1074,30 @@ input[type="range"]::-webkit-slider-thumb {
   background: #12081c;
   box-shadow: 0 0 0 2px #ffd24a, 0 0 16px rgba(255, 210, 74, 0.55);
 }
+.pin-spotlight {
+  border: 1px solid rgba(255, 210, 74, 0.38);
+  background: linear-gradient(180deg, rgba(36, 26, 8, 0.98), rgba(8, 4, 14, 0.98));
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.62), 0 0 48px rgba(255, 210, 74, 0.14), inset 0 1px 0 rgba(255, 236, 180, 0.18);
+}
+.pin-spotlight-wash {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(90% 70% at 50% -8%, rgba(255, 210, 74, 0.28), transparent 58%),
+    radial-gradient(60% 40% at 100% 100%, rgba(20, 241, 149, 0.08), transparent 50%);
+}
+.pin-spotlight-art {
+  border-radius: 1.85rem;
+  padding: 3px;
+  background: linear-gradient(135deg, #ffe89a, #ffd24a 42%, #c9a227);
+  box-shadow: 0 0 32px rgba(255, 210, 74, 0.5);
+}
+.pin-spotlight-buy {
+  background: linear-gradient(180deg, #ffe27a, #ffd24a);
+  color: #140c00;
+  box-shadow: 0 10px 28px rgba(255, 210, 74, 0.28);
+}
 .shill-bar {
   height: 2px;
   width: 2.9rem;

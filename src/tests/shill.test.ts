@@ -282,4 +282,16 @@ describe("shill zone", () => {
     assert.match(profile, /app-layer /);
     assert.equal(page.includes("items-end justify-center"), false);
   });
+
+  it("opens a gold pin spotlight and lets chat tokens open it too", () => {
+    const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
+    const page = readFileSync(join(process.cwd(), "src/app/shill/page.tsx"), "utf8");
+    assert.match(css, /\.pin-spotlight \{/);
+    assert.match(css, /\.pin-spotlight-buy \{/);
+    assert.match(page, /PINNED ON THE RAIL/);
+    assert.match(page, /Buy \{ticker\}/);
+    assert.match(page, /function PinSpotlight/);
+    assert.match(page, /onOpen=\{\(\) => openTokenCard\(m\.token!\)\}/);
+    assert.match(page, /app-layer shill-overlay-dock/);
+  });
 });

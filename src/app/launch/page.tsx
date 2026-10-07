@@ -818,6 +818,9 @@ export default function LaunchPage() {
       setOpen(local);
       setLookedMint(local.mint || local.id);
       setTab("tape");
+      window.setTimeout(() => {
+        document.getElementById(`desk-${local.id}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 60);
       return;
     }
     if (!isSolanaAddress(q)) {
@@ -838,6 +841,9 @@ export default function LaunchPage() {
       setOpen(coin);
       setLookedMint(coin.mint || coin.id);
       setTab("tape");
+      window.setTimeout(() => {
+        document.getElementById(`desk-${coin.id}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 60);
     } catch (e) {
       setCaErr(e instanceof Error ? e.message : "Lookup failed.");
     } finally {
@@ -1653,7 +1659,10 @@ export default function LaunchPage() {
         if (already) next = [already, ...next.filter((r) => r !== already)];
         else {
           const extra = scoreTape([pinned], solUsd)[0];
-          if (extra) next = [{ ...extra, boost: undefined }, ...next];
+          if (extra) {
+            const b = boostRank.find((x) => x.coinId === pinned.id || (x.mint && x.mint === pinned.mint));
+            next = [{ ...extra, boost: b }, ...next];
+          }
         }
       }
     }
@@ -1726,13 +1735,48 @@ export default function LaunchPage() {
                   symbol: b.symbol || hit?.symbol || "",
                 };
               })}
-              onOpen={(mint, coinId) => {
-                const hit = coins.find((c) => c.mint === mint || c.id === coinId || c.id === mint);
+              onOpen={(b) => {
+                const mint = b.mint || b.coinId;
+                const hit = coins.find((c) => c.mint === mint || c.id === b.coinId || c.id === mint);
                 if (hit) {
                   setOpen(hit);
                   setLookedMint(hit.mint || hit.id);
                   setSnapAt(Date.now());
+                  setTab("tape");
+                  window.setTimeout(() => {
+                    document.getElementById(`desk-${hit.id}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+                  }, 60);
+                  return;
                 }
+                if (!mint) return;
+                const seeded: Coin = {
+                  id: b.coinId || mint,
+                  mint,
+                  name: b.name || b.symbol || "Token",
+                  symbol: b.symbol || "",
+                  image: b.image,
+                  blurb: "",
+                  creator: "",
+                  createdAt: Date.now(),
+                  status: "graduated",
+                  priceSol: 0,
+                  marketCapSol: 0,
+                  marketCapUsd: 0,
+                  progress: 1,
+                  realSol: 0,
+                  holders: 0,
+                  devRewardsSol: 0,
+                  fills: [],
+                };
+                setCoins((prev) => [seeded, ...prev.filter((c) => c.mint !== mint && c.id !== seeded.id)]);
+                setOpen(seeded);
+                setLookedMint(mint);
+                setSnapAt(Date.now());
+                setTab("tape");
+                window.setTimeout(() => {
+                  document.getElementById(`desk-${seeded.id}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+                }, 60);
+                if (isSolanaAddress(mint)) searchMint(mint).catch(() => {});
               }}
             />
             {boostOpen && (

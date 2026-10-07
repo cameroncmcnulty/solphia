@@ -222,7 +222,7 @@ export function BoostRail({
   onOpen,
 }: {
   rows: BoostRank[];
-  onOpen: (mint: string, coinId: string) => void;
+  onOpen: (row: BoostRank) => void;
 }) {
   const [sort, setSort] = useState<BoostSort>("top");
   if (!rows.length) {
@@ -274,7 +274,7 @@ export function BoostRail({
             <button
               key={`${b.mint || b.coinId}-${i}`}
               type="button"
-              onClick={() => onOpen(b.mint, b.coinId)}
+              onClick={() => onOpen(b)}
               className={`flex w-[7.6rem] shrink-0 flex-col items-center rounded-[22px] px-3 py-3 text-center ${
                 gold ? "boost-gold" : "border border-white/10 bg-white/[0.04]"
               }`}

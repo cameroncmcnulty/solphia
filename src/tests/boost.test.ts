@@ -258,6 +258,16 @@ describe("rocket boosts", () => {
     assert.equal(src.includes("Open a token below"), false);
   });
 
+  it("opens a boosted rail token even when it is not already on the tape", () => {
+    const rail = readFileSync(path.join(process.cwd(), "src/components/BoostBuy.tsx"), "utf8");
+    const page = readFileSync(path.join(process.cwd(), "src/app/launch/page.tsx"), "utf8");
+    assert.match(rail, /onClick=\{\(\) => onOpen\(b\)\}/);
+    assert.match(page, /onOpen=\{\(b\) => \{/);
+    assert.match(page, /searchMint\(mint\)/);
+    assert.match(page, /desk-\$\{/);
+    assert.match(page, /scrollIntoView/);
+  });
+
   it("charges boosts with a live 50/50 owner and treasury split", () => {
     const src = readFileSync(path.join(process.cwd(), "src/app/api/launch/boost/route.ts"), "utf8");
     assert.match(src, /mode: "even"/);
