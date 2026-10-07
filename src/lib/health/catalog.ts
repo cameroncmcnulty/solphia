@@ -160,8 +160,8 @@ export const SERVICES: ServiceDef[] = [
   },
   {
     id: "smtp",
-    name: "Email (SMTP)",
-    why: "Signup codes, admin login codes, and alert mail. Gmail app password is free — no paid SMTP.",
+    name: "Email",
+    why: "Signup codes, admin login codes, and alert mail. Sent from Solphia's own inbox, never a personal Gmail.",
     defaultTier: "none",
     tiers: [
       {
@@ -169,15 +169,15 @@ export const SERVICES: ServiceDef[] = [
         label: "Off",
         price: "$0",
         limits: { mailPerDay: 0 },
-        notes: "Set MAIL_USER and MAIL_APP_PASSWORD (Gmail → Security → App passwords). Codes will not reach inboxes until this is set.",
+        notes: "Set AGENTMAIL_API_KEY so codes leave solphia@agentmail.to. Do not use a Gmail app password.",
         next: "set",
       },
       {
         id: "set",
         label: "Configured",
-        price: "your host",
-        limits: { mailPerDay: 500 },
-        notes: "Mailer is set (Gmail app password, SMTP, or Resend). Watch the provider's send cap.",
+        price: "in-house",
+        limits: { mailPerDay: 3000 },
+        notes: "Mailer is live from Solphia's inbox. Watch the provider send cap.",
       },
     ],
   },

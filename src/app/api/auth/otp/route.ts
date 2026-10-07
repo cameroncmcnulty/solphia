@@ -5,7 +5,7 @@ import { verifyBot } from "@/lib/auth/challenge";
 import { consumeSignupOtp, otpEmailHtml, startSignupOtp } from "@/lib/auth/otp";
 import { setAccountCookie } from "@/lib/auth/session";
 import { withSignature } from "@/lib/email/desk";
-import { mailConfigured, queueEmail } from "@/lib/email/send";
+import { mailConfigured, mailOffHint, queueEmail } from "@/lib/email/send";
 import { clientIp, rateLimit } from "@/lib/security";
 import { mutateState } from "@/lib/store";
 
@@ -84,7 +84,7 @@ export async function POST(req: NextRequest) {
         error: "mail_off",
         message: mailConfigured()
           ? out.mailError || "Could not send the code. Try again in a minute."
-          : "Email is not sending yet. Set MAIL_USER and MAIL_APP_PASSWORD (Gmail app password) on Vercel.",
+          : mailOffHint(),
       },
       { status: 503 },
     );

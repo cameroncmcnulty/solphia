@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { consumeAdminOtp, DEFAULT_ADMIN_OTP_EMAIL, maskEmail, startAdminOtp } from "../lib/admin/otp";
 import { hashOtp, otpMatch } from "../lib/auth/otp";
 import { emptyState } from "../lib/store";
@@ -38,47 +40,70 @@ describe("admin otp", () => {
 });
 
 describe("mailer", () => {
-  it("is off without credentials", () => {
-    const prev = {
+  function snapMailEnv() {
+    return {
       host: process.env.SMTP_HOST,
-      user: process.env.MAIL_USER,
-      pass: process.env.MAIL_APP_PASSWORD,
       smtpUser: process.env.SMTP_USER,
       smtpPass: process.env.SMTP_PASS,
       resend: process.env.RESEND_API_KEY,
+      agent: process.env.AGENTMAIL_API_KEY,
+      inbox: process.env.AGENTMAIL_INBOX,
+      mailUser: process.env.MAIL_USER,
+      mailPass: process.env.MAIL_APP_PASSWORD,
     };
+  }
+  function restoreMailEnv(prev: ReturnType<typeof snapMailEnv>) {
+    const put = (k: string, v: string | undefined) => {
+      if (v) process.env[k] = v;
+      else delete process.env[k];
+    };
+    put("SMTP_HOST", prev.host);
+    put("SMTP_USER", prev.smtpUser);
+    put("SMTP_PASS", prev.smtpPass);
+    put("RESEND_API_KEY", prev.resend);
+    put("AGENTMAIL_API_KEY", prev.agent);
+    put("AGENTMAIL_INBOX", prev.inbox);
+    put("MAIL_USER", prev.mailUser);
+    put("MAIL_APP_PASSWORD", prev.mailPass);
+  }
+
+  it("is off without credentials", () => {
+    const prev = snapMailEnv();
     delete process.env.SMTP_HOST;
+    delete process.env.SMTP_USER;
+    delete process.env.SMTP_PASS;
+    delete process.env.RESEND_API_KEY;
+    delete process.env.AGENTMAIL_API_KEY;
     delete process.env.MAIL_USER;
     delete process.env.MAIL_APP_PASSWORD;
-    delete process.env.SMTP_USER;
-    delete process.env.SMTP_PASS;
-    delete process.env.RESEND_API_KEY;
     assert.equal(mailerKind(), null);
     assert.equal(mailConfigured(), false);
-    if (prev.host) process.env.SMTP_HOST = prev.host;
-    if (prev.user) process.env.MAIL_USER = prev.user;
-    if (prev.pass) process.env.MAIL_APP_PASSWORD = prev.pass;
-    if (prev.smtpUser) process.env.SMTP_USER = prev.smtpUser;
-    if (prev.smtpPass) process.env.SMTP_PASS = prev.smtpPass;
-    if (prev.resend) process.env.RESEND_API_KEY = prev.resend;
+    restoreMailEnv(prev);
   });
 
-  it("picks gmail when user+app password are set without a host", () => {
-    const prevHost = process.env.SMTP_HOST;
-    const prevUser = process.env.MAIL_USER;
-    const prevPass = process.env.MAIL_APP_PASSWORD;
+  it("picks AgentMail and ignores a Gmail app password", () => {
+    const prev = snapMailEnv();
     delete process.env.SMTP_HOST;
-    process.env.MAIL_USER = "hello@gmail.com";
-    process.env.MAIL_APP_PASSWORD = "abcd efgh ijkl mnop";
     delete process.env.SMTP_USER;
     delete process.env.SMTP_PASS;
     delete process.env.RESEND_API_KEY;
-    assert.equal(mailerKind(), "gmail");
-    if (prevHost) process.env.SMTP_HOST = prevHost;
-    else delete process.env.SMTP_HOST;
-    if (prevUser) process.env.MAIL_USER = prevUser;
-    else delete process.env.MAIL_USER;
-    if (prevPass) process.env.MAIL_APP_PASSWORD = prevPass;
-    else delete process.env.MAIL_APP_PASSWORD;
+    process.env.MAIL_USER = "hello@gmail.com";
+    process.env.MAIL_APP_PASSWORD = "abcd efgh ijkl mnop";
+    process.env.AGENTMAIL_API_KEY = "am_test";
+    process.env.AGENTMAIL_INBOX = "solphia@agentmail.to";
+    assert.equal(mailerKind(), "agentmail");
+    delete process.env.AGENTMAIL_API_KEY;
+    assert.equal(mailerKind(), null);
+    restoreMailEnv(prev);
+  });
+
+  it("does not tell operators to use a Gmail app password", () => {
+    const login = readFileSync(join(process.cwd(), "src/app/api/admin/login/route.ts"), "utf8");
+    const otp = readFileSync(join(process.cwd(), "src/app/api/auth/otp/route.ts"), "utf8");
+    const send = readFileSync(join(process.cwd(), "src/lib/email/send.ts"), "utf8");
+    assert.equal(login.includes("MAIL_APP_PASSWORD"), false);
+    assert.equal(otp.includes("MAIL_APP_PASSWORD"), false);
+    assert.equal(send.includes("smtp.gmail.com"), false);
+    assert.match(send, /agentmail\.to/);
   });
 });

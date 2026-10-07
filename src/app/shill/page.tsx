@@ -220,24 +220,24 @@ function Sheet({
   if (!open) return null;
   return (
     <div
-      className="shill-overlay-dock fixed inset-x-0 top-0 z-[45] flex items-end justify-center bg-black/70 md:items-center md:p-4"
+      className="shill-overlay-dock fixed inset-x-0 top-0 z-[45] flex items-start justify-center bg-black/70 md:items-center md:p-4"
       onClick={onClose}
     >
       <div
-        className={`flex w-full flex-col overflow-hidden rounded-t-3xl border border-white/10 bg-[#04000a] sm:rounded-3xl ${
+        className={`flex w-full flex-col overflow-hidden border border-white/10 bg-[#04000a] ${
           tall
-            ? "max-h-[min(70svh,32rem)] sm:max-h-[36rem] sm:max-w-md"
-            : "panel-bubble max-h-[min(70svh,32rem)] overflow-y-auto sm:max-w-lg"
+            ? "h-full max-h-full rounded-none sm:h-auto sm:max-h-[min(92svh,40rem)] sm:max-w-md sm:rounded-3xl"
+            : "max-h-[min(88svh,36rem)] overflow-y-auto rounded-b-3xl sm:max-w-lg sm:rounded-3xl"
         }`}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex h-12 shrink-0 items-center justify-between px-4">
+        <div className="flex min-h-12 shrink-0 items-center justify-between px-4 pt-[env(safe-area-inset-top)] sm:pt-0">
           <div className="font-display text-[20px] text-ghost">{title}</div>
           <button type="button" onClick={onClose} className="flex h-11 w-11 items-center justify-center rounded-full text-white/70" aria-label="Close">
             <X className="h-5 w-5" />
           </button>
         </div>
-        <div className={`min-h-0 ${tall ? "flex flex-1 flex-col overflow-hidden px-2 pb-3" : "px-4 pb-5"}`}>{children}</div>
+        <div className={`min-h-0 ${tall ? "flex min-h-0 flex-1 flex-col overflow-y-auto px-2 pb-3" : "px-4 pb-5"}`}>{children}</div>
       </div>
     </div>
   );
@@ -1065,7 +1065,7 @@ export default function ShillPage() {
 
         {openPin && (
           <div
-            className="shill-overlay-dock fixed inset-x-0 top-0 z-[46] flex items-end justify-center bg-black/55 p-3 backdrop-blur-sm md:items-center"
+            className="shill-overlay-dock fixed inset-x-0 top-0 z-[46] flex items-start justify-center bg-black/55 p-3 pt-[max(0.75rem,env(safe-area-inset-top))] backdrop-blur-sm md:items-center"
             onClick={() => setOpenPin(null)}
           >
             <div className="panel-bubble w-full max-w-sm rounded-3xl p-4" onClick={(e) => e.stopPropagation()}>

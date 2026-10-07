@@ -878,7 +878,7 @@ export function SwapWidget({
       </div>
 
       {picker ? (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-3 sm:items-center" onClick={() => setPicker(null)}>
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/70 px-3 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] sm:items-center sm:p-3" onClick={() => setPicker(null)}>
           <div
             className="max-h-[min(32rem,80svh)] w-full max-w-md overflow-hidden rounded-[24px] border border-white/10 bg-[#0b0714] p-4"
             onClick={(e) => e.stopPropagation()}

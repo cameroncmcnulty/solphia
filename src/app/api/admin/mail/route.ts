@@ -3,7 +3,7 @@ import { z } from "zod";
 import { requireAdmin } from "@/lib/admin/auth";
 import { clientIp } from "@/lib/security";
 import { audit, pushBounded, withMail } from "@/lib/store";
-import { queueEmail } from "@/lib/email/send";
+import { queueEmail, verifyAgentMail } from "@/lib/email/send";
 import {
   composeMail,
   createIdentity,
@@ -16,7 +16,8 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
 const Body = z.object({
-  action: z.enum(["create", "draft", "send", "star", "read", "delete"]),
+  action: z.enum(["create", "draft", "send", "star", "read", "delete", "verify_sender"]),
+  otp: z.string().max(12).optional(),
   local: z.string().max(32).optional(),
   name: z.string().max(48).optional(),
   fromLocal: z.string().max(32).optional(),
@@ -50,6 +51,12 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) return NextResponse.json({ error: "bad_request" }, { status: 400 });
   const b = parsed.data;
   const ip = clientIp(req);
+
+  if (b.action === "verify_sender") {
+    const out = await verifyAgentMail(b.otp || "");
+    if (!out.ok) return NextResponse.json({ error: "verify_failed", message: out.error }, { status: 400 });
+    return NextResponse.json({ ok: true, verified: true });
+  }
 
   if (b.action === "create") {
     const out = await withMail((s) => {

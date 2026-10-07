@@ -90,7 +90,7 @@ export function MailSection() {
         .replace(/\n/g, "<br/>")}</div>`,
     });
     if (!j) return;
-    setNote(draft ? "Draft saved." : j.message?.status === "preview" ? "Stored in sent (SMTP off)." : "Sent.");
+    setNote(draft ? "Draft saved." : j.message?.status === "preview" ? "Stored in sent (mail off)." : "Sent.");
     if (!draft) {
       setTo("");
       setCc("");
@@ -106,7 +106,7 @@ export function MailSection() {
         <div className="font-mono text-[10px] tracking-[0.28em] text-mute">SOLPHIA MAIL</div>
         <h2 className="mt-1 font-display text-3xl text-ghost">admin@solphia.io</h2>
         <p className="mt-1 max-w-2xl text-sm text-mute">
-          Compose, send, and create more @solphia.io addresses. Signature uses the SPHA mark — never the Solana logo.
+          Compose, send, and create more @solphia.io addresses. Outbound mail leaves Solphia&apos;s inbox, not Gmail. Signature uses the SPHA mark — never the Solana logo.
         </p>
       </div>
 

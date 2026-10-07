@@ -14,7 +14,10 @@ export function WalletSheet({
   children: ReactNode;
 }) {
   return (
-    <div className="fixed inset-0 z-[96] flex items-end justify-center bg-black/75 p-3 sm:items-center" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-[96] flex items-start justify-center bg-black/75 px-3 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] sm:items-center sm:p-3"
+      onClick={onClose}
+    >
       <div
         className="max-h-[min(40rem,92svh)] w-full max-w-md overflow-y-auto rounded-[28px] border border-white/10 bg-[#0b0714] p-5 shadow-[0_20px_60px_rgba(0,0,0,0.55)]"
         onClick={(e) => e.stopPropagation()}

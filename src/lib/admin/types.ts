@@ -201,6 +201,7 @@ export type AdminDesk = {
   sphaDbcConfig: string;
   adminOtpEmail: string;
   mailReady: boolean;
+  mailFrom: string;
   googleEnabled: boolean;
   sphaSocials: { x: string; telegram: string; discord: string };
   circle: { cap: number; members: number; spots: number };

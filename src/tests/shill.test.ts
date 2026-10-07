@@ -273,5 +273,6 @@ describe("shill zone", () => {
     assert.match(nav, /min-h-\[var\(--bottom-nav-h\)\]/);
     assert.match(page, /className="shill-dock /);
     assert.equal(/pb-3 md:pb-6/.test(page), false);
+    assert.match(page, /shill-overlay-dock[\s\S]*items-start/);
   });
 });
