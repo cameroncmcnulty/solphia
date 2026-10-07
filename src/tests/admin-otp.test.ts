@@ -37,6 +37,28 @@ describe("admin otp", () => {
     if (!started.ok) return;
     assert.equal(started.email, "ops@solphia.io");
   });
+
+  it("accepts a pasted code with spaces and keeps the digits readable in mail", () => {
+    const s = emptyState();
+    const started = startAdminOtp(s);
+    assert.equal(started.ok, true);
+    if (!started.ok) return;
+    const spaced = started.otp.split("").join(" ");
+    assert.equal(consumeAdminOtp(s, spaced).ok, true);
+    const html = readFileSync(join(process.cwd(), "src/lib/admin/otp.ts"), "utf8");
+    assert.match(html, /background:#ffffff/);
+    assert.match(html, /Dashboard one-time code/);
+  });
+
+  it("writes the admin code to its own durable key so verify can run on another instance", () => {
+    const persist = readFileSync(join(process.cwd(), "src/lib/persist.ts"), "utf8");
+    const login = readFileSync(join(process.cwd(), "src/app/api/admin/login/route.ts"), "utf8");
+    const otp = readFileSync(join(process.cwd(), "src/lib/auth/otp.ts"), "utf8");
+    assert.match(persist, /adminOtp:\s*"solphia:admin-otp"/);
+    assert.match(login, /await pullAdminOtp\(s\)/);
+    assert.match(login, /await saveAdminOtp\(/);
+    assert.match(otp, /function otpSecret\(\)/);
+  });
 });
 
 describe("mailer", () => {

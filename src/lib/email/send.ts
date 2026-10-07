@@ -92,9 +92,22 @@ async function sendAgentMail(opts: { to: string; cc?: string; bcc?: string; subj
     cache: "no-store",
   });
   if (!r.ok) {
-    const j = (await r.json().catch(() => ({}))) as { message?: string };
-    throw new Error(typeof j.message === "string" ? j.message : `agentmail_${r.status}`);
+    const j = await r.json().catch(() => ({}));
+    throw new Error(agentMailError(j, r.status));
   }
+}
+
+function agentMailError(j: unknown, status: number): string {
+  if (j && typeof j === "object") {
+    const o = j as { message?: string; error?: { message?: string; code?: string; fix?: string } | string };
+    if (typeof o.message === "string" && o.message.trim()) return o.message;
+    if (typeof o.error === "string" && o.error.trim()) return o.error;
+    if (o.error && typeof o.error === "object") {
+      return o.error.message || o.error.fix || o.error.code || `agentmail_${status}`;
+    }
+  }
+  if (status === 403) return "AgentMail is not verified yet, so it can only send to the inbox owner.";
+  return `agentmail_${status}`;
 }
 
 export async function verifyAgentMail(otp: string): Promise<{ ok: true } | { ok: false; error: string }> {
@@ -109,8 +122,8 @@ export async function verifyAgentMail(otp: string): Promise<{ ok: true } | { ok:
     cache: "no-store",
   });
   if (!r.ok) {
-    const j = (await r.json().catch(() => ({}))) as { message?: string };
-    return { ok: false, error: typeof j.message === "string" ? j.message : "That verify code did not work." };
+    const j = await r.json().catch(() => ({}));
+    return { ok: false, error: agentMailError(j, r.status) };
   }
   return { ok: true };
 }

@@ -1,9 +1,12 @@
 import { createHmac, randomBytes, timingSafeEqual } from "crypto";
 import type { AppState } from "@/lib/types";
+import { durableConfigured, KEYS, kvDel, kvGetJson, kvSetEx } from "@/lib/persist";
 import { hashPassword, passwordIssue, passwordOk } from "./password";
 import { emailOk, findByEmail, normalizeEmail } from "./accounts";
 
-const secret = process.env.ADMIN_SECRET || "solphia-dev-only";
+function otpSecret(): string {
+  return process.env.ADMIN_SECRET || "solphia-dev-only";
+}
 export const OTP_TTL_MS = 15 * 60_000;
 export const OTP_RESEND_MS = 45_000;
 export const OTP_MAX_TRIES = 5;
@@ -37,7 +40,7 @@ export function makeOtp(): string {
 }
 
 export function hashOtp(emailNorm: string, otp: string): string {
-  return createHmac("sha256", secret).update(`${emailNorm}:${otp}`).digest("hex");
+  return createHmac("sha256", otpSecret()).update(`${emailNorm}:${otp}`).digest("hex");
 }
 
 export function otpMatch(emailNorm: string, otp: string, stored: string): boolean {
@@ -48,8 +51,28 @@ export function otpMatch(emailNorm: string, otp: string, stored: string): boolea
   return timingSafeEqual(a, b);
 }
 
+export function digitsOtp(otp: string): string {
+  return (otp || "").replace(/\D/g, "").slice(0, 6);
+}
+
 export function otpLooksRight(otp: string): boolean {
-  return /^\d{6}$/.test((otp || "").trim());
+  return /^\d{6}$/.test(digitsOtp(otp));
+}
+
+export async function pullSignupOtp(state: AppState): Promise<void> {
+  if (!durableConfigured()) return;
+  const raw = await kvGetJson(KEYS.signupOtp);
+  if (Array.isArray(raw)) state.signupPending = raw as SignupPending[];
+}
+
+export async function saveSignupOtp(rows: SignupPending[]): Promise<void> {
+  if (!durableConfigured()) return;
+  const live = (rows || []).filter((p) => p && p.expiresAt > Date.now());
+  if (!live.length) {
+    await kvDel(KEYS.signupOtp);
+    return;
+  }
+  await kvSetEx(KEYS.signupOtp, live, Math.ceil(OTP_TTL_MS / 1000) + 60);
 }
 
 export function startSignupOtp(
@@ -93,7 +116,8 @@ export function consumeSignupOtp(
   state: AppState,
   opts: { email: string; otp: string },
 ): { ok: true; pending: SignupPending } | { ok: false; error: string } {
-  if (!otpLooksRight(opts.otp)) return { ok: false, error: "Enter the 6-digit code." };
+  const code = digitsOtp(opts.otp);
+  if (!otpLooksRight(code)) return { ok: false, error: "Enter the 6-digit code." };
   const email = normalizeEmail(opts.email);
   const rows = pendingOf(state);
   const row = rows.find((p) => p.emailNorm === email);
@@ -103,7 +127,7 @@ export function consumeSignupOtp(
     return { ok: false, error: "That code expired. Send a new one." };
   }
   if (row.tries >= OTP_MAX_TRIES) return { ok: false, error: "Too many tries. Send a new code." };
-  if (!otpMatch(email, opts.otp.trim(), row.otpHash)) {
+  if (!otpMatch(email, code, row.otpHash)) {
     row.tries += 1;
     return { ok: false, error: "That code is wrong." };
   }
@@ -112,10 +136,13 @@ export function consumeSignupOtp(
 }
 
 export function otpEmailHtml(code: string): string {
-  return `<div style="font-family:Georgia,serif;color:#f4f0ea;background:#04000a;padding:28px;">
-  <p style="margin:0 0 12px;font-size:14px;color:#7a708c;letter-spacing:0.18em;">SOLPHIA</p>
-  <p style="margin:0 0 8px;font-size:18px;">Your one-time code</p>
-  <p style="margin:16px 0;font-size:32px;letter-spacing:0.28em;font-family:ui-monospace,monospace;color:#14f195;">${code}</p>
-  <p style="margin:0;font-size:13px;color:#7a708c;line-height:1.5;">Expires in 15 minutes. Solphia never asks for a seed phrase or PIN.</p>
+  const digits = digitsOtp(code);
+  return `<div style="font-family:Arial,Helvetica,sans-serif;background:#f4f0ea;padding:28px;">
+  <div style="max-width:440px;margin:0 auto;background:#ffffff;border-radius:16px;padding:28px;border:1px solid #eadfce;">
+    <p style="margin:0 0 8px;font-size:12px;letter-spacing:0.18em;color:#7a708c;">SOLPHIA</p>
+    <p style="margin:0 0 8px;font-size:18px;color:#140c00;">Your one-time code</p>
+    <p style="margin:20px 0;font-size:36px;letter-spacing:0.24em;font-family:ui-monospace,Consolas,monospace;color:#140c00;font-weight:700;">${digits}</p>
+    <p style="margin:0;font-size:13px;color:#7a708c;line-height:1.5;">Expires in 15 minutes. Solphia never asks for a seed phrase or PIN.</p>
+  </div>
 </div>`;
 }

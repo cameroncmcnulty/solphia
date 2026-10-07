@@ -10,7 +10,7 @@ import {
   setAdminCookie,
   setAdminOtpCookie,
 } from "@/lib/admin/auth";
-import { consumeAdminOtp, maskEmail, startAdminOtp, adminOtpEmailHtml } from "@/lib/admin/otp";
+import { consumeAdminOtp, maskEmail, startAdminOtp, adminOtpEmailHtml, pullAdminOtp, saveAdminOtp } from "@/lib/admin/otp";
 import { withSignature } from "@/lib/email/desk";
 import { mailConfigured, mailOffHint, queueEmail } from "@/lib/email/send";
 import { clientIp, rateLimit } from "@/lib/security";
@@ -47,10 +47,16 @@ export async function POST(req: NextRequest) {
     if (action === "resend") {
       let code = "";
       const out = await mutateState(async (s) => {
+        await pullAdminOtp(s);
         const started = startAdminOtp(s);
         if (!started.ok) return started;
+        await saveAdminOtp(s.adminOtpPending || null);
         code = started.otp;
         const mail = await queueEmail(s, started.email, "Solphia admin code", withSignature(adminOtpEmailHtml(started.otp)));
+        if (mail.status !== "sent" && s.adminOtpPending) {
+          s.adminOtpPending.sentAt = 0;
+          await saveAdminOtp(s.adminOtpPending);
+        }
         return { ok: true as const, email: started.email, mailStatus: mail.status, mailError: mail.error };
       });
       if (!out.ok) return NextResponse.json({ error: "otp_failed", message: out.error }, { status: 400 });
@@ -70,7 +76,12 @@ export async function POST(req: NextRequest) {
       });
     }
     const otp = (parsed.data.otp || "").trim();
-    const out = await mutateState((s) => consumeAdminOtp(s, otp));
+    const out = await mutateState(async (s) => {
+      await pullAdminOtp(s);
+      const consumed = consumeAdminOtp(s, otp);
+      await saveAdminOtp(s.adminOtpPending || null);
+      return consumed;
+    });
     if (!out.ok) return NextResponse.json({ error: "otp_failed", message: out.error }, { status: 400 });
     await mutateState((s) => {
       pushBounded(s.audit, audit("admin", "login", "admin dashboard", clientIp(req)), 400);
@@ -87,10 +98,16 @@ export async function POST(req: NextRequest) {
 
   let code = "";
   const out = await mutateState(async (s) => {
+    await pullAdminOtp(s);
     const started = startAdminOtp(s);
     if (!started.ok) return started;
+    await saveAdminOtp(s.adminOtpPending || null);
     code = started.otp;
     const mail = await queueEmail(s, started.email, "Solphia admin code", withSignature(adminOtpEmailHtml(started.otp)));
+    if (mail.status !== "sent" && s.adminOtpPending) {
+      s.adminOtpPending.sentAt = 0;
+      await saveAdminOtp(s.adminOtpPending);
+    }
     return { ok: true as const, email: started.email, mailStatus: mail.status, mailError: mail.error };
   });
   if (!out.ok) return NextResponse.json({ error: "otp_failed", message: out.error }, { status: 400 });

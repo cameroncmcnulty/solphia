@@ -16,6 +16,8 @@ export const KEYS = {
   circle: "solphia:circle",
   shill: "solphia:shill",
   mail: "solphia:mail",
+  adminOtp: "solphia:admin-otp",
+  signupOtp: "solphia:signup-otp",
   signer: (owner: string) => `solphia:signer:${owner}`,
   phjob: (id: string) => `solphia:ph:${id}`,
 };

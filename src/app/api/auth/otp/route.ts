@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createEmailAccount, publicAccount } from "@/lib/auth/accounts";
 import { verifyBot } from "@/lib/auth/challenge";
-import { consumeSignupOtp, otpEmailHtml, startSignupOtp } from "@/lib/auth/otp";
+import { consumeSignupOtp, otpEmailHtml, pullSignupOtp, saveSignupOtp, startSignupOtp } from "@/lib/auth/otp";
 import { setAccountCookie } from "@/lib/auth/session";
 import { withSignature } from "@/lib/email/desk";
 import { mailConfigured, mailOffHint, queueEmail } from "@/lib/email/send";
@@ -37,8 +37,10 @@ export async function POST(req: NextRequest) {
     if (!rateLimit(ip + ":otp-verify", 12, 10 * 60_000)) {
       return NextResponse.json({ error: "rate_limited", message: "Too many tries. Wait a bit." }, { status: 429 });
     }
-    const out = await mutateState((s) => {
+    const out = await mutateState(async (s) => {
+      await pullSignupOtp(s);
       const consumed = consumeSignupOtp(s, asVerify.data);
+      await saveSignupOtp(s.signupPending || []);
       if (!consumed.ok) return consumed;
       return createEmailAccount(s, {
         email: consumed.pending.emailNorm,
@@ -68,11 +70,18 @@ export async function POST(req: NextRequest) {
 
   let code = "";
   const out = await mutateState(async (s) => {
+    await pullSignupOtp(s);
     const started = startSignupOtp(s, parsed.data);
     if (!started.ok) return started;
+    await saveSignupOtp(s.signupPending || []);
     code = started.otp;
     const html = withSignature(otpEmailHtml(started.otp));
     const mail = await queueEmail(s, started.email, "Your Solphia code", html);
+    if (mail.status !== "sent") {
+      const row = (s.signupPending || []).find((p) => p.emailNorm === started.email);
+      if (row) row.sentAt = 0;
+      await saveSignupOtp(s.signupPending || []);
+    }
     return { ok: true as const, email: started.email, mailStatus: mail.status, mailError: mail.error };
   });
   if (!out.ok) {

@@ -2,7 +2,8 @@ import fs from "fs";
 import path from "path";
 import { DEFAULT_SETTINGS } from "./config";
 import { DEFAULT_FUND, DEFAULT_OWNER, DEFAULT_TREASURY } from "./protocolWallets";
-import { DEFAULT_ADMIN_OTP_EMAIL } from "./admin/otp";
+import { DEFAULT_ADMIN_OTP_EMAIL, type AdminOtpPending } from "./admin/otp";
+import type { SignupPending } from "./auth/otp";
 import { emptyBook, emptyTrader, lockedAuto } from "./auto";
 import { emptyLaunchBook, mergeAccountMaps, mergeLaunch, slimLaunch, type LaunchAccount, type LaunchBook } from "./launch/engine";
 import { emptyLab, mergeLab } from "./desk/shadow";
@@ -311,6 +312,19 @@ function opsView(state: AppState): AppState {
     shill: slimShill(state.shill),
     mail: state.mail,
   };
+}
+
+async function overlayAuthOtps(state: AppState) {
+  if (!durableConfigured()) return;
+  try {
+    const [admin, signup] = await kvMGetJson([KEYS.adminOtp, KEYS.signupOtp]);
+    if (admin && typeof admin === "object" && typeof (admin as AdminOtpPending).otpHash === "string") {
+      state.adminOtpPending = admin as AdminOtpPending;
+    }
+    if (Array.isArray(signup)) state.signupPending = signup as SignupPending[];
+  } catch {
+    /* keep mem */
+  }
 }
 
 async function overlayLaunch(state: AppState) {
@@ -679,6 +693,7 @@ async function hydrate(): Promise<AppState> {
         await overlayCircle(mem);
         await overlayShill(mem);
         await overlayMail(mem);
+        await overlayAuthOtps(mem);
         knownTraderOwners = await kvSmembers(KEYS.traders);
         memMtime = Date.now();
         hydrated = true;
@@ -694,6 +709,7 @@ async function hydrate(): Promise<AppState> {
         await overlayCircle(mem);
         await overlayShill(mem);
         await overlayMail(mem);
+        await overlayAuthOtps(mem);
         await persistShards(mem, owners);
         memMtime = Date.now();
         hydrated = true;
@@ -712,6 +728,7 @@ async function hydrate(): Promise<AppState> {
       await overlayCircle(local);
       await overlayShill(local);
       await overlayMail(local);
+      await overlayAuthOtps(local);
     } catch {
       /* disk still usable */
     }
