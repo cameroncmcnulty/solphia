@@ -2,8 +2,21 @@
 
 import { useEffect, useState } from "react";
 import { FieldError, useConfirmErrors } from "@/components/form/confirm";
+import {
+  dkimDnsHost,
+  dkimDnsTxt,
+  dmarcDnsHost,
+  dmarcDnsTxt,
+  spfDnsTxt,
+} from "@/lib/email/dkim-public";
 import { useAdmin } from "../AdminProvider";
 import { Field, Row } from "../ui";
+
+const dkimHost = dkimDnsHost();
+const dkimTxt = dkimDnsTxt();
+const dmarcHost = dmarcDnsHost();
+const dmarcTxt = dmarcDnsTxt();
+const spfTxt = spfDnsTxt();
 
 function emailLooksOk(v: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) && v.length < 120;
@@ -59,18 +72,26 @@ export function SystemSection() {
           {data.googleEnabled ? "on" : "off"}
         </p>
         <p className="mt-2 text-sm text-mute">
-          Codes leave otp@solphia.io through Solphia&apos;s SES pipe — not Gmail, not AgentMail. About $0.10 per 1,000
-          emails, no 3,000 cap.
+          Codes leave otp@solphia.io from Solphia&apos;s own mailer — our SMTP + DKIM. Not Gmail, not SES, not AgentMail.
         </p>
-        <ol className="mt-3 list-decimal space-y-1 pl-5 text-[12px] text-mute">
-          <li>Amazon SES → verify identity → solphia.io</li>
-          <li>Publish the SPF, DKIM, and DMARC records SES shows</li>
-          <li>SMTP settings → create SMTP credentials</li>
+        <ol className="mt-3 list-decimal space-y-2 pl-5 text-[12px] text-mute">
           <li>
-            Vercel Production env: SMTP_HOST=email-smtp.us-east-1.amazonaws.com, SMTP_PORT=587, SMTP_USER, SMTP_PASS,
-            SMTP_FROM=Solphia &lt;otp@solphia.io&gt;
+            DNS TXT <span className="font-mono text-ghost">{dkimHost}</span>
+            <code className="mt-1 block break-all font-mono text-[10px] text-ghost">{dkimTxt}</code>
           </li>
-          <li>Redeploy</li>
+          <li>
+            DNS TXT <span className="font-mono text-ghost">{dmarcHost}</span>
+            <code className="mt-1 block break-all font-mono text-[10px] text-ghost">{dmarcTxt}</code>
+          </li>
+          <li>
+            DNS TXT solphia.io SPF once mail.solphia.io has an A record
+            <code className="mt-1 block break-all font-mono text-[10px] text-ghost">{spfTxt}</code>
+          </li>
+          <li>
+            Vercel Production env: SOLPHIA_DKIM_PRIVATE_KEY (PEM, newlines as \n). Generate with{" "}
+            <span className="font-mono text-ghost">node scripts/gen-dkim.mjs</span>. Never commit the private key.
+          </li>
+          <li>Redeploy. Vercel blocks outbound port 25, so Gmail may still refuse from serverless. Same code on a box we control (A record mail.solphia.io) is still our system — set SOLPHIA_MAIL_HOST=mail.solphia.io if that box is ours.</li>
         </ol>
       </div>
       <div className="panel rounded-2xl p-5">

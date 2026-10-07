@@ -64,7 +64,10 @@ describe("admin otp", () => {
 describe("mailer", () => {
   function snapMailEnv() {
     return {
-      host: process.env.SMTP_HOST,
+      dkim: process.env.SOLPHIA_DKIM_PRIVATE_KEY,
+      host: process.env.SOLPHIA_MAIL_HOST,
+      port: process.env.SOLPHIA_MAIL_PORT,
+      smtpHost: process.env.SMTP_HOST,
       smtpUser: process.env.SMTP_USER,
       smtpPass: process.env.SMTP_PASS,
       resend: process.env.RESEND_API_KEY,
@@ -79,7 +82,10 @@ describe("mailer", () => {
       if (v) process.env[k] = v;
       else delete process.env[k];
     };
-    put("SMTP_HOST", prev.host);
+    put("SOLPHIA_DKIM_PRIVATE_KEY", prev.dkim);
+    put("SOLPHIA_MAIL_HOST", prev.host);
+    put("SOLPHIA_MAIL_PORT", prev.port);
+    put("SMTP_HOST", prev.smtpHost);
     put("SMTP_USER", prev.smtpUser);
     put("SMTP_PASS", prev.smtpPass);
     put("RESEND_API_KEY", prev.resend);
@@ -89,37 +95,32 @@ describe("mailer", () => {
     put("MAIL_APP_PASSWORD", prev.mailPass);
   }
 
-  it("is off without credentials", () => {
+  it("is off without a Solphia DKIM key, even if leftover vendor env is set", () => {
     const prev = snapMailEnv();
-    delete process.env.SMTP_HOST;
-    delete process.env.SMTP_USER;
-    delete process.env.SMTP_PASS;
-    delete process.env.RESEND_API_KEY;
-    delete process.env.AGENTMAIL_API_KEY;
-    delete process.env.MAIL_USER;
-    delete process.env.MAIL_APP_PASSWORD;
+    delete process.env.SOLPHIA_DKIM_PRIVATE_KEY;
+    process.env.SMTP_HOST = "email-smtp.us-east-1.amazonaws.com";
+    process.env.SMTP_USER = "AKIAEXAMPLE";
+    process.env.SMTP_PASS = "ses-smtp-pass";
+    process.env.RESEND_API_KEY = "re_test";
+    process.env.AGENTMAIL_API_KEY = "am_test";
+    process.env.MAIL_USER = "hello@gmail.com";
+    process.env.MAIL_APP_PASSWORD = "abcd efgh ijkl mnop";
     assert.equal(mailerKind(), null);
     assert.equal(mailConfigured(), false);
     restoreMailEnv(prev);
   });
 
-  it("picks Amazon SES SMTP first and ignores a Gmail app password", () => {
+  it("picks the in-house mailer when DKIM is set and ignores Gmail / SES / AgentMail", () => {
     const prev = snapMailEnv();
-    delete process.env.RESEND_API_KEY;
-    process.env.MAIL_USER = "hello@gmail.com";
-    process.env.MAIL_APP_PASSWORD = "abcd efgh ijkl mnop";
+    process.env.SOLPHIA_DKIM_PRIVATE_KEY =
+      "-----BEGIN PRIVATE KEY-----\\n" + "A".repeat(80) + "\\n-----END PRIVATE KEY-----";
     process.env.AGENTMAIL_API_KEY = "am_test";
-    process.env.AGENTMAIL_INBOX = "solphia@agentmail.to";
     process.env.SMTP_HOST = "email-smtp.us-east-1.amazonaws.com";
-    process.env.SMTP_USER = "AKIAEXAMPLE";
-    process.env.SMTP_PASS = "ses-smtp-pass";
-    assert.equal(mailerKind(), "ses");
+    process.env.RESEND_API_KEY = "re_test";
+    process.env.MAIL_APP_PASSWORD = "abcd efgh ijkl mnop";
+    assert.equal(mailerKind(), "solphia");
     assert.match(mailFrom(), /otp@solphia\.io/);
-    delete process.env.SMTP_HOST;
-    delete process.env.SMTP_USER;
-    delete process.env.SMTP_PASS;
-    assert.equal(mailerKind(), "agentmail");
-    delete process.env.AGENTMAIL_API_KEY;
+    delete process.env.SOLPHIA_DKIM_PRIVATE_KEY;
     process.env.SMTP_HOST = "smtp.gmail.com";
     process.env.SMTP_USER = "hello@gmail.com";
     process.env.SMTP_PASS = "app-pass";
@@ -127,14 +128,17 @@ describe("mailer", () => {
     restoreMailEnv(prev);
   });
 
-  it("does not tell operators to use a Gmail app password", () => {
+  it("does not tell operators to use a Gmail app password or SES", () => {
     const login = readFileSync(join(process.cwd(), "src/app/api/admin/login/route.ts"), "utf8");
     const otp = readFileSync(join(process.cwd(), "src/app/api/auth/otp/route.ts"), "utf8");
     const send = readFileSync(join(process.cwd(), "src/lib/email/send.ts"), "utf8");
     assert.equal(login.includes("MAIL_APP_PASSWORD"), false);
     assert.equal(otp.includes("MAIL_APP_PASSWORD"), false);
     assert.equal(send.includes("smtp.gmail.com"), false);
+    assert.equal(send.includes("amazonses"), false);
+    assert.equal(send.includes("nodemailer"), false);
+    assert.equal(send.includes("api.agentmail.to"), false);
     assert.match(send, /otp@solphia\.io/);
-    assert.match(mailOffHint("admin"), /SMTP_HOST/);
+    assert.match(mailOffHint("admin"), /SOLPHIA_DKIM_PRIVATE_KEY/);
   });
 });
