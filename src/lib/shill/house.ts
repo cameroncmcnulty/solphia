@@ -1,7 +1,7 @@
 import { createHash } from "crypto";
 import { Keypair } from "@solana/web3.js";
 import { isSolanaAddress } from "../security";
-import { emptyLaunchBook, type LaunchBook } from "../launch/engine";
+import { emptyLaunchBook, setAccountPfp, type LaunchBook } from "../launch/engine";
 import { fillHouseBoosts, HOUSE_INITIAL, padLaunchMints } from "../launch/boost";
 import { loadMarketTape } from "../launch/market";
 import { setUsername, usernameOk } from "../launch/username";
@@ -35,6 +35,46 @@ export const HOUSE_CYCLE_MIN_MS = 12 * 24 * 3600_000;
 export const HOUSE_CYCLE_MAX_MS = 28 * 24 * 3600_000;
 export const HOUSE_CYCLE_MIN_LIFE_MS = 5 * 24 * 3600_000;
 export const HOUSE_CYCLE_PER_TICK = 1;
+/** Share of named house wallets that get a CC0 NFT PFP. The rest stay cartoons. */
+export const HOUSE_PFP_NAMED = 0.38;
+
+/** Local copies of CC0 Nouns (noun.pics) and Chain Runners. */
+export const HOUSE_PFP_FILES = [
+  "noun-1.png",
+  "noun-2.png",
+  "noun-8.png",
+  "noun-17.png",
+  "noun-42.png",
+  "noun-69.png",
+  "noun-80.png",
+  "noun-101.png",
+  "noun-137.png",
+  "noun-220.png",
+  "noun-325.png",
+  "noun-420.png",
+  "noun-487.png",
+  "noun-615.png",
+  "noun-754.png",
+  "noun-888.png",
+  "noun-1035.png",
+  "noun-1111.png",
+  "noun-1337.png",
+  "noun-1500.png",
+  "runner-1.png",
+  "runner-7.png",
+  "runner-13.png",
+  "runner-27.png",
+  "runner-42.png",
+  "runner-69.png",
+  "runner-88.png",
+  "runner-101.png",
+  "runner-256.png",
+  "runner-420.png",
+  "runner-777.png",
+  "runner-1000.png",
+  "runner-1337.png",
+  "runner-2048.png",
+] as const;
 
 const PIN_BLOCK = new Set([SOL_MINT, SPYX_MINT_OFFICIAL, QQQX_MINT_OFFICIAL, GLDX_MINT_OFFICIAL, USDC_MINT, USDT_MINT]);
 
@@ -354,6 +394,48 @@ export function plantHouseSchedules(book: ShillBook, now = Date.now(), rng: Rng 
 
 export function houseNeedsNames(launch: LaunchBook, actors: HouseActor[]): boolean {
   return actors.some((a) => a.named && !launch.accounts?.[a.pubkey]?.username);
+}
+
+export function shouldPaintHousePfp(pubkey: string): boolean {
+  if (!HOUSE_PFP_FILES.length) return false;
+  const h = createHash("sha256").update(`solphia.house.pfp.${pubkey}`).digest();
+  return h[0]! / 256 < HOUSE_PFP_NAMED;
+}
+
+export function pickHousePfp(pubkey: string): string {
+  const n = HOUSE_PFP_FILES.length;
+  const h = createHash("sha256").update(`solphia.house.pfp.file.${pubkey}`).digest();
+  const i = n ? h.readUInt32BE(1) % n : 0;
+  return `/house-pfps/${HOUSE_PFP_FILES[i]}`;
+}
+
+export function houseNeedsPfps(launch: LaunchBook, actors: HouseActor[]): boolean {
+  return actors.some((a) => {
+    if (!a.named || !isSolanaAddress(a.pubkey) || !shouldPaintHousePfp(a.pubkey)) return false;
+    return !launch.accounts?.[a.pubkey]?.pfp;
+  });
+}
+
+export function paintHousePfps(launch: LaunchBook, actors: HouseActor[]): boolean {
+  let dirty = false;
+  for (const actor of actors) {
+    if (!actor.named || !isSolanaAddress(actor.pubkey)) continue;
+    if (!shouldPaintHousePfp(actor.pubkey)) continue;
+    if (launch.accounts?.[actor.pubkey]?.pfp) continue;
+    const set = setAccountPfp(launch, actor.pubkey, pickHousePfp(actor.pubkey));
+    if (set.ok) dirty = true;
+  }
+  return dirty;
+}
+
+export function houseNeedsIdentities(launch: LaunchBook, actors: HouseActor[]): boolean {
+  return houseNeedsNames(launch, actors) || houseNeedsPfps(launch, actors);
+}
+
+export function paintHouseIdentities(launch: LaunchBook, actors: HouseActor[], rng: Rng = Math.random): boolean {
+  const names = paintHouseNames(launch, actors, rng);
+  const pfps = paintHousePfps(launch, actors);
+  return names || pfps;
 }
 
 export function paintHouseNames(launch: LaunchBook, actors: HouseActor[], rng: Rng = Math.random): boolean {
@@ -732,8 +814,9 @@ export async function persistHouseXpAndCycles(
     for (const r of retired) {
       resetRank(st.launch, r.oldPk);
       setUsername(st.launch, r.oldPk, "");
+      setAccountPfp(st.launch, r.oldPk, "");
     }
-    paintHouseNames(st.launch, latest, rng);
+    paintHouseIdentities(st.launch, latest, rng);
   }, true);
   return retired.length;
 }
@@ -761,14 +844,14 @@ export async function runHouseShill(now = Date.now()): Promise<{ shares: number;
     }, true);
   }
 
-  const needNames = await withLaunch((st) => {
+  const needIdentities = await withLaunch((st) => {
     if (!st.launch) st.launch = emptyLaunchBook();
-    return houseNeedsNames(st.launch, actors);
+    return houseNeedsIdentities(st.launch, actors);
   }, false);
-  if (needNames) {
+  if (needIdentities) {
     await withLaunch((st) => {
       if (!st.launch) st.launch = emptyLaunchBook();
-      paintHouseNames(st.launch, actors);
+      paintHouseIdentities(st.launch, actors);
     }, true);
   }
 

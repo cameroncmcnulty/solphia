@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isSolanaAddress, rateLimit, clientIp } from "@/lib/security";
+import { housePfpPath } from "@/lib/launch/validate";
 import { readyState } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
@@ -14,6 +15,10 @@ export async function GET(req: NextRequest) {
   const kind = req.nextUrl.searchParams.get("kind") || "pfp";
   const pfp = (kind === "banner" ? s.launch?.accounts?.[pk]?.banner : s.launch?.accounts?.[pk]?.pfp) || "";
   if (!pfp) return new NextResponse(null, { status: 404 });
+  const house = housePfpPath(pfp);
+  if (house) {
+    return NextResponse.redirect(new URL(house, req.nextUrl.origin), 302);
+  }
   if (/^https?:\/\//i.test(pfp)) {
     return NextResponse.redirect(pfp, 302);
   }

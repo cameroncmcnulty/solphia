@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import { isSolanaAddress } from "../lib/security";
@@ -22,12 +22,19 @@ import {
   cryptoUsername,
   houseActorPubkey,
   mulberry32,
+  HOUSE_PFP_FILES,
+  HOUSE_PFP_NAMED,
+  houseNeedsPfps,
   namedHouseCount,
   paintHouseNames,
+  paintHousePfps,
+  pickHousePfp,
   plantHouseSchedules,
   recycleHouseActors,
+  shouldPaintHousePfp,
   tickHouseActions,
 } from "../lib/shill/house";
+import { housePfpPath, profileImageOk } from "../lib/launch/validate";
 import { creditRank, leaderboard } from "../lib/rank/engine";
 
 const CA = "So11111111111111111111111111111111111111112";
@@ -323,6 +330,44 @@ describe("house shill wallets", () => {
     const board = leaderboard(launch, 10, skip);
     assert.equal(board.some((r) => r.pubkey === house), false);
     assert.equal(board.some((r) => r.pubkey === A), true);
+  });
+
+  it("gives some named wallets CC0 NFT PFPs and leaves anons as cartoons", () => {
+    const book = emptyShill();
+    const launch = emptyLaunchBook();
+    const rng = mulberry32(0x51ed);
+    plantHouseSchedules(book, 1_700_000_000_000, rng);
+    paintHouseNames(launch, book.houseActors!, rng);
+    assert.equal(houseNeedsPfps(launch, book.houseActors!), true);
+    assert.equal(paintHousePfps(launch, book.houseActors!), true);
+    assert.equal(houseNeedsPfps(launch, book.houseActors!), false);
+    const named = book.houseActors!.filter((a) => a.named);
+    const unnamed = book.houseActors!.filter((a) => !a.named);
+    const painted = named.filter((a) => launch.accounts[a.pubkey]?.pfp);
+    for (const a of unnamed) assert.equal(launch.accounts[a.pubkey]?.pfp, undefined);
+    for (const a of named) {
+      if (!shouldPaintHousePfp(a.pubkey)) {
+        assert.equal(launch.accounts[a.pubkey]?.pfp, undefined);
+        continue;
+      }
+      const pfp = launch.accounts[a.pubkey]?.pfp || "";
+      assert.equal(pfp, pickHousePfp(a.pubkey));
+      assert.equal(profileImageOk(pfp), pfp);
+      assert.equal(housePfpPath(pfp), pfp);
+    }
+    assert.ok(painted.length >= 8, "some named wallets should wear NFT PFPs");
+    assert.ok(painted.length < named.length, "not every named wallet gets an NFT PFP");
+    assert.ok(painted.length / named.length < HOUSE_PFP_NAMED + 0.2);
+    assert.ok(HOUSE_PFP_FILES.length >= 16);
+    for (const f of HOUSE_PFP_FILES) {
+      assert.equal(existsSync(join(process.cwd(), "public/house-pfps", f)), true, f);
+    }
+    const avatar = readFileSync(join(process.cwd(), "src/app/api/circle/avatar/route.ts"), "utf8");
+    assert.match(avatar, /housePfpPath/);
+    const shill = readFileSync(join(process.cwd(), "src/app/api/shill/route.ts"), "utf8");
+    assert.match(shill, /paintHouseIdentities/);
+    const house = readFileSync(join(process.cwd(), "src/lib/shill/house.ts"), "utf8");
+    assert.match(house, /setAccountPfp\(st\.launch, r\.oldPk, ""\)/);
   });
 
   it("crypto names pass the username rules", () => {

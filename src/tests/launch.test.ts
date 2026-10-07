@@ -28,7 +28,7 @@ import {
 import { buyCoin, createCoin, emptyLaunchBook, mergeLaunch, publicCoin, sellCoin, setAccountPfp, slimAccount, sparkCandles, withdrawDev, setOwnerWallet } from "../lib/launch/engine";
 import { launchError } from "../lib/launch/errors";
 import { yourLaunches } from "../lib/launch/yours";
-import { IMAGE_DATA_MAX, firstErrorKey, validateLaunchCreate } from "../lib/launch/validate";
+import { IMAGE_DATA_MAX, firstErrorKey, housePfpPath, profileImageOk, validateLaunchCreate } from "../lib/launch/validate";
 import { isPlaceholderLabel, preferLiveLabel } from "../lib/launch/labels";
 
 const A = "CyaE1VxvBrahnPWkqm5VsdCvyS2QmNht2UFrKJHga54o";
@@ -463,6 +463,14 @@ describe("launch create validation", () => {
     const ok = setAccountPfp(book, A, url);
     assert.equal(ok.ok, true);
     if (ok.ok) assert.equal(ok.account.pfp, url);
+    const house = setAccountPfp(book, A, "/house-pfps/noun-1.png");
+    assert.equal(house.ok, true);
+    if (house.ok) assert.equal(house.account.pfp, "/house-pfps/noun-1.png");
+    assert.equal(profileImageOk("/house-pfps/noun-1.png"), "/house-pfps/noun-1.png");
+    assert.equal(housePfpPath("/house-pfps/../secret.png"), "");
+    assert.equal(profileImageOk("/house-pfps/../secret.png"), "");
+    assert.equal(profileImageOk("/house-pfps/noun-1.gif"), "");
+    assert.equal(profileImageOk("/etc/passwd"), "");
     const bad = setAccountPfp(book, A, "javascript:alert(1)");
     assert.equal(bad.ok, false);
     const data = setAccountPfp(book, A, `data:image/jpeg;base64,${"a".repeat(200)}`);

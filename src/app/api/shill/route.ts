@@ -37,7 +37,7 @@ import { creditRank, leaderboard, publicCard } from "@/lib/rank/engine";
 import { canModerateChat, staffRole } from "@/lib/access";
 import type { AppState } from "@/lib/types";
 import { GLDX_MINT_OFFICIAL, QQQX_MINT_OFFICIAL, SOL_MINT, SPYX_MINT_OFFICIAL, USDC_MINT, USDT_MINT } from "@/lib/pair/mints";
-import { houseNeedsNames, houseNeedsTape, houseWorkDue, loadHouseMarketCoins, paintHouseNames, persistHouseXpAndCycles, plantHouseSchedules, tickHouseActions } from "@/lib/shill/house";
+import { houseNeedsIdentities, houseNeedsTape, houseWorkDue, loadHouseMarketCoins, paintHouseIdentities, persistHouseXpAndCycles, plantHouseSchedules, tickHouseActions } from "@/lib/shill/house";
 import { readShillDevice, shillHumanOk, shillJson, shillWalletAllowed, stampShillOk } from "@/lib/shill/antispam";
 
 export const dynamic = "force-dynamic";
@@ -183,14 +183,14 @@ export async function GET(req: NextRequest) {
         plantHouseSchedules(st.shill);
         return st.shill.houseActors || [];
       }, true);
-      const needNames = await withLaunch((st) => {
+      const needIdentities = await withLaunch((st) => {
         if (!st.launch) st.launch = emptyLaunchBook();
-        return houseNeedsNames(st.launch, actors);
+        return houseNeedsIdentities(st.launch, actors);
       }, false);
-      if (needNames) {
+      if (needIdentities) {
         await withLaunch((st) => {
           if (!st.launch) st.launch = emptyLaunchBook();
-          paintHouseNames(st.launch, actors);
+          paintHouseIdentities(st.launch, actors);
         }, true);
       }
     }
@@ -208,6 +208,22 @@ export async function GET(req: NextRequest) {
     }, true);
     if (need.actors) await persistHouseXpAndCycles(xpOwners);
     bustShillSnap();
+  }
+  if (!light) {
+    const actors = await withShill((st) => (ensureShill(st.shill).houseActors || []).slice(), false);
+    if (actors.length) {
+      const needIdentities = await withLaunch((st) => {
+        if (!st.launch) st.launch = emptyLaunchBook();
+        return houseNeedsIdentities(st.launch, actors);
+      }, false);
+      if (needIdentities) {
+        await withLaunch((st) => {
+          if (!st.launch) st.launch = emptyLaunchBook();
+          paintHouseIdentities(st.launch, actors);
+        }, true);
+        bustShillSnap();
+      }
+    }
   }
   if (!light && pubkey && isSolanaAddress(pubkey)) {
     const blocked = guestBlock(req, ip, pubkey, false);

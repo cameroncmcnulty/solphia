@@ -57,13 +57,23 @@ export function imageOk(raw?: string): string {
   return s;
 }
 
-/** PFP / banner: pinned https, avatar proxy, or a small data URL that survives slimAccount. */
+/** Same-origin CC0 NFT PFPs for house chat wallets. No path traversal, no other folders. */
+const HOUSE_PFP_RE = /^\/house-pfps\/[a-z0-9._-]+\.(png|jpe?g|webp)$/i;
+
+export function housePfpPath(raw?: string): string {
+  const s = (raw || "").trim();
+  return HOUSE_PFP_RE.test(s) ? s : "";
+}
+
+/** PFP / banner: pinned https, avatar proxy, house NFT, or a small data URL that survives slimAccount. */
 export function profileImageOk(raw?: string): string {
   const s = (raw || "").trim();
   if (!s) return "";
   if (s.startsWith("data:image/") && s.length <= PROFILE_DATA_MAX) return s;
   if (/^https?:\/\//i.test(s) && s.length <= 2048) return s;
   if (s.startsWith("/api/media") || s.startsWith("/api/circle/avatar")) return s;
+  const house = housePfpPath(s);
+  if (house) return house;
   return "";
 }
 
