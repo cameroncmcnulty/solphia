@@ -24,6 +24,8 @@ export type SmtpSendInput = {
   mxDomain?: string;
   port?: number;
   helo?: string;
+  /** Worker process delivering to MX — do not POST back to ourselves. */
+  skipWorker?: boolean;
 };
 
 function envHost(): string {
@@ -37,6 +39,14 @@ function envPort(): number | null {
 
 export function mailHostOverride(): string {
   return envHost();
+}
+
+export function mailWorkerUrl(): string {
+  return (process.env.SOLPHIA_MAIL_WORKER_URL || "").trim().replace(/\/$/, "");
+}
+
+export function mailWorkerSecret(): string {
+  return (process.env.SOLPHIA_MAIL_WORKER_SECRET || "").trim();
 }
 
 export function mailHelo(): string {
@@ -84,20 +94,52 @@ function localName(host: string): boolean {
   return h === "localhost" || h === "127.0.0.1" || h === "::1";
 }
 
+async function resolveMxList(domain: string, servers?: string[]): Promise<string[]> {
+  const r = new dns.promises.Resolver();
+  if (servers?.length) r.setServers(servers);
+  const recs = await r.resolveMx(domain);
+  return recs
+    .sort((a, b) => a.priority - b.priority)
+    .map((row) => stripDot(row.exchange))
+    .filter(Boolean);
+}
+
 export async function lookupMx(domain: string): Promise<string[]> {
   const d = stripDot(domain);
   if (!d) return [];
-  try {
-    const recs = await dns.promises.resolveMx(d);
-    const hosts = recs
-      .sort((a, b) => a.priority - b.priority)
-      .map((r) => stripDot(r.exchange))
-      .filter(Boolean);
-    if (hosts.length) return hosts;
-  } catch {
-    /* implicit MX */
+  for (const servers of [undefined, ["8.8.8.8", "1.1.1.1"]] as (string[] | undefined)[]) {
+    try {
+      const hosts = await resolveMxList(d, servers);
+      if (hosts.length) return hosts;
+    } catch {
+      /* try next resolver */
+    }
   }
   return [d];
+}
+
+async function sendViaWorker(input: SmtpSendInput): Promise<{ host: string; port: number }> {
+  const url = mailWorkerUrl();
+  const secret = mailWorkerSecret();
+  if (!url || !secret) throw new Error("mail_worker_off");
+  const r = await fetch(`${url}/send`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${secret}`,
+    },
+    body: JSON.stringify({
+      envelopeFrom: input.envelopeFrom,
+      envelopeTo: input.envelopeTo,
+      raw: input.raw,
+    }),
+    signal: AbortSignal.timeout(25_000),
+  });
+  const j = (await r.json().catch(() => ({}))) as { ok?: boolean; error?: string; host?: string; port?: number };
+  if (!r.ok || !j.ok) {
+    throw new Error(typeof j.error === "string" && j.error ? j.error : `mail_worker_${r.status}`);
+  }
+  return { host: j.host || "worker", port: j.port || 443 };
 }
 
 function takeReply(buf: string): { reply: SmtpReply; rest: string } | null {
@@ -281,6 +323,9 @@ async function sessionOn(host: string, port: number, helo: string, input: SmtpSe
 export async function smtpSend(input: SmtpSendInput): Promise<{ host: string; port: number }> {
   if (!input.envelopeFrom) throw new Error("missing MAIL FROM");
   if (!input.envelopeTo.length) throw new Error("missing RCPT TO");
+  if (!input.skipWorker && mailWorkerUrl() && mailWorkerSecret()) {
+    return sendViaWorker(input);
+  }
   const helo = input.helo || mailHelo();
   const override = input.host || envHost();
   if (override && isThirdPartySmarthost(override)) {

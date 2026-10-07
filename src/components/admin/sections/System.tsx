@@ -92,8 +92,9 @@ export function SystemSection() {
             <span className="font-mono text-ghost">node scripts/gen-dkim.mjs</span>. Never commit the private key.
           </li>
           <li>
-            Vercel blocks outbound port 25, so Gmail may still refuse from serverless. Same code on a box we control
-            (A record mail.solphia.io) is still our system — set SOLPHIA_MAIL_HOST=mail.solphia.io if that box is ours.
+            Vercel blocks outbound port 25. Run our worker on a box that can open it (
+            <span className="font-mono text-ghost">npm run mail-worker</span>
+            ), then set SOLPHIA_MAIL_WORKER_URL and SOLPHIA_MAIL_WORKER_SECRET on Production. Same code. Not SES.
           </li>
         </ol>
       </div>

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash, createPublicKey, createVerify, generateKeyPairSync } from "node:crypto";
+import { createServer } from "node:http";
 import net from "node:net";
 import type { AddressInfo } from "node:net";
 import { describe, it } from "node:test";
@@ -221,6 +222,46 @@ describe("solphia mail", () => {
     assert.equal(isThirdPartySmarthost("aspmx.l.google.com"), false);
     assert.equal(isThirdPartySmarthost("mail.solphia.io"), false);
     assert.equal(stuffDots("hello\n.hidden\n"), "hello\r\n..hidden\r\n");
+  });
+
+  it("posts signed mail to our worker over HTTPS instead of opening port 25", async () => {
+    const got: { auth?: string; body?: string } = {};
+    const server = createServer((req, res) => {
+      const chunks: Buffer[] = [];
+      req.on("data", (c) => chunks.push(c));
+      req.on("end", () => {
+        got.auth = req.headers.authorization;
+        got.body = Buffer.concat(chunks).toString("utf8");
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ ok: true, host: "worker", port: 443 }));
+      });
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const port = (server.address() as AddressInfo).port;
+    const prev = {
+      url: process.env.SOLPHIA_MAIL_WORKER_URL,
+      secret: process.env.SOLPHIA_MAIL_WORKER_SECRET,
+    };
+    process.env.SOLPHIA_MAIL_WORKER_URL = `http://127.0.0.1:${port}`;
+    process.env.SOLPHIA_MAIL_WORKER_SECRET = "worker-secret-test";
+    try {
+      const out = await smtpSend({
+        envelopeFrom: "otp@solphia.io",
+        envelopeTo: ["you@example.com"],
+        raw: "From: otp@solphia.io\r\nTo: you@example.com\r\nSubject: x\r\n\r\nhi\r\n",
+      });
+      assert.equal(out.host, "worker");
+      assert.equal(got.auth, "Bearer worker-secret-test");
+      assert.match(got.body || "", /otp@solphia\.io/);
+    } finally {
+      const put = (k: string, v: string | undefined) => {
+        if (v) process.env[k] = v;
+        else delete process.env[k];
+      };
+      put("SOLPHIA_MAIL_WORKER_URL", prev.url);
+      put("SOLPHIA_MAIL_WORKER_SECRET", prev.secret);
+      await new Promise<void>((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
+    }
   });
 
   it("does not send through a third-party host even if DKIM is ready", async () => {

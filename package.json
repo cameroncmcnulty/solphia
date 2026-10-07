@@ -8,6 +8,7 @@
     "build": "next build",
     "start": "next start --port 3100",
     "test": "tsx --test src/tests/*.test.ts",
+    "mail-worker": "tsx scripts/mail-worker.ts",
     "lint": "next lint"
   },
   "dependencies": {
