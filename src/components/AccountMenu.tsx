@@ -83,7 +83,14 @@ export function AccountMenu() {
 
   function toggle() {
     const r = btn.current?.getBoundingClientRect();
-    if (r) setPos({ top: r.bottom + 8, right: Math.max(8, window.innerWidth - r.right) });
+    if (r) {
+      const nav = 58;
+      const menuH = 380;
+      const vv = window.visualViewport?.height || window.innerHeight;
+      let top = r.bottom + 8;
+      if (top + menuH > vv - nav) top = Math.max(8, r.top - menuH - 8);
+      setPos({ top, right: Math.max(8, window.innerWidth - r.right) });
+    }
     setOpen((v) => !v);
   }
 

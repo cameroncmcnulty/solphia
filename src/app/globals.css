@@ -745,16 +745,26 @@ body {
 
 .human-gate {
   position: fixed;
-  inset: 0;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: calc(var(--bottom-nav-h) + env(safe-area-inset-bottom, 0px));
   z-index: 90;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
-  padding: 1rem;
+  padding: max(0.75rem, env(safe-area-inset-top, 0px)) 1rem 1rem;
+  overflow-y: auto;
   background: rgba(4, 0, 10, 0.82);
   backdrop-filter: blur(10px);
   touch-action: none;
   overscroll-behavior: none;
+}
+@media (min-width: 768px) {
+  .human-gate {
+    bottom: 0;
+    align-items: center;
+  }
 }
 .human-card {
   width: min(560px, 100%);
@@ -1092,12 +1102,37 @@ body.shill-kbd .bottom-nav {
 .shill-dock {
   padding-bottom: calc(var(--bottom-nav-h) + env(safe-area-inset-bottom, 0px));
 }
+
+/* Every mobile sheet/card opens in the usable frame: under the notch, above BottomNav. */
+.app-layer,
 .shill-overlay-dock {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: 0;
   bottom: calc(var(--bottom-nav-h) + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: max(0.5rem, env(safe-area-inset-top, 0px));
+  padding-right: 0.75rem;
+  padding-bottom: 0.5rem;
+  padding-left: 0.75rem;
+  overflow: hidden;
+}
+.app-layer-card {
+  width: 100%;
+  max-width: 28rem;
+  max-height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 body.shill-kbd .shill-dock {
   padding-bottom: 0;
 }
+body.shill-kbd .app-layer,
 body.shill-kbd .shill-overlay-dock {
   bottom: 0;
 }
@@ -1105,7 +1140,10 @@ body.shill-kbd .shill-overlay-dock {
   .shill-dock {
     padding-bottom: 0;
   }
+  .app-layer,
   .shill-overlay-dock {
     bottom: 0;
+    align-items: center;
+    padding: 1rem;
   }
 }

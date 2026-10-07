@@ -128,8 +128,8 @@ function ProjectUnlock({ onClose, onDone }: { onClose: () => void; onDone: () =>
   }
 
   return (
-    <div className="fixed inset-0 z-[97] flex items-end justify-center bg-black/75 p-3 sm:items-center" onClick={close}>
-      <div className="w-full max-w-md rounded-[28px] border border-white/10 bg-[#0b0714] p-5" onClick={(e) => e.stopPropagation()}>
+    <div className="app-layer z-[97] bg-black/75" onClick={close}>
+      <div className="app-layer-card rounded-[1.5rem] border border-white/10 bg-[#0b0714] p-5" onClick={(e) => e.stopPropagation()}>
         <p className="text-[18px] font-semibold text-white">Unlock project wallets</p>
         <p className="mt-1 text-[13px] text-white/45">PIN stays on this device. Solphia never receives it.</p>
         {err ? <p className="mt-2 font-mono text-[13px] text-blood">{err}</p> : null}

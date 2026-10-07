@@ -93,9 +93,9 @@ export function ProfileOverlay({
   const fav = pack?.fav;
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))]" onClick={onClose}>
+    <div className="app-layer z-[80] bg-black/70" onClick={onClose}>
       <div
-        className="relative max-h-[min(92dvh,720px)] w-full max-w-sm overflow-y-auto rounded-[1.8rem] border border-acid/30 bg-[#12081c] shadow-[0_30px_80px_rgba(0,0,0,0.55)]"
+        className="app-layer-card relative rounded-[1.5rem] border border-acid/30 bg-[#12081c] shadow-[0_30px_80px_rgba(0,0,0,0.55)]"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="relative h-28 bg-gradient-to-r from-violet/40 via-acid/20 to-cyan/30">

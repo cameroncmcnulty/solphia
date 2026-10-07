@@ -38,11 +38,11 @@ export function ToolsSheet({ open, onClose }: { open: boolean; onClose: () => vo
   if (!open) return null;
   return (
     <div
-      className="fixed inset-0 z-[70] flex items-end justify-center bg-black/70 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:items-center"
+      className="app-layer z-[70] bg-black/70"
       onClick={onClose}
     >
       <div
-        className="flex max-h-[min(82dvh,34rem)] w-full max-w-[22rem] flex-col overflow-hidden rounded-3xl border border-white/10 bg-[#0c0c0c] shadow-2xl sm:max-w-sm"
+        className="app-layer-card flex max-w-[22rem] flex-col overflow-hidden rounded-[1.5rem] border border-white/10 bg-[#0c0c0c] shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex shrink-0 items-center justify-between gap-3 px-4 pb-1 pt-3">

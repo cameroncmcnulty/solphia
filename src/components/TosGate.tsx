@@ -70,8 +70,8 @@ export function TosGate() {
 
   if (needAccount && !peekAccount()?.tosAcceptedAt) {
     return (
-      <div className="fixed inset-0 z-[80] flex items-end justify-center bg-void/80 p-4 backdrop-blur-sm sm:items-center">
-        <div className="w-full max-w-md rounded-3xl border border-violet/30 bg-ink p-5 shadow-[0_24px_80px_rgba(0,0,0,0.55)]">
+      <div className="app-layer z-[80] bg-void/80 backdrop-blur-sm">
+        <div className="app-layer-card rounded-[1.5rem] border border-violet/30 bg-ink p-5 shadow-[0_24px_80px_rgba(0,0,0,0.55)]">
           <p className="font-mono text-[10px] tracking-[0.22em] text-acid">ACCOUNT</p>
           <h2 className="mt-2 font-display text-2xl text-ghost">Agree to continue</h2>
           <p className="mt-2 text-sm leading-relaxed text-mute">
@@ -113,8 +113,8 @@ export function TosGate() {
   }
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-end justify-center bg-void/80 p-4 backdrop-blur-sm sm:items-center">
-      <div className="w-full max-w-md rounded-3xl border border-violet/30 bg-ink p-5 shadow-[0_24px_80px_rgba(0,0,0,0.55)]">
+    <div className="app-layer z-[80] bg-void/80 backdrop-blur-sm">
+      <div className="app-layer-card rounded-[1.5rem] border border-violet/30 bg-ink p-5 shadow-[0_24px_80px_rgba(0,0,0,0.55)]">
         <p className="font-mono text-[10px] tracking-[0.22em] text-acid">FIRST CONNECT</p>
         <h2 className="mt-2 font-display text-2xl text-ghost">Before you enter</h2>
         <p className="mt-2 text-sm leading-relaxed text-mute">
