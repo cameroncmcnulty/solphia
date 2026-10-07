@@ -481,6 +481,9 @@ describe("launch create validation", () => {
     const wallet = readFileSync(path.join(process.cwd(), "src/app/wallet/page.tsx"), "utf8");
     assert.match(wallet, /\/api\/circle\/avatar\?pk=/);
     assert.match(wallet, /ArrowDownLeft/);
+    assert.match(wallet, /pickedMint/);
+    assert.match(wallet, /text-\[40px\]/);
+    assert.match(wallet, /picked\?\.usd/);
   });
 
   it("rejects a 1-character name or ticker with an explicit too-short message", () => {

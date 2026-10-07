@@ -65,6 +65,7 @@ export default function WalletPage() {
   const wallets = useVaultWallets();
   const [holdings, setHoldings] = useState<Holding[]>([]);
   const [hist, setHist] = useState<Hist[]>([]);
+  const [pickedMint, setPickedMint] = useState(SOL_MINT);
   const [q, setQ] = useState("");
   const [hideDust, setHideDust] = useState(true);
   const [sheet, setSheet] = useState<"receive" | "send" | "token" | "export" | null>(null);
@@ -113,11 +114,22 @@ export default function WalletPage() {
   }, [holdings, hideDust, q]);
 
   const totalUsd = holdings.reduce((n, h) => n + (h.usd || 0), 0);
+  const picked =
+    holdings.find((h) => h.mint === pickedMint) || holdings.find((h) => h.sol) || holdings[0] || null;
   const sendToken = holdings.find((h) => h.mint === sendMint) || holdings.find((h) => h.sol) || null;
   const book = wallets.filter((w) => w.pubkey !== owner);
   const nickname = active?.nickname || "Wallet";
 
+  function pickHolding(row: Holding) {
+    if (pickedMint === row.mint) {
+      openToken(row);
+      return;
+    }
+    setPickedMint(row.mint);
+  }
+
   function openToken(row: Holding) {
+    setPickedMint(row.mint);
     setToken(row);
     setSheet("token");
     setCandles([]);
@@ -227,15 +239,23 @@ export default function WalletPage() {
           </button>
         </div>
 
-        <p className="mt-5 text-[32px] font-semibold tracking-tight text-white">{fmtUsd(totalUsd || null)}</p>
-        <p className="font-mono text-[12px] text-white/40">{fmtAmt(holdings.find((h) => h.sol)?.amount || 0)} SOL</p>
+        <p className="mt-5 text-[40px] font-semibold leading-none tracking-tight text-white sm:text-5xl">
+          {picked?.usd != null && picked.usd > 0 ? fmtUsd(picked.usd) : picked ? fmtAmt(picked.amount) : "$0"}
+        </p>
+        <p className="mt-2 text-[18px] font-semibold text-white/80">
+          {picked ? `${fmtAmt(picked.amount)} ${tick(picked.symbol, picked.mint)}` : "0 SOL"}
+        </p>
+        <p className="mt-1 font-mono text-[13px] text-white/40">
+          {picked?.change24h != null ? `${picked.change24h >= 0 ? "+" : ""}${picked.change24h.toFixed(1)}%` : ""}
+          {totalUsd > 0 ? `${picked?.change24h != null ? " · " : ""}book ${fmtUsd(totalUsd)}` : ""}
+        </p>
 
         <div className="mt-5 grid grid-cols-4 gap-2">
           {(
             [
               { label: "Receive", Icon: ArrowDownLeft, tone: "acid" as const, onClick: () => setSheet("receive") },
-              { label: "Send", Icon: ArrowUpRight, tone: "ghost" as const, onClick: () => { setSendMint(SOL_MINT); setSheet("send"); } },
-              { label: "Swap", Icon: Repeat, tone: "ghost" as const, onClick: () => { window.location.href = "/swap"; } },
+              { label: "Send", Icon: ArrowUpRight, tone: "ghost" as const, onClick: () => { setSendMint(picked?.mint || SOL_MINT); setSheet("send"); } },
+              { label: "Swap", Icon: Repeat, tone: "ghost" as const, onClick: () => { if (picked?.mint) goSwap(picked.mint, picked.sol ? "buy" : "sell"); else window.location.href = "/swap"; } },
               { label: "Add", Icon: Plus, tone: "ghost" as const, onClick: () => openWalletOnboard() },
             ]
           ).map((a) => (
@@ -278,8 +298,10 @@ export default function WalletPage() {
             <button
               key={row.mint}
               type="button"
-              onClick={() => openToken(row)}
-              className="flex w-full items-center gap-3 rounded-2xl px-2 py-2.5 text-left hover:bg-white/5"
+              onClick={() => pickHolding(row)}
+              className={`flex w-full items-center gap-3 rounded-2xl px-2 py-2.5 text-left ${
+                picked?.mint === row.mint ? "bg-white/10 ring-1 ring-acid/35" : "hover:bg-white/5"
+              }`}
             >
               {row.sol ? (
                 <SolanaMark className="h-10 w-10" />

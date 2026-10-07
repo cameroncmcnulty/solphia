@@ -245,6 +245,13 @@ export function SwapWidget({
   const lookedUpMint = useRef("");
   const loadBalsRef = useRef<() => void>(() => undefined);
 
+  function clearPayAmount() {
+    setAmount("");
+    setQuote(null);
+    setReview(false);
+    loadBalsRef.current();
+  }
+
   function stayOnCard() {
     markActionSpot("swap-widget");
     const go = (n = 0) => {
@@ -374,6 +381,7 @@ export function SwapWidget({
         return;
       }
       if (j.signature) {
+        clearPayAmount();
         noticeRef.current({ kind: "ok", text: `Swap landed. ${j.signature}`, at: Date.now() });
         onDone?.();
       }
@@ -609,7 +617,7 @@ export function SwapWidget({
         { skipPreflight: false },
       );
       liveRef.current = false;
-      setReview(false);
+      clearPayAmount();
       stayOnCard();
       showNotice({ kind: "ok", text: "Swap landed.", at: Date.now(), sig });
       const feeMint = pay.mint === SOL_MINT ? recv.mint : pay.mint;
