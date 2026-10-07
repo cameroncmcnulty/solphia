@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { consumeAdminOtp, DEFAULT_ADMIN_OTP_EMAIL, maskEmail, startAdminOtp } from "../lib/admin/otp";
 import { hashOtp, otpMatch } from "../lib/auth/otp";
 import { emptyState } from "../lib/store";
-import { mailerKind, mailConfigured } from "../lib/email/send";
+import { mailerKind, mailConfigured, mailFrom, mailOffHint } from "../lib/email/send";
 
 describe("admin otp", () => {
   it("defaults to CameronCmcnulty@gmail.com and hashes the code", () => {
@@ -103,18 +103,26 @@ describe("mailer", () => {
     restoreMailEnv(prev);
   });
 
-  it("picks AgentMail and ignores a Gmail app password", () => {
+  it("picks Amazon SES SMTP first and ignores a Gmail app password", () => {
     const prev = snapMailEnv();
-    delete process.env.SMTP_HOST;
-    delete process.env.SMTP_USER;
-    delete process.env.SMTP_PASS;
     delete process.env.RESEND_API_KEY;
     process.env.MAIL_USER = "hello@gmail.com";
     process.env.MAIL_APP_PASSWORD = "abcd efgh ijkl mnop";
     process.env.AGENTMAIL_API_KEY = "am_test";
     process.env.AGENTMAIL_INBOX = "solphia@agentmail.to";
+    process.env.SMTP_HOST = "email-smtp.us-east-1.amazonaws.com";
+    process.env.SMTP_USER = "AKIAEXAMPLE";
+    process.env.SMTP_PASS = "ses-smtp-pass";
+    assert.equal(mailerKind(), "ses");
+    assert.match(mailFrom(), /otp@solphia\.io/);
+    delete process.env.SMTP_HOST;
+    delete process.env.SMTP_USER;
+    delete process.env.SMTP_PASS;
     assert.equal(mailerKind(), "agentmail");
     delete process.env.AGENTMAIL_API_KEY;
+    process.env.SMTP_HOST = "smtp.gmail.com";
+    process.env.SMTP_USER = "hello@gmail.com";
+    process.env.SMTP_PASS = "app-pass";
     assert.equal(mailerKind(), null);
     restoreMailEnv(prev);
   });
@@ -126,7 +134,7 @@ describe("mailer", () => {
     assert.equal(login.includes("MAIL_APP_PASSWORD"), false);
     assert.equal(otp.includes("MAIL_APP_PASSWORD"), false);
     assert.equal(send.includes("smtp.gmail.com"), false);
-    assert.match(send, /agentmail\.to/);
-    assert.match(send, /not an admin login code/);
+    assert.match(send, /otp@solphia\.io/);
+    assert.match(mailOffHint("admin"), /SMTP_HOST/);
   });
 });

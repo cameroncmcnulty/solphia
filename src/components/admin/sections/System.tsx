@@ -12,8 +12,6 @@ function emailLooksOk(v: string) {
 export function SystemSection() {
   const { data, patch, busy } = useAdmin();
   const [otpEmail, setOtpEmail] = useState("");
-  const [senderOtp, setSenderOtp] = useState("");
-  const [senderNote, setSenderNote] = useState("");
   const otpErr = useConfirmErrors<"adminOtpEmail">();
   useEffect(() => {
     if (data?.adminOtpEmail) setOtpEmail(data.adminOtpEmail);
@@ -57,45 +55,23 @@ export function SystemSection() {
           </button>
         </div>
         <p className="mt-3 font-mono text-[11px] text-mute">
-          Mail {data.mailReady ? `ready · ${data.mailFrom}` : "off"} · Google{" "}
+          Mail {data.mailReady ? `ready · ${data.mailKind || "on"} · ${data.mailFrom}` : "off"} · Google{" "}
           {data.googleEnabled ? "on" : "off"}
         </p>
-        <p className="mt-2 text-sm text-mute">Codes send from Solphia&apos;s inbox, not Gmail. If AgentMail emailed a 6-digit verify code, paste it here once to unlock sending to any address.</p>
-        <Field
-          field="senderOtp"
-          value={senderOtp}
-          onChange={(v) => {
-            setSenderOtp(v.trim());
-            setSenderNote("");
-          }}
-          placeholder="AgentMail verify code"
-          className="mt-3"
-        />
-        <button
-          type="button"
-          disabled={busy || senderOtp.length < 6}
-          onClick={() => {
-            void (async () => {
-              setSenderNote("");
-              const r = await fetch("/api/admin/mail", {
-                method: "POST",
-                headers: { "content-type": "application/json" },
-                body: JSON.stringify({ action: "verify_sender", otp: senderOtp }),
-              });
-              const j = await r.json().catch(() => ({}));
-              if (!r.ok) {
-                setSenderNote(typeof j.message === "string" ? j.message : "Verify failed.");
-                return;
-              }
-              setSenderOtp("");
-              setSenderNote("Sender unlocked.");
-            })();
-          }}
-          className="mt-3 rounded-full border border-white/15 px-5 py-2 text-sm text-white disabled:opacity-40"
-        >
-          Unlock sender
-        </button>
-        {senderNote ? <p className="mt-2 font-mono text-[11px] text-acid">{senderNote}</p> : null}
+        <p className="mt-2 text-sm text-mute">
+          Codes leave otp@solphia.io through Solphia&apos;s SES pipe — not Gmail, not AgentMail. About $0.10 per 1,000
+          emails, no 3,000 cap.
+        </p>
+        <ol className="mt-3 list-decimal space-y-1 pl-5 text-[12px] text-mute">
+          <li>Amazon SES → verify identity → solphia.io</li>
+          <li>Publish the SPF, DKIM, and DMARC records SES shows</li>
+          <li>SMTP settings → create SMTP credentials</li>
+          <li>
+            Vercel Production env: SMTP_HOST=email-smtp.us-east-1.amazonaws.com, SMTP_PORT=587, SMTP_USER, SMTP_PASS,
+            SMTP_FROM=Solphia &lt;otp@solphia.io&gt;
+          </li>
+          <li>Redeploy</li>
+        </ol>
       </div>
       <div className="panel rounded-2xl p-5">
         <div className="font-mono text-[10px] tracking-[0.3em] text-mute">LOCKED DEFAULTS</div>

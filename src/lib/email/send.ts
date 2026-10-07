@@ -2,9 +2,12 @@ import nodemailer from "nodemailer";
 import type { EmailRecord } from "../types";
 import { pushBounded } from "../store";
 import type { AppState } from "../types";
+import { mailAddress } from "./desk";
 
 const AGENTMAIL_SEND = "https://api.agentmail.to/v0/inboxes";
 const AGENTMAIL_VERIFY = "https://api.agentmail.to/v0/agent/verify";
+
+export type MailerKind = "ses" | "smtp" | "resend" | "agentmail" | null;
 
 export function agentMailKey(): string {
   return (process.env.AGENTMAIL_API_KEY || "").trim();
@@ -22,16 +25,33 @@ export function mailPass(): string {
   return (process.env.SMTP_PASS || "").trim();
 }
 
-function smtpHost(): string {
+export function smtpHost(): string {
   return (process.env.SMTP_HOST || "").trim();
 }
 
-/** Never Gmail. Codes leave Solphia's own inbox. */
-export function mailerKind(): "agentmail" | "resend" | "smtp" | null {
-  if (agentMailKey()) return "agentmail";
-  if ((process.env.RESEND_API_KEY || "").trim()) return "resend";
+function isGmailHost(host: string): boolean {
+  const h = host.toLowerCase();
+  return h === "gmail.com" || h.endsWith(".gmail.com") || h === "googlemail.com" || h.endsWith(".googlemail.com");
+}
+
+function smtpReady(): boolean {
   const host = smtpHost();
-  if (host && mailUser() && mailPass() && !/gmail\.com/i.test(host)) return "smtp";
+  return Boolean(host && mailUser() && mailPass() && !isGmailHost(host));
+}
+
+function isSesHost(host: string): boolean {
+  const h = host.toLowerCase();
+  return h.includes("amazonses.com") || h.startsWith("email-smtp.");
+}
+
+/**
+ * Solphia's mailer. SMTP (Amazon SES) is first — that is our pipe, from otp@solphia.io.
+ * Never Gmail. AgentMail is a leftover fallback only.
+ */
+export function mailerKind(): MailerKind {
+  if (smtpReady()) return isSesHost(smtpHost()) ? "ses" : "smtp";
+  if ((process.env.RESEND_API_KEY || "").trim()) return "resend";
+  if (agentMailKey()) return "agentmail";
   return null;
 }
 
@@ -47,18 +67,20 @@ export function mailFrom(): string {
     if (branded && branded.toLowerCase().includes(inbox.toLowerCase())) return branded;
     return `Solphia <${inbox}>`;
   }
-  return branded || "Solphia <hello@solphia.io>";
+  if (branded && /@solphia\.io\b/i.test(branded) && !/agentmail\.to/i.test(branded)) return branded;
+  return `Solphia <${mailAddress("otp")}>`;
 }
 
 export function mailOffHint(kind: "admin" | "user" = "user"): string {
   if (kind === "admin") {
-    return "The live server does not have the AgentMail key, so Solphia cannot send login codes. A 6-digit email from AgentMail is only to verify the inbox — it is not an admin login code. Add AGENTMAIL_API_KEY and AGENTMAIL_INBOX=solphia@agentmail.to in Vercel Production, then redeploy.";
+    return `Solphia mail is off on the live server. Wire Amazon SES SMTP so codes leave ${mailAddress("otp")}. Set SMTP_HOST, SMTP_USER, SMTP_PASS, and SMTP_FROM on Vercel Production, then redeploy.`;
   }
   return "Codes are not sending on the live site yet. Try again in a minute.";
 }
 
 function smtpTransport() {
-  if (mailerKind() !== "smtp") return null;
+  const kind = mailerKind();
+  if (kind !== "ses" && kind !== "smtp") return null;
   const port = Number(process.env.SMTP_PORT || 587);
   return nodemailer.createTransport({
     host: smtpHost(),
@@ -75,6 +97,30 @@ function htmlToText(html: string): string {
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 4000);
+}
+
+async function sendSmtp(opts: { from: string; to: string; cc?: string; bcc?: string; subject: string; html: string }) {
+  const mailer = smtpTransport();
+  if (!mailer) throw new Error("SMTP transport missing.");
+  const payload = {
+    from: opts.from,
+    to: opts.to,
+    cc: opts.cc || undefined,
+    bcc: opts.bcc || undefined,
+    subject: opts.subject,
+    html: opts.html,
+    text: htmlToText(opts.html),
+  };
+  let last: Error | null = null;
+  for (let i = 0; i < 2; i++) {
+    try {
+      await mailer.sendMail(payload);
+      return;
+    } catch (err) {
+      last = err instanceof Error ? err : new Error("send failed");
+    }
+  }
+  throw last || new Error("send failed");
 }
 
 async function sendAgentMail(opts: { to: string; cc?: string; bcc?: string; subject: string; html: string }) {
@@ -176,21 +222,12 @@ export async function queueEmail(
     return rec;
   }
   try {
-    if (kind === "agentmail") {
-      await sendAgentMail({ to, cc: opts?.cc, bcc: opts?.bcc, subject, html });
+    if (kind === "ses" || kind === "smtp") {
+      await sendSmtp({ from, to, cc: opts?.cc, bcc: opts?.bcc, subject, html });
     } else if (kind === "resend") {
       await sendResend({ from, to, cc: opts?.cc, bcc: opts?.bcc, subject, html });
     } else {
-      const mailer = smtpTransport();
-      if (!mailer) throw new Error("SMTP transport missing.");
-      await mailer.sendMail({
-        from,
-        to,
-        cc: opts?.cc || undefined,
-        bcc: opts?.bcc || undefined,
-        subject,
-        html,
-      });
+      await sendAgentMail({ to, cc: opts?.cc, bcc: opts?.bcc, subject, html });
     }
     rec.status = "sent";
   } catch (err) {

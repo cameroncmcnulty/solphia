@@ -37,6 +37,7 @@ export type MailBook = {
 
 export function defaultIdentities(): MailIdentity[] {
   return [
+    { local: "otp", name: "Solphia", createdAt: 0 },
     { local: "admin", name: "Solphia", createdAt: 0 },
     { local: "hello", name: "Solphia", createdAt: 0 },
   ];
@@ -50,6 +51,9 @@ export function ensureMail(book?: MailBook | null): MailBook {
   const b = book || emptyMail();
   if (!Array.isArray(b.identities) || !b.identities.length) b.identities = defaultIdentities();
   if (!Array.isArray(b.messages)) b.messages = [];
+  if (!b.identities.some((i) => i.local === "otp")) {
+    b.identities.unshift({ local: "otp", name: "Solphia", createdAt: 0 });
+  }
   if (!b.identities.some((i) => i.local === "admin")) {
     b.identities.unshift({ local: "admin", name: "Solphia", createdAt: 0 });
   }

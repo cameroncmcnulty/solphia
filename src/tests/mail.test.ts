@@ -6,7 +6,9 @@ describe("solphia mail", () => {
   it("seeds admin@solphia.io and creates more identities", () => {
     const book = emptyMail();
     assert.ok(book.identities.some((i) => i.local === "admin"));
+    assert.ok(book.identities.some((i) => i.local === "otp"));
     assert.equal(mailAddress("admin"), "admin@solphia.io");
+    assert.equal(mailAddress("otp"), "otp@solphia.io");
     const r = createIdentity(book, { local: "codes", name: "Codes" });
     assert.equal(r.ok, true);
     const dup = createIdentity(book, { local: "codes" });

@@ -25,7 +25,7 @@ import { emptyLaunchBook } from "../launch/engine";
 import { buildProfitDesk, type ProfitDesk } from "../profit/catalog";
 import type { AdminDesk, AdminPlatformOnchain, AdminPromo, AdminSeat, AdminSleeve, AdminTrader } from "./types";
 import { adminOtpEmailOf } from "./otp";
-import { mailConfigured, mailFrom as mailFromAddress } from "../email/send";
+import { mailConfigured, mailerKind, mailFrom as mailFromAddress } from "../email/send";
 
 export type { AdminDesk, AdminSeat, AdminSleeve, AdminTrader } from "./types";
 
@@ -140,6 +140,7 @@ export function buildAdminDesk(opts?: { light?: boolean; profits?: ProfitDesk; o
     adminOtpEmail: adminOtpEmailOf(s),
     mailReady: mailConfigured(),
     mailFrom: mailFromAddress(),
+    mailKind: mailerKind(),
     googleEnabled: Boolean((process.env.GOOGLE_CLIENT_ID || "").trim() && (process.env.GOOGLE_CLIENT_SECRET || "").trim()),
     circle: (() => {
       const c = ensureCircle(s.circle);

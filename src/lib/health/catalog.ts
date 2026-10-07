@@ -161,7 +161,7 @@ export const SERVICES: ServiceDef[] = [
   {
     id: "smtp",
     name: "Email",
-    why: "Signup codes, admin login codes, and alert mail. Sent from Solphia's own inbox, never a personal Gmail.",
+    why: "Signup codes, admin login codes, and alert mail. Sent from otp@solphia.io through Solphia's own SES SMTP pipe.",
     defaultTier: "none",
     tiers: [
       {
@@ -169,15 +169,15 @@ export const SERVICES: ServiceDef[] = [
         label: "Off",
         price: "$0",
         limits: { mailPerDay: 0 },
-        notes: "Free AgentMail plan. Set AGENTMAIL_API_KEY on Vercel so codes leave solphia@agentmail.to.",
+        notes: "Wire Amazon SES SMTP on Vercel (SMTP_HOST, SMTP_USER, SMTP_PASS). Codes leave otp@solphia.io. About $0.10 per 1,000 — no 3,000 cap.",
         next: "set",
       },
       {
         id: "set",
         label: "Configured",
-        price: "in-house",
-        limits: { mailPerDay: 3000 },
-        notes: "Mailer is live from Solphia's inbox on the free AgentMail plan (3,000 emails/month).",
+        price: "~$0.10/1k",
+        limits: { mailPerDay: 100_000 },
+        notes: "Solphia mailer is live from otp@solphia.io via Amazon SES. No AgentMail cap.",
       },
     ],
   },
