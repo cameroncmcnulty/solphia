@@ -93,7 +93,7 @@ export async function POST(req: NextRequest) {
         error: "mail_off",
         message: mailConfigured()
           ? out.mailError || "Could not send the code. Try again in a minute."
-          : mailOffHint(),
+          : mailOffHint("user"),
       },
       { status: 503 },
     );

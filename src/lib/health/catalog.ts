@@ -169,7 +169,7 @@ export const SERVICES: ServiceDef[] = [
         label: "Off",
         price: "$0",
         limits: { mailPerDay: 0 },
-        notes: "Set AGENTMAIL_API_KEY so codes leave solphia@agentmail.to. Do not use a Gmail app password.",
+        notes: "Free AgentMail plan. Set AGENTMAIL_API_KEY on Vercel so codes leave solphia@agentmail.to.",
         next: "set",
       },
       {
@@ -177,7 +177,7 @@ export const SERVICES: ServiceDef[] = [
         label: "Configured",
         price: "in-house",
         limits: { mailPerDay: 3000 },
-        notes: "Mailer is live from Solphia's inbox. Watch the provider send cap.",
+        notes: "Mailer is live from Solphia's inbox on the free AgentMail plan (3,000 emails/month).",
       },
     ],
   },

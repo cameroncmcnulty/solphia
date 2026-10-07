@@ -355,7 +355,7 @@ export function HealthSection() {
             <span className={pack?.keys.helius ? "text-acid" : "text-blood"}>Helius {pack?.keys.helius ? "on" : "off"}</span>
             <span className={pack?.keys.pinata ? "text-acid" : "text-mute"}>Pinata {pack?.keys.pinata ? "on" : "off"}</span>
             <span className={pack?.keys.signer ? "text-acid" : "text-mute"}>Signer {pack?.keys.signer ? "on" : "off"}</span>
-            <span className={pack?.keys.smtp ? "text-acid" : "text-mute"}>SMTP {pack?.keys.smtp ? "on" : "off"}</span>
+            <span className={pack?.keys.smtp ? "text-acid" : "text-mute"}>Mail {pack?.keys.smtp ? "on" : "off"}</span>
             <span className={data?.treasurySet ? "text-acid" : "text-blood"}>Treasury skim {data?.treasurySet ? "on" : "off"}</span>
             <span className={pack?.jup?.collecting ? "text-acid" : "text-mute"}>
               Jupiter referral {pack?.jup?.collecting ? "on" : "off"}

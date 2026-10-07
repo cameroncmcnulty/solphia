@@ -50,8 +50,11 @@ export function mailFrom(): string {
   return branded || "Solphia <hello@solphia.io>";
 }
 
-export function mailOffHint(): string {
-  return "Solphia mail is not sending yet. Codes come from solphia@agentmail.to — not Gmail.";
+export function mailOffHint(kind: "admin" | "user" = "user"): string {
+  if (kind === "admin") {
+    return "The live server does not have the AgentMail key, so Solphia cannot send login codes. A 6-digit email from AgentMail is only to verify the inbox — it is not an admin login code. Add AGENTMAIL_API_KEY and AGENTMAIL_INBOX=solphia@agentmail.to in Vercel Production, then redeploy.";
+  }
+  return "Codes are not sending on the live site yet. Try again in a minute.";
 }
 
 function smtpTransport() {

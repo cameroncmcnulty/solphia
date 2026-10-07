@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
       if (!out.ok) return NextResponse.json({ error: "otp_failed", message: out.error }, { status: 400 });
       if (out.mailStatus !== "sent" && process.env.NODE_ENV === "production") {
         return NextResponse.json(
-          { error: "mail_off", message: out.mailError || mailOffHint() },
+          { error: "mail_off", message: out.mailError || mailOffHint("admin") },
           { status: 503 },
         );
       }
@@ -117,7 +117,7 @@ export async function POST(req: NextRequest) {
         error: "mail_off",
         message: mailConfigured()
           ? out.mailError || "Could not send the admin code."
-          : mailOffHint(),
+          : mailOffHint("admin"),
       },
       { status: 503 },
     );

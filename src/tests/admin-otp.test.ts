@@ -127,5 +127,6 @@ describe("mailer", () => {
     assert.equal(otp.includes("MAIL_APP_PASSWORD"), false);
     assert.equal(send.includes("smtp.gmail.com"), false);
     assert.match(send, /agentmail\.to/);
+    assert.match(send, /not an admin login code/);
   });
 });
