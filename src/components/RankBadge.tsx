@@ -39,6 +39,53 @@ export function StaffBadge({
   );
 }
 
+function SolphiaCrest({ size, className, id }: { size: number; className: string; id: string }) {
+  const ticks = [-90, 0, 90, 180].map((deg) => {
+    const a = (deg * Math.PI) / 180;
+    const x = 40 + Math.cos(a) * 30.2;
+    const y = 40 + Math.sin(a) * 30.2;
+    return `${x},${y - 3.1} ${x + 2},${y} ${x},${y + 3.1} ${x - 2},${y}`;
+  });
+  return (
+    <svg viewBox="0 0 80 80" width={size} height={size} className={className} aria-label="Rank 100">
+      <defs>
+        <linearGradient id={`${id}ring`} x1="0.15" y1="0" x2="0.9" y2="1">
+          <stop offset="0%" stopColor="#fff8e1" />
+          <stop offset="45%" stopColor="#e8c35a" />
+          <stop offset="100%" stopColor="#14f195" />
+        </linearGradient>
+        <radialGradient id={`${id}core`} cx="50%" cy="36%" r="68%">
+          <stop offset="0%" stopColor="#24142f" />
+          <stop offset="62%" stopColor="#12081c" />
+          <stop offset="100%" stopColor="#07040d" />
+        </radialGradient>
+        <filter id={`${id}glow`} x="-20%" y="-20%" width="140%" height="140%">
+          <feGaussianBlur stdDeviation="1.8" />
+        </filter>
+      </defs>
+      <circle cx="40" cy="40" r="33" fill="#14f195" opacity="0.16" filter={`url(#${id}glow)`} />
+      <circle cx="40" cy="40" r="30.5" fill={`url(#${id}core)`} stroke={`url(#${id}ring)`} strokeWidth="2.6" />
+      <circle cx="40" cy="40" r="26" fill="none" stroke="#14f195" strokeWidth="0.8" opacity="0.55" />
+      <circle cx="40" cy="40" r="22.5" fill="none" stroke="#e8c35a" strokeWidth="0.45" opacity="0.35" />
+      {ticks.map((points) => (
+        <polygon key={points} points={points} fill="#fff6d6" />
+      ))}
+      <text
+        x="40"
+        y="46"
+        textAnchor="middle"
+        fontFamily="ui-sans-serif, system-ui, sans-serif"
+        fontWeight="800"
+        fontSize="20"
+        fill="#f8f4ff"
+        letterSpacing="-0.8"
+      >
+        100
+      </text>
+    </svg>
+  );
+}
+
 export function RankBadge({
   rank,
   size = 72,
@@ -51,7 +98,8 @@ export function RankBadge({
   const r = Math.max(1, Math.min(100, Math.floor(rank || 1)));
   const tier = rankTier(r);
   const id = `rb${r}${tier.id}${size}`.replace(/[^a-z0-9]/gi, "");
-  const rings = r >= 100 ? 4 : r >= 80 ? 3 : r >= 50 ? 2 : 1;
+  if (r >= 100) return <SolphiaCrest size={size} className={className} id={id} />;
+  const rings = r >= 80 ? 3 : r >= 50 ? 2 : 1;
   const jewels = r >= 90 ? 8 : r >= 65 ? 6 : r >= 35 ? 4 : 3;
   return (
     <svg viewBox="0 0 80 80" width={size} height={size} className={className} aria-label={`Rank ${r}`}>
@@ -87,11 +135,11 @@ export function RankBadge({
       })}
       <text
         x="40"
-        y={r >= 100 ? 38 : 44}
+        y="44"
         textAnchor="middle"
         fontFamily="ui-sans-serif, system-ui, sans-serif"
         fontWeight="800"
-        fontSize={r >= 100 ? 18 : r >= 10 ? 22 : 26}
+        fontSize={r >= 10 ? 22 : 26}
         fill="#f4f0ff"
       >
         {r}

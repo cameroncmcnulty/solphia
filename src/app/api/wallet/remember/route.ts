@@ -37,3 +37,9 @@ export async function POST(req: NextRequest) {
   res.cookies.set(OWNER_KEY, pubkey, cookieOpts());
   return res;
 }
+
+export async function DELETE() {
+  const res = NextResponse.json({ ok: true, pubkey: null });
+  res.cookies.set(OWNER_KEY, "", { ...cookieOpts(), maxAge: 0 });
+  return res;
+}

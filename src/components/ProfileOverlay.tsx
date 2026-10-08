@@ -17,7 +17,6 @@ export type ProfilePack = {
   pubkey: string;
   username: string;
   pfp?: string;
-  banner?: string;
   intro: string;
   rank: number;
   title: string;
@@ -88,7 +87,6 @@ export function ProfileOverlay({
   }, [onClose]);
 
   const name = pack?.username ? `@${pack.username}` : `${pubkey.slice(0, 4)}…${pubkey.slice(-4)}`;
-  const banner = pack?.banner ? media(pack.banner) : "";
   const pfp = pack?.pfp ? media(pack.pfp) : undefined;
   const fav = pack?.fav;
 
@@ -98,11 +96,7 @@ export function ProfileOverlay({
         className="app-layer-card relative rounded-[1.5rem] border border-acid/30 bg-[#12081c] shadow-[0_30px_80px_rgba(0,0,0,0.55)]"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="relative h-28 bg-gradient-to-r from-violet/40 via-acid/20 to-cyan/30">
-          {banner ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={banner} alt="" className="h-full w-full object-cover" />
-          ) : null}
+        <div className="relative h-20 bg-gradient-to-r from-violet/40 via-acid/20 to-cyan/30">
           <div className="absolute inset-0 bg-gradient-to-t from-[#12081c] to-transparent" />
         </div>
         <button type="button" onClick={onClose} className="absolute right-3 top-3 rounded-full bg-black/50 px-3 py-1 text-sm text-ghost">

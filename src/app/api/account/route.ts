@@ -62,7 +62,6 @@ function pack(book: ReturnType<typeof emptyLaunchBook>, pubkey: string, solUsd: 
     tosAcceptedAt: 0,
     link: `/r/${pubkey}`,
     intro: acc.intro || "",
-    banner: profilePhotoUrl(acc.banner, pubkey, "banner"),
     favMint: acc.favMint || "",
     favSymbol: acc.favSymbol || "",
     favName: acc.favName || "",

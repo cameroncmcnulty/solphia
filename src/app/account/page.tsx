@@ -43,7 +43,6 @@ type Desk = {
   link: string;
   withdrawn?: number;
   intro?: string;
-  banner?: string;
   favMint?: string;
   favSymbol?: string;
   favName?: string;
@@ -77,12 +76,11 @@ export default function AccountPage() {
   const [note, setNote] = useState("");
   const [noteErr, setNoteErr] = useState(false);
   const [username, setUsername] = useState("");
-  const fieldErr = useConfirmErrors<"username" | "restore" | "pfp" | "banner" | "intro" | "fav">();
+  const fieldErr = useConfirmErrors<"username" | "restore" | "pfp" | "intro" | "fav">();
   const [intro, setIntro] = useState("");
   const [favMint, setFavMint] = useState("");
   const [saved, setSaved] = useState<Record<string, string>>({});
   const [peek, setPeek] = useState(false);
-  const bannerRef = useRef<HTMLInputElement>(null);
   const [boosts, setBoosts] = useState<{
     live: { symbol: string; leftMs: number; rockets: number }[];
     queued: { symbol: string; position: number; etaMs: number; rockets: number }[];
@@ -351,75 +349,6 @@ export default function AccountPage() {
             />
           </section>
           <section className="panel-bubble overflow-hidden rounded-3xl p-5">
-            <h2 className="text-[22px] font-semibold tracking-tight text-white">Banner</h2>
-            <p className="mt-1 text-sm text-mute">Wide image for your card. Shows when someone taps your PFP in Shill Zone.</p>
-            <div className="mt-3 overflow-hidden rounded-2xl border border-violet/25 bg-void">
-              <div className="relative h-28 bg-gradient-to-r from-violet/30 via-acid/15 to-cyan/25">
-                {desk?.banner ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={desk.banner.startsWith("data:") || desk.banner.startsWith("/") ? desk.banner : `/api/media?u=${encodeURIComponent(desk.banner)}`}
-                    alt=""
-                    className="h-full w-full object-cover"
-                  />
-                ) : null}
-              </div>
-            </div>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <button type="button" disabled={busy} className="btn-acid rounded-full px-5 py-2 text-sm disabled:opacity-40" onClick={() => bannerRef.current?.click()}>
-                {busy ? "Uploading…" : "Upload banner"}
-              </button>
-              <button
-                type="button"
-                disabled={busy || !desk?.banner}
-                className="btn-ghost rounded-full px-5 py-2 text-sm disabled:opacity-40"
-                onClick={async () => {
-                  await fetch("/api/profile", {
-                    method: "POST",
-                    headers: { "content-type": "application/json" },
-                    body: JSON.stringify({ action: "banner", pubkey: owner, banner: "" }),
-                  });
-                  setSaved((s) => ({ ...s, banner: "Banner cleared." }));
-                  load().catch(() => {});
-                }}
-              >
-                Clear
-              </button>
-            </div>
-            <FieldError error={fieldErr.errors.banner} />
-            {saved.banner && <p className="mt-2 text-[12px] text-acid">{saved.banner}</p>}
-            <input
-              ref={bannerRef}
-              type="file"
-              accept="image/png,image/jpeg,image/webp"
-              className="hidden"
-              onChange={async (e) => {
-                const f = e.target.files?.[0];
-                e.target.value = "";
-                if (!f) return;
-                fieldErr.clear("banner");
-                setBusy(true);
-                try {
-                  const data = await wideBanner(f);
-                  const r = await fetch("/api/profile", {
-                    method: "POST",
-                    headers: { "content-type": "application/json" },
-                    body: JSON.stringify({ action: "banner", pubkey: owner, banner: data }),
-                  });
-                  const j = await r.json();
-                  if (!r.ok) throw new Error(j.message || "Could not save banner.");
-                  setSaved((s) => ({ ...s, banner: "Banner saved." }));
-                  if (j.banner) setDesk((d) => (d ? { ...d, banner: j.banner } : d));
-                  load().catch(() => {});
-                } catch (err) {
-                  fieldErr.fail({ banner: err instanceof Error ? err.message : "Could not use that image." });
-                } finally {
-                  setBusy(false);
-                }
-              }}
-            />
-          </section>
-          <section className="panel-bubble overflow-hidden rounded-3xl p-5">
             <h2 className="text-[22px] font-semibold tracking-tight text-white">Intro</h2>
             <p className="mt-1 text-sm text-mute">One short line. People see it on your card.</p>
             <form
@@ -655,37 +584,6 @@ async function squarePfp(file: File): Promise<string> {
       if (data.length <= 80_000) return data;
     }
     throw new Error("Image is too heavy.");
-  } finally {
-    URL.revokeObjectURL(url);
-  }
-}
-
-async function wideBanner(file: File): Promise<string> {
-  if (file.size > 4_000_000) throw new Error("Image must be under 4 MB.");
-  const url = URL.createObjectURL(file);
-  try {
-    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
-      const el = new Image();
-      el.onload = () => resolve(el);
-      el.onerror = () => reject(new Error("Could not read that image."));
-      el.src = url;
-    });
-    const w = 1200;
-    const h = 400;
-    const canvas = document.createElement("canvas");
-    canvas.width = w;
-    canvas.height = h;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) throw new Error("Could not crop image.");
-    const scale = Math.max(w / img.naturalWidth, h / img.naturalHeight);
-    const dw = img.naturalWidth * scale;
-    const dh = img.naturalHeight * scale;
-    ctx.drawImage(img, (w - dw) / 2, (h - dh) / 2, dw, dh);
-    for (const q of [0.72, 0.55, 0.42, 0.3, 0.22]) {
-      const data = canvas.toDataURL("image/jpeg", q);
-      if (data.length <= 80_000) return data;
-    }
-    throw new Error("Image is too heavy. Try a simpler JPEG.");
   } finally {
     URL.revokeObjectURL(url);
   }

@@ -7,7 +7,7 @@ import {
   ownerSetCookie,
   parseOwnerCookie,
 } from "../lib/wallet/owner";
-import { GET, POST } from "../app/api/wallet/remember/route";
+import { DELETE, GET, POST } from "../app/api/wallet/remember/route";
 import { NextRequest } from "next/server";
 
 const PK = "D4uCNcBKAbG9NAkmhQg7pBiztuejNzbWrZDcZmFGut81";
@@ -64,5 +64,10 @@ describe("wallet owner cookie", () => {
       }),
     );
     assert.equal(bad.status, 400);
+
+    const gone = await DELETE();
+    assert.equal(gone.status, 200);
+    const cleared = gone.headers.get("set-cookie") || "";
+    assert.ok(cleared.includes("Max-Age=0") || cleared.toLowerCase().includes("max-age=0"));
   });
 });

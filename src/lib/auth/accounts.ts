@@ -185,3 +185,13 @@ export function attachWallet(
   row.lastSeen = Date.now();
   return { ok: true };
 }
+
+export function detachWallet(
+  row: LoginAccount,
+  pubkey: string,
+): { ok: true } | { ok: false; error: string } {
+  if (!isSolanaAddress(pubkey)) return { ok: false, error: "Bad wallet." };
+  row.wallets = row.wallets.filter((pk) => pk !== pubkey);
+  row.lastSeen = Date.now();
+  return { ok: true };
+}

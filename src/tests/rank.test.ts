@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { emptyLaunchBook, mergeAccountMaps, mergeLaunch, slimLaunch } from "../lib/launch/engine";
 import {
   RANK_MAX,
@@ -174,5 +176,19 @@ describe("rank engine", () => {
     const fromCopy = mergeAccountMaps({}, slim.accounts);
     assert.equal(fromCopy[A].xp, xpA);
     assert.equal(fromCopy[B].xp, xpB);
+  });
+
+  it("gives rank 100 its own medal crest and does not show banner uploads", () => {
+    const badge = readFileSync(join(process.cwd(), "src/components/RankBadge.tsx"), "utf8");
+    assert.match(badge, /function SolphiaCrest/);
+    assert.match(badge, /r >= 100/);
+    assert.equal(badge.includes("r >= 100 ? 4"), false);
+    const account = readFileSync(join(process.cwd(), "src/app/account/page.tsx"), "utf8");
+    assert.equal(account.includes("Upload banner"), false);
+    assert.equal(account.includes("wideBanner"), false);
+    const overlay = readFileSync(join(process.cwd(), "src/components/ProfileOverlay.tsx"), "utf8");
+    assert.equal(overlay.includes("pack?.banner"), false);
+    const profile = readFileSync(join(process.cwd(), "src/app/api/profile/route.ts"), "utf8");
+    assert.equal(profile.includes('"banner"'), false);
   });
 });

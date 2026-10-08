@@ -3,8 +3,8 @@ import { z } from "zod";
 import { clientIp, isSolanaAddress, rateLimit } from "@/lib/security";
 import { withLaunch, withShill } from "@/lib/store";
 import { emptyLaunchBook, referredBy } from "@/lib/launch/engine";
-import { INTRO_MAX, profilePhotoUrl, publicCard, setBanner, setFavourite, setIntro } from "@/lib/rank/engine";
-import { displayMedia, pinDataUrl } from "@/lib/pinata";
+import { INTRO_MAX, profilePhotoUrl, publicCard, setFavourite, setIntro } from "@/lib/rank/engine";
+import { displayMedia } from "@/lib/pinata";
 import { lookupMarketMint } from "@/lib/launch/market";
 import { staffRole } from "@/lib/access";
 
@@ -12,10 +12,9 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
 const Body = z.object({
-  action: z.enum(["intro", "banner", "favourite"]),
+  action: z.enum(["intro", "favourite"]),
   pubkey: z.string(),
   intro: z.string().max(INTRO_MAX).optional(),
-  banner: z.string().max(800_000).optional(),
   mint: z.string().optional(),
 });
 
@@ -25,8 +24,8 @@ function bookOf(s: { launch?: ReturnType<typeof emptyLaunchBook> }) {
   return s.launch;
 }
 
-function photo(raw: string | undefined, pubkey: string, kind: "pfp" | "banner") {
-  return profilePhotoUrl(raw, pubkey, kind) || displayMedia(raw);
+function photo(raw: string | undefined, pubkey: string) {
+  return profilePhotoUrl(raw, pubkey, "pfp") || displayMedia(raw);
 }
 
 export async function GET(req: NextRequest) {
@@ -48,8 +47,7 @@ export async function GET(req: NextRequest) {
     viewerRole,
     banned: Boolean(mem?.banned),
     mutedUntil: mem?.mutedUntil || 0,
-    pfp: photo(acc?.pfp, pubkey, "pfp"),
-    banner: photo(acc?.banner, pubkey, "banner"),
+    pfp: photo(acc?.pfp, pubkey),
     intro: acc?.intro || "",
     fav: acc?.favMint
       ? {
@@ -77,20 +75,6 @@ export async function POST(req: NextRequest) {
     const out = await withLaunch((s) => setIntro(bookOf(s), b.pubkey, b.intro || ""), true);
     if (!out.ok) return NextResponse.json({ error: out.error, message: "Could not save intro." }, { status: 400 });
     return NextResponse.json({ ok: true, intro: out.account.intro || "" });
-  }
-  if (b.action === "banner") {
-    let url = (b.banner || "").trim();
-    if (url.startsWith("data:image/")) {
-      try {
-        const pinned = await pinDataUrl(url, `banner-${b.pubkey.slice(0, 8)}`);
-        if (pinned?.url) url = pinned.url.startsWith("http") ? pinned.url : displayMedia(pinned.url) || pinned.url;
-      } catch {
-        /* keep the data URL; slimLaunch will drop only huge data URLs */
-      }
-    }
-    const out = await withLaunch((s) => setBanner(bookOf(s), b.pubkey, url), true);
-    if (!out.ok) return NextResponse.json({ error: out.error, message: "Could not save that banner." }, { status: 400 });
-    return NextResponse.json({ ok: true, banner: photo(out.account.banner, b.pubkey, "banner") });
   }
   if (b.action === "favourite") {
     const mint = (b.mint || "").trim();

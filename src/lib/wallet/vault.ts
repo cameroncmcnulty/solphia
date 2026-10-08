@@ -1,6 +1,6 @@
 import { Keypair } from "@solana/web3.js";
 import { isSolanaAddress } from "./addr";
-import { persistOwner } from "./owner";
+import { loadOwner, persistOwner } from "./owner";
 import {
   decodeSecretPayload,
   encodeSecretPayload,
@@ -394,6 +394,28 @@ export function followInjectedPhantom(): boolean {
   const active = activeWallet();
   if (!active) return false;
   return active.kind === "phantom";
+}
+
+/** Phantom is a send rail. Strip it from the vault so it cannot stay the signed-in identity. */
+export function dropPhantomWallets(): string[] {
+  const meta = readVaultMeta();
+  const phantoms = meta.wallets.filter((w) => w.kind === "phantom");
+  if (!phantoms.length) return [];
+  const pubkeys = phantoms.map((w) => w.pubkey);
+  meta.wallets = meta.wallets.filter((w) => w.kind !== "phantom");
+  const next = meta.wallets.find((w) => !w.hidden) || meta.wallets[0];
+  meta.activeId = next?.id || "";
+  writeMeta(meta);
+  return pubkeys;
+}
+
+export function phantomIsOwner(injectedPk?: string | null): boolean {
+  const owner = loadOwner();
+  const active = activeWallet();
+  if (active?.kind === "phantom") return true;
+  if (owner && listWallets({ hidden: true }).some((w) => w.kind === "phantom" && w.pubkey === owner)) return true;
+  if (owner && injectedPk && owner === injectedPk) return true;
+  return false;
 }
 
 export function ensurePhantomStub(_pubkey: string | null) {

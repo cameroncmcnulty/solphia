@@ -37,7 +37,7 @@ export const RANK_TIERS: RankTier[] = [
   { id: "mythic", from: 80, title: "Mythic", metal: "#ff4fd8", glow: "#ff4fd8" },
   { id: "apex", from: 90, title: "Apex", metal: "#fff4c2", glow: "#ffffff" },
   { id: "immortal", from: 97, title: "Immortal", metal: "#80eaff", glow: "#14f195" },
-  { id: "solphia", from: 100, title: "Solphia", metal: "#14f195", glow: "#ff4fd8" },
+  { id: "solphia", from: 100, title: "Solphia", metal: "#e8c35a", glow: "#14f195" },
 ];
 
 /** Quadratic-ish curve. Rank 10 is a few days. Rank 50 is months. Rank 100 is a long grind. */

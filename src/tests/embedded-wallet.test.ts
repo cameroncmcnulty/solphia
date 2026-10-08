@@ -181,6 +181,11 @@ describe("vault localStorage isolation", () => {
     assert.equal(followInjectedPhantom(), false);
     switchWallet(ph!.id);
     assert.equal(followInjectedPhantom(), true);
+    const { dropPhantomWallets } = await import("../lib/wallet/vault");
+    const dropped = dropPhantomWallets();
+    assert.equal(dropped.includes(phantomPk), true);
+    assert.equal(followInjectedPhantom(), false);
+    assert.equal(listWallets({ hidden: true }).some((w) => w.kind === "phantom"), false);
   });
 });
 

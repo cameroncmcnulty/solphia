@@ -2,10 +2,11 @@
 
 import { useEffect, useRef, useState } from "react";
 import { SphaMark } from "./SphaMark";
-import { loadOwner, persistOwner, OWNER_EVENT } from "@/lib/wallet/owner";
+import { logoutAccount } from "@/lib/auth/client";
+import { forgetOwner, loadOwner, persistOwner, OWNER_EVENT } from "@/lib/wallet/owner";
 import { beginPhantomConnect, completePhantomConnect, completePhantomUl, injectedProvider, openPhantomLink, PHANTOM_EVENT, readPhantomReturn } from "@/lib/wallet/phantomConnect";
-import { ensurePhantomStub, followInjectedPhantom } from "@/lib/wallet/vault";
-import { openConnect } from "./wallet/WalletHost";
+import { dropPhantomWallets, ensurePhantomStub, followInjectedPhantom, phantomIsOwner } from "@/lib/wallet/vault";
+import { openAccountGate, openConnect } from "./wallet/WalletHost";
 
 type Provider = {
   isPhantom?: boolean;
@@ -28,8 +29,13 @@ function phantom(): Provider | null {
   return (injectedProvider() as Provider | null) || null;
 }
 
+function blockedPhantomOwner(pubkey: string | null | undefined): boolean {
+  return Boolean(pubkey && kickedPhantomPubkeys().includes(pubkey));
+}
+
 function keep(pubkey: string | null | undefined) {
   if (!pubkey) return;
+  if (blockedPhantomOwner(pubkey)) return;
   if (!followInjectedPhantom()) return;
   persistOwner(pubkey);
   ensurePhantomStub(pubkey);
@@ -96,11 +102,58 @@ export async function switchPhantom(): Promise<string | null> {
   }
 }
 
-/** Keep Phantom session across phone tab sleeps and in-app switches. Mount once in the shell. */
+const PHANTOM_KICK = "solphia_kick_phantom";
+
+function kickedPhantomPubkeys(): string[] {
+  try {
+    const raw = window.localStorage.getItem(PHANTOM_KICK);
+    const j = JSON.parse(raw || "[]") as unknown;
+    return Array.isArray(j) ? j.filter((x): x is string => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function rememberKickedPhantom(pubkeys: string[]) {
+  try {
+    window.localStorage.setItem(PHANTOM_KICK, JSON.stringify([...new Set([...kickedPhantomPubkeys(), ...pubkeys])]));
+  } catch {
+    /* private mode */
+  }
+}
+
+/** Phantom is a send rail. If it is the signed-in identity, drop it and force Google/email login. */
+function kickPhantomIdentity(injectedPk: string | null) {
+  const owner = loadOwner();
+  const wasPhantom = phantomIsOwner(injectedPk);
+  const dropped = dropPhantomWallets();
+  const kick =
+    wasPhantom || Boolean(owner && dropped.includes(owner)) || Boolean(owner && kickedPhantomPubkeys().includes(owner));
+  if (!kick) return false;
+  const pubkeys = [...new Set([...dropped, owner].filter(Boolean))] as string[];
+  rememberKickedPhantom(pubkeys);
+  for (const pubkey of pubkeys) {
+    void fetch("/api/auth/wallets", {
+      method: "DELETE",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ pubkey }),
+    }).catch(() => undefined);
+  }
+  forgetOwner();
+  void fetch("/api/wallet/remember", { method: "DELETE", credentials: "include" }).catch(() => undefined);
+  void logoutAccount();
+  window.setTimeout(() => openAccountGate(), 0);
+  return true;
+}
+
+/** Keep a Solphia wallet session across phone tab sleeps. Phantom is not identity. */
 export function WalletKeepalive() {
   useEffect(() => {
     let poll: ReturnType<typeof setInterval> | null = null;
     let attached: Provider | null = null;
+    const injectedPk = phantom()?.publicKey?.toString() || null;
+    if (kickPhantomIdentity(injectedPk)) return;
 
     const onAccount = (pk?: { toString(): string } | null) => {
       if (switching) return;
@@ -132,12 +185,20 @@ export function WalletKeepalive() {
         return;
       }
       const saved = loadOwner();
+      if (saved && blockedPhantomOwner(saved)) {
+        forgetOwner();
+        return;
+      }
       if (saved) persistOwner(saved, { announce: true, server: opts?.server !== false });
       silentTrusted(p);
     };
 
     const restoreFromCookie = () => {
       const saved = loadOwner();
+      if (saved && blockedPhantomOwner(saved)) {
+        forgetOwner();
+        return;
+      }
       if (saved) {
         persistOwner(saved, { server: true });
         return;
@@ -145,7 +206,9 @@ export function WalletKeepalive() {
       fetch("/api/wallet/remember", { credentials: "include", cache: "no-store" })
         .then((r) => r.json())
         .then((j) => {
-          if (j?.pubkey) persistOwner(String(j.pubkey));
+          const pk = j?.pubkey ? String(j.pubkey) : "";
+          if (!pk || blockedPhantomOwner(pk)) return;
+          persistOwner(pk);
         })
         .catch(() => undefined);
     };

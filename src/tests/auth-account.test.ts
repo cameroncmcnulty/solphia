@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   attachWallet,
   createEmailAccount,
+  detachWallet,
   loginEmail,
   publicAccount,
   upsertGoogleAccount,
@@ -67,6 +68,8 @@ describe("account login", () => {
     assert.equal(attachWallet(ok.account, pk).ok, true);
     assert.deepEqual(ok.account.wallets, [pk]);
     assert.equal(attachWallet(ok.account, "not-a-key").ok, false);
+    assert.equal(detachWallet(ok.account, pk).ok, true);
+    assert.deepEqual(ok.account.wallets, []);
   });
 
   it("upserts Google with TOS on first create and links the same email", () => {

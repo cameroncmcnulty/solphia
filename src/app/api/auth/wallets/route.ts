@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { attachWallet, findAccount, publicAccount } from "@/lib/auth/accounts";
+import { attachWallet, detachWallet, findAccount, publicAccount } from "@/lib/auth/accounts";
 import { readAccountId } from "@/lib/auth/session";
 import { assertNoSecretLeak, clientIp, isSolanaAddress, rateLimit } from "@/lib/security";
 import { mutateState } from "@/lib/store";
@@ -55,6 +55,29 @@ export async function POST(req: NextRequest) {
   });
   if (!out.ok) {
     return NextResponse.json({ error: out.error, message: "Could not save that wallet on the account." }, { status: 400 });
+  }
+  return NextResponse.json({ ok: true, account: out.account });
+}
+
+export async function DELETE(req: NextRequest) {
+  if (!rateLimit(clientIp(req) + ":acct-wallet", 30, 60_000)) {
+    return NextResponse.json({ error: "rate_limited" }, { status: 429 });
+  }
+  const id = readAccountId(req);
+  if (!id) return NextResponse.json({ error: "auth", message: "Sign in first." }, { status: 401 });
+  const raw = await req.json().catch(() => null);
+  const parsed = Body.safeParse(raw);
+  if (!parsed.success || !isSolanaAddress(parsed.data.pubkey)) {
+    return NextResponse.json({ error: "bad_request", message: "Bad wallet." }, { status: 400 });
+  }
+  const out = await mutateState((s) => {
+    const row = findAccount(s, id);
+    if (!row) return { ok: false as const, error: "missing" };
+    detachWallet(row, parsed.data.pubkey);
+    return { ok: true as const, account: publicAccount(row) };
+  });
+  if (!out.ok) {
+    return NextResponse.json({ error: out.error, message: "Could not drop that wallet from the account." }, { status: 400 });
   }
   return NextResponse.json({ ok: true, account: out.account });
 }
