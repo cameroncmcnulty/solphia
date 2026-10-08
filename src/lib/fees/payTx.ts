@@ -1,6 +1,6 @@
 import { PublicKey, Transaction } from "@solana/web3.js";
 import { connection } from "../solana/connection";
-import { boundReferrer, houseFeeIxs, houseFeeLegs, type HouseFeeMode, type HouseLeg } from "./payout";
+import { boundReferrer, houseFeeIxs, houseFeeLegs, houseFeeMissing, type HouseFeeMode, type HouseLeg } from "./payout";
 
 export async function unsignedHousePay(
   from: string,
@@ -9,8 +9,11 @@ export async function unsignedHousePay(
   mode: HouseFeeMode = "split",
 ): Promise<{ ok: true; transaction: string; legs: HouseLeg[] } | { ok: false; error: string }> {
   const referrer = boundReferrer(person || from);
-  const legs = houseFeeLegs({ from, feeSol, referrer, mode });
-  const ixs = houseFeeIxs({ from, feeSol, referrer, mode });
+  const opts = { from, feeSol, referrer, mode };
+  const missing = houseFeeMissing(opts);
+  if (missing) return { ok: false, error: missing };
+  const legs = houseFeeLegs(opts);
+  const ixs = houseFeeIxs(opts);
   if (!ixs.length) return { ok: false, error: "empty" };
   const tx = new Transaction();
   for (const ix of ixs) tx.add(ix);

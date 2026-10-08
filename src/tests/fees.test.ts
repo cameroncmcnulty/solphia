@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { DEFAULT_OWNER, DEFAULT_TREASURY } from "../lib/protocolWallets";
 import { feeOn, splitFee } from "../lib/launch/curve";
-import { harvestSplit, houseFeeLegs, houseShare } from "../lib/fees/payout";
+import { harvestSplit, houseFeeLegs, houseFeeMissing, houseShare } from "../lib/fees/payout";
+import { liveSwapFeeSol } from "../lib/swap/route";
+import { formatSol, formatSolUsd } from "../lib/formatSol";
 
 const FROM = "CyaE1VxvBrahnPWkqm5VsdCvyS2QmNht2UFrKJHga54o";
 const REF = "D4uCNcBKAbG9NAkmhQg7pBiztuejNzbWrZDcZmFGut81";
@@ -113,6 +115,26 @@ describe("house fee legs", () => {
     assert.equal(s.dev, 0.005);
     assert.equal(s.owner, 0.0025);
     assert.equal(s.treasury, 0.0025);
+  });
+
+  it("refuses a 1% swap when owner or treasury cannot receive their cut", () => {
+    const fee = feeOn(1);
+    assert.equal(houseFeeMissing({ from: FROM, feeSol: fee, owner: DEFAULT_OWNER, treasury: DEFAULT_TREASURY, vaults: false }), null);
+    assert.match(houseFeeMissing({ from: "nope", feeSol: fee, owner: DEFAULT_OWNER, treasury: DEFAULT_TREASURY }) || "", /wallet/i);
+    assert.equal(houseFeeMissing({ from: FROM, feeSol: 0, owner: DEFAULT_OWNER, treasury: DEFAULT_TREASURY }), null);
+  });
+
+  it("takes exact 1% even on small SOL sizes (no floor-to-zero)", () => {
+    assert.equal(liveSwapFeeSol(1), 0.01);
+    assert.equal(liveSwapFeeSol(0.015), 0.00015);
+    assert.equal(liveSwapFeeSol(0.01), 0.0001);
+    assert.ok(liveSwapFeeSol(0.01) * 1e9 >= 100_000);
+  });
+
+  it("shows dust SOL instead of 0", () => {
+    assert.equal(formatSol(0), "0");
+    assert.equal(formatSol(0.00025), "0.00025");
+    assert.equal(formatSolUsd(0.00025, 200), "$0.05");
   });
 
   it("pays owner and treasury live even when vaults are on", () => {

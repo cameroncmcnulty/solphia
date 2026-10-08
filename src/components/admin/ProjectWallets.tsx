@@ -1,10 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Keypair } from "@solana/web3.js";
 import { CopyButton } from "@/components/CopyButton";
 import { FieldError, useConfirmErrors } from "@/components/form/confirm";
-import { SOL_MINT, USDC_MINT } from "@/lib/pair/mints";
+import { SwapWidget } from "@/components/SwapWidget";
+import { formatSol, formatSolUsd } from "@/lib/formatSol";
 import { pinOk } from "@/lib/wallet/vaultCrypto";
 import { qrSvg } from "@/lib/wallet/qr";
 import { phraseFile, phraseWords, pickConfirmSlots } from "@/lib/wallet/phrase";
@@ -32,17 +32,12 @@ import {
 import { useAdmin } from "./AdminProvider";
 import { Field, shortPk } from "./ui";
 
-function solStr(n: number) {
-  if (!(n > 0)) return "0";
-  if (n >= 100) return n.toFixed(2);
-  if (n >= 1) return n.toFixed(3);
-  return n.toFixed(4);
-}
-
 export function ProjectWallets({
   balances,
+  solUsd = 0,
 }: {
   balances?: Record<string, number>;
+  solUsd?: number;
 }) {
   const [rows, setRows] = useState<ProjectWallet[]>([]);
   const [open, setOpen] = useState(false);
@@ -64,9 +59,9 @@ export function ProjectWallets({
         <div>
           <div className="font-mono text-[10px] tracking-[0.28em] text-acid">IN-HOUSE PROJECT WALLETS</div>
           <p className="mt-1 max-w-2xl text-sm text-mute">
-            Treasury, owner, and foundation live in a PIN vault on this admin device — not Phantom. Seeds never leave
-            the browser. After you create each one, the public address is saved so curve fees and swap 1% land here.
-            Existing pad configs still pay the previous treasury until new tokens launch.
+            Treasury, owner, and foundation live in a PIN vault on this admin device — not Phantom. User swaps send the
+            open-market 1% live 50/50 into treasury and owner. Balances show full decimals (a few dollars of 1% is
+            ~0.0002 SOL, not zero).
           </p>
         </div>
         <div className="flex gap-2">
@@ -82,16 +77,20 @@ export function ProjectWallets({
           ) : null}
         </div>
       </div>
-      <div className="grid gap-4 lg:grid-cols-3">
-        {PROJECT_ROLES.map((role) => (
-          <ProjectWalletCard
-            key={role.id}
-            role={role.id}
-            local={rows.find((w) => w.role === role.id) || null}
-            sol={balances?.[rows.find((w) => w.role === role.id)?.pubkey || ""] || 0}
-            onChange={sync}
-          />
-        ))}
+      <div className="grid gap-6 xl:grid-cols-3">
+        {PROJECT_ROLES.map((role) => {
+          const local = rows.find((w) => w.role === role.id) || null;
+          return (
+            <ProjectWalletCard
+              key={role.id}
+              role={role.id}
+              local={local}
+              fallbackSol={balances}
+              solUsd={solUsd}
+              onChange={sync}
+            />
+          );
+        })}
       </div>
       {open ? <ProjectUnlock onClose={() => setOpen(false)} onDone={sync} /> : null}
     </div>
@@ -155,12 +154,14 @@ function ProjectUnlock({ onClose, onDone }: { onClose: () => void; onDone: () =>
 function ProjectWalletCard({
   role,
   local,
-  sol,
+  fallbackSol,
+  solUsd,
   onChange,
 }: {
   role: ProjectRole;
   local: ProjectWallet | null;
-  sol: number;
+  fallbackSol?: Record<string, number>;
+  solUsd: number;
   onChange: () => void;
 }) {
   const { patch, busy, data } = useAdmin();
@@ -168,18 +169,45 @@ function ProjectWalletCard({
   const savedPk =
     role === "treasury" ? data?.treasury || "" : role === "owner" ? data?.ownerWallet || "" : data?.foundationWallet || "";
   const pk = local?.pubkey || savedPk;
-  const [tab, setTab] = useState<"home" | "create" | "receive" | "send" | "swap" | "backup">("home");
+  const [tab, setTab] = useState<"swap" | "create" | "receive" | "send" | "backup">("swap");
   const [pin, setPin] = useState("");
   const [phrase, setPhrase] = useState("");
   const [fresh, setFresh] = useState("");
   const [to, setTo] = useState("");
   const [amt, setAmt] = useState("");
-  const [mint, setMint] = useState(USDC_MINT);
-  const [side, setSide] = useState<"buy" | "sell">("buy");
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
   const [work, setWork] = useState(false);
+  const [liveSol, setLiveSol] = useState<number | null>(null);
   const sendErr = useConfirmErrors<"to" | "amt">();
+
+  const mapped =
+    (pk && fallbackSol?.[pk]) ??
+    (savedPk && fallbackSol?.[savedPk]) ??
+    (local?.pubkey && fallbackSol?.[local.pubkey]) ??
+    0;
+  const sol = liveSol != null ? liveSol : mapped;
+
+  const loadSol = useCallback(() => {
+    if (!pk) {
+      setLiveSol(null);
+      return;
+    }
+    void fetch(`/api/sol/balance?pubkey=${encodeURIComponent(pk)}`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => {
+        const n = Number(j?.sol);
+        if (Number.isFinite(n)) setLiveSol(n);
+      })
+      .catch(() => {});
+  }, [pk]);
+
+  useEffect(() => {
+    loadSol();
+    if (!pk) return;
+    const t = window.setInterval(loadSol, 12_000);
+    return () => window.clearInterval(t);
+  }, [loadSol, pk]);
 
   async function generate() {
     setErr("");
@@ -206,7 +234,7 @@ function ProjectWalletCard({
       const out = await createProjectWallet({ role, pin: pin || undefined, phrase });
       onChange();
       await patch({ [meta.stateKey]: out.wallet.pubkey });
-      setTab("home");
+      setTab("swap");
       setMsg("Imported. Public address saved. Phrase stays on this device.");
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Could not import.");
@@ -229,8 +257,9 @@ function ProjectWalletCard({
     setWork(true);
     try {
       const sig = await sendProjectSol(role, to.trim(), n);
-      setMsg(`Sent ${n} SOL · ${sig.slice(0, 8)}…`);
+      setMsg(`Sent ${formatSol(n)} SOL · ${sig.slice(0, 8)}…`);
       setAmt("");
+      loadSol();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Send failed.");
     } finally {
@@ -238,59 +267,33 @@ function ProjectWalletCard({
     }
   }
 
-  async function swap() {
-    if (!pk) return;
-    const n = Number(amt);
-    if (!(n > 0)) {
-      setErr("Enter an amount.");
-      return;
-    }
-    setErr("");
-    setWork(true);
-    try {
-      const other = mint.trim() === SOL_MINT || !mint.trim() ? USDC_MINT : mint.trim();
-      const inputMint = side === "buy" ? SOL_MINT : other;
-      const outputMint = side === "buy" ? other : SOL_MINT;
-      if (inputMint === outputMint) {
-        setErr("Pick a token other than SOL.");
-        setWork(false);
-        return;
-      }
-      const built = await fetch("/api/swap/build", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ owner: pk, inputMint, outputMint, amount: n }),
-      });
-      const j = (await built.json().catch(() => ({}))) as { transaction?: string; error?: string };
-      if (!built.ok || !j.transaction) throw new Error(j.error || "Could not build the swap.");
-      const extras: Keypair[] = [];
-      const sig = await signAndSendProjectTx(role, j.transaction, extras);
-      setMsg(`Swap landed · ${sig.slice(0, 8)}…`);
-      setAmt("");
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "Swap failed.");
-    } finally {
-      setWork(false);
-    }
-  }
+  const usd = formatSolUsd(sol, solUsd);
 
   return (
-    <div className="rounded-3xl border border-violet/20 bg-void/40 p-5">
-      <div className="font-mono text-[10px] tracking-[0.22em] text-mute">{meta.kicker}</div>
-      <div className="mt-1 font-display text-2xl text-ghost">{meta.label}</div>
-      <p className="mt-1 text-sm text-mute">{meta.blurb}</p>
-      <div className="mt-4 font-display text-3xl text-acid">
-        {solStr(sol)} <span className="text-lg text-mute">SOL</span>
+    <div className="overflow-hidden rounded-[28px] border border-white/10 bg-[#0b0714] shadow-[0_20px_60px_rgba(0,0,0,0.45)]">
+      <div className="px-4 pb-1 pt-4 sm:px-5">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="font-mono text-[10px] tracking-[0.22em] text-white/35">{meta.kicker}</div>
+            <div className="mt-1 text-[18px] font-semibold tracking-tight text-white">{meta.label}</div>
+          </div>
+          <p className="font-mono text-[10px] tracking-[0.18em] text-white/35">SWAP</p>
+        </div>
+        <div className="mt-3 font-display text-[32px] leading-none text-acid">
+          {formatSol(sol)} <span className="text-lg text-white/40">SOL</span>
+        </div>
+        <div className="mt-1 font-mono text-[12px] text-white/45">{usd || "—"}</div>
+        <div className="mt-2 break-all font-mono text-[11px] text-white/70">{pk || "not created"}</div>
+        {pk ? (
+          <a href={`https://solscan.io/account/${pk}`} target="_blank" rel="noreferrer" className="mt-1 inline-block font-mono text-[10px] text-acid">
+            Solscan →
+          </a>
+        ) : null}
+        <p className="mt-2 text-[12px] leading-snug text-white/40">{meta.blurb}</p>
       </div>
-      <div className="mt-2 break-all font-mono text-[11px] text-ghost">{pk || "not created"}</div>
-      {pk ? (
-        <a href={`https://solscan.io/account/${pk}`} target="_blank" rel="noreferrer" className="mt-1 inline-block font-mono text-[10px] text-acid">
-          Solscan →
-        </a>
-      ) : null}
 
-      <div className="mt-4 flex flex-wrap gap-1">
-        {(["home", "create", "receive", "send", "swap", "backup"] as const).map((t) => (
+      <div className="mt-3 flex flex-wrap gap-1 px-4 sm:px-5">
+        {(["swap", "create", "receive", "send", "backup"] as const).map((t) => (
           <button
             key={t}
             type="button"
@@ -299,15 +302,35 @@ function ProjectWalletCard({
               setErr("");
               setMsg("");
             }}
-            className={`rounded-full px-3 py-1 font-mono text-[10px] ${tab === t ? "bg-acid/20 text-acid" : "text-mute"}`}
+            className={`rounded-full px-3 py-1.5 font-mono text-[10px] ${tab === t ? "bg-acid text-void" : "bg-white/8 text-white/50"}`}
           >
             {t === "create" ? (local ? "replace" : "create") : t}
           </button>
         ))}
       </div>
 
+      {tab === "swap" && pk ? (
+        <div className="px-1 pb-2 pt-2">
+          <SwapWidget
+            owner={pk}
+            widgetId={`project-swap-${role}`}
+            note="Project wallets skip the house 1% so you do not skim yourself. User swaps still pay 1% live 50/50 into treasury and owner."
+            signTx={async (transaction) => {
+              const sig = await signAndSendProjectTx(role, transaction);
+              loadSol();
+              return sig;
+            }}
+            onDone={loadSol}
+          />
+        </div>
+      ) : null}
+
+      {tab === "swap" && !pk ? (
+        <p className="px-4 py-4 text-sm text-white/45 sm:px-5">Create this wallet first so user-swap 1% has a destination.</p>
+      ) : null}
+
       {tab === "create" && (
-        <div className="mt-4 space-y-2">
+        <div className="space-y-2 px-4 py-4 sm:px-5">
           {!projectHasPin() || !projectUnlocked() ? (
             <input
               inputMode="numeric"
@@ -315,7 +338,7 @@ function ProjectWalletCard({
               value={pin}
               onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 8))}
               placeholder="PIN 4–8 digits"
-              className="w-full rounded-full border border-violet/30 bg-void px-4 py-2 font-mono text-sm outline-none"
+              className="w-full rounded-full border border-white/10 bg-white/[0.06] px-4 py-2 font-mono text-sm text-white outline-none"
             />
           ) : null}
           <button type="button" disabled={work || busy} onClick={() => void generate()} className="btn-acid w-full rounded-full py-2 text-sm disabled:opacity-40">
@@ -326,7 +349,7 @@ function ProjectWalletCard({
             onChange={(e) => setPhrase(e.target.value)}
             placeholder="Or paste a 12/24-word phrase to import"
             rows={3}
-            className="w-full rounded-2xl border border-violet/30 bg-void px-3 py-2 font-mono text-[11px] outline-none"
+            className="w-full rounded-2xl border border-white/10 bg-white/[0.06] px-3 py-2 font-mono text-[11px] text-white outline-none"
           />
           <button type="button" disabled={work || busy} onClick={() => void importPhrase()} className="btn-ghost w-full rounded-full py-2 text-sm">
             Import phrase
@@ -335,14 +358,14 @@ function ProjectWalletCard({
       )}
 
       {tab === "receive" && pk && (
-        <div className="mt-4 space-y-3">
+        <div className="space-y-3 px-4 py-4 sm:px-5">
           <div className="mx-auto h-40 w-40" dangerouslySetInnerHTML={{ __html: qrSvg(pk, "#14f195") }} />
           <CopyButton text={pk} label="Copy address" copiedLabel="Copied" className="btn-ghost w-full rounded-full py-2 text-sm" />
         </div>
       )}
 
       {tab === "send" && (
-        <div className="mt-4 space-y-2">
+        <div className="space-y-2 px-4 py-4 sm:px-5">
           <Field field="to" value={to} error={sendErr.errors.to} onChange={(v) => { setTo(v.trim()); sendErr.clear("to"); }} placeholder="Destination" />
           <FieldError error={sendErr.errors.to} />
           <Field field="amt" value={amt} error={sendErr.errors.amt} onChange={(v) => { setAmt(v); sendErr.clear("amt"); }} placeholder="SOL amount" />
@@ -353,35 +376,14 @@ function ProjectWalletCard({
         </div>
       )}
 
-      {tab === "swap" && (
-        <div className="mt-4 space-y-2">
-          <div className="flex rounded-full border border-violet/30 p-0.5">
-            {(["buy", "sell"] as const).map((s) => (
-              <button
-                key={s}
-                type="button"
-                onClick={() => setSide(s)}
-                className={`flex-1 rounded-full py-1 font-mono text-[11px] ${side === s ? "bg-acid/20 text-acid" : "text-mute"}`}
-              >
-                {s === "buy" ? "SOL → token" : "token → SOL"}
-              </button>
-            ))}
-          </div>
-          <Field value={mint} onChange={setMint} placeholder="Mint (USDC default)" />
-          <Field value={amt} onChange={setAmt} placeholder={side === "buy" ? "SOL in" : "Token amount"} />
-          <button type="button" disabled={work} onClick={() => void swap()} className="btn-acid w-full rounded-full py-2 text-sm disabled:opacity-40">
-            {work ? "Swapping…" : "Swap"}
-          </button>
-          <p className="font-mono text-[10px] text-mute">Project wallets skip the house 1% so you do not skim yourself. Curve swaps still pay the on-chain 1%.</p>
+      {tab === "backup" && (
+        <div className="px-4 pb-4 sm:px-5">
+          <BackupPanel role={role} seeded={fresh} onDone={() => { setFresh(""); onChange(); }} />
         </div>
       )}
 
-      {tab === "backup" && (
-        <BackupPanel role={role} seeded={fresh} onDone={() => { setFresh(""); onChange(); }} />
-      )}
-
-      {msg && <p className="mt-3 text-sm text-acid">{msg}</p>}
-      {err && <p className="mt-3 text-sm text-blood">{err}</p>}
+      {msg && <p className="px-4 pb-4 text-sm text-acid sm:px-5">{msg}</p>}
+      {err && <p className="px-4 pb-4 text-sm text-blood sm:px-5">{err}</p>}
     </div>
   );
 }
@@ -452,7 +454,7 @@ function BackupPanel({ role, seeded, onDone }: { role: ProjectRole; seeded?: str
         </button>
       ) : (
         <>
-          <ol className="grid grid-cols-2 gap-2 rounded-2xl border border-violet/20 p-3">
+          <ol className="grid grid-cols-2 gap-2 rounded-2xl border border-white/10 p-3">
             {words.map((w, i) => (
               <li key={`${w}-${i}`} className="flex gap-2 font-mono text-[12px] text-ghost">
                 <span className="text-mute">{i + 1}.</span>
@@ -475,7 +477,7 @@ function BackupPanel({ role, seeded, onDone }: { role: ProjectRole; seeded?: str
                   value={typed[i] || ""}
                   onChange={(e) => setTyped((p) => ({ ...p, [i]: e.target.value }))}
                   placeholder={`Word ${i + 1}`}
-                  className="w-full rounded-full border border-violet/30 bg-void px-4 py-2 font-mono text-sm outline-none"
+                  className="w-full rounded-full border border-white/10 bg-white/[0.06] px-4 py-2 font-mono text-sm text-white outline-none"
                 />
               ))}
               <button type="button" onClick={confirmSaved} className="btn-acid w-full rounded-full py-2 text-sm">

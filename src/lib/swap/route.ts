@@ -1,6 +1,6 @@
 /** Live desk router (official xStocks). Pad coins use src/lib/swap/pad.ts instead. */
 import { BOT_SLIPPAGE_BPS, PROTOCOL_FEE_BPS } from "../config";
-import { SWAP_FEE_BPS } from "../launch/curve";
+import { feeOn } from "../launch/curve";
 import { assembleSwapTx } from "./build";
 import { quoteBestRoute, type QuoteResult } from "../pair/jupiter";
 import { SOL_MINT } from "../pair/mints";
@@ -12,10 +12,9 @@ export function protocolFeeSol(clipUsd: number, solUsd: number): number {
   return (clipUsd * PROTOCOL_FEE_BPS) / 10_000 / solUsd;
 }
 
-/** Live in-house skim: 1% of SOL. Widget open-market pays 50/50 owner and treasury. */
+/** Live in-house skim: exact 1% of SOL. Widget open-market pays 50/50 owner and treasury. */
 export function liveSwapFeeSol(solAmount: number): number {
-  if (!(solAmount > 0)) return 0;
-  return Math.floor(solAmount * SWAP_FEE_BPS) / 10_000;
+  return feeOn(solAmount);
 }
 
 export function liveClipFeeSol(clipUsd: number, solUsd: number): number {

@@ -10,7 +10,7 @@ import {
 } from "@solana/web3.js";
 import { rpcUrl } from "../config";
 import { buildSwapTx, type JupiterQuote } from "../pair/jupiter";
-import { boundReferrer, houseFeeIxs, type HouseFeeMode } from "../fees/payout";
+import { boundReferrer, houseFeeIxs, houseFeeMissing, type HouseFeeMode } from "../fees/payout";
 import { simulateUnsignedB64 } from "../solana/simulate";
 
 const IX_URLS = ["https://lite-api.jup.ag/swap/v1/swap-instructions", "https://api.jup.ag/swap/v1/swap-instructions"];
@@ -104,12 +104,18 @@ export async function assemblePhantomSwapTx(opts: {
   priority?: "auto" | "low" | "medium" | "high";
 }): Promise<{ ok: true; transaction: string } | { ok: false; reason: string }> {
   const person = opts.person || opts.owner;
-  const feeIxs = houseFeeIxs({
+  const feeOpts = {
     from: opts.owner,
     feeSol: opts.feeSol || 0,
     referrer: boundReferrer(person),
-    mode: "even",
-  });
+    mode: "even" as const,
+  };
+  const missing = houseFeeMissing(feeOpts);
+  if (missing) return { ok: false, reason: missing };
+  const feeIxs = houseFeeIxs(feeOpts);
+  if ((opts.feeSol || 0) > 0 && !feeIxs.length) {
+    return { ok: false, reason: "House 1% could not be split. Swap refused so that cut is not dropped." };
+  }
   let last = "Could not build the swap.";
   const preferAfter = Boolean(opts.feeAfter);
   for (const asLegacy of [true, false]) {
@@ -129,6 +135,10 @@ export async function assemblePhantomSwapTx(opts: {
       continue;
     }
     if (!feeIxs.length) {
+      if ((opts.feeSol || 0) > 0) {
+        last = "House 1% could not be packed into the swap.";
+        continue;
+      }
       const sim = await simulateUnsignedB64(built.transaction);
       if (sim.ok) return { ok: true, transaction: built.transaction };
       last = sim.reason;
@@ -173,12 +183,18 @@ export async function assembleSwapTx(opts: {
   if (!swap) return { ok: false, reason: "Could not build the swap." };
 
   const ixs: TransactionInstruction[] = [...compute];
-  const feeIxs = houseFeeIxs({
+  const feeOpts = {
     from: opts.owner,
     feeSol: opts.feeSol || 0,
     referrer: boundReferrer(opts.person || opts.owner),
-    mode: opts.mode || "split",
-  });
+    mode: opts.mode || ("split" as const),
+  };
+  const missing = houseFeeMissing(feeOpts);
+  if (missing) return { ok: false, reason: missing };
+  const feeIxs = houseFeeIxs(feeOpts);
+  if ((opts.feeSol || 0) > 0 && !feeIxs.length) {
+    return { ok: false, reason: "House 1% could not be split. Swap refused so that cut is not dropped." };
+  }
   if (feeIxs.length && !opts.feeAfter) ixs.push(...feeIxs);
   ixs.push(...setup, swap);
   if (cleanup) ixs.push(cleanup);

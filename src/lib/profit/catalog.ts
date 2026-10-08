@@ -159,7 +159,8 @@ export function buildProfitDesk(state: AppState): ProfitDesk {
       settlement: "Sent live in the boost tx to the owner and treasury project wallets 50/50.",
     },
   ];
-  const treasurySol = padTreasury + pinSolAccrued + boostSolAccrued + seatSolAccrued + swapSolAccrued;
+  /** swapFeesSol is the gross 1%; owner/treasury halves are already in ownerEarningsSol / treasuryFeesSol. */
+  const treasurySol = padTreasury + pinSolAccrued + boostSolAccrued + seatSolAccrued;
   return {
     treasury,
     ownerWallet,

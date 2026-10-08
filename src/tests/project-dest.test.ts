@@ -18,10 +18,17 @@ describe("project protocol wallets", () => {
     const src = readFileSync(path.join(process.cwd(), "src/app/api/swap/build/route.ts"), "utf8");
     assert.match(src, /isProjectProtocolWallet/);
     assert.match(src, /skipHouse/);
+    const quote = readFileSync(path.join(process.cwd(), "src/app/api/swap/quote/route.ts"), "utf8");
+    assert.match(quote, /isProjectProtocolWallet/);
+    assert.match(quote, /skipHouse/);
     const open = readFileSync(path.join(process.cwd(), "src/lib/swap/open.ts"), "utf8");
     assert.match(open, /skipHouse/);
     const wallets = readFileSync(path.join(process.cwd(), "src/components/admin/sections/Wallets.tsx"), "utf8");
     assert.match(wallets, /\/api\/admin\/claim/);
     assert.match(wallets, /signAndSendProjectTx/);
+    const projectUi = readFileSync(path.join(process.cwd(), "src/components/admin/ProjectWallets.tsx"), "utf8");
+    assert.match(projectUi, /SwapWidget/);
+    assert.match(projectUi, /formatSol/);
+    assert.match(projectUi, /\/api\/sol\/balance/);
   });
 });

@@ -82,9 +82,14 @@ export function houseFeeLegs(opts: HouseFeeOpts): HouseLeg[] {
   const owner = (opts.owner && isSolanaAddress(opts.owner) ? opts.owner : ownerAddress()).trim();
   const treasury = (opts.treasury && isSolanaAddress(opts.treasury) ? opts.treasury : treasuryAddress()).trim();
   const rows: HouseLeg[] = [];
+  let dustLamports = 0;
   const add = (to: string, sol: number) => {
     const lamports = Math.round(sol * LAMPORTS_PER_SOL);
-    if (!to || !isSolanaAddress(to) || lamports < FEE_DUST_LAMPORTS || to === opts.from) return;
+    if (!to || !isSolanaAddress(to) || lamports <= 0 || to === opts.from) return;
+    if (lamports < FEE_DUST_LAMPORTS) {
+      dustLamports += lamports;
+      return;
+    }
     const hit = rows.find((r) => r.to === to);
     if (hit) hit.lamports += lamports;
     else rows.push({ to, lamports });
@@ -94,16 +99,52 @@ export function houseFeeLegs(opts: HouseFeeOpts): HouseLeg[] {
     const half = evenShare(feeSol);
     add(owner, half.owner);
     add(treasury, half.treasury);
-    return rows.filter((r) => r.lamports >= FEE_DUST_LAMPORTS);
+  } else {
+    add(destVault(creator), s.dev);
+    add(destVault(referrer), s.referral);
+    if (mode === "hold") add(treasury, s.owner + s.treasury);
+    else {
+      add(owner, s.owner);
+      add(treasury, s.treasury);
+    }
   }
-  add(destVault(creator), s.dev);
-  add(destVault(referrer), s.referral);
-  if (mode === "hold") add(treasury, s.owner + s.treasury);
-  else {
-    add(owner, s.owner);
-    add(treasury, s.treasury);
+  if (dustLamports > 0 && isSolanaAddress(treasury) && treasury !== opts.from) {
+    const hit = rows.find((r) => r.to === treasury);
+    if (hit) hit.lamports += dustLamports;
+    else if (dustLamports >= FEE_DUST_LAMPORTS) rows.push({ to: treasury, lamports: dustLamports });
+    else if (rows.length) rows[0]!.lamports += dustLamports;
   }
   return rows.filter((r) => r.lamports >= FEE_DUST_LAMPORTS);
+}
+
+/**
+ * Open-market 1% must land. If owner or treasury cannot take their cut, refuse the swap
+ * instead of sending a bare Jupiter tx that drops the fee.
+ */
+export function houseFeeMissing(opts: HouseFeeOpts): string | null {
+  const feeSol = Number(opts.feeSol) || 0;
+  if (!(feeSol > 0)) return null;
+  if (!isSolanaAddress(opts.from)) return "Connect a wallet first.";
+  const owner = (opts.owner && isSolanaAddress(opts.owner) ? opts.owner : ownerAddress()).trim();
+  const treasury = (opts.treasury && isSolanaAddress(opts.treasury) ? opts.treasury : treasuryAddress()).trim();
+  if (!isSolanaAddress(owner) || !isSolanaAddress(treasury)) {
+    return "Set owner and treasury project wallets so the 1% can be split.";
+  }
+  const legs = houseFeeLegs(opts);
+  const mode = opts.mode || "split";
+  const need =
+    mode === "hold"
+      ? [treasury].filter((d) => d !== opts.from && isSolanaAddress(d))
+      : [...new Set([owner, treasury].filter((d) => d !== opts.from && isSolanaAddress(d)))];
+  for (const d of need) {
+    if (!legs.some((l) => l.to === d)) {
+      return "House 1% could not be sent to owner and treasury. Swap refused so that cut is not dropped.";
+    }
+  }
+  if (need.length && !legs.length) {
+    return "House 1% could not be split. Swap refused so that cut is not dropped.";
+  }
+  return null;
 }
 
 export function houseFeeIxs(opts: HouseFeeOpts): TransactionInstruction[] {

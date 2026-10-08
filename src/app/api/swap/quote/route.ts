@@ -3,10 +3,13 @@ import { z } from "zod";
 import { clientIp, isSolanaAddress, rateLimit } from "@/lib/security";
 import { SOL_MINT } from "@/lib/pair/mints";
 import { quoteAnySwap } from "@/lib/swap/open";
+import { isProjectProtocolWallet } from "@/lib/projectDest";
+import { readyState } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
 const Body = z.object({
+  owner: z.string().optional(),
   mint: z.string().optional(),
   side: z.enum(["buy", "sell"]).optional(),
   inputMint: z.string().optional(),
@@ -30,11 +33,14 @@ export async function POST(req: NextRequest) {
   if (inputMint === outputMint) {
     return NextResponse.json({ error: "same_mint", message: "Pick two different tokens." }, { status: 400 });
   }
+  await readyState();
+  const skipHouse = Boolean(b.owner && isSolanaAddress(b.owner) && isProjectProtocolWallet(b.owner));
   const q = await quoteAnySwap({
     inputMint,
     outputMint,
     amount: b.amount,
     slippageBps: b.slippageBps,
+    skipHouse,
   });
   if (!q.ok) return NextResponse.json({ error: q.reason }, { status: 400 });
   return NextResponse.json({

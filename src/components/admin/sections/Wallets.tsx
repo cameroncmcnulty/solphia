@@ -13,6 +13,7 @@ import { ProjectWallets } from "../ProjectWallets";
 import { SphaSection } from "./Spha";
 import { Field, Mini, shortPk } from "../ui";
 import { BuybackPanel } from "../BuybackPanel";
+import { formatSol, formatSolUsd } from "@/lib/formatSol";
 
 type BalRow = { pk: string; sol: number };
 type Pack = {
@@ -33,10 +34,7 @@ type Pack = {
 const PCTS = [10, 25, 50, 100] as const;
 
 function solStr(n: number) {
-  if (!(n > 0)) return "0";
-  if (n >= 100) return n.toFixed(2);
-  if (n >= 1) return n.toFixed(3);
-  return n.toFixed(4);
+  return formatSol(n);
 }
 
 function tokStr(n: number) {
@@ -48,8 +46,8 @@ function tokStr(n: number) {
 }
 
 function usdStr(sol: number, px: number) {
-  if (!(px > 0) || !(sol > 0)) return "";
-  return ` · $${(sol * px).toFixed(2)}`;
+  const u = formatSolUsd(sol, px);
+  return u ? ` · ${u}` : "";
 }
 
 function explorer(pk: string) {
@@ -262,6 +260,7 @@ export function WalletsSection() {
       </div>
 
       <ProjectWallets
+        solUsd={solUsd}
         balances={{
           [pack?.treasury.pk || ""]: pack?.treasury.sol ?? 0,
           [pack?.owner.pk || ""]: pack?.owner.sol ?? 0,
@@ -657,8 +656,8 @@ function ProfitsPanel() {
   const hot = Boolean(data.treasuryHot);
   function money(sol: number) {
     if (!(sol > 0)) return "0 SOL";
-    const usd = solUsd > 0 ? ` · $${(sol * solUsd).toFixed(2)}` : "";
-    return `${sol.toFixed(4)} SOL${usd}`;
+    const usd = formatSolUsd(sol, solUsd);
+    return `${formatSol(sol)} SOL${usd ? ` · ${usd}` : ""}`;
   }
   async function claimPad(wallet: "treasury" | "owner") {
     setClaimErr("");
@@ -717,7 +716,7 @@ function ProfitsPanel() {
           <p className="mt-1 text-sm text-mute">
             25% of curve fees, 50% of widget open-market / boosts / pins, live in this project wallet.
             {claim?.dbcPartnerSol
-              ? ` ${claim.dbcPartnerSol.toFixed(4)} SOL still sitting in pad pools — claim with the treasury project wallet.`
+              ? ` ${formatSol(claim.dbcPartnerSol)} SOL still sitting in pad pools — claim with the treasury project wallet.`
               : hot
                 ? " Optional cron can harvest pad partner fees into this treasury."
                 : " Pad partner fees claim with this treasury project wallet. Then send the owner share."}
@@ -788,7 +787,7 @@ function ProfitsPanel() {
                   <div className="text-ghost">{s.wallet === "treasury" ? "Treasury" : s.wallet === "owner" ? "Owner" : s.wallet === "creator" ? "Creator" : "Inviter"}</div>
                   <div className="break-all font-mono text-[10px] text-mute">{s.walletPk && s.walletPk.length > 20 ? shortPk(s.walletPk, 4) : s.walletPk}</div>
                 </td>
-                <td className="py-2.5 pr-3 font-mono text-[12px] text-ghost">{s.accruedSol > 0 ? `${s.accruedSol.toFixed(4)} SOL` : "—"}</td>
+                <td className="py-2.5 pr-3 font-mono text-[12px] text-ghost">{s.accruedSol > 0 ? `${formatSol(s.accruedSol)} SOL` : "—"}</td>
                 <td className="py-2.5 text-[12px] text-mute">{s.settlement}</td>
               </tr>
             ))}

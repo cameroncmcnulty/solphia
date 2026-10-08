@@ -81,12 +81,14 @@ describe("open market swap fees", () => {
     assert.match(swapBuild, /creditSwapHold/);
     assert.match(src, /Not enough SOL in this wallet/);
     assert.equal(liveSwapFeeSol(1), 0.01);
+    assert.equal(liveSwapFeeSol(0.015), 0.00015);
+    assert.match(phantom, /houseFeeMissing/);
     const pair = readFileSync(path.join(process.cwd(), "src/app/api/pair/swap/route.ts"), "utf8");
     assert.match(pair, /assembleSwapTx/);
     assert.equal(/assemblePhantomSwapTx/.test(pair), false);
     const widget = readFileSync(path.join(process.cwd(), "src/components/SwapWidget.tsx"), "utf8");
     assert.equal(widget.includes('useState("0.25")'), false);
-    assert.match(widget, /id="swap-widget"/);
+    assert.match(widget, /id=\{widgetId\}/);
     assert.match(widget, /function clearPayAmount/);
     assert.match(widget, /notice\?\.at/);
     assert.match(widget, /maxPayString\(spendable/);

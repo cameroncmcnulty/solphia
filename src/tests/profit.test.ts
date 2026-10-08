@@ -94,4 +94,19 @@ describe("profit catalog", () => {
     assert.equal(p.claimable.ownerReadySol, 0);
     assert.equal(p.accrued.ownerSol, 0.4);
   });
+
+  it("does not double-count booked swap 1% into the treasury total", () => {
+    const s = emptyState();
+    s.launch = {
+      ...s.launch!,
+      ownerEarningsSol: 0.005,
+      treasuryFeesSol: 0.005,
+      swapFeesSol: 0.01,
+      coins: [],
+      accounts: {},
+    };
+    const p = buildProfitDesk(s);
+    assert.equal(p.accrued.treasurySol, 0.005);
+    assert.equal(p.streams.find((row) => row.id === "swap")?.accruedSol, 0.01);
+  });
 });

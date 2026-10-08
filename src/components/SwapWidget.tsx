@@ -203,6 +203,9 @@ export function SwapWidget({
   tokens,
   onDone,
   onMint,
+  signTx,
+  note,
+  widgetId = "swap-widget",
 }: {
   owner?: string | null;
   title?: string;
@@ -213,6 +216,10 @@ export function SwapWidget({
   tokens?: SwapToken[];
   onDone?: () => void;
   onMint?: (mint: string) => void;
+  /** Admin / project-wallet signer. When set, Phantom is not used. */
+  signTx?: (transaction: string) => Promise<string>;
+  note?: string;
+  widgetId?: string;
 }) {
   const siteOwner = useOwner();
   const vault = useActiveWallet();
@@ -255,7 +262,7 @@ export function SwapWidget({
   function stayOnCard() {
     markActionSpot("swap-widget");
     const go = (n = 0) => {
-      const el = rootRef.current || document.getElementById("swap-widget");
+      const el = rootRef.current || document.getElementById(widgetId);
       if (el) {
         el.scrollIntoView({ behavior: "smooth", block: "start" });
         return;
@@ -274,9 +281,9 @@ export function SwapWidget({
   const spendable = spendableAmount(payBal, pay.mint);
   const short = Boolean(pk && balKnown && amountExceedsBalance(payNum, spendable));
   const out = quote?.outAmount ?? null;
-  const fees = feeBreakout(quote?.feeSol || (payNum > 0 ? payNum * 0.01 : 0), bonded);
+  const fees = feeBreakout(quote ? quote.feeSol : payNum > 0 ? payNum * 0.01 : 0, bonded);
   const minOut = out != null ? minReceived(out, slipBps) : 0;
-  const embedded = vault?.kind === "embedded";
+  const embedded = Boolean(signTx) || vault?.kind === "embedded";
 
   const showNotice = useCallback((n: SwapNotice) => {
     setNotice(saveSwapNotice(n));
@@ -460,6 +467,7 @@ export function SwapWidget({
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
+          owner: pk || undefined,
           inputMint: pay.mint,
           outputMint: recv.mint,
           amount: payNum,
@@ -603,19 +611,21 @@ export function SwapWidget({
       });
       const j = await r.json();
       if (!r.ok) throw new Error(typeof j.error === "string" ? j.error : "Could not build the swap.");
-      const sig = await signPhantomAndSend(
-        j.transaction,
-        undefined,
-        {
-          kind: "swap",
-          owner: pk,
-          mint: recv.mint,
-          side: pay.mint === SOL_MINT ? "buy" : "sell",
-          sol: pay.mint === SOL_MINT ? payNum : undefined,
-          tokens: pay.mint === SOL_MINT ? undefined : payNum,
-        },
-        { skipPreflight: false },
-      );
+      const sig = signTx
+        ? await signTx(j.transaction)
+        : await signPhantomAndSend(
+            j.transaction,
+            undefined,
+            {
+              kind: "swap",
+              owner: pk,
+              mint: recv.mint,
+              side: pay.mint === SOL_MINT ? "buy" : "sell",
+              sol: pay.mint === SOL_MINT ? payNum : undefined,
+              tokens: pay.mint === SOL_MINT ? undefined : payNum,
+            },
+            { skipPreflight: false },
+          );
       liveRef.current = false;
       clearPayAmount();
       stayOnCard();
@@ -628,7 +638,7 @@ export function SwapWidget({
       }).catch(() => {});
       onDone?.();
     } catch (e) {
-      if (isPhantomRedirect(e)) {
+      if (!signTx && isPhantomRedirect(e)) {
         setReview(false);
         showNotice({
           kind: "pending",
@@ -658,7 +668,7 @@ export function SwapWidget({
         : `Swap ${tick(pay.symbol) || pay.symbol} → ${tick(recv.symbol) || recv.symbol}`;
 
   return (
-    <div ref={rootRef} id="swap-widget" className="relative z-20 w-full min-w-0 scroll-mt-20">
+    <div ref={rootRef} id={widgetId} className="relative z-20 w-full min-w-0 scroll-mt-20">
       <div className="overflow-hidden rounded-[28px] border border-white/10 bg-[#0b0714] shadow-[0_20px_60px_rgba(0,0,0,0.45)]">
         <div className="flex items-center justify-between gap-3 px-4 pb-1 pt-4 sm:px-5">
           <p className="text-[18px] font-semibold tracking-tight text-white">Swap</p>
@@ -808,11 +818,15 @@ export function SwapWidget({
               <div className="flex justify-between"><span>Route</span><span>{quote.via === "curve" ? "Solphia curve" : "Jupiter"}</span></div>
               <div className="flex justify-between"><span>Price impact</span><span>{(quote.impactPct * 100).toFixed(2)}%</span></div>
               <div className="flex justify-between"><span>Min received</span><span>{recvIsSol ? fmtSol(minOut, 4) : fmtTok(minOut)}</span></div>
-              <div className="flex justify-between text-white/80"><span>Fee 1.00%</span><span>{fmtSol(fees.totalSol, 5)} SOL</span></div>
-              <div className="flex justify-between pl-2"><span>Creator 0.50%</span><span>{fmtSol(fees.creatorSol, 5)}</span></div>
-              <div className="flex justify-between pl-2"><span>House 0.50%</span><span>{fmtSol(fees.houseSol, 5)}</span></div>
-              {bonded ? (
-                <div className="flex justify-between pl-4 text-acid/80"><span>Invite (inside house)</span><span>{fmtSol(fees.inviteSol, 5)}</span></div>
+              {fees.totalSol > 0 ? (
+                <>
+                  <div className="flex justify-between text-white/80"><span>Fee 1.00%</span><span>{fmtSol(fees.totalSol, 5)} SOL</span></div>
+                  <div className="flex justify-between pl-2"><span>Creator 0.50%</span><span>{fmtSol(fees.creatorSol, 5)}</span></div>
+                  <div className="flex justify-between pl-2"><span>House 0.50%</span><span>{fmtSol(fees.houseSol, 5)}</span></div>
+                  {bonded ? (
+                    <div className="flex justify-between pl-4 text-acid/80"><span>Invite (inside house)</span><span>{fmtSol(fees.inviteSol, 5)}</span></div>
+                  ) : null}
+                </>
               ) : null}
             </div>
           ) : null}
@@ -876,7 +890,7 @@ export function SwapWidget({
             </button>
           )}
           <p className="mt-3 text-center text-[13px] text-white/45">
-            {embedded ? "Signs in-app. Keys stay on this device." : "Tokens land in the active wallet."}
+            {note || (embedded ? "Signs in-app. Keys stay on this device." : "Tokens land in the active wallet.")}
           </p>
           <div className="mt-4 flex items-center justify-center gap-2 text-white/35">
             <SphaMark className="h-5 w-5 opacity-80" />
@@ -946,7 +960,13 @@ export function SwapWidget({
       {review ? (
         <WalletSheet
           title="Review swap"
-          subtitle={embedded ? "Sign in-app. Solphia never holds this key." : "Phantom will pop up to sign."}
+          subtitle={
+            signTx
+              ? "Unlock the project wallet to sign. Keys stay on this device."
+              : embedded
+                ? "Sign in-app. Solphia never holds this key."
+                : "Phantom will pop up to sign."
+          }
           onClose={() => !busy && setReview(false)}
         >
           <div className="space-y-1 font-mono text-[12px] text-white/70">
@@ -956,10 +976,14 @@ export function SwapWidget({
             <div className="flex justify-between"><span>Min received</span><span>{recvIsSol ? fmtSol(minOut, 4) : fmtTok(minOut)}</span></div>
             <div className="flex justify-between"><span>Slippage</span><span>{slipBps / 100}%</span></div>
             <div className="flex justify-between"><span>Priority</span><span>{priority}</span></div>
-            <div className="flex justify-between text-white"><span>Fee 1.00%</span><span>{fmtSol(fees.totalSol, 5)} SOL</span></div>
-            <div className="flex justify-between pl-2"><span>Creator 0.50%</span><span>{fmtSol(fees.creatorSol, 5)}</span></div>
-            <div className="flex justify-between pl-2"><span>House 0.50%</span><span>{fmtSol(fees.houseSol, 5)}</span></div>
-            {bonded ? <div className="flex justify-between pl-4 text-acid/80"><span>Invite (inside house)</span><span>{fmtSol(fees.inviteSol, 5)}</span></div> : null}
+            {fees.totalSol > 0 ? (
+              <>
+                <div className="flex justify-between text-white"><span>Fee 1.00%</span><span>{fmtSol(fees.totalSol, 5)} SOL</span></div>
+                <div className="flex justify-between pl-2"><span>Creator 0.50%</span><span>{fmtSol(fees.creatorSol, 5)}</span></div>
+                <div className="flex justify-between pl-2"><span>House 0.50%</span><span>{fmtSol(fees.houseSol, 5)}</span></div>
+                {bonded ? <div className="flex justify-between pl-4 text-acid/80"><span>Invite (inside house)</span><span>{fmtSol(fees.inviteSol, 5)}</span></div> : null}
+              </>
+            ) : null}
           </div>
           <button
             type="button"
@@ -967,7 +991,7 @@ export function SwapWidget({
             onClick={() => void go()}
             className="btn-acid mt-4 min-h-[48px] w-full rounded-full disabled:opacity-40"
           >
-            {busy ? "Signing…" : embedded ? "Sign in Solphia" : "Sign in Phantom"}
+            {busy ? "Signing…" : signTx ? "Sign swap" : embedded ? "Sign in Solphia" : "Sign in Phantom"}
           </button>
         </WalletSheet>
       ) : null}
