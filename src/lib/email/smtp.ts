@@ -3,6 +3,7 @@ import tls from "node:tls";
 import dns from "node:dns";
 import { once } from "node:events";
 import { mailHeloName } from "./dkim-public";
+import { domainOf } from "./rfc5322";
 
 try {
   dns.setDefaultResultOrder("ipv4first");
@@ -51,6 +52,17 @@ export function mailWorkerSecret(): string {
 
 export function mailHelo(): string {
   return (process.env.SOLPHIA_MAIL_HELO || mailHeloName()).trim() || mailHeloName();
+}
+
+/** Worker POSTs envelope only — recover the MX domain from RCPT TO. */
+export function resolveMxDomain(input: Pick<SmtpSendInput, "mxDomain" | "envelopeTo">): string {
+  const explicit = (input.mxDomain || "").trim();
+  if (explicit) return stripDot(explicit);
+  for (const rcpt of input.envelopeTo || []) {
+    const d = domainOf(rcpt);
+    if (d) return d;
+  }
+  return "";
 }
 
 /** Direct-to-MX uses 25. 587 is a fallback when 25 is blocked (Vercel). */
@@ -331,7 +343,7 @@ export async function smtpSend(input: SmtpSendInput): Promise<{ host: string; po
   if (override && isThirdPartySmarthost(override)) {
     throw new Error("Solphia does not send through a third-party mail host.");
   }
-  const hosts = override ? [stripDot(override)] : await lookupMx(input.mxDomain || "");
+  const hosts = override ? [stripDot(override)] : await lookupMx(resolveMxDomain(input));
   if (!hosts.length) throw new Error("no_mx");
   const limited = process.env.VERCEL ? hosts.slice(0, 1) : hosts;
   const ports = mailPorts(input.port);

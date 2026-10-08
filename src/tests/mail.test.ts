@@ -15,7 +15,7 @@ import {
 import { deliverSolphiaMail } from "../lib/email/mta";
 import { assembleRaw, buildMime, envelopeAddr, quotedPrintable } from "../lib/email/rfc5322";
 import { mailConfigured, mailerKind, queueEmail } from "../lib/email/send";
-import { isThirdPartySmarthost, smtpSend, stuffDots } from "../lib/email/smtp";
+import { isThirdPartySmarthost, resolveMxDomain, smtpSend, stuffDots } from "../lib/email/smtp";
 import { emptyState } from "../lib/store";
 
 function startFakeSmtp() {
@@ -214,6 +214,12 @@ describe("solphia mail", () => {
       put("SOLPHIA_MAIL_PORT", prev.port);
       await fake.close();
     }
+  });
+
+  it("recovers the MX domain from RCPT TO when the worker omits mxDomain", () => {
+    assert.equal(resolveMxDomain({ envelopeTo: ["you@gmail.com"] }), "gmail.com");
+    assert.equal(resolveMxDomain({ mxDomain: "example.com", envelopeTo: ["you@gmail.com"] }), "example.com");
+    assert.equal(resolveMxDomain({ envelopeTo: [] }), "");
   });
 
   it("refuses Gmail and SES as a smarthost and stuffs leading dots", () => {
