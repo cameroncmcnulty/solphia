@@ -20,7 +20,11 @@ type AdminContextValue = {
   otpPending: boolean;
   otpEmail: string;
   otpHint: string;
+  totpSetup: boolean;
+  totpQr: string;
+  totpBackupCodes: string[];
   verifyOtp: () => Promise<void>;
+  confirmTotp: () => Promise<void>;
   resendOtp: () => Promise<void>;
   now: number;
   streamOn: boolean;
@@ -73,6 +77,9 @@ export function AdminProvider({ children }: { children: ReactNode }) {
   const [otpPending, setOtpPending] = useState(false);
   const [otpEmail, setOtpEmail] = useState("");
   const [otpHint, setOtpHint] = useState("");
+  const [totpSetup, setTotpSetup] = useState(false);
+  const [totpQr, setTotpQr] = useState("");
+  const [totpBackupCodes, setTotpBackupCodes] = useState<string[]>([]);
   const [data, setData] = useState<AdminDesk | null>(null);
   const [authed, setAuthed] = useState(false);
   const [err, setErr] = useState("");
@@ -148,15 +155,24 @@ export function AdminProvider({ children }: { children: ReactNode }) {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ secret, action: "start" }),
       });
-      const j = (await r.json().catch(() => ({}))) as { pending?: boolean; email?: string; message?: string; devCode?: string };
+      const j = (await r.json().catch(() => ({}))) as {
+        pending?: boolean;
+        setup?: boolean;
+        totp?: boolean;
+        qr?: string;
+        backupCodes?: string[];
+        message?: string;
+      };
       if (!r.ok) {
         setErr(j.message || "Wrong password.");
         return;
       }
       if (j.pending) {
         setOtpPending(true);
-        setOtpEmail(typeof j.email === "string" ? j.email : "");
-        setOtpHint(j.devCode ? `Dev preview code: ${j.devCode}` : "We emailed a 6-digit code. It expires in 15 minutes.");
+        setTotpSetup(Boolean(j.setup));
+        setTotpQr(j.qr || "");
+        setTotpBackupCodes(j.backupCodes || []);
+        setOtpHint(j.setup ? "Scan the QR, save the 8 backup codes, then enter the 6-digit code." : "Enter the 6-digit authenticator code, or one unused backup code.");
         return;
       }
       await reload();
@@ -168,14 +184,15 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     }
   }, [reload, secret]);
 
-  const verifyOtp = useCallback(async () => {
+  const finishAdmin = useCallback(
+    async (action: "verify" | "confirm") => {
     setBusy(true);
     setErr("");
     try {
       const r = await fetch("/api/admin/login", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action: "verify", otp }),
+        body: JSON.stringify({ action, otp, code: otp }),
       });
       const j = (await r.json().catch(() => ({}))) as { message?: string };
       if (!r.ok) {
@@ -192,6 +209,9 @@ export function AdminProvider({ children }: { children: ReactNode }) {
       setBusy(false);
     }
   }, [otp, reload]);
+
+  const verifyOtp = useCallback(() => finishAdmin("verify"), [finishAdmin]);
+  const confirmTotp = useCallback(() => finishAdmin("confirm"), [finishAdmin]);
 
   const resendOtp = useCallback(async () => {
     setBusy(true);
@@ -226,6 +246,9 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     setOtpPending(false);
     setOtpEmail("");
     setOtpHint("");
+    setTotpSetup(false);
+    setTotpQr("");
+    setTotpBackupCodes([]);
   }, []);
 
   const patch = useCallback(async (body: Record<string, unknown>) => {
@@ -311,7 +334,11 @@ export function AdminProvider({ children }: { children: ReactNode }) {
       otpPending,
       otpEmail,
       otpHint,
+      totpSetup,
+      totpQr,
+      totpBackupCodes,
       verifyOtp,
+      confirmTotp,
       resendOtp,
       now,
       streamOn,
@@ -361,7 +388,11 @@ export function AdminProvider({ children }: { children: ReactNode }) {
       otpPending,
       otpEmail,
       otpHint,
+      totpSetup,
+      totpQr,
+      totpBackupCodes,
       verifyOtp,
+      confirmTotp,
       resendOtp,
       now,
       streamOn,

@@ -17,6 +17,7 @@ export const KEYS = {
   shill: "solphia:shill",
   mail: "solphia:mail",
   adminOtp: "solphia:admin-otp",
+  adminTotp: "solphia:admin-totp",
   signupOtp: "solphia:signup-otp",
   signer: (owner: string) => `solphia:signer:${owner}`,
   phjob: (id: string) => `solphia:ph:${id}`,

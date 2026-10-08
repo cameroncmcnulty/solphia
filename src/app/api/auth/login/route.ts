@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { loginEmail, publicAccount } from "@/lib/auth/accounts";
 import { verifyBot } from "@/lib/auth/challenge";
-import { setAccountCookie } from "@/lib/auth/session";
+import { clearAccountCookie, setAccountCookie, setTotpPendingCookie } from "@/lib/auth/session";
+import { totpEnabled } from "@/lib/auth/totp";
 import { clientIp, rateLimit } from "@/lib/security";
 import { mutateState } from "@/lib/store";
 
@@ -34,6 +35,12 @@ export async function POST(req: NextRequest) {
     const message =
       out.error === "verify_email" ? "Verify this email with the one-time code we send." : out.error;
     return NextResponse.json({ error: out.error, message }, { status });
+  }
+  if (totpEnabled(out.account)) {
+    const res = NextResponse.json({ ok: true, totp: true });
+    clearAccountCookie(res);
+    setTotpPendingCookie(res, out.account.id);
+    return res;
   }
   const res = NextResponse.json({ ok: true, account: publicAccount(out.account) });
   setAccountCookie(res, out.account.id);

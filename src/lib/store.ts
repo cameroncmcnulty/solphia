@@ -181,6 +181,7 @@ export function emptyState(): AppState {
     sphaDbcConfig: "",
     adminOtpEmail: DEFAULT_ADMIN_OTP_EMAIL,
     adminOtpPending: null,
+    adminTotp: null,
     circle: emptyCircle(),
     shill: emptyShill(),
     mail: emptyMail(),
@@ -253,6 +254,7 @@ function hydrateFromRaw(raw: AppState): AppState {
     sphaDbcConfig: raw.sphaDbcConfig || "",
     adminOtpEmail: raw.adminOtpEmail || DEFAULT_ADMIN_OTP_EMAIL,
     adminOtpPending: raw.adminOtpPending || null,
+    adminTotp: raw.adminTotp && typeof raw.adminTotp === "object" ? raw.adminTotp : null,
     circle: ensureCircle(raw.circle),
     shill: ensureShill(raw.shill),
     mail: ensureMail(raw.mail),
@@ -317,11 +319,14 @@ function opsView(state: AppState): AppState {
 async function overlayAuthOtps(state: AppState) {
   if (!durableConfigured()) return;
   try {
-    const [admin, signup] = await kvMGetJson([KEYS.adminOtp, KEYS.signupOtp]);
+    const [admin, signup, totp] = await kvMGetJson([KEYS.adminOtp, KEYS.signupOtp, KEYS.adminTotp]);
     if (admin && typeof admin === "object" && typeof (admin as AdminOtpPending).otpHash === "string") {
       state.adminOtpPending = admin as AdminOtpPending;
     }
     if (Array.isArray(signup)) state.signupPending = signup as SignupPending[];
+    if (totp && typeof totp === "object" && !state.adminTotp?.totpEnabledAt) {
+      state.adminTotp = totp as AppState["adminTotp"];
+    }
   } catch {
     /* keep mem */
   }

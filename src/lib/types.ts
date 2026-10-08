@@ -496,6 +496,8 @@ export interface AppState {
   adminOtpEmail?: string;
   /** Hashed pending admin login code. Never plaintext. */
   adminOtpPending?: import("./admin/otp").AdminOtpPending | null;
+  /** Admin dashboard authenticator. Secret is sealed. */
+  adminTotp?: import("./auth/totp").TotpSlot | null;
   alerts: AlertEvent[];
   emails: EmailRecord[];
   audit: AuditEvent[];

@@ -5,6 +5,8 @@ const secret = process.env.ADMIN_SECRET || "solphia-dev-only";
 export const SESSION_COOKIE = "solphia_session";
 export const SESSION_MAX_AGE = 60 * 60 * 24 * 90;
 export const OAUTH_COOKIE = "solphia_oauth";
+export const TOTP_COOKIE = "solphia_2fa";
+const TOTP_MAX_AGE = 10 * 60;
 
 export function sessionCookieOpts() {
   return {
@@ -44,6 +46,29 @@ export function setAccountCookie(res: NextResponse, accountId: string) {
 
 export function clearAccountCookie(res: NextResponse) {
   res.cookies.set(SESSION_COOKIE, "", { ...sessionCookieOpts(), maxAge: 0 });
+}
+
+export function totpPendingToken(accountId: string): string {
+  return signToken(`2fa:${accountId}:${Date.now()}`, secret);
+}
+
+export function readTotpPendingId(req: NextRequest): string | null {
+  const raw = req.cookies.get(TOTP_COOKIE)?.value;
+  if (!raw) return null;
+  const payload = verifyToken(raw, secret);
+  if (!payload?.startsWith("2fa:")) return null;
+  const parts = payload.split(":");
+  const at = Number(parts[2] || 0);
+  if (!at || Date.now() - at > TOTP_MAX_AGE * 1000) return null;
+  return parts[1] || null;
+}
+
+export function setTotpPendingCookie(res: NextResponse, accountId: string) {
+  res.cookies.set(TOTP_COOKIE, totpPendingToken(accountId), shortCookieOpts(TOTP_MAX_AGE));
+}
+
+export function clearTotpPendingCookie(res: NextResponse) {
+  res.cookies.set(TOTP_COOKIE, "", { ...shortCookieOpts(0), maxAge: 0 });
 }
 
 export function signOauthState(tos: boolean, privacy: boolean): string {

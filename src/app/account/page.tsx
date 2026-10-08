@@ -14,6 +14,8 @@ import { RankBadge } from "@/components/RankBadge";
 import { ProfileOverlay } from "@/components/ProfileOverlay";
 import { INTRO_MAX } from "@/lib/rank/engine";
 import { isSolanaAddress } from "@/lib/wallet/addr";
+import { peekAccount, AUTH_EVENT, type PublicAccount } from "@/lib/auth/client";
+import { TotpSettings } from "@/components/auth/TotpSettings";
 
 type Invited = { pubkey: string; launched: number };
 type Coin = {
@@ -89,6 +91,7 @@ export default function AccountPage() {
   const [ownerBal, setOwnerBal] = useState(0);
   const [tradeBal, setTradeBal] = useState(0);
   const fileRef = useRef<HTMLInputElement>(null);
+  const [loginAccount, setLoginAccount] = useState<PublicAccount | null>(() => peekAccount());
 
   const load = useCallback(async () => {
     if (!owner) return;
@@ -100,6 +103,13 @@ export default function AccountPage() {
     const b = await fetch(`/api/launch/boost?pubkey=${encodeURIComponent(owner)}`).then((r) => r.json());
     if (b.mine) setBoosts({ live: b.mine.live || [], queued: b.mine.queued || [] });
   }, [owner]);
+
+  useEffect(() => {
+    const sync = () => setLoginAccount(peekAccount());
+    sync();
+    window.addEventListener(AUTH_EVENT, sync);
+    return () => window.removeEventListener(AUTH_EVENT, sync);
+  }, []);
 
   useEffect(() => {
     setTab(tabOf());
@@ -181,6 +191,12 @@ export default function AccountPage() {
         <div className="pump-wrap py-16">
         <h1 className="pump-h1">Account</h1>
         <p className="pump-p mt-2">Connect a wallet to manage PFP, launches, and referrals. Rank and profile follow that address.</p>
+        {loginAccount ? (
+          <section className="panel-bubble mt-6 overflow-hidden rounded-3xl p-5">
+            <h2 className="text-[22px] font-semibold tracking-tight text-white">Two-factor auth</h2>
+            <TotpSettings account={loginAccount} />
+          </section>
+        ) : null}
         <div className="mt-6">
           <WalletConnect />
         </div>
@@ -234,6 +250,12 @@ export default function AccountPage() {
 
       {tab === "overview" && (
         <div className="mt-6 space-y-4">
+          {loginAccount ? (
+            <section className="panel-bubble overflow-hidden rounded-3xl p-5">
+              <h2 className="text-[22px] font-semibold tracking-tight text-white">Two-factor auth</h2>
+              <TotpSettings account={loginAccount} />
+            </section>
+          ) : null}
           <section className="panel-bubble overflow-hidden rounded-3xl p-5">
             <h2 className="text-[22px] font-semibold tracking-tight text-white">Username</h2>
             <p className="mt-1 text-sm text-mute">Unique on Solphia. 3–20 characters, start with a letter. Letters, numbers, underscore.</p>

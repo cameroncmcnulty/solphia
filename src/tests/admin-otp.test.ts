@@ -50,13 +50,16 @@ describe("admin otp", () => {
     assert.match(html, /Dashboard one-time code/);
   });
 
-  it("writes the admin code to its own durable key so verify can run on another instance", () => {
+  it("writes the admin authenticator to its own durable key so verify can run on another instance", () => {
     const persist = readFileSync(join(process.cwd(), "src/lib/persist.ts"), "utf8");
     const login = readFileSync(join(process.cwd(), "src/app/api/admin/login/route.ts"), "utf8");
     const otp = readFileSync(join(process.cwd(), "src/lib/auth/otp.ts"), "utf8");
-    assert.match(persist, /adminOtp:\s*"solphia:admin-otp"/);
-    assert.match(login, /await pullAdminOtp\(s\)/);
-    assert.match(login, /await saveAdminOtp\(/);
+    assert.match(persist, /adminTotp:\s*"solphia:admin-totp"/);
+    assert.match(login, /await pullAdminTotp\(s\)/);
+    assert.match(login, /await saveAdminTotp\(/);
+    assert.match(login, /beginTotp/);
+    assert.equal(login.includes("queueEmail"), false);
+    assert.equal(login.includes("pullAdminOtp"), false);
     assert.match(otp, /function otpSecret\(\)/);
   });
 });

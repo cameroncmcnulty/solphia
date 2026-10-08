@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { SITE_URL } from "@/lib/config";
 import { upsertGoogleAccount } from "@/lib/auth/accounts";
-import { OAUTH_COOKIE, readOauthState, setAccountCookie, shortCookieOpts } from "@/lib/auth/session";
+import { OAUTH_COOKIE, clearAccountCookie, readOauthState, setAccountCookie, setTotpPendingCookie, shortCookieOpts } from "@/lib/auth/session";
+import { totpEnabled } from "@/lib/auth/totp";
 import { mutateState } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
@@ -66,6 +67,13 @@ export async function GET(req: NextRequest) {
     return fail(req, code);
   }
 
+  if (totpEnabled(out.account)) {
+    const res = NextResponse.redirect(`${originOf(req)}/?auth_2fa=1`);
+    clearAccountCookie(res);
+    setTotpPendingCookie(res, out.account.id);
+    res.cookies.set(OAUTH_COOKIE, "", { ...shortCookieOpts(0), maxAge: 0 });
+    return res;
+  }
   const res = NextResponse.redirect(`${originOf(req)}/?signedin=1`);
   setAccountCookie(res, out.account.id);
   res.cookies.set(OAUTH_COOKIE, "", { ...shortCookieOpts(0), maxAge: 0 });

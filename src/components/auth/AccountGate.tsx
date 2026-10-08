@@ -7,9 +7,10 @@ import { linkDeviceWallets, refreshAccount, type PublicAccount } from "@/lib/aut
 import { PASSWORD_HINT, passwordIssue, passwordRules } from "@/lib/auth/passwordPolicy";
 import { listWallets } from "@/lib/wallet/vault";
 import { BotCheck, type BotFields } from "./BotCheck";
+import { TotpSetup } from "./TotpSetup";
 
 type Mode = "signup" | "signin";
-type Screen = "pick" | "google" | "email" | "otp";
+type Screen = "pick" | "google" | "email" | "otp" | "totp-opt" | "totp" | "totp-setup";
 
 function GoogleMark() {
   return (
@@ -72,6 +73,10 @@ export function AccountGate({
   const [password, setPassword] = useState("");
   const [password2, setPassword2] = useState("");
   const [otp, setOtp] = useState("");
+  const [totpCode, setTotpCode] = useState("");
+  const [pendingAccount, setPendingAccount] = useState<PublicAccount | null>(null);
+  const [totpQr, setTotpQr] = useState("");
+  const [backupCodes, setBackupCodes] = useState<string[]>([]);
   const [tos, setTos] = useState(false);
   const [privacy, setPrivacy] = useState(false);
   const [bot, setBot] = useState<BotFields>({ website: "", challengeToken: "", challengeAnswer: "", turnstile: "" });
@@ -93,6 +98,10 @@ export function AccountGate({
     else if (authErr === "google_denied") setErr("Google sign-in was cancelled.");
     else if (authErr === "google_state" || authErr === "google") setErr("Google sign-in failed. Try email, or tap Google again.");
     else if (authErr === "rate") setErr("Too many tries. Wait a bit.");
+    if (q.get("auth_2fa") === "1") {
+      setScreen("totp");
+      setMode("signin");
+    }
     fetch("/api/auth/me", { credentials: "include", cache: "no-store" })
       .then((r) => r.json())
       .then((j) => {
@@ -171,8 +180,13 @@ export function AccountGate({
         setScreen("otp");
         return;
       }
-      if (!r.ok || !j.account) throw new Error(j.message || "Could not sign in.");
-      await finish(j.account);
+      const loginJ = j as { message?: string; error?: string; account?: PublicAccount; totp?: boolean };
+      if (loginJ.totp) {
+        setScreen("totp");
+        return;
+      }
+      if (!r.ok || !loginJ.account) throw new Error(loginJ.message || "Could not sign in.");
+      await finish(loginJ.account);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Could not sign in.");
     } finally {
@@ -192,7 +206,8 @@ export function AccountGate({
       });
       const j = (await r.json().catch(() => ({}))) as { message?: string; account?: PublicAccount };
       if (!r.ok || !j.account) throw new Error(j.message || "That code did not work.");
-      await finish(j.account);
+      setPendingAccount(j.account);
+      setScreen("totp-opt");
     } catch (e) {
       setErr(e instanceof Error ? e.message : "That code did not work.");
     } finally {
@@ -270,6 +285,148 @@ export function AccountGate({
     setScreen("pick");
     setErr("");
     setHint("");
+  }
+
+  async function startTotpSetup() {
+    setBusy(true);
+    setErr("");
+    try {
+      const r = await fetch("/api/auth/totp", {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "setup" }),
+      });
+      const j = (await r.json().catch(() => ({}))) as { message?: string; qr?: string; backupCodes?: string[] };
+      if (!r.ok) throw new Error(j.message || "Could not start authenticator.");
+      setTotpQr(j.qr || "");
+      setBackupCodes(j.backupCodes || []);
+      setTotpCode("");
+      setScreen("totp-setup");
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Could not start authenticator.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function confirmTotpSetup() {
+    setBusy(true);
+    setErr("");
+    try {
+      const r = await fetch("/api/auth/totp", {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "confirm", code: totpCode }),
+      });
+      const j = (await r.json().catch(() => ({}))) as { message?: string; account?: PublicAccount };
+      if (!r.ok || !j.account) throw new Error(j.message || "That authenticator code is wrong.");
+      await finish(j.account);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "That authenticator code is wrong.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function submitTotpLogin() {
+    setBusy(true);
+    setErr("");
+    try {
+      const r = await fetch("/api/auth/totp", {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "verify", code: totpCode }),
+      });
+      const j = (await r.json().catch(() => ({}))) as { message?: string; account?: PublicAccount };
+      if (!r.ok || !j.account) throw new Error(j.message || "That authenticator or backup code is wrong.");
+      await finish(j.account);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "That authenticator or backup code is wrong.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (screen === "totp-setup") {
+    return (
+      <WalletSheet title="Google Authenticator" subtitle="Optional extra lock on this account." onClose={onClose}>
+        <TotpSetup
+          qr={totpQr}
+          backupCodes={backupCodes}
+          code={totpCode}
+          setCode={setTotpCode}
+          busy={busy}
+          err={err}
+          onConfirm={() => void confirmTotpSetup()}
+          onSkip={() => {
+            if (pendingAccount) void finish(pendingAccount);
+            else setScreen("totp-opt");
+          }}
+          skipLabel="Skip for now"
+        />
+      </WalletSheet>
+    );
+  }
+
+  if (screen === "totp-opt") {
+    return (
+      <WalletSheet
+        title="Add authenticator?"
+        subtitle="Optional. You can turn this on later in Account. Google Authenticator puts a 6-digit code on your phone. Backup codes are one-time keys if you lose the phone."
+        onClose={onClose}
+      >
+        {err ? <p className="mb-3 font-mono text-[13px] text-blood">{err}</p> : null}
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => void startTotpSetup()}
+          className="btn-acid min-h-[48px] w-full rounded-full disabled:opacity-40"
+        >
+          {busy ? "…" : "Turn on Google Authenticator"}
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          className="mt-2 w-full text-center text-[13px] text-white/45"
+          onClick={() => pendingAccount && void finish(pendingAccount)}
+        >
+          Skip for now
+        </button>
+      </WalletSheet>
+    );
+  }
+
+  if (screen === "totp") {
+    return (
+      <WalletSheet
+        title="Authenticator"
+        subtitle="Enter the 6-digit code from Google Authenticator, or one unused backup code. Backup codes are one-time keys for when the phone is gone."
+        onClose={onClose}
+      >
+        {err ? <p className="mb-3 font-mono text-[13px] text-blood">{err}</p> : null}
+        <label className="block">
+          <span className="font-mono text-[11px] tracking-[0.16em] text-white/40">AUTHENTICATOR OR BACKUP CODE</span>
+          <input
+            autoComplete="one-time-code"
+            value={totpCode}
+            onChange={(e) => setTotpCode(e.target.value.toUpperCase().slice(0, 12))}
+            placeholder="000000 or XXXX-XXXX"
+            className="mt-1 min-h-[48px] w-full rounded-2xl border border-white/10 bg-white/[0.06] px-3 text-center font-mono text-[18px] tracking-[0.2em] text-white outline-none"
+          />
+        </label>
+        <button
+          type="button"
+          disabled={busy || totpCode.trim().length < 6}
+          onClick={() => void submitTotpLogin()}
+          className="btn-acid mt-4 min-h-[48px] w-full rounded-full disabled:opacity-40"
+        >
+          {busy ? "…" : "Verify"}
+        </button>
+      </WalletSheet>
+    );
   }
 
   if (screen === "otp") {

@@ -10,9 +10,9 @@ import {
   setAdminCookie,
   setAdminOtpCookie,
 } from "@/lib/admin/auth";
-import { consumeAdminOtp, maskEmail, startAdminOtp, adminOtpEmailHtml, pullAdminOtp, saveAdminOtp } from "@/lib/admin/otp";
-import { withSignature } from "@/lib/email/desk";
-import { mailConfigured, mailOffHint, queueEmail } from "@/lib/email/send";
+import { adminTotpOf, pullAdminTotp, saveAdminTotp } from "@/lib/admin/totp";
+import { beginTotp, confirmTotp, totpEnabled, verifyTotp } from "@/lib/auth/totp";
+import { qrSvg } from "@/lib/wallet/qr";
 import { clientIp, rateLimit } from "@/lib/security";
 import { mutateState, audit, pushBounded } from "@/lib/store";
 import { timingSafeEqual } from "crypto";
@@ -28,9 +28,10 @@ function safeEq(a: string, b: string): boolean {
 }
 
 const Body = z.object({
-  action: z.enum(["start", "verify", "resend"]).optional(),
+  action: z.enum(["start", "verify", "confirm"]).optional(),
   secret: z.string().optional(),
   otp: z.string().optional(),
+  code: z.string().optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -40,48 +41,18 @@ export async function POST(req: NextRequest) {
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "denied" }, { status: 401 });
   const action = parsed.data.action || "start";
+  const code = (parsed.data.code || parsed.data.otp || "").trim();
 
-  if (action === "verify" || action === "resend") {
+  if (action === "verify" || action === "confirm") {
     if (!isAdminOtpRequest(req)) {
       return NextResponse.json({ error: "otp_expired", message: "Sign in again." }, { status: 401 });
     }
-    if (action === "resend") {
-      let code = "";
-      const out = await mutateState(async (s) => {
-        await pullAdminOtp(s);
-        const started = startAdminOtp(s);
-        if (!started.ok) return started;
-        await saveAdminOtp(s.adminOtpPending || null);
-        code = started.otp;
-        const mail = await queueEmail(s, started.email, "Solphia admin code", withSignature(adminOtpEmailHtml(started.otp)));
-        if (mail.status !== "sent" && s.adminOtpPending) {
-          s.adminOtpPending.sentAt = 0;
-          await saveAdminOtp(s.adminOtpPending);
-        }
-        return { ok: true as const, email: started.email, mailStatus: mail.status, mailError: mail.error };
-      });
-      if (!out.ok) return NextResponse.json({ error: "otp_failed", message: out.error }, { status: 400 });
-      if (out.mailStatus !== "sent" && process.env.NODE_ENV === "production") {
-        return NextResponse.json(
-          { error: "mail_off", message: out.mailError || mailOffHint("admin") },
-          { status: 503 },
-        );
-      }
-      const preview = process.env.NODE_ENV !== "production" && out.mailStatus !== "sent";
-      return NextResponse.json({
-        ok: true,
-        pending: true,
-        email: maskEmail(out.email),
-        preview: preview || undefined,
-        devCode: preview ? code : undefined,
-      });
-    }
-    const otp = (parsed.data.otp || "").trim();
     const out = await mutateState(async (s) => {
-      await pullAdminOtp(s);
-      const consumed = consumeAdminOtp(s, otp);
-      await saveAdminOtp(s.adminOtpPending || null);
-      return consumed;
+      await pullAdminTotp(s);
+      const slot = adminTotpOf(s);
+      const hit = action === "confirm" ? confirmTotp(slot, code) : verifyTotp(slot, code);
+      await saveAdminTotp(slot);
+      return hit;
     });
     if (!out.ok) return NextResponse.json({ error: "otp_failed", message: out.error }, { status: 400 });
     await mutateState((s) => {
@@ -97,40 +68,28 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "denied", message: "Wrong password." }, { status: 401 });
   }
 
-  let code = "";
   const out = await mutateState(async (s) => {
-    await pullAdminOtp(s);
-    const started = startAdminOtp(s);
-    if (!started.ok) return started;
-    await saveAdminOtp(s.adminOtpPending || null);
-    code = started.otp;
-    const mail = await queueEmail(s, started.email, "Solphia admin code", withSignature(adminOtpEmailHtml(started.otp)));
-    if (mail.status !== "sent" && s.adminOtpPending) {
-      s.adminOtpPending.sentAt = 0;
-      await saveAdminOtp(s.adminOtpPending);
-    }
-    return { ok: true as const, email: started.email, mailStatus: mail.status, mailError: mail.error };
+    await pullAdminTotp(s);
+    const slot = adminTotpOf(s);
+    if (totpEnabled(slot)) return { ok: true as const, setup: false as const };
+    const started = beginTotp(slot, "admin");
+    await saveAdminTotp(slot);
+    return { ok: true as const, setup: true as const, ...started };
   });
-  if (!out.ok) return NextResponse.json({ error: "otp_failed", message: out.error }, { status: 400 });
-  if (out.mailStatus !== "sent" && process.env.NODE_ENV === "production") {
-    return NextResponse.json(
-      {
-        error: "mail_off",
-        message: mailConfigured()
-          ? out.mailError || "Could not send the admin code."
-          : mailOffHint("admin"),
-      },
-      { status: 503 },
-    );
-  }
-  const preview = process.env.NODE_ENV !== "production" && out.mailStatus !== "sent";
-  const res = NextResponse.json({
-    ok: true,
-    pending: true,
-    email: maskEmail(out.email),
-    preview: preview || undefined,
-    devCode: preview ? code : undefined,
-  });
+  if (!out.ok) return NextResponse.json({ error: "otp_failed", message: "Could not start authenticator." }, { status: 400 });
+
+  const res = NextResponse.json(
+    out.setup
+      ? {
+          ok: true,
+          pending: true,
+          setup: true,
+          otpauth: out.otpauth,
+          qr: qrSvg(out.otpauth, "#14f195"),
+          backupCodes: out.backupCodes,
+        }
+      : { ok: true, pending: true, totp: true },
+  );
   setAdminOtpCookie(res, adminOtpCookie());
   return res;
 }

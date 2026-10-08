@@ -15,6 +15,12 @@ export type LoginAccount = {
   wallets: string[];
   createdAt: number;
   lastSeen: number;
+  totpSecret?: string;
+  totpEnabledAt?: number;
+  totpBackupHashes?: string[];
+  totpPendingSecret?: string;
+  totpPendingBackupHashes?: string[];
+  totpLastCounter?: number;
 };
 
 export type PublicAccount = {
@@ -25,6 +31,7 @@ export type PublicAccount = {
   tosAcceptedAt: number;
   wallets: string[];
   createdAt: number;
+  totpEnabled: boolean;
 };
 
 export function normalizeEmail(email: string): string {
@@ -53,6 +60,7 @@ export function publicAccount(row: LoginAccount): PublicAccount {
     tosAcceptedAt: row.tosAcceptedAt || 0,
     wallets: row.wallets.filter((pk) => isSolanaAddress(pk)),
     createdAt: row.createdAt,
+    totpEnabled: Boolean(row.totpEnabledAt && row.totpSecret),
   };
 }
 

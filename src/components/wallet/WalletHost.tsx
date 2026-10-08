@@ -83,12 +83,15 @@ export function WalletHost() {
     void refreshAccount().then((acct) => {
       if (typeof window === "undefined") return;
       const q = new URLSearchParams(window.location.search);
-      if (q.get("signedin") === "1" || q.get("auth_error")) {
+      const signed = q.get("signedin") === "1";
+      const authErr = q.get("auth_error");
+      const twoFa = q.get("auth_2fa") === "1";
+      if (signed || authErr || twoFa) {
         const path = window.location.pathname || "/";
         window.history.replaceState({}, "", path);
       }
-      if (q.get("signedin") === "1" && acct && !loadOwner()) setOnboard(true);
-      if (q.get("auth_error")) setAccount(true);
+      if (signed && acct && !loadOwner()) setOnboard(true);
+      if (authErr || twoFa) setAccount(true);
     });
   }, []);
 

@@ -1,7 +1,5 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { FieldError, useConfirmErrors } from "@/components/form/confirm";
 import {
   dkimDnsHost,
   dkimDnsTxt,
@@ -10,7 +8,7 @@ import {
   spfDnsTxt,
 } from "@/lib/email/dkim-public";
 import { useAdmin } from "../AdminProvider";
-import { Field, Row } from "../ui";
+import { Row } from "../ui";
 
 const dkimHost = dkimDnsHost();
 const dkimTxt = dkimDnsTxt();
@@ -18,61 +16,25 @@ const dmarcHost = dmarcDnsHost();
 const dmarcTxt = dmarcDnsTxt();
 const spfTxt = spfDnsTxt();
 
-function emailLooksOk(v: string) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) && v.length < 120;
-}
-
 export function SystemSection() {
-  const { data, patch, busy } = useAdmin();
-  const [otpEmail, setOtpEmail] = useState("");
-  const otpErr = useConfirmErrors<"adminOtpEmail">();
-  useEffect(() => {
-    if (data?.adminOtpEmail) setOtpEmail(data.adminOtpEmail);
-  }, [data?.adminOtpEmail]);
+  const { data } = useAdmin();
   if (!data) return null;
 
   return (
     <div className="grid gap-6 lg:grid-cols-2">
       <div className="panel rounded-2xl p-5">
-        <div className="font-mono text-[10px] tracking-[0.3em] text-mute">ADMIN LOGIN OTP</div>
+        <div className="font-mono text-[10px] tracking-[0.3em] text-mute">ADMIN LOGIN 2FA</div>
         <p className="mt-2 text-sm text-mute">
-          Every dashboard sign-in emails a 6-digit code here. Default is CameronCmcnulty@gmail.com.
+          Dashboard login is password, then Google Authenticator. First sign-in after this ships: scan the QR, save the 8
+          one-time backup codes, confirm the 6-digit code. After that, password plus authenticator. Mail is not part of
+          dashboard login. If the phone is gone, an unused backup code is the only way in — we cannot email a reset.
         </p>
-        <Field
-          field="adminOtpEmail"
-          value={otpEmail}
-          error={otpErr.errors.adminOtpEmail}
-          onChange={(v) => {
-            setOtpEmail(v.trim());
-            otpErr.clear("adminOtpEmail");
-          }}
-          placeholder="admin inbox"
-          className="mt-3"
-        />
-        <FieldError error={otpErr.errors.adminOtpEmail} />
-        <div className="mt-3 flex flex-wrap gap-2">
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => {
-              if (otpEmail && !emailLooksOk(otpEmail)) {
-                otpErr.fail({ adminOtpEmail: "Enter a valid email." });
-                return;
-              }
-              otpErr.ok();
-              void patch({ adminOtpEmail: otpEmail || null });
-            }}
-            className="btn-acid rounded-full px-5 py-2 text-sm disabled:opacity-40"
-          >
-            Save OTP email
-          </button>
-        </div>
         <p className="mt-3 font-mono text-[11px] text-mute">
           Mail {data.mailReady ? `ready · ${data.mailKind || "on"} · ${data.mailFrom}` : "off"} · Google{" "}
           {data.googleEnabled ? "on" : "off"}
         </p>
         <p className="mt-2 text-sm text-mute">
-          Codes leave otp@solphia.io from Solphia&apos;s own mailer — our SMTP + DKIM. Not Gmail, not SES, not AgentMail.
+          Signup still emails a one-time code from otp@solphia.io — our SMTP + DKIM. Not Gmail, not SES, not AgentMail.
         </p>
         <ol className="mt-3 list-decimal space-y-2 pl-5 text-[12px] text-mute">
           <li>
