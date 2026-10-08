@@ -181,11 +181,12 @@ function ProjectWalletCard({
   const [liveSol, setLiveSol] = useState<number | null>(null);
   const sendErr = useConfirmErrors<"to" | "amt">();
 
-  const mapped =
-    (pk && fallbackSol?.[pk]) ??
-    (savedPk && fallbackSol?.[savedPk]) ??
-    (local?.pubkey && fallbackSol?.[local.pubkey]) ??
-    0;
+  const fromMap = (key: string) => {
+    if (!key || !fallbackSol || !(key in fallbackSol)) return undefined;
+    const n = fallbackSol[key];
+    return typeof n === "number" && Number.isFinite(n) ? n : undefined;
+  };
+  const mapped = fromMap(pk) ?? fromMap(savedPk) ?? fromMap(local?.pubkey || "") ?? 0;
   const sol = liveSol != null ? liveSol : mapped;
 
   const loadSol = useCallback(() => {
