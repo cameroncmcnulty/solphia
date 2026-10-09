@@ -15,7 +15,8 @@ import { importKeypair, newPhrase, phraseOk, secretB58 } from "./phrase";
 
 export const VAULT_EVENT = "solphia:vault";
 export const VAULT_UNLOCK_EVENT = "solphia:wallet-unlock";
-const META_KEY = "solphia_vault_meta";
+export const VAULT_META_KEY = "solphia_vault_meta";
+const META_KEY = VAULT_META_KEY;
 const SECRETS_KEY = "solphia_vault_secrets";
 
 export type WalletKind = "embedded" | "phantom";

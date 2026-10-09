@@ -6,6 +6,7 @@ import { logoutAccount } from "@/lib/auth/client";
 import { forgetOwner, loadOwner, persistOwner, OWNER_EVENT } from "@/lib/wallet/owner";
 import { beginPhantomConnect, completePhantomConnect, completePhantomUl, injectedProvider, openPhantomLink, PHANTOM_EVENT, readPhantomReturn } from "@/lib/wallet/phantomConnect";
 import { dropPhantomWallets, ensurePhantomStub, followInjectedPhantom, phantomIsOwner } from "@/lib/wallet/vault";
+import { ownerIsEmbedded, syncOwnerToDeviceVault } from "@/lib/wallet/identity";
 import { openAccountGate, openConnect } from "./wallet/WalletHost";
 
 type Provider = {
@@ -154,13 +155,14 @@ export function WalletKeepalive() {
     let attached: Provider | null = null;
     const injectedPk = phantom()?.publicKey?.toString() || null;
     if (kickPhantomIdentity(injectedPk)) return;
+    syncOwnerToDeviceVault();
 
     const onAccount = (pk?: { toString(): string } | null) => {
       if (switching) return;
       if (!followInjectedPhantom()) return;
       if (!pk) {
-        const saved = loadOwner();
-        if (saved) persistOwner(saved, { server: false });
+        const saved = syncOwnerToDeviceVault();
+        if (saved && ownerIsEmbedded(saved)) persistOwner(saved, { server: false });
         return;
       }
       keep(pk.toString());
@@ -178,28 +180,29 @@ export function WalletKeepalive() {
       const p = phantom();
       bind(p);
       if (p?.publicKey) {
+        if (kickPhantomIdentity(p.publicKey.toString())) return;
         if (followInjectedPhantom()) {
           persistOwner(p.publicKey.toString(), { server: opts?.server !== false });
           ensurePhantomStub(p.publicKey.toString());
+          return;
         }
-        return;
       }
-      const saved = loadOwner();
+      const saved = syncOwnerToDeviceVault();
       if (saved && blockedPhantomOwner(saved)) {
         forgetOwner();
         return;
       }
-      if (saved) persistOwner(saved, { announce: true, server: opts?.server !== false });
+      if (saved && ownerIsEmbedded(saved)) persistOwner(saved, { announce: true, server: opts?.server !== false });
       silentTrusted(p);
     };
 
     const restoreFromCookie = () => {
-      const saved = loadOwner();
+      const saved = syncOwnerToDeviceVault();
       if (saved && blockedPhantomOwner(saved)) {
         forgetOwner();
         return;
       }
-      if (saved) {
+      if (saved && ownerIsEmbedded(saved)) {
         persistOwner(saved, { server: true });
         return;
       }
@@ -207,7 +210,7 @@ export function WalletKeepalive() {
         .then((r) => r.json())
         .then((j) => {
           const pk = j?.pubkey ? String(j.pubkey) : "";
-          if (!pk || blockedPhantomOwner(pk)) return;
+          if (!pk || blockedPhantomOwner(pk) || !ownerIsEmbedded(pk)) return;
           persistOwner(pk);
         })
         .catch(() => undefined);
@@ -238,7 +241,9 @@ export function WalletKeepalive() {
       const p = phantom();
       bind(p);
       if (p?.publicKey) {
+        if (kickPhantomIdentity(p.publicKey.toString())) return;
         if (followInjectedPhantom()) persistOwner(p.publicKey.toString(), { server: tries % 8 === 0 });
+        else syncOwnerToDeviceVault();
         if (tries > 20 && poll) {
           clearInterval(poll);
           poll = setInterval(() => wake({ server: false }), 8000);
@@ -282,7 +287,8 @@ export function WalletConnect({ compact: _compact = false }: { compact?: boolean
   useEffect(() => {
     mounted.current = true;
     const fromUl = completePhantomConnect();
-    const saved = (fromUl && followInjectedPhantom() ? fromUl : null) || loadOwner();
+    const saved =
+      (fromUl && followInjectedPhantom() ? fromUl : null) || (ownerIsEmbedded(loadOwner()) ? loadOwner() : syncOwnerToDeviceVault());
     if (saved) setAddr(saved);
     if (fromUl && followInjectedPhantom()) persistOwner(fromUl);
     const found = phantom();
@@ -301,8 +307,9 @@ export function WalletConnect({ compact: _compact = false }: { compact?: boolean
     };
     found?.on?.("accountChanged", onAccount);
     const onOwner = (e: Event) => {
-      const pk = (e as CustomEvent<string | null>).detail || loadOwner();
-      if (pk) setAddr(pk);
+      const pk = (e as CustomEvent<string | null>).detail;
+      const next = pk === null ? null : pk || loadOwner();
+      setAddr(next && ownerIsEmbedded(next) ? next : null);
     };
     window.addEventListener(OWNER_EVENT, onOwner as EventListener);
     return () => {

@@ -94,7 +94,7 @@ export function AccountMenu() {
     setOpen((v) => !v);
   }
 
-  if (!owner) return <WalletConnect />;
+  if (!owner || vault?.kind !== "embedded") return <WalletConnect />;
 
   const nickname = desk?.username ? `@${desk.username}` : vault?.nickname || `${owner.slice(0, 4)}…${owner.slice(-4)}`;
 
