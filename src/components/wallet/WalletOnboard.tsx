@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { SphaMark } from "@/components/SphaMark";
 import { CopyButton } from "@/components/CopyButton";
-import { createEmbeddedWallet, vaultHasPin } from "@/lib/wallet/vault";
+import { createEmbeddedWallet, vaultHasPin, vaultUnlocked } from "@/lib/wallet/vault";
 import { newPhrase, phraseFile, phraseOk, phraseWords, pickConfirmSlots } from "@/lib/wallet/phrase";
 import { pinOk } from "@/lib/wallet/vaultCrypto";
 import { WalletSheet } from "./sheet";
@@ -11,6 +11,7 @@ import { WALLET_PATHS } from "@/lib/wallet/paths";
 import { linkAccountWallet } from "@/lib/auth/client";
 
 type Step = "chooser" | "phrase" | "confirm" | "import" | "pin";
+type Kind = "create" | "import";
 
 function downloadPhrase(phrase: string, pubkey: string) {
   const blob = new Blob([phraseFile(phrase, pubkey)], { type: "text/plain" });
@@ -24,6 +25,7 @@ function downloadPhrase(phrase: string, pubkey: string) {
 
 export function WalletOnboard({ onClose }: { onClose: () => void }) {
   const [step, setStep] = useState<Step>("chooser");
+  const [kind, setKind] = useState<Kind>("create");
   const [phrase, setPhrase] = useState("");
   const [importText, setImportText] = useState("");
   const [pin, setPin] = useState("");
@@ -33,10 +35,25 @@ export function WalletOnboard({ onClose }: { onClose: () => void }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const words = useMemo(() => phraseWords(phrase), [phrase]);
-  const needPin = !vaultHasPin();
+  const unlockPin = vaultHasPin();
+  const pinReady = vaultUnlocked();
+
+  function seedPhrase() {
+    return kind === "import" ? importText : phrase;
+  }
+
+  function goPinOrSave() {
+    setErr("");
+    if (!pinReady) {
+      setStep("pin");
+      return;
+    }
+    void finish();
+  }
 
   function startCreate() {
     const next = newPhrase();
+    setKind("create");
     setPhrase(next);
     setSlots(pickConfirmSlots(12, 3));
     setTyped({});
@@ -44,23 +61,28 @@ export function WalletOnboard({ onClose }: { onClose: () => void }) {
     setStep("phrase");
   }
 
-  async function finish(opts: { phrase?: string; secret?: string }) {
+  async function finish() {
     setBusy(true);
     setErr("");
     try {
-      if (needPin) {
+      if (!vaultUnlocked()) {
         if (!pinOk(pin)) throw new Error("PIN is 4–8 digits.");
-        if (pin !== pin2) throw new Error("PINs do not match.");
+        if (!vaultHasPin() && pin !== pin2) throw new Error("PINs do not match.");
       }
       const created = await createEmbeddedWallet({
-        pin: needPin ? pin : undefined,
-        phrase: opts.phrase,
-        secret: opts.secret,
+        pin: vaultUnlocked() ? undefined : pin,
+        phrase: seedPhrase(),
       });
       await linkAccountWallet(created.wallet.pubkey);
       onClose();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Could not save this wallet.");
+      const msg = e instanceof Error ? e.message : "Could not save this wallet.";
+      if (/unlock with your pin first/i.test(msg)) {
+        setStep("pin");
+        setErr("Enter the PIN for this device, then we save the recovery phrase.");
+      } else {
+        setErr(msg);
+      }
     } finally {
       setBusy(false);
     }
@@ -73,9 +95,7 @@ export function WalletOnboard({ onClose }: { onClose: () => void }) {
         return;
       }
     }
-    setErr("");
-    if (needPin) setStep("pin");
-    else void finish({ phrase });
+    goPinOrSave();
   }
 
   const title =
@@ -87,7 +107,9 @@ export function WalletOnboard({ onClose }: { onClose: () => void }) {
           ? "Confirm the phrase"
           : step === "import"
             ? "Import wallet"
-            : "Set a PIN";
+            : unlockPin
+              ? "Unlock with PIN"
+              : "Set a PIN";
 
   const subtitle =
     step === "chooser"
@@ -98,7 +120,9 @@ export function WalletOnboard({ onClose }: { onClose: () => void }) {
           ? "Type the three words below so we know you saved the phrase."
           : step === "import"
             ? "Paste a 12/24-word phrase. It stays on this device."
-            : "Unlocks this device only. Solphia never receives this PIN.";
+            : unlockPin
+              ? "This device already has a PIN. Unlock, then the recovery phrase is saved here."
+              : "Unlocks this device only. Solphia never receives this PIN.";
 
   return (
     <WalletSheet title={title} subtitle={subtitle} onClose={onClose}>
@@ -120,6 +144,7 @@ export function WalletOnboard({ onClose }: { onClose: () => void }) {
           <button
             type="button"
             onClick={() => {
+              setKind("import");
               setErr("");
               setStep("import");
             }}
@@ -206,14 +231,10 @@ export function WalletOnboard({ onClose }: { onClose: () => void }) {
                 setErr("That recovery phrase is not valid.");
                 return;
               }
-              if (needPin) {
-                setStep("pin");
-                return;
-              }
-              void finish({ phrase: importText });
+              goPinOrSave();
             }}
           >
-            Import
+            Continue
           </button>
         </div>
       ) : null}
@@ -221,32 +242,49 @@ export function WalletOnboard({ onClose }: { onClose: () => void }) {
       {step === "pin" ? (
         <div className="space-y-3">
           <label className="block">
-            <span className="font-mono text-[11px] tracking-[0.16em] text-white/40">PIN</span>
+            <span className="font-mono text-[11px] tracking-[0.16em] text-white/40">{unlockPin ? "DEVICE PIN" : "PIN"}</span>
             <input
               inputMode="numeric"
               autoComplete="off"
+              autoFocus
               value={pin}
               onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 8))}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && (unlockPin || pin === pin2)) void finish();
+              }}
               className="mt-1 min-h-[44px] w-full rounded-2xl border border-white/10 bg-white/[0.06] px-3 font-mono text-[18px] tracking-[0.4em] text-white outline-none"
             />
           </label>
-          <label className="block">
-            <span className="font-mono text-[11px] tracking-[0.16em] text-white/40">CONFIRM PIN</span>
-            <input
-              inputMode="numeric"
-              autoComplete="off"
-              value={pin2}
-              onChange={(e) => setPin2(e.target.value.replace(/\D/g, "").slice(0, 8))}
-              className="mt-1 min-h-[44px] w-full rounded-2xl border border-white/10 bg-white/[0.06] px-3 font-mono text-[18px] tracking-[0.4em] text-white outline-none"
-            />
-          </label>
+          {unlockPin ? null : (
+            <label className="block">
+              <span className="font-mono text-[11px] tracking-[0.16em] text-white/40">CONFIRM PIN</span>
+              <input
+                inputMode="numeric"
+                autoComplete="off"
+                value={pin2}
+                onChange={(e) => setPin2(e.target.value.replace(/\D/g, "").slice(0, 8))}
+                className="mt-1 min-h-[44px] w-full rounded-2xl border border-white/10 bg-white/[0.06] px-3 font-mono text-[18px] tracking-[0.4em] text-white outline-none"
+              />
+            </label>
+          )}
+          <button
+            type="button"
+            disabled={busy || !pinOk(pin) || (!unlockPin && pin !== pin2)}
+            className="btn-acid min-h-[48px] w-full rounded-full disabled:opacity-40"
+            onClick={() => void finish()}
+          >
+            {busy ? "Saving…" : unlockPin ? "Unlock and save wallet" : "Save wallet on this device"}
+          </button>
           <button
             type="button"
             disabled={busy}
-            className="btn-acid min-h-[48px] w-full rounded-full disabled:opacity-40"
-            onClick={() => void finish(phrase ? { phrase } : { phrase: importText })}
+            className="w-full text-center text-[13px] text-white/45"
+            onClick={() => {
+              setErr("");
+              setStep(kind === "import" ? "import" : "confirm");
+            }}
           >
-            {busy ? "Saving…" : "Save wallet on this device"}
+            Back
           </button>
         </div>
       ) : null}

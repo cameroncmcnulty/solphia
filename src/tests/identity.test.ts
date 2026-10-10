@@ -141,6 +141,16 @@ describe("header identity", () => {
     assert.match(menu, /authReady/);
   });
 
+  it("import recovery asks for the device PIN instead of bouncing back to the phrase", async () => {
+    const { readFileSync } = await import("node:fs");
+    const onboard = readFileSync(new URL("../components/wallet/WalletOnboard.tsx", import.meta.url), "utf8");
+    assert.match(onboard, /vaultUnlocked/);
+    assert.match(onboard, /Unlock with PIN/);
+    assert.match(onboard, /Unlock and save wallet/);
+    assert.match(onboard, /goPinOrSave/);
+    assert.equal(onboard.includes("const needPin = !vaultHasPin()"), false);
+  });
+
   it("wallet remember cookie is not an identity without an account session", async () => {
     const { readFileSync } = await import("node:fs");
     const remember = readFileSync(new URL("../app/api/wallet/remember/route.ts", import.meta.url), "utf8");

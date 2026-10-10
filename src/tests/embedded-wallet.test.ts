@@ -187,6 +187,57 @@ describe("vault localStorage isolation", () => {
     assert.equal(followInjectedPhantom(), false);
     assert.equal(listWallets({ hidden: true }).some((w) => w.kind === "phantom"), false);
   });
+
+  it("imports a recovery phrase after unlocking an existing device PIN", async () => {
+    const mem = new Map<string, string>();
+    const ls = {
+      getItem: (k: string) => (mem.has(k) ? mem.get(k)! : null),
+      setItem: (k: string, v: string) => void mem.set(k, String(v)),
+      removeItem: (k: string) => void mem.delete(k),
+      clear: () => mem.clear(),
+      key: (i: number) => [...mem.keys()][i] || null,
+      get length() {
+        return mem.size;
+      },
+    };
+    const g = globalThis as unknown as {
+      window: Record<string, unknown>;
+      localStorage: typeof ls;
+      sessionStorage: typeof ls;
+      document: { cookie: string };
+      location: { protocol: string };
+      fetch?: typeof fetch;
+    };
+    g.localStorage = ls;
+    g.sessionStorage = ls;
+    g.document = { cookie: "" };
+    g.location = { protocol: "http:" };
+    g.window = {
+      localStorage: ls,
+      sessionStorage: ls,
+      dispatchEvent: () => true,
+      addEventListener: () => undefined,
+      crypto: globalThis.crypto,
+    };
+    g.fetch = (async () => ({ ok: true, json: async () => ({}) })) as unknown as typeof fetch;
+
+    const { createEmbeddedWallet, lockVault, listWallets } = await import("../lib/wallet/vault");
+    lockVault();
+    mem.clear();
+    const first = await createEmbeddedWallet({ pin: "2468", phrase: newPhrase() });
+    lockVault();
+    const recover = newPhrase();
+    await assert.rejects(
+      () => createEmbeddedWallet({ phrase: recover }),
+      /Unlock with your PIN first/,
+    );
+    const imported = await createEmbeddedWallet({ pin: "2468", phrase: recover });
+    assert.notEqual(imported.wallet.pubkey, first.wallet.pubkey);
+    assert.equal(
+      listWallets({ hidden: true }).some((w) => w.pubkey === imported.wallet.pubkey),
+      true,
+    );
+  });
 });
 
 describe("wallet path labels and fees", () => {
