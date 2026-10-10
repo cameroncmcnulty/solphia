@@ -19,11 +19,11 @@ export const HOUSE_LIVE_MIN = 51;
 export const HOUSE_LIVE_MAX = 87;
 export const HOUSE_SHARE_CAP = 1;
 export const HOUSE_VOTE_CAP = 2;
-export const HOUSE_CHAT_CAP = 1;
+export const HOUSE_CHAT_CAP = 2;
 export const HOUSE_SHARE_CLUSTER_MS = 2 * 60_000;
 export const HOUSE_VOTE_CLUSTER_MS = 4 * 60_000;
 export const HOUSE_SHARE_GAP_MS = 2.5 * 60_000;
-export const HOUSE_CHAT_GAP_MS = 16_000;
+export const HOUSE_CHAT_GAP_MS = 10_000;
 export const HOUSE_SHARE_HORIZON_MS = 22 * 3600_000;
 export const HOUSE_VOTE_HORIZON_MS = 30 * 3600_000;
 export const HOUSE_MIN_LEAD_MS = 45_000;
@@ -180,9 +180,9 @@ function pickVoteP(rng: Rng): number {
 
 function pickChatEvery(rng: Rng): number {
   const r = rng();
-  if (r < 0.35) return lerp(70_000, 3 * 60_000, rng());
-  if (r < 0.75) return lerp(3 * 60_000, 8 * 60_000, rng());
-  return lerp(8 * 60_000, 14 * 60_000, rng());
+  if (r < 0.42) return lerp(40_000, 2 * 60_000, rng());
+  if (r < 0.8) return lerp(2 * 60_000, 6 * 60_000, rng());
+  return lerp(6 * 60_000, 11 * 60_000, rng());
 }
 
 function clampLive(n: number) {

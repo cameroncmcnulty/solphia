@@ -1,3 +1,5 @@
+import { hangoutCardinality, hangoutReply, hangoutSay, isHangoutText } from "./hangout";
+
 export const PHRASE_WHO = [
   "this", "that", "the tape", "the chart", "the book", "the open", "the wick", "the range",
   "liquidity", "volume", "this print", "that dump", "the bid", "the ask", "this candle",
@@ -260,7 +262,8 @@ export function phraseCardinality(): number {
     PHRASE_ASK.length +
     PHRASE_CANNED.length +
     PHRASE_FOLLOW.length +
-    PHRASE_REPLY_A.length * PHRASE_REPLY_B.length
+    PHRASE_REPLY_A.length * PHRASE_REPLY_B.length +
+    hangoutCardinality()
   );
 }
 
@@ -303,13 +306,15 @@ function tokenHits(symbol: string): string[] {
 }
 
 function replyLine(rng: () => number, ctx: HouseChatCtx): string {
-  if (ctx.lastHasToken && ctx.lastSymbol && rng() < 0.52) {
+  const last = (ctx.lastText || "").toLowerCase();
+  if (isHangoutText(last) && rng() < 0.82) return hangoutReply(rng, last);
+  if (!ctx.lastHasToken && rng() < 0.55) return hangoutReply(rng, last);
+  if (ctx.lastHasToken && ctx.lastSymbol && rng() < 0.4) {
     return pick(tokenHits(ctx.lastSymbol), rng);
   }
-  const last = (ctx.lastText || "").toLowerCase();
-  if (/\b(gm|morning)\b/.test(last)) return pick(["gm", "gm gm", "gm ser", "morning", "gm chat", "gm tape", "gm room", "gm back"], rng);
-  if (/\bgn\b/.test(last)) return pick(["gn", "gn gn", "gn ser", "later", "gn chat", "gn don't force it"], rng);
-  if (/\b(lmao|lol)\b/.test(last)) return pick(["lmao", "lol", "true", "facts", "chat is chat", "yeah that"], rng);
+  if (/\b(gm|morning)\b/.test(last)) return pick(["gm", "gm gm", "morning", "gm chat", "hey", "you good", "morning crew", "gm back"], rng);
+  if (/\bgn\b/.test(last)) return pick(["gn", "gn gn", "later", "go sleep", "night crew", "rest"], rng);
+  if (/\b(lmao|lol)\b/.test(last)) return pick(["lmao", "lol", "true", "facts", "you're funny", "y'all wild", "yeah that"], rng);
   if (/\b(trap|fakeout|fake|poke)\b/.test(last)) {
     return pick(["that's the trap", "yeah fakeout", "give them the wick", "wait for the real one", "too obvious", "I saw that poke too", "don't buy the first spike"], rng);
   }
@@ -335,6 +340,7 @@ function replyLine(rng: () => number, ctx: HouseChatCtx): string {
       rng,
     );
   }
+  if (rng() < 0.45) return hangoutReply(rng, last);
   if (rng() < 0.22) return pick(PHRASE_FOLLOW, rng);
   if (rng() < 0.16) return pick(PHRASE_CANNED, rng);
   return `${pick(PHRASE_REPLY_A, rng)}${pick(PHRASE_REPLY_B, rng)}`.trim();
@@ -347,18 +353,18 @@ export function composeHouseChat(
 ): { text: string; replyTo?: string } {
   const canReply = Boolean(ctx.lastId && ctx.lastOwner && ctx.lastOwner !== actorPk);
   const last = (ctx.lastText || "").toLowerCase();
-  let replyP = 0.28;
-  if (canReply && ctx.lastHasToken) replyP = 0.48;
-  if (canReply && /\?|anyone|thoughts|wen|you seeing|you in/.test(last)) replyP = 0.7;
-  if (canReply && /^(gm|gn|yo|hey|morning)\b/.test(last.trim())) replyP = 0.52;
+  let replyP = 0.62;
+  if (canReply && isHangoutText(last)) replyP = 0.84;
+  if (canReply && ctx.lastHasToken && !isHangoutText(last)) replyP = 0.5;
+  if (canReply && /\?|anyone|thoughts|wen|you seeing|you in|you good|you eat|you still/.test(last)) replyP = 0.86;
+  if (canReply && /^(gm|gn|yo|hey|hi|morning|what's up|sup)\b/.test(last.trim())) replyP = 0.8;
   if (canReply && rng() < replyP) {
     return { text: replyLine(rng, ctx), replyTo: ctx.lastId };
   }
   const roll = rng();
-  if (roll < 0.1) return { text: pick(PHRASE_GREET, rng) };
-  if (roll < 0.22) return { text: pick(PHRASE_REACT, rng) };
-  if (roll < 0.3) return { text: pick(PHRASE_ASK, rng) };
-  if (roll < 0.38) return { text: pick(PHRASE_CANNED, rng) };
-  if (roll < 0.72) return { text: takeLine(rng) };
+  if (roll < 0.62) return { text: hangoutSay(rng) };
+  if (roll < 0.7) return { text: pick(PHRASE_ASK, rng) };
+  if (roll < 0.78) return { text: pick(PHRASE_CANNED, rng) };
+  if (roll < 0.9) return { text: takeLine(rng) };
   return { text: marketLine(rng) };
 }

@@ -7,6 +7,7 @@ import { emptyLaunchBook } from "../lib/launch/engine";
 import { emptyShill, liveRoomCount, mergeShill } from "../lib/shill/engine";
 import { SHILL_PRESENCE_MS } from "../lib/shill/types";
 import { composeHouseChat, phraseCardinality, PHRASE_HOOK, PHRASE_MOVE, PHRASE_TAG } from "../lib/shill/phrases";
+import { hangoutCardinality, isHangoutText, TALK_THING } from "../lib/shill/hangout";
 import {
   HOUSE_ACTOR_N,
   HOUSE_CYCLE_MIN_LIFE_MS,
@@ -407,6 +408,30 @@ describe("house chat phrases", () => {
       if (m.replyTo === "m1") replies += 1;
     }
     assert.ok(replies > 120);
+  });
+
+  it("has thousands of regular hangout lines and replies to each other with them", () => {
+    assert.ok(hangoutCardinality() >= 20_000);
+    const rng = mulberry32(13);
+    let hangout = 0;
+    let replies = 0;
+    let hangoutReplies = 0;
+    for (let i = 0; i < 500; i++) {
+      const m = composeHouseChat(rng);
+      if (isHangoutText(m.text) || TALK_THING.some((t) => m.text.toLowerCase().startsWith(t))) hangout += 1;
+      const r = composeHouseChat(
+        rng,
+        { lastText: "you eat yet", lastId: "m2", lastOwner: "other" },
+        "me",
+      );
+      if (r.replyTo === "m2") {
+        replies += 1;
+        if (isHangoutText(r.text) || /eat|food|starv|snack|hungry|same|not yet|just did/i.test(r.text)) hangoutReplies += 1;
+      }
+    }
+    assert.ok(hangout > 180, "plain chat should often be hangout, not only degen");
+    assert.ok(replies > 300, "they should answer each other most of the time");
+    assert.ok(hangoutReplies > 200);
   });
 });
 
