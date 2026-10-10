@@ -238,13 +238,75 @@ describe("vault localStorage isolation", () => {
       true,
     );
   });
+
+  it("reclaims a phrase already on this device instead of treating it as an error", async () => {
+    const mem = new Map<string, string>();
+    const ls = {
+      getItem: (k: string) => (mem.has(k) ? mem.get(k)! : null),
+      setItem: (k: string, v: string) => void mem.set(k, String(v)),
+      removeItem: (k: string) => void mem.delete(k),
+      clear: () => mem.clear(),
+      key: (i: number) => [...mem.keys()][i] || null,
+      get length() {
+        return mem.size;
+      },
+    };
+    const g = globalThis as unknown as {
+      window: Record<string, unknown>;
+      localStorage: typeof ls;
+      sessionStorage: typeof ls;
+      document: { cookie: string };
+      location: { protocol: string };
+      fetch?: typeof fetch;
+    };
+    g.localStorage = ls;
+    g.sessionStorage = ls;
+    g.document = { cookie: "" };
+    g.location = { protocol: "http:" };
+    g.window = {
+      localStorage: ls,
+      sessionStorage: ls,
+      dispatchEvent: () => true,
+      addEventListener: () => undefined,
+      crypto: globalThis.crypto,
+    };
+    g.fetch = (async () => ({ ok: true, json: async () => ({}) })) as unknown as typeof fetch;
+
+    const { createEmbeddedWallet, hideWallet, listWallets, addPhantomWallet, readVaultMeta, lockVault } =
+      await import("../lib/wallet/vault");
+    lockVault();
+    mem.clear();
+    const phrase = newPhrase();
+    const first = await createEmbeddedWallet({ pin: "2468", phrase });
+    hideWallet(first.wallet.id, true);
+    const again = await createEmbeddedWallet({ pin: "2468", phrase });
+    assert.equal(again.wallet.pubkey, first.wallet.pubkey);
+    assert.equal(again.wallet.id, first.wallet.id);
+    assert.equal(again.wallet.hidden, false);
+    assert.equal(again.wallet.kind, "embedded");
+    assert.equal(readVaultMeta().activeId, first.wallet.id);
+    assert.equal(listWallets({ hidden: true }).filter((w) => w.pubkey === first.wallet.pubkey).length, 1);
+
+    const phantomPhrase = newPhrase();
+    const phantom = await createEmbeddedWallet({ pin: "2468", phrase: phantomPhrase });
+    const pk = phantom.wallet.pubkey;
+    lockVault();
+    mem.clear();
+    addPhantomWallet(pk, "Phantom");
+    const converted = await createEmbeddedWallet({ pin: "1357", phrase: phantomPhrase });
+    assert.equal(converted.wallet.pubkey, pk);
+    assert.equal(converted.wallet.kind, "embedded");
+    assert.equal(listWallets({ hidden: true }).filter((w) => w.pubkey === pk).length, 1);
+  });
 });
 
 describe("wallet path labels and fees", () => {
   it("offers create or phrase import, not Phantom login", () => {
     assert.equal("phantom" in WALLET_PATHS, false);
     assert.match(WALLET_PATHS.create.hint, /sending funds/i);
-    assert.match(WALLET_PATHS.import.title, /phrase/i);
+    assert.match(WALLET_PATHS.import.title, /account/i);
+    assert.match(WALLET_PATHS.import.hint, /account/i);
+    assert.match(WALLET_PATHS.import.hint, /never leaves this device/i);
     assert.equal(CONNECT_WALLET_FIRST, "Connect a wallet first.");
   });
 

@@ -60,14 +60,21 @@ export async function refreshAccount(): Promise<PublicAccount | null> {
   }
 }
 
-export async function linkAccountWallet(pubkey: string): Promise<void> {
-  if (!peekAccount() && !(await refreshAccount())) return;
-  await fetch("/api/auth/wallets", {
+export async function linkAccountWallet(pubkey: string): Promise<PublicAccount> {
+  const signedIn = peekAccount() || (await refreshAccount());
+  if (!signedIn) throw new Error("Sign in first so this wallet can sit on your account.");
+  const r = await fetch("/api/auth/wallets", {
     method: "POST",
     credentials: "include",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ pubkey }),
-  }).catch(() => undefined);
+  });
+  const j = (await r.json().catch(() => ({}))) as { account?: PublicAccount; message?: string };
+  if (!r.ok || !j.account) {
+    throw new Error(j.message || "Could not save that wallet on the account.");
+  }
+  writeCache(j.account);
+  return j.account;
 }
 
 export async function linkDeviceWallets(pubkeys: string[]): Promise<void> {

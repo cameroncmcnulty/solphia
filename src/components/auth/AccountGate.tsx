@@ -130,7 +130,11 @@ export function AccountGate({
   }, [onReady, authHint]);
 
   async function finish(account: PublicAccount) {
-    await linkDeviceWallets(listWallets({ hidden: true }).map((w) => w.pubkey));
+    try {
+      await linkDeviceWallets(listWallets({ hidden: true }).map((w) => w.pubkey));
+    } catch {
+      /* signed in; recover/create still attaches the wallet to this account */
+    }
     await refreshAccount();
     syncOwnerToSignedInAccount();
     onReady(account);

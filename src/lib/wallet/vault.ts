@@ -243,9 +243,27 @@ export async function createEmbeddedWallet(opts: {
   }
   const pubkey = keypair.publicKey.toBase58();
   const meta = readVaultMeta();
-  if (meta.wallets.some((w) => w.pubkey === pubkey)) throw new Error("That wallet is already on this device.");
-  const id = newId();
   const imported = Boolean(opts.phrase || opts.secret);
+  const existing = meta.wallets.find((w) => w.pubkey === pubkey);
+  if (existing) {
+    existing.hidden = false;
+    existing.kind = "embedded";
+    existing.account = account;
+    existing.backupConfirmed = imported || existing.backupConfirmed;
+    if (opts.nickname) existing.nickname = opts.nickname.trim().slice(0, 24);
+    const secrets = readSecrets();
+    secrets[existing.id] = await wrapWithPin(
+      pin,
+      encodeSecretPayload({ secret: keypair.secretKey, mnemonic: phrase, pubkey }),
+    );
+    writeSecrets(secrets);
+    meta.activeId = existing.id;
+    writeMeta(meta);
+    rememberUnlocked(existing.id, keypair.secretKey, phrase, pubkey);
+    announceOwner(pubkey);
+    return { wallet: existing, phrase, firstTime };
+  }
+  const id = newId();
   const wallet: VaultWallet = {
     id,
     kind: "embedded",

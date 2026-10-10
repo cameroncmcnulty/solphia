@@ -151,6 +151,60 @@ describe("header identity", () => {
     assert.equal(onboard.includes("const needPin = !vaultHasPin()"), false);
   });
 
+  it("recovery attaches the wallet to the signed-in account instead of erroring if it is already local", async () => {
+    const { readFileSync } = await import("node:fs");
+    const onboard = readFileSync(new URL("../components/wallet/WalletOnboard.tsx", import.meta.url), "utf8");
+    assert.match(onboard, /linkAccountWallet/);
+    assert.match(onboard, /refreshAccount/);
+    assert.match(onboard, /syncOwnerToSignedInAccount/);
+    assert.match(onboard, /attached to your account/);
+    const vault = readFileSync(new URL("../lib/wallet/vault.ts", import.meta.url), "utf8");
+    assert.equal(vault.includes("already on this device"), false);
+    assert.match(vault, /existing\.kind = "embedded"/);
+    const client = readFileSync(new URL("../lib/auth/client.ts", import.meta.url), "utf8");
+    assert.match(client, /Sign in first so this wallet can sit on your account/);
+    assert.match(client, /writeCache\(j\.account\)/);
+  });
+
+  it("linkAccountWallet refuses when there is no signed-in account", async () => {
+    mockBrowser();
+    const { linkAccountWallet } = await import("../lib/auth/client");
+    await assert.rejects(
+      () => linkAccountWallet("D4uCNcBKAbG9NAkmhQg7pBiztuejNzbWrZDcZmFGut81"),
+      /Sign in first so this wallet can sit on your account/,
+    );
+  });
+
+  it("linkAccountWallet writes the account cache when the server attaches the pubkey", async () => {
+    const { mem } = mockBrowser();
+    const pk = "D4uCNcBKAbG9NAkmhQg7pBiztuejNzbWrZDcZmFGut81";
+    const account = {
+      id: "acct_test",
+      email: "a@solphia.io",
+      google: true,
+      emailVerified: true,
+      tosAcceptedAt: 1,
+      wallets: [] as string[],
+      createdAt: 1,
+      totpEnabled: false,
+    };
+    mem.set("solphia_account", JSON.stringify(account));
+    const g = globalThis as unknown as { fetch?: typeof fetch };
+    g.fetch = (async (_url: string, init?: RequestInit) => {
+      if (String(_url).includes("/api/auth/wallets") && init?.method === "POST") {
+        return {
+          ok: true,
+          json: async () => ({ ok: true, account: { ...account, wallets: [pk] } }),
+        };
+      }
+      return { ok: true, json: async () => ({ account }) };
+    }) as unknown as typeof fetch;
+    const { linkAccountWallet, peekAccount } = await import("../lib/auth/client");
+    const linked = await linkAccountWallet(pk);
+    assert.deepEqual(linked.wallets, [pk]);
+    assert.deepEqual(peekAccount()?.wallets, [pk]);
+  });
+
   it("wallet remember cookie is not an identity without an account session", async () => {
     const { readFileSync } = await import("node:fs");
     const remember = readFileSync(new URL("../app/api/wallet/remember/route.ts", import.meta.url), "utf8");

@@ -8,7 +8,8 @@ import { newPhrase, phraseFile, phraseOk, phraseWords, pickConfirmSlots } from "
 import { pinOk } from "@/lib/wallet/vaultCrypto";
 import { WalletSheet } from "./sheet";
 import { WALLET_PATHS } from "@/lib/wallet/paths";
-import { linkAccountWallet } from "@/lib/auth/client";
+import { linkAccountWallet, refreshAccount } from "@/lib/auth/client";
+import { syncOwnerToSignedInAccount } from "@/lib/wallet/identity";
 
 type Step = "chooser" | "phrase" | "confirm" | "import" | "pin";
 type Kind = "create" | "import";
@@ -74,6 +75,8 @@ export function WalletOnboard({ onClose }: { onClose: () => void }) {
         phrase: seedPhrase(),
       });
       await linkAccountWallet(created.wallet.pubkey);
+      await refreshAccount();
+      syncOwnerToSignedInAccount();
       onClose();
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Could not save this wallet.";
@@ -106,22 +109,24 @@ export function WalletOnboard({ onClose }: { onClose: () => void }) {
         : step === "confirm"
           ? "Confirm the phrase"
           : step === "import"
-            ? "Import wallet"
+            ? "Recover wallet"
             : unlockPin
               ? "Unlock with PIN"
               : "Set a PIN";
 
   const subtitle =
     step === "chooser"
-      ? "Create a Solphia wallet on this device, or import a recovery phrase. Phantom is only for sending funds in or out."
+      ? "Create a Solphia wallet, or recover one onto your account with a phrase. Phantom is only for sending funds in or out."
       : step === "phrase"
         ? "Write these 12 words down. If you lose them, the funds are gone. We cannot recover them."
         : step === "confirm"
           ? "Type the three words below so we know you saved the phrase."
           : step === "import"
-            ? "Paste a 12/24-word phrase. It stays on this device."
+            ? "Paste a 12/24-word phrase. The wallet is attached to your account. The phrase never leaves this device."
             : unlockPin
-              ? "This device already has a PIN. Unlock, then the recovery phrase is saved here."
+              ? kind === "import"
+                ? "Unlock this device, then the wallet is attached to your account. The phrase never leaves here."
+                : "This device already has a PIN. Unlock, then the recovery phrase is saved here."
               : "Unlocks this device only. Solphia never receives this PIN.";
 
   return (
@@ -273,7 +278,15 @@ export function WalletOnboard({ onClose }: { onClose: () => void }) {
             className="btn-acid min-h-[48px] w-full rounded-full disabled:opacity-40"
             onClick={() => void finish()}
           >
-            {busy ? "Saving…" : unlockPin ? "Unlock and save wallet" : "Save wallet on this device"}
+            {busy
+              ? "Saving…"
+              : kind === "import"
+                ? unlockPin
+                  ? "Unlock and recover onto account"
+                  : "Recover onto your account"
+                : unlockPin
+                  ? "Unlock and save wallet"
+                  : "Save wallet on this device"}
           </button>
           <button
             type="button"

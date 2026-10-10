@@ -5,8 +5,8 @@ export const WALLET_PATHS = {
     hint: "Keys stay on this device. Phantom is only for sending funds in or out.",
   },
   import: {
-    title: "Import recovery phrase",
-    hint: "12 or 24 words. Stays on this device. Never sent to Solphia.",
+    title: "Recover wallet to your account",
+    hint: "12 or 24 words. Attaches the wallet to your account. The phrase never leaves this device.",
   },
 } as const;
 
