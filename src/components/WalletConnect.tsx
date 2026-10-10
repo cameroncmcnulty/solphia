@@ -2,11 +2,11 @@
 
 import { useEffect, useRef, useState } from "react";
 import { SphaMark } from "./SphaMark";
-import { logoutAccount } from "@/lib/auth/client";
-import { forgetOwner, loadOwner, persistOwner, OWNER_EVENT } from "@/lib/wallet/owner";
+import { AUTH_EVENT, peekAccount, refreshAccount } from "@/lib/auth/client";
+import { forgetOwner, loadOwner, persistOwner } from "@/lib/wallet/owner";
 import { beginPhantomConnect, completePhantomConnect, completePhantomUl, injectedProvider, openPhantomLink, PHANTOM_EVENT, readPhantomReturn } from "@/lib/wallet/phantomConnect";
-import { dropPhantomWallets, ensurePhantomStub, followInjectedPhantom, phantomIsOwner } from "@/lib/wallet/vault";
-import { ownerIsEmbedded, syncOwnerToDeviceVault } from "@/lib/wallet/identity";
+import { dropPhantomWallets, ensurePhantomStub, phantomIsOwner } from "@/lib/wallet/vault";
+import { ownerIsEmbedded, syncOwnerToSignedInAccount } from "@/lib/wallet/identity";
 import { openAccountGate, openConnect } from "./wallet/WalletHost";
 
 type Provider = {
@@ -34,14 +34,6 @@ function blockedPhantomOwner(pubkey: string | null | undefined): boolean {
   return Boolean(pubkey && kickedPhantomPubkeys().includes(pubkey));
 }
 
-function keep(pubkey: string | null | undefined) {
-  if (!pubkey) return;
-  if (blockedPhantomOwner(pubkey)) return;
-  if (!followInjectedPhantom()) return;
-  persistOwner(pubkey);
-  ensurePhantomStub(pubkey);
-}
-
 function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   return new Promise((resolve, reject) => {
     const t = setTimeout(() => reject(new Error(`${label} timed out`)), ms);
@@ -62,14 +54,6 @@ let switching = false;
 
 function openPhantomBrowse() {
   beginPhantomConnect();
-}
-
-function silentTrusted(p: Provider | null) {
-  if (!p) return;
-  p.connect({ onlyIfTrusted: true }).then(
-    (res) => keep(res?.publicKey?.toString()),
-    () => undefined,
-  );
 }
 
 /** Disconnect then connect so Phantom opens the account picker. Saved wallet is never cleared. */
@@ -123,15 +107,15 @@ function rememberKickedPhantom(pubkeys: string[]) {
   }
 }
 
-/** Phantom is a send rail. If it is the signed-in identity, drop it and force Google/email login. */
-function kickPhantomIdentity(injectedPk: string | null) {
+/** Phantom is a send rail. Drop it as identity without wiping the account session. */
+function kickPhantomIdentity(injectedPk: string | null, opts?: { prompt?: boolean }) {
   const owner = loadOwner();
   const wasPhantom = phantomIsOwner(injectedPk);
   const dropped = dropPhantomWallets();
-  const kick =
+  const ownerWasPhantom =
     wasPhantom || Boolean(owner && dropped.includes(owner)) || Boolean(owner && kickedPhantomPubkeys().includes(owner));
-  if (!kick) return false;
-  const pubkeys = [...new Set([...dropped, owner].filter(Boolean))] as string[];
+  if (!ownerWasPhantom && !dropped.length) return false;
+  const pubkeys = [...new Set([...dropped, ownerWasPhantom ? owner : null].filter(Boolean))] as string[];
   rememberKickedPhantom(pubkeys);
   for (const pubkey of pubkeys) {
     void fetch("/api/auth/wallets", {
@@ -141,83 +125,36 @@ function kickPhantomIdentity(injectedPk: string | null) {
       body: JSON.stringify({ pubkey }),
     }).catch(() => undefined);
   }
-  forgetOwner();
-  void fetch("/api/wallet/remember", { method: "DELETE", credentials: "include" }).catch(() => undefined);
-  void logoutAccount();
-  window.setTimeout(() => openAccountGate(), 0);
-  return true;
+  if (ownerWasPhantom && !ownerIsEmbedded(owner)) {
+    forgetOwner();
+    void fetch("/api/wallet/remember", { method: "DELETE", credentials: "include" }).catch(() => undefined);
+  }
+  if (opts?.prompt && ownerWasPhantom && !peekAccount()?.id) {
+    window.setTimeout(() => openAccountGate(), 0);
+  } else {
+    syncOwnerToSignedInAccount();
+  }
+  return ownerWasPhantom;
 }
 
-/** Keep a Solphia wallet session across phone tab sleeps. Phantom is not identity. */
+/** Keep the account session alive. Wallet follows that account; Phantom is not identity. */
 export function WalletKeepalive() {
   useEffect(() => {
     let poll: ReturnType<typeof setInterval> | null = null;
-    let attached: Provider | null = null;
-    const injectedPk = phantom()?.publicKey?.toString() || null;
-    if (kickPhantomIdentity(injectedPk)) return;
-    syncOwnerToDeviceVault();
+    kickPhantomIdentity(phantom()?.publicKey?.toString() || null, { prompt: true });
 
-    const onAccount = (pk?: { toString(): string } | null) => {
-      if (switching) return;
-      if (!followInjectedPhantom()) return;
-      if (!pk) {
-        const saved = syncOwnerToDeviceVault();
-        if (saved && ownerIsEmbedded(saved)) persistOwner(saved, { server: false });
-        return;
-      }
-      keep(pk.toString());
-    };
-
-    const bind = (p: Provider | null) => {
-      if (attached === p) return;
-      attached?.off?.("accountChanged", onAccount);
-      attached = p;
-      p?.on?.("accountChanged", onAccount);
-    };
-
-    const wake = (opts?: { server?: boolean }) => {
+    const align = async () => {
       if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
-      const p = phantom();
-      bind(p);
-      if (p?.publicKey) {
-        if (kickPhantomIdentity(p.publicKey.toString())) return;
-        if (followInjectedPhantom()) {
-          persistOwner(p.publicKey.toString(), { server: opts?.server !== false });
-          ensurePhantomStub(p.publicKey.toString());
-          return;
-        }
-      }
-      const saved = syncOwnerToDeviceVault();
-      if (saved && blockedPhantomOwner(saved)) {
-        forgetOwner();
+      kickPhantomIdentity(phantom()?.publicKey?.toString() || null);
+      const acct = await refreshAccount();
+      if (!acct?.id) {
+        if (loadOwner()) forgetOwner();
         return;
       }
-      if (saved && ownerIsEmbedded(saved)) persistOwner(saved, { announce: true, server: opts?.server !== false });
-      silentTrusted(p);
+      const saved = syncOwnerToSignedInAccount();
+      if (saved && blockedPhantomOwner(saved)) forgetOwner();
     };
 
-    const restoreFromCookie = () => {
-      const saved = syncOwnerToDeviceVault();
-      if (saved && blockedPhantomOwner(saved)) {
-        forgetOwner();
-        return;
-      }
-      if (saved && ownerIsEmbedded(saved)) {
-        persistOwner(saved, { server: true });
-        return;
-      }
-      fetch("/api/wallet/remember", { credentials: "include", cache: "no-store" })
-        .then((r) => r.json())
-        .then((j) => {
-          const pk = j?.pubkey ? String(j.pubkey) : "";
-          if (!pk || blockedPhantomOwner(pk) || !ownerIsEmbedded(pk)) return;
-          persistOwner(pk);
-        })
-        .catch(() => undefined);
-    };
-
-    const fromUl = completePhantomConnect();
-    if (fromUl && followInjectedPhantom()) persistOwner(fromUl);
     const ingestReturn = () => {
       if (!readPhantomReturn()) return;
       void completePhantomUl()
@@ -231,99 +168,50 @@ export function WalletKeepalive() {
         })
         .catch(() => undefined);
     };
+    completePhantomConnect();
     ingestReturn();
-    restoreFromCookie();
-    wake({ server: true });
+    void align();
 
-    let tries = 0;
-    poll = setInterval(() => {
-      tries += 1;
-      const p = phantom();
-      bind(p);
-      if (p?.publicKey) {
-        if (kickPhantomIdentity(p.publicKey.toString())) return;
-        if (followInjectedPhantom()) persistOwner(p.publicKey.toString(), { server: tries % 8 === 0 });
-        else syncOwnerToDeviceVault();
-        if (tries > 20 && poll) {
-          clearInterval(poll);
-          poll = setInterval(() => wake({ server: false }), 8000);
-        }
-        return;
-      }
-      if (document.visibilityState === "visible" && tries % 5 === 1 && followInjectedPhantom()) silentTrusted(p);
-      if (tries > 40 && poll) {
-        clearInterval(poll);
-        poll = setInterval(() => wake({ server: false }), 8000);
-      }
-    }, 400);
+    poll = setInterval(() => void align(), 8000);
 
     const onShow = () => {
-      wake({ server: true });
+      void align();
       ingestReturn();
     };
+    const onAuth = () => {
+      if (!peekAccount()?.id) {
+        if (loadOwner()) forgetOwner();
+        return;
+      }
+      syncOwnerToSignedInAccount();
+    };
+    window.addEventListener(AUTH_EVENT, onAuth);
     document.addEventListener("visibilitychange", onShow);
     window.addEventListener("focus", onShow);
     window.addEventListener("pageshow", onShow);
     window.addEventListener("online", onShow);
-    window.addEventListener("phantom#initialized", onShow as EventListener);
     return () => {
       if (poll) clearInterval(poll);
-      attached?.off?.("accountChanged", onAccount);
+      window.removeEventListener(AUTH_EVENT, onAuth);
       document.removeEventListener("visibilitychange", onShow);
       window.removeEventListener("focus", onShow);
       window.removeEventListener("pageshow", onShow);
       window.removeEventListener("online", onShow);
-      window.removeEventListener("phantom#initialized", onShow as EventListener);
     };
   }, []);
   return null;
 }
 
 export function WalletConnect({ compact: _compact = false }: { compact?: boolean }) {
-  const [addr, setAddr] = useState<string | null>(() => (typeof window === "undefined" ? null : loadOwner()));
   const [busy, setBusy] = useState(false);
   const mounted = useRef(true);
 
   useEffect(() => {
     mounted.current = true;
-    const fromUl = completePhantomConnect();
-    const saved =
-      (fromUl && followInjectedPhantom() ? fromUl : null) || (ownerIsEmbedded(loadOwner()) ? loadOwner() : syncOwnerToDeviceVault());
-    if (saved) setAddr(saved);
-    if (fromUl && followInjectedPhantom()) persistOwner(fromUl);
-    const found = phantom();
-    if (found?.publicKey && followInjectedPhantom()) {
-      const pubkey = found.publicKey.toString();
-      setAddr(pubkey);
-      keep(pubkey);
-    } else if (followInjectedPhantom()) {
-      silentTrusted(found);
-    }
-    const onAccount = (pk?: { toString(): string } | null) => {
-      if (!pk || !followInjectedPhantom()) return;
-      const next = pk.toString();
-      setAddr(next);
-      keep(next);
-    };
-    found?.on?.("accountChanged", onAccount);
-    const onOwner = (e: Event) => {
-      const pk = (e as CustomEvent<string | null>).detail;
-      const next = pk === null ? null : pk || loadOwner();
-      setAddr(next && ownerIsEmbedded(next) ? next : null);
-    };
-    window.addEventListener(OWNER_EVENT, onOwner as EventListener);
     return () => {
       mounted.current = false;
-      found?.off?.("accountChanged", onAccount);
-      window.removeEventListener(OWNER_EVENT, onOwner as EventListener);
     };
   }, []);
-
-  function connect() {
-    openConnect();
-  }
-
-  if (addr) return null;
 
   return (
     <button
@@ -332,9 +220,13 @@ export function WalletConnect({ compact: _compact = false }: { compact?: boolean
       onClick={(e) => {
         e.preventDefault();
         e.stopPropagation();
-        connect();
+        setBusy(true);
+        openConnect();
+        window.setTimeout(() => {
+          if (mounted.current) setBusy(false);
+        }, 400);
       }}
-      title="Connect a wallet"
+      title="Sign in"
       className="relative z-[70] btn-ghost inline-flex h-10 shrink-0 items-center gap-1.5 rounded-full px-2.5 py-2 font-mono text-[10px] tracking-widest sm:h-11 sm:gap-2 sm:px-4 sm:text-[11px]"
     >
       <SphaMark className="h-4 w-4 shrink-0 sm:h-5 sm:w-5" />

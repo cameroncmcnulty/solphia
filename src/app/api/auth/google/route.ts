@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { SITE_URL } from "@/lib/config";
-import { verifyBot } from "@/lib/auth/challenge";
 import { OAUTH_COOKIE, shortCookieOpts, signOauthState } from "@/lib/auth/session";
 import { clientIp, rateLimit } from "@/lib/security";
 
@@ -11,26 +10,26 @@ const Body = z.object({
   tos: z.boolean().optional(),
   privacy: z.boolean().optional(),
   website: z.string().optional(),
-  challengeToken: z.string().optional(),
-  challengeAnswer: z.string().optional(),
-  turnstile: z.string().optional(),
 });
 
 function googleId(): string {
   return (process.env.GOOGLE_CLIENT_ID || "").trim();
 }
 
-function redirectUri(req: NextRequest): string {
-  const origin = req.nextUrl.origin || SITE_URL;
-  return `${origin.replace(/\/$/, "")}/api/auth/google/callback`;
+function siteOrigin(): string {
+  return SITE_URL.replace(/\/$/, "");
 }
 
-function googleUrl(req: NextRequest, tos: boolean, privacy: boolean) {
+function redirectUri(): string {
+  return `${siteOrigin()}/api/auth/google/callback`;
+}
+
+function googleUrl(tos: boolean, privacy: boolean) {
   const id = googleId();
   const state = signOauthState(tos, privacy);
   const url = new URL("https://accounts.google.com/o/oauth2/v2/auth");
   url.searchParams.set("client_id", id);
-  url.searchParams.set("redirect_uri", redirectUri(req));
+  url.searchParams.set("redirect_uri", redirectUri());
   url.searchParams.set("response_type", "code");
   url.searchParams.set("scope", "openid email profile");
   url.searchParams.set("state", state);
@@ -48,15 +47,16 @@ export async function POST(req: NextRequest) {
   if (!id || !secret) {
     return NextResponse.json({ error: "google_off", message: "Google sign-in is not configured yet." }, { status: 400 });
   }
-  const parsed = Body.safeParse(await req.json().catch(() => null));
+  const parsed = Body.safeParse(await req.json().catch(() => ({})));
   if (!parsed.success) {
-    return NextResponse.json({ error: "bad_request", message: "Complete the bot check." }, { status: 400 });
+    return NextResponse.json({ error: "bad_request", message: "Could not start Google sign-in." }, { status: 400 });
   }
-  const bot = await verifyBot(parsed.data, ip);
-  if (!bot.ok) return NextResponse.json({ error: "bot", message: bot.error }, { status: 400 });
+  if ((parsed.data.website || "").trim()) {
+    return NextResponse.json({ error: "bot", message: "Could not verify this request." }, { status: 400 });
+  }
   const tos = Boolean(parsed.data.tos);
   const privacy = Boolean(parsed.data.privacy);
-  const { url, state } = googleUrl(req, tos, privacy);
+  const { url, state } = googleUrl(tos, privacy);
   const res = NextResponse.json({ ok: true, url });
   res.cookies.set(OAUTH_COOKIE, state, shortCookieOpts(15 * 60));
   return res;

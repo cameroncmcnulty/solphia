@@ -29,7 +29,7 @@ export function mailOffHint(kind: "admin" | "user" = "user"): string {
   if (kind === "admin") {
     return `Solphia mail is off on the live server. Set SOLPHIA_DKIM_PRIVATE_KEY so codes leave ${mailAddress("otp")} through Solphia's own SMTP. Publish the DKIM / SPF / DMARC records, then redeploy.`;
   }
-  return "Codes are not sending on the live site yet. Try again in a minute.";
+  return "Email codes are not sending right now. Sign in with Google instead.";
 }
 
 export async function verifyAgentMail(_otp: string): Promise<{ ok: true } | { ok: false; error: string }> {

@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { VAULT_EVENT, VAULT_UNLOCK_EVENT, needsBackup } from "@/lib/wallet/vault";
-import { loadOwner } from "@/lib/wallet/owner";
 import { peekAccount, refreshAccount } from "@/lib/auth/client";
+import { syncOwnerToSignedInAccount } from "@/lib/wallet/identity";
 import { AccountGate } from "@/components/auth/AccountGate";
 import { WalletOnboard } from "./WalletOnboard";
 import { WalletUnlock } from "./WalletUnlock";
@@ -46,7 +46,7 @@ export function WalletHost() {
 
   const afterAccount = useCallback(() => {
     setAccount(false);
-    if (!loadOwner()) setOnboard(true);
+    if (!syncOwnerToSignedInAccount()) setOnboard(true);
   }, []);
 
   useEffect(() => {
@@ -90,7 +90,8 @@ export function WalletHost() {
         const path = window.location.pathname || "/";
         window.history.replaceState({}, "", path);
       }
-      if (signed && acct && !loadOwner()) setOnboard(true);
+      const restored = syncOwnerToSignedInAccount();
+      if (signed && acct && !restored) setOnboard(true);
       if (authErr || twoFa) setAccount(true);
     });
   }, []);

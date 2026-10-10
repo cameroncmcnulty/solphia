@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { WalletSheet } from "@/components/wallet/sheet";
 import { linkDeviceWallets, refreshAccount, type PublicAccount } from "@/lib/auth/client";
+import { syncOwnerToSignedInAccount } from "@/lib/wallet/identity";
 import { PASSWORD_HINT, passwordIssue, passwordRules } from "@/lib/auth/passwordPolicy";
 import { listWallets } from "@/lib/wallet/vault";
 import { BotCheck, type BotFields } from "./BotCheck";
@@ -114,6 +115,7 @@ export function AccountGate({
   async function finish(account: PublicAccount) {
     await linkDeviceWallets(listWallets({ hidden: true }).map((w) => w.pubkey));
     await refreshAccount();
+    syncOwnerToSignedInAccount();
     onReady(account);
   }
 
@@ -146,11 +148,15 @@ export function AccountGate({
         });
         const j = (await r.json().catch(() => ({}))) as {
           message?: string;
+          error?: string;
           pending?: boolean;
           preview?: boolean;
           devCode?: string;
         };
-        if (!r.ok) throw new Error(j.message || "Could not send a code.");
+        if (!r.ok) {
+          if (j.error === "mail_off") throw new Error(j.message || "Email codes are down. Sign in with Google instead.");
+          throw new Error(j.message || "Could not send a code.");
+        }
         if (j.devCode) setHint(`Dev preview code: ${j.devCode}`);
         else setHint("We emailed a 6-digit code. It expires in 15 minutes.");
         setScreen("otp");
@@ -249,7 +255,7 @@ export function AccountGate({
         method: "POST",
         credentials: "include",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ tos, privacy, ...botBody() }),
+        body: JSON.stringify({ tos, privacy, website: bot.website }),
       });
       const j = (await r.json().catch(() => ({}))) as { message?: string; url?: string };
       if (!r.ok || !j.url) throw new Error(j.message || "Google sign-in failed.");
@@ -475,16 +481,15 @@ export function AccountGate({
     return (
       <WalletSheet
         title={mode === "signup" ? "Sign up with Google" : "Sign in with Google"}
-        subtitle={mode === "signup" ? "Agree to the terms, pass the bot check, then continue with your Google account." : "Pass the bot check, then continue with Google."}
+        subtitle={mode === "signup" ? "Agree to the terms, then continue with your Google account." : "Continue with the Google account you used before."}
         onClose={onClose}
       >
         {modeToggle()}
         {err ? <p className="mb-3 font-mono text-[13px] text-blood">{err}</p> : null}
         {mode === "signup" ? <TosBoxes tos={tos} privacy={privacy} setTos={setTos} setPrivacy={setPrivacy} /> : null}
-        <BotCheck onChange={onBot} />
         <button
           type="button"
-          disabled={busy || !botReady || (mode === "signup" && (!tos || !privacy))}
+          disabled={busy || (mode === "signup" && (!tos || !privacy))}
           onClick={() => void google()}
           className="mt-4 flex min-h-[48px] w-full items-center justify-center gap-2 rounded-full border border-white/15 bg-white text-[14px] font-semibold text-void disabled:opacity-40"
         >
@@ -585,6 +590,10 @@ export function AccountGate({
         disabled={busy || !googleOn}
         onClick={() => {
           setErr("");
+          if (mode === "signin") {
+            void google();
+            return;
+          }
           setScreen("google");
         }}
         className="flex min-h-[52px] w-full items-center justify-center gap-2 rounded-full border border-white/15 bg-white text-[15px] font-semibold text-void disabled:opacity-40"

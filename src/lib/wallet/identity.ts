@@ -1,3 +1,4 @@
+import { peekAccount } from "@/lib/auth/client";
 import { forgetOwner, loadOwner, persistOwner } from "./owner";
 import { activeWallet, walletByPubkey } from "./vault";
 
@@ -8,11 +9,25 @@ export function ownerIsEmbedded(pubkey?: string | null): boolean {
 }
 
 /**
- * Header identity is the local Solphia wallet, not a leftover cookie or injected Phantom.
- * Drops Phantom / remember-cookie pubkeys so a fresh browser cannot look signed in.
+ * Wallet follows the signed-in account. No account session → no remembered wallet,
+ * even if this device still has a local vault or leftover owner cookie.
  */
-export function syncOwnerToDeviceVault(): string | null {
+export function syncOwnerToSignedInAccount(): string | null {
+  const account = peekAccount();
+  if (!account?.id) {
+    if (loadOwner()) forgetOwner();
+    return null;
+  }
+  const linked = Array.isArray(account.wallets) ? account.wallets.filter((pk) => ownerIsEmbedded(pk)) : [];
   const active = activeWallet();
+  if (active?.kind === "embedded" && (!linked.length || linked.includes(active.pubkey))) {
+    persistOwner(active.pubkey);
+    return active.pubkey;
+  }
+  if (linked[0]) {
+    persistOwner(linked[0]);
+    return linked[0];
+  }
   if (active?.kind === "embedded") {
     persistOwner(active.pubkey);
     return active.pubkey;
@@ -24,4 +39,9 @@ export function syncOwnerToDeviceVault(): string | null {
   }
   if (owner) forgetOwner();
   return null;
+}
+
+/** @deprecated Use syncOwnerToSignedInAccount. Wallet is not an identity by itself. */
+export function syncOwnerToDeviceVault(): string | null {
+  return syncOwnerToSignedInAccount();
 }

@@ -8,6 +8,7 @@ import {
   parseOwnerCookie,
 } from "../lib/wallet/owner";
 import { DELETE, GET, POST } from "../app/api/wallet/remember/route";
+import { SESSION_COOKIE, accountToken } from "../lib/auth/session";
 import { NextRequest } from "next/server";
 
 const PK = "D4uCNcBKAbG9NAkmhQg7pBiztuejNzbWrZDcZmFGut81";
@@ -32,13 +33,31 @@ describe("wallet owner cookie", () => {
     assert.equal(header.includes("Secure"), false);
   });
 
-  it("GET reads the cookie and POST sets a first-party jar entry", async () => {
+  it("GET and POST only remember a wallet while an account session is live", async () => {
     const empty = new NextRequest("http://localhost/api/wallet/remember");
     const none = await GET(empty);
     assert.deepEqual(await none.json(), { pubkey: null });
 
-    const remembered = new NextRequest("http://localhost/api/wallet/remember", {
+    const leftover = new NextRequest("http://localhost/api/wallet/remember", {
       headers: { cookie: `${OWNER_KEY}=${PK}` },
+    });
+    const dropped = await GET(leftover);
+    assert.deepEqual(await dropped.json(), { pubkey: null });
+    const droppedSet = dropped.headers.get("set-cookie") || "";
+    assert.ok(droppedSet.includes("Max-Age=0") || droppedSet.toLowerCase().includes("max-age=0"));
+
+    const unsigned = await POST(
+      new NextRequest("http://localhost/api/wallet/remember", {
+        method: "POST",
+        body: JSON.stringify({ pubkey: PK }),
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    assert.equal(unsigned.status, 401);
+
+    const session = `${SESSION_COOKIE}=${accountToken("acct_test")}`;
+    const remembered = new NextRequest("http://localhost/api/wallet/remember", {
+      headers: { cookie: `${session}; ${OWNER_KEY}=${PK}` },
     });
     const got = await GET(remembered);
     assert.deepEqual(await got.json(), { pubkey: PK });
@@ -47,7 +66,7 @@ describe("wallet owner cookie", () => {
       new NextRequest("http://localhost/api/wallet/remember", {
         method: "POST",
         body: JSON.stringify({ pubkey: PK }),
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", cookie: session },
       }),
     );
     assert.equal(post.status, 200);
@@ -60,7 +79,7 @@ describe("wallet owner cookie", () => {
       new NextRequest("http://localhost/api/wallet/remember", {
         method: "POST",
         body: JSON.stringify({ pubkey: "nope" }),
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", cookie: session },
       }),
     );
     assert.equal(bad.status, 400);

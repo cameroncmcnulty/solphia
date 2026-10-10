@@ -1,11 +1,13 @@
 "use client";
 
+import { forgetOwner } from "@/lib/wallet/owner";
 import type { PublicAccount } from "./accounts";
 
 export type { PublicAccount };
 
 export const AUTH_EVENT = "solphia:auth";
-const CACHE_KEY = "solphia_account";
+export const ACCOUNT_CACHE_KEY = "solphia_account";
+const CACHE_KEY = ACCOUNT_CACHE_KEY;
 
 function store(): Storage | null {
   if (typeof window === "undefined") return null;
@@ -71,6 +73,10 @@ export async function linkDeviceWallets(pubkeys: string[]): Promise<void> {
 }
 
 export async function logoutAccount(): Promise<void> {
-  await fetch("/api/auth/logout", { method: "POST", credentials: "include" }).catch(() => undefined);
   writeCache(null);
+  forgetOwner();
+  await Promise.all([
+    fetch("/api/auth/logout", { method: "POST", credentials: "include" }).catch(() => undefined),
+    fetch("/api/wallet/remember", { method: "DELETE", credentials: "include" }).catch(() => undefined),
+  ]);
 }

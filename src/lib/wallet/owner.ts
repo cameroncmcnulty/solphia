@@ -80,8 +80,23 @@ export function loadOwner(): string | null {
 
 let rememberTimer: ReturnType<typeof setTimeout> | null = null;
 
+/** Must match `ACCOUNT_CACHE_KEY` in src/lib/auth/client.ts. Boot script cannot import that module. */
+const ACCOUNT_CACHE_KEY = "solphia_account";
+
+function accountCached(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const raw = window.localStorage.getItem(ACCOUNT_CACHE_KEY);
+    if (!raw) return false;
+    return Boolean(JSON.parse(raw)?.id);
+  } catch {
+    return false;
+  }
+}
+
 function rememberOnServer(pubkey: string) {
   if (typeof fetch === "undefined") return;
+  if (!accountCached()) return;
   if (rememberTimer) clearTimeout(rememberTimer);
   rememberTimer = setTimeout(() => {
     fetch("/api/wallet/remember", {
@@ -103,15 +118,17 @@ export function persistOwner(
   w.__SOLPHIA_OWNER = pubkey;
   writeStore(window.localStorage, pubkey);
   writeStore(window.sessionStorage, pubkey);
-  try {
-    document.cookie = ownerSetCookie(pubkey, location.protocol === "https:");
-  } catch {
-    /* ignore */
+  if (accountCached()) {
+    try {
+      document.cookie = ownerSetCookie(pubkey, location.protocol === "https:");
+    } catch {
+      /* ignore */
+    }
+    if (opts?.server !== false) rememberOnServer(pubkey);
   }
   if (opts?.announce !== false) {
     window.dispatchEvent(new CustomEvent(OWNER_EVENT, { detail: pubkey }));
   }
-  if (opts?.server !== false) rememberOnServer(pubkey);
 }
 
 /** Only for an explicit user switch that has already written the next key — not for backgrounding. */
@@ -129,5 +146,5 @@ export function forgetOwner(): void {
   window.dispatchEvent(new CustomEvent(OWNER_EVENT, { detail: null }));
 }
 
-/** Boot identity only from a local Solphia embedded vault. A remember cookie alone is not a login. */
-export const OWNER_HYDRATE_SCRIPT = `(function(){try{var k=${JSON.stringify(OWNER_KEY)};var pk=null;var m=document.cookie.match(new RegExp("(?:^|; )"+k+"=([^;]*)"));if(m){try{pk=decodeURIComponent(m[1])}catch(e){pk=m[1]}}if(!pk){try{pk=sessionStorage.getItem(k)||localStorage.getItem(k)}catch(e){}}var embedded=false;try{var meta=JSON.parse(localStorage.getItem("solphia_vault_meta")||"null");var ws=meta&&meta.wallets?meta.wallets:[];if(!pk&&meta&&meta.activeId){for(var i=0;i<ws.length;i++){var a=ws[i];if(a&&a.id===meta.activeId&&a.kind==="embedded"&&a.pubkey)pk=a.pubkey}}for(var j=0;j<ws.length;j++){var w=ws[j];if(w&&w.kind==="embedded"&&w.pubkey===pk)embedded=true}}catch(e){}if(!pk||!embedded){try{localStorage.removeItem(k);sessionStorage.removeItem(k)}catch(e){}try{document.cookie=k+"=; Path=/; Max-Age=0; SameSite=Lax"+(location.protocol==="https:"?"; Secure":"")}catch(e){}window.__SOLPHIA_OWNER=null;return}window.__SOLPHIA_OWNER=pk;try{localStorage.setItem(k,pk);sessionStorage.setItem(k,pk)}catch(e){}}catch(e){}})();`;
+/** Boot wallet only when this device has a cached account AND a matching local Solphia vault. */
+export const OWNER_HYDRATE_SCRIPT = `(function(){try{var k=${JSON.stringify(OWNER_KEY)};var signed=false;try{var acct=JSON.parse(localStorage.getItem(${JSON.stringify(ACCOUNT_CACHE_KEY)})||"null");signed=!!(acct&&acct.id)}catch(e){}var pk=null;var m=document.cookie.match(new RegExp("(?:^|; )"+k+"=([^;]*)"));if(m){try{pk=decodeURIComponent(m[1])}catch(e){pk=m[1]}}if(!pk){try{pk=sessionStorage.getItem(k)||localStorage.getItem(k)}catch(e){}}var embedded=false;try{var meta=JSON.parse(localStorage.getItem("solphia_vault_meta")||"null");var ws=meta&&meta.wallets?meta.wallets:[];if(!pk&&meta&&meta.activeId){for(var i=0;i<ws.length;i++){var a=ws[i];if(a&&a.id===meta.activeId&&a.kind==="embedded"&&a.pubkey)pk=a.pubkey}}for(var j=0;j<ws.length;j++){var w=ws[j];if(w&&w.kind==="embedded"&&w.pubkey===pk)embedded=true}}catch(e){}if(!signed||!pk||!embedded){try{localStorage.removeItem(k);sessionStorage.removeItem(k)}catch(e){}try{document.cookie=k+"=; Path=/; Max-Age=0; SameSite=Lax"+(location.protocol==="https:"?"; Secure":"")}catch(e){}window.__SOLPHIA_OWNER=null;return}window.__SOLPHIA_OWNER=pk;try{localStorage.setItem(k,pk);sessionStorage.setItem(k,pk)}catch(e){}}catch(e){}})();`;

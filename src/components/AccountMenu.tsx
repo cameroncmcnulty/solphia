@@ -94,9 +94,12 @@ export function AccountMenu() {
     setOpen((v) => !v);
   }
 
-  if (!owner || vault?.kind !== "embedded") return <WalletConnect />;
+  if (!signedIn) return <WalletConnect />;
 
-  const nickname = desk?.username ? `@${desk.username}` : vault?.nickname || `${owner.slice(0, 4)}…${owner.slice(-4)}`;
+  const seed = owner || email || "account";
+  const nickname = desk?.username
+    ? `@${desk.username}`
+    : vault?.nickname || (owner ? `${owner.slice(0, 4)}…${owner.slice(-4)}` : email || "Account");
 
   const menu = open && mounted && createPortal(
     <div
@@ -106,12 +109,12 @@ export function AccountMenu() {
       className="fixed z-[90] w-64 overflow-hidden rounded-2xl border border-violet/30 bg-ink/95 shadow-[0_16px_48px_rgba(0,0,0,0.55)] backdrop-blur-xl"
     >
       <div className="flex items-center gap-3 border-b border-violet/20 px-3 py-3">
-        <CartoonPfp seed={owner} src={desk?.pfp} className="h-11 w-11" />
+        <CartoonPfp seed={seed} src={desk?.pfp} className="h-11 w-11" />
         <div className="min-w-0">
           <div className="truncate font-mono text-xs text-ghost">{nickname}</div>
           <div className="truncate font-mono text-[10px] text-mute">
-            {email || `${owner.slice(0, 4)}…${owner.slice(-4)}`}
-            {vault ? " · Solphia" : ""}
+            {email || (owner ? `${owner.slice(0, 4)}…${owner.slice(-4)}` : "Signed in")}
+            {vault?.kind === "embedded" ? " · Solphia" : ""}
           </div>
         </div>
       </div>
@@ -196,7 +199,7 @@ export function AccountMenu() {
         title="Account"
         className="inline-flex items-center gap-2 rounded-full border border-violet/30 bg-void/60 p-0.5 pr-2.5 hover:border-acid/40"
       >
-        <CartoonPfp seed={owner} src={desk?.pfp} className="h-9 w-9" />
+        <CartoonPfp seed={seed} src={desk?.pfp} className="h-9 w-9" />
         <span className="hidden max-w-[7rem] truncate font-mono text-[11px] text-ghost sm:inline">{nickname}</span>
       </button>
       {menu}

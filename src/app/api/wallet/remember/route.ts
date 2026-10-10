@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { readAccountId } from "@/lib/auth/session";
 import { clientIp, isSolanaAddress, rateLimit } from "@/lib/security";
 import { OWNER_KEY, OWNER_MAX_AGE, parseOwnerCookie } from "@/lib/wallet/owner";
 
@@ -18,6 +19,11 @@ function cookieOpts() {
 }
 
 export async function GET(req: NextRequest) {
+  if (!readAccountId(req)) {
+    const res = NextResponse.json({ pubkey: null });
+    res.cookies.set(OWNER_KEY, "", { ...cookieOpts(), maxAge: 0 });
+    return res;
+  }
   const fromJar = req.cookies.get(OWNER_KEY)?.value || "";
   const fromHeader = parseOwnerCookie(req.headers.get("cookie"));
   const pubkey = isSolanaAddress(fromJar) ? fromJar : fromHeader;
@@ -27,6 +33,9 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   if (!rateLimit(clientIp(req) + ":wallet-remember", 30, 60_000)) {
     return NextResponse.json({ error: "rate_limited" }, { status: 429 });
+  }
+  if (!readAccountId(req)) {
+    return NextResponse.json({ error: "auth", pubkey: null }, { status: 401 });
   }
   const parsed = Body.safeParse(await req.json().catch(() => null));
   const pubkey = parsed.success ? parsed.data.pubkey.trim() : "";
