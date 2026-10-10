@@ -1,6 +1,7 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 
 export function WalletSheet({
   title,
@@ -13,7 +14,10 @@ export function WalletSheet({
   onClose: () => void;
   children: ReactNode;
 }) {
-  return (
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  if (!mounted || typeof document === "undefined") return null;
+  return createPortal(
     <div className="app-layer z-[96] bg-black/75" onClick={onClose}>
       <div
         className="app-layer-card rounded-[1.5rem] border border-white/10 bg-[#0b0714] p-5 shadow-[0_20px_60px_rgba(0,0,0,0.55)]"
@@ -30,6 +34,7 @@ export function WalletSheet({
         </div>
         <div className="mt-4">{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

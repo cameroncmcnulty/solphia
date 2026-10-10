@@ -25,9 +25,7 @@ export async function GET(req: NextRequest) {
   if (err) return fail("google_denied");
   const code = req.nextUrl.searchParams.get("code") || "";
   const state = req.nextUrl.searchParams.get("state") || "";
-  const cookieState = req.cookies.get(OAUTH_COOKIE)?.value || "";
   if (!code || !state) return fail("google_state");
-  if (cookieState && state !== cookieState) return fail("google_state");
   const legal = readOauthState(state);
   if (!legal) return fail("google_state");
 

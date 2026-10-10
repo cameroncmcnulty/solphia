@@ -16,7 +16,7 @@ const LINKS = [
 export function Nav() {
   const path = usePathname();
   return (
-    <header className="sticky top-0 z-40 flex items-center justify-between gap-3 border-b border-white/10 bg-[#04000a]/90 px-4 py-2.5 pt-[max(0.5rem,env(safe-area-inset-top))] backdrop-blur-xl md:px-12 md:py-4">
+    <header className="sticky top-0 z-30 flex items-center justify-between gap-3 overflow-hidden border-b border-white/10 bg-[#04000a]/90 px-4 py-2.5 pt-[max(0.5rem,env(safe-area-inset-top))] backdrop-blur-xl md:px-12 md:py-4">
       <Link href="/" className="flex min-w-0 items-center gap-2 md:gap-3">
         <SphaMark className="h-7 w-7" />
         <span className="truncate text-[17px] font-semibold tracking-tight text-white sm:text-xl md:text-2xl">

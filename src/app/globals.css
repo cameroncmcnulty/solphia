@@ -670,6 +670,8 @@ body {
   letter-spacing: 0.04em;
   font-size: 1rem;
   font-weight: 600;
+  overflow: hidden;
+  isolation: isolate;
   border: 2px solid transparent;
   background:
     linear-gradient(#100818, #100818) padding-box,
@@ -682,6 +684,7 @@ body {
       #c9a8ff 100%
     )
       border-box;
+  background-origin: border-box;
   background-size: 100% 100%, 220% 100%;
   animation: sol-border 6s ease-in-out infinite;
   transition: filter 0.18s ease, transform 0.18s ease;

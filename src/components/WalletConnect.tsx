@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect } from "react";
 import { SphaMark } from "./SphaMark";
 import { AUTH_EVENT, peekAccount, refreshAccount } from "@/lib/auth/client";
 import { forgetOwner, loadOwner, persistOwner } from "@/lib/wallet/owner";
 import { beginPhantomConnect, completePhantomConnect, completePhantomUl, injectedProvider, openPhantomLink, PHANTOM_EVENT, readPhantomReturn } from "@/lib/wallet/phantomConnect";
 import { dropPhantomWallets, ensurePhantomStub, phantomIsOwner } from "@/lib/wallet/vault";
 import { ownerIsEmbedded, syncOwnerToSignedInAccount } from "@/lib/wallet/identity";
-import { openAccountGate, openConnect } from "./wallet/WalletHost";
+import { openConnect } from "./wallet/WalletHost";
 
 type Provider = {
   isPhantom?: boolean;
@@ -108,7 +108,7 @@ function rememberKickedPhantom(pubkeys: string[]) {
 }
 
 /** Phantom is a send rail. Drop it as identity without wiping the account session. */
-function kickPhantomIdentity(injectedPk: string | null, opts?: { prompt?: boolean }) {
+function kickPhantomIdentity(injectedPk: string | null) {
   const owner = loadOwner();
   const wasPhantom = phantomIsOwner(injectedPk);
   const dropped = dropPhantomWallets();
@@ -129,11 +129,7 @@ function kickPhantomIdentity(injectedPk: string | null, opts?: { prompt?: boolea
     forgetOwner();
     void fetch("/api/wallet/remember", { method: "DELETE", credentials: "include" }).catch(() => undefined);
   }
-  if (opts?.prompt && ownerWasPhantom && !peekAccount()?.id) {
-    window.setTimeout(() => openAccountGate(), 0);
-  } else {
-    syncOwnerToSignedInAccount();
-  }
+  syncOwnerToSignedInAccount();
   return ownerWasPhantom;
 }
 
@@ -141,7 +137,7 @@ function kickPhantomIdentity(injectedPk: string | null, opts?: { prompt?: boolea
 export function WalletKeepalive() {
   useEffect(() => {
     let poll: ReturnType<typeof setInterval> | null = null;
-    kickPhantomIdentity(phantom()?.publicKey?.toString() || null, { prompt: true });
+    kickPhantomIdentity(phantom()?.publicKey?.toString() || null);
 
     const align = async () => {
       if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
@@ -203,34 +199,19 @@ export function WalletKeepalive() {
 }
 
 export function WalletConnect({ compact: _compact = false }: { compact?: boolean }) {
-  const [busy, setBusy] = useState(false);
-  const mounted = useRef(true);
-
-  useEffect(() => {
-    mounted.current = true;
-    return () => {
-      mounted.current = false;
-    };
-  }, []);
-
   return (
     <button
       type="button"
-      disabled={busy}
       onClick={(e) => {
         e.preventDefault();
         e.stopPropagation();
-        setBusy(true);
         openConnect();
-        window.setTimeout(() => {
-          if (mounted.current) setBusy(false);
-        }, 400);
       }}
       title="Sign in"
-      className="relative z-[70] btn-ghost inline-flex h-10 shrink-0 items-center gap-1.5 rounded-full px-2.5 py-2 font-mono text-[10px] tracking-widest sm:h-11 sm:gap-2 sm:px-4 sm:text-[11px]"
+      className="inline-flex h-10 shrink-0 items-center gap-1.5 overflow-hidden rounded-full border border-white/15 bg-white/[0.06] px-2.5 py-2 font-mono text-[10px] tracking-widest text-ghost hover:border-white/30 hover:bg-white/10 sm:h-11 sm:gap-2 sm:px-4 sm:text-[11px]"
     >
-      <SphaMark className="h-4 w-4 shrink-0 sm:h-5 sm:w-5" />
-      <span className="whitespace-nowrap">{busy ? "…" : "CONNECT"}</span>
+      <SphaMark float={false} className="h-4 w-4 shrink-0 sm:h-5 sm:w-5" />
+      <span className="whitespace-nowrap">CONNECT</span>
     </button>
   );
 }

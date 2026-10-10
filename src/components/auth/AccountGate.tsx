@@ -243,27 +243,17 @@ export function AccountGate({
     }
   }
 
-  async function google() {
+  function google() {
     if (mode === "signup" && (!tos || !privacy)) {
       setErr("Agree to the terms and privacy policy first.");
       return;
     }
     setBusy(true);
     setErr("");
-    try {
-      const r = await fetch("/api/auth/google", {
-        method: "POST",
-        credentials: "include",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ tos, privacy, website: bot.website }),
-      });
-      const j = (await r.json().catch(() => ({}))) as { message?: string; url?: string };
-      if (!r.ok || !j.url) throw new Error(j.message || "Google sign-in failed.");
-      window.location.href = j.url;
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "Google sign-in failed.");
-      setBusy(false);
-    }
+    const q = new URLSearchParams();
+    if (tos) q.set("tos", "1");
+    if (privacy) q.set("privacy", "1");
+    window.location.assign(`/api/auth/google?${q.toString()}`);
   }
 
   function modeToggle() {

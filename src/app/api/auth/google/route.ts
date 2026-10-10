@@ -37,6 +37,24 @@ function googleUrl(tos: boolean, privacy: boolean) {
   return { url: url.toString(), state };
 }
 
+export async function GET(req: NextRequest) {
+  const ip = clientIp(req);
+  if (!rateLimit(ip + ":google", 20, 10 * 60_000)) {
+    return NextResponse.redirect(`${siteOrigin()}/?auth_error=rate`);
+  }
+  const id = googleId();
+  const secret = (process.env.GOOGLE_CLIENT_SECRET || "").trim();
+  if (!id || !secret) {
+    return NextResponse.redirect(`${siteOrigin()}/?auth_error=google_off`);
+  }
+  const tos = req.nextUrl.searchParams.get("tos") === "1";
+  const privacy = req.nextUrl.searchParams.get("privacy") === "1";
+  const { url, state } = googleUrl(tos, privacy);
+  const res = NextResponse.redirect(url);
+  res.cookies.set(OAUTH_COOKIE, state, shortCookieOpts(15 * 60));
+  return res;
+}
+
 export async function POST(req: NextRequest) {
   const ip = clientIp(req);
   if (!rateLimit(ip + ":google", 20, 10 * 60_000)) {

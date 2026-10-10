@@ -33,6 +33,8 @@ export function peekAccount(): PublicAccount | null {
 }
 
 function writeCache(account: PublicAccount | null) {
+  const prevId = peekAccount()?.id || null;
+  const nextId = account?.id || null;
   const s = store();
   if (!s) return;
   try {
@@ -41,7 +43,7 @@ function writeCache(account: PublicAccount | null) {
   } catch {
     /* private mode */
   }
-  if (typeof window !== "undefined") {
+  if (typeof window !== "undefined" && prevId !== nextId) {
     window.dispatchEvent(new CustomEvent(AUTH_EVENT, { detail: account }));
   }
 }

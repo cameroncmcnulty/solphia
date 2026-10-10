@@ -107,6 +107,11 @@ describe("header identity", () => {
     assert.match(keep, /syncOwnerToSignedInAccount/);
     assert.equal(keep.includes("logoutAccount"), false);
     assert.match(keep, /refreshAccount/);
+    const connect = keep.slice(keep.indexOf("export function WalletConnect"));
+    assert.equal(connect.includes("btn-ghost"), false);
+    assert.equal(connect.includes("z-[70]"), false);
+    const sheet = readFileSync(new URL("../components/wallet/sheet.tsx", import.meta.url), "utf8");
+    assert.match(sheet, /createPortal/);
   });
 
   it("Google sign-in skips the bot check and pins OAuth to SITE_URL", async () => {
@@ -116,12 +121,14 @@ describe("header identity", () => {
     assert.match(start, /SITE_URL/);
     const cb = readFileSync(new URL("../app/api/auth/google/callback/route.ts", import.meta.url), "utf8");
     assert.match(cb, /SITE_URL/);
-    assert.match(cb, /cookieState && state !== cookieState/);
     assert.match(cb, /readOauthState\(state\)/);
+    assert.equal(cb.includes("state !== cookieState"), false);
+    const startGet = start.includes("export async function GET");
+    assert.equal(startGet, true);
     const gate = readFileSync(new URL("../components/auth/AccountGate.tsx", import.meta.url), "utf8");
     const googleBlock = gate.slice(gate.indexOf('screen === "google"'), gate.indexOf('screen === "email"'));
     assert.equal(googleBlock.includes("BotCheck"), false);
-    assert.match(gate, /mode === "signin"/);
+    assert.match(gate, /\/api\/auth\/google\?/);
   });
 
   it("wallet remember cookie is not an identity without an account session", async () => {
