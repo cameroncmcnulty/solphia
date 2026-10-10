@@ -37,6 +37,7 @@ export function openConnect() {
 
 export function WalletHost() {
   const [account, setAccount] = useState(false);
+  const [gateHint, setGateHint] = useState("");
   const [onboard, setOnboard] = useState(false);
   const [unlock, setUnlock] = useState(false);
   const [switcher, setSwitcher] = useState(false);
@@ -84,7 +85,7 @@ export function WalletHost() {
       if (typeof window === "undefined") return;
       const q = new URLSearchParams(window.location.search);
       const signed = q.get("signedin") === "1";
-      const authErr = q.get("auth_error");
+      const authErr = q.get("auth_error") || "";
       const twoFa = q.get("auth_2fa") === "1";
       if (signed || authErr || twoFa) {
         const path = window.location.pathname || "/";
@@ -92,7 +93,16 @@ export function WalletHost() {
       }
       const restored = syncOwnerToSignedInAccount();
       if (signed && acct && !restored) setOnboard(true);
-      if (authErr || twoFa) setAccount(true);
+      if (authErr) {
+        setGateHint(authErr);
+        setAccount(true);
+      } else if (twoFa) {
+        setGateHint("2fa");
+        setAccount(true);
+      } else if (signed && !acct) {
+        setGateHint("session");
+        setAccount(true);
+      }
     });
   }, []);
 
@@ -101,7 +111,11 @@ export function WalletHost() {
       {backup ? <BackupBar onOpen={() => setUnlock(true)} /> : null}
       {account ? (
         <AccountGate
-          onClose={() => setAccount(false)}
+          hint={gateHint}
+          onClose={() => {
+            setAccount(false);
+            setGateHint("");
+          }}
           onReady={() => afterAccount()}
         />
       ) : null}

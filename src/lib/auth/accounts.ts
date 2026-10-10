@@ -130,7 +130,11 @@ export function loginEmail(
   opts: { email: string; password: string },
 ): { ok: true; account: LoginAccount } | { ok: false; error: string } {
   const row = findByEmail(state, opts.email);
-  if (!row?.passwordHash) return { ok: false, error: "Email or password is wrong." };
+  if (!row) return { ok: false, error: "no_account" };
+  if (!row.passwordHash) {
+    if (row.googleId) return { ok: false, error: "use_google" };
+    return { ok: false, error: "no_account" };
+  }
   if (!verifyPassword(opts.password, row.passwordHash)) return { ok: false, error: "Email or password is wrong." };
   if (!row.emailVerifiedAt && !row.googleId) return { ok: false, error: "verify_email" };
   row.lastSeen = Date.now();
@@ -159,7 +163,7 @@ export function upsertGoogleAccount(
     }
     return { ok: true, account: existing, created: false };
   }
-  if (!opts.tos || !opts.privacy) return { ok: false, error: "Agree to the terms and privacy policy." };
+  if (!opts.tos || !opts.privacy) return { ok: false, error: "no_account" };
   const email = opts.email && emailOk(opts.email) ? normalizeEmail(opts.email) : undefined;
   const row: LoginAccount = {
     id: randomNonce(),

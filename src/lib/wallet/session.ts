@@ -6,7 +6,7 @@ const secret = process.env.ADMIN_SECRET || "solphia-dev-only";
 
 /** SIWS pubkey session. Account logins use `readAccountId`. */
 export function readSession(req: NextRequest): string | null {
-  const raw = req.cookies.get("solphia_session")?.value;
+  const raw = req.cookies.get("solphia_siws")?.value || req.cookies.get("solphia_session")?.value;
   if (!raw) return null;
   const payload = verifyToken(raw, secret);
   if (!payload?.startsWith("user:")) return null;

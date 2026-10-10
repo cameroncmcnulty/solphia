@@ -27,22 +27,26 @@ export function AccountMenu() {
   const [open, setOpen] = useState(false);
   const [desk, setDesk] = useState<Desk | null>(null);
   const [email, setEmail] = useState("");
-  const [signedIn, setSignedIn] = useState(() => Boolean(peekAccount()?.id));
+  const [signedIn, setSignedIn] = useState(false);
+  const [authReady, setAuthReady] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [pos, setPos] = useState({ top: 0, right: 0 });
   const box = useRef<HTMLDivElement>(null);
   const btn = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
+    let ready = false;
     const sync = () => {
+      if (!ready) return;
       const a = peekAccount();
       setEmail(a?.email || "");
       setSignedIn(Boolean(a?.id));
     };
-    sync();
     void refreshAccount().then((a) => {
+      ready = true;
       setEmail(a?.email || "");
       setSignedIn(Boolean(a?.id));
+      setAuthReady(true);
     });
     window.addEventListener(AUTH_EVENT, sync);
     return () => window.removeEventListener(AUTH_EVENT, sync);
@@ -94,6 +98,7 @@ export function AccountMenu() {
     setOpen((v) => !v);
   }
 
+  if (!authReady) return <div className="h-10 w-[7.25rem] sm:h-11" aria-hidden />;
   if (!signedIn) return <WalletConnect />;
 
   const seed = owner || email || "account";

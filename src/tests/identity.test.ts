@@ -122,6 +122,8 @@ describe("header identity", () => {
     const cb = readFileSync(new URL("../app/api/auth/google/callback/route.ts", import.meta.url), "utf8");
     assert.match(cb, /SITE_URL/);
     assert.match(cb, /readOauthState\(state\)/);
+    assert.match(cb, /\/api\/auth\/claim/);
+    assert.match(cb, /no_account/);
     assert.equal(cb.includes("state !== cookieState"), false);
     const startGet = start.includes("export async function GET");
     assert.equal(startGet, true);
@@ -129,6 +131,14 @@ describe("header identity", () => {
     const googleBlock = gate.slice(gate.indexOf('screen === "google"'), gate.indexOf('screen === "email"'));
     assert.equal(googleBlock.includes("BotCheck"), false);
     assert.match(gate, /\/api\/auth\/google\?/);
+    assert.match(gate, /No Solphia account for that Google login/);
+    assert.match(gate, /hint: authHint/);
+    assert.match(cb, /method="POST"/);
+    assert.match(cb, /name="ticket"/);
+    const host = readFileSync(new URL("../components/wallet/WalletHost.tsx", import.meta.url), "utf8");
+    assert.match(host, /gateHint/);
+    const menu = readFileSync(new URL("../components/AccountMenu.tsx", import.meta.url), "utf8");
+    assert.match(menu, /authReady/);
   });
 
   it("wallet remember cookie is not an identity without an account session", async () => {

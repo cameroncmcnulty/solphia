@@ -10,7 +10,7 @@ import {
   type LoginAccount,
 } from "../lib/auth/accounts";
 import { hashPassword, passwordOk, verifyPassword } from "../lib/auth/password";
-import { accountToken } from "../lib/auth/session";
+import { accountToken, readClaimTicket, signClaimTicket } from "../lib/auth/session";
 import { verifyToken } from "../lib/security";
 import { copyText } from "../lib/copyText";
 import { issueChallenge, verifyBot, verifyMathChallenge } from "../lib/auth/challenge";
@@ -59,6 +59,9 @@ describe("account login", () => {
     const s = blank();
     const made = createEmailAccount(s, { email: "b@solphia.io", password: "Hunter22!", tos: true, privacy: true, verified: true });
     assert.equal(made.ok, true);
+    const missing = loginEmail(s, { email: "nobody@solphia.io", password: "Hunter22!" });
+    assert.equal(missing.ok, false);
+    if (!missing.ok) assert.equal(missing.error, "no_account");
     const bad = loginEmail(s, { email: "b@solphia.io", password: "nope-nope" });
     assert.equal(bad.ok, false);
     const ok = loginEmail(s, { email: "b@solphia.io", password: "Hunter22!" });
@@ -76,6 +79,7 @@ describe("account login", () => {
     const s = blank();
     const noTos = upsertGoogleAccount(s, { googleId: "g1", email: "g@solphia.io", tos: false, privacy: false });
     assert.equal(noTos.ok, false);
+    if (!noTos.ok) assert.equal(noTos.error, "no_account");
     const made = upsertGoogleAccount(s, { googleId: "g1", email: "g@solphia.io", tos: true, privacy: true });
     assert.equal(made.ok, true);
     if (!made.ok) return;
@@ -87,10 +91,41 @@ describe("account login", () => {
     assert.equal(again.account.id, made.account.id);
   });
 
+  it("tells sign-in when that Google has no account, and links an existing email login", () => {
+    const s = blank();
+    const missing = upsertGoogleAccount(s, { googleId: "g-new", email: "new@solphia.io", tos: false, privacy: false });
+    assert.equal(missing.ok, false);
+    if (!missing.ok) assert.equal(missing.error, "no_account");
+    const email = createEmailAccount(s, {
+      email: "link@solphia.io",
+      password: "Hunter22!",
+      tos: true,
+      privacy: true,
+      verified: true,
+    });
+    assert.equal(email.ok, true);
+    const linked = upsertGoogleAccount(s, { googleId: "g-link", email: "link@solphia.io", tos: false, privacy: false });
+    assert.equal(linked.ok, true);
+    if (!linked.ok || !email.ok) return;
+    assert.equal(linked.created, false);
+    assert.equal(linked.account.id, email.account.id);
+    assert.equal(linked.account.googleId, "g-link");
+    const googleOnly = loginEmail(s, { email: "link@solphia.io", password: "Hunter22!" });
+    assert.equal(googleOnly.ok, true);
+    const gOnly = upsertGoogleAccount(s, { googleId: "g-only", email: "onlyg@solphia.io", tos: true, privacy: true });
+    assert.equal(gOnly.ok, true);
+    const useGoogle = loginEmail(s, { email: "onlyg@solphia.io", password: "Hunter22!" });
+    assert.equal(useGoogle.ok, false);
+    if (!useGoogle.ok) assert.equal(useGoogle.error, "use_google");
+  });
+
   it("signs an account session token", () => {
     const tok = accountToken("acctid123");
     const payload = verifyToken(tok, process.env.ADMIN_SECRET || "solphia-dev-only");
     assert.equal(payload?.startsWith("acct:acctid123:"), true);
+    const ticket = signClaimTicket("acctid123");
+    assert.equal(readClaimTicket(ticket), "acctid123");
+    assert.equal(readClaimTicket("nope"), null);
   });
 
   it("copy helper is a no-op without a DOM", () => {

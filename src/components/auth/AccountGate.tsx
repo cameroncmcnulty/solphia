@@ -61,14 +61,27 @@ function TosBoxes({
   );
 }
 
+const AUTH_HINTS: Record<string, string> = {
+  tos: "Agree to the terms and privacy policy, then tap Google again.",
+  no_account: "No Solphia account for that Google login. Switch to Create account, agree to the terms, then tap Google.",
+  google_off: "Google sign-in is not configured yet.",
+  google_denied: "Google sign-in was cancelled.",
+  google_state: "Google sign-in failed. Tap Google again.",
+  google: "Google sign-in failed. Tap Google again.",
+  rate: "Too many tries. Wait a bit.",
+  session: "Sign-in did not stay active. Tap Google again.",
+};
+
 export function AccountGate({
   onClose,
   onReady,
+  hint: authHint,
 }: {
   onClose: () => void;
   onReady: (account: PublicAccount) => void;
+  hint?: string;
 }) {
-  const [mode, setMode] = useState<Mode>("signup");
+  const [mode, setMode] = useState<Mode>("signin");
   const [screen, setScreen] = useState<Screen>("pick");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -83,23 +96,27 @@ export function AccountGate({
   const [bot, setBot] = useState<BotFields>({ website: "", challengeToken: "", challengeAnswer: "", turnstile: "" });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
-  const [hint, setHint] = useState("");
+  const [note, setNote] = useState("");
   const [googleOn, setGoogleOn] = useState(true);
   const onBot = useCallback((fields: BotFields) => setBot(fields), []);
   const rules = passwordRules(password);
 
   useEffect(() => {
     const q = new URLSearchParams(typeof window === "undefined" ? "" : window.location.search);
-    const authErr = q.get("auth_error");
+    const authErr = authHint || q.get("auth_error") || "";
     if (authErr === "tos") {
-      setErr("Agree to the terms and privacy policy, then tap Google again.");
+      setErr(AUTH_HINTS.tos);
       setScreen("google");
       setMode("signup");
-    } else if (authErr === "google_off") setErr("Google sign-in is not configured yet.");
-    else if (authErr === "google_denied") setErr("Google sign-in was cancelled.");
-    else if (authErr === "google_state" || authErr === "google") setErr("Google sign-in failed. Try email, or tap Google again.");
-    else if (authErr === "rate") setErr("Too many tries. Wait a bit.");
-    if (q.get("auth_2fa") === "1") {
+    } else if (authErr === "no_account") {
+      setErr(AUTH_HINTS.no_account);
+      setScreen("google");
+      setMode("signup");
+    } else if (AUTH_HINTS[authErr]) {
+      setErr(AUTH_HINTS[authErr]);
+      if (authErr === "session") setMode("signin");
+    }
+    if (q.get("auth_2fa") === "1" || authHint === "2fa") {
       setScreen("totp");
       setMode("signin");
     }
@@ -110,7 +127,7 @@ export function AccountGate({
         if (j?.account?.id) onReady(j.account as PublicAccount);
       })
       .catch(() => undefined);
-  }, [onReady]);
+  }, [onReady, authHint]);
 
   async function finish(account: PublicAccount) {
     await linkDeviceWallets(listWallets({ hidden: true }).map((w) => w.pubkey));
@@ -133,7 +150,7 @@ export function AccountGate({
   async function submitEmail() {
     setBusy(true);
     setErr("");
-    setHint("");
+    setNote("");
     try {
       if (mode === "signup") {
         if (password !== password2) throw new Error("Passwords do not match.");
@@ -157,8 +174,8 @@ export function AccountGate({
           if (j.error === "mail_off") throw new Error(j.message || "Email codes are down. Sign in with Google instead.");
           throw new Error(j.message || "Could not send a code.");
         }
-        if (j.devCode) setHint(`Dev preview code: ${j.devCode}`);
-        else setHint("We emailed a 6-digit code. It expires in 15 minutes.");
+        if (j.devCode) setNote(`Dev preview code: ${j.devCode}`);
+        else setNote("We emailed a 6-digit code. It expires in 15 minutes.");
         setScreen("otp");
         return;
       }
@@ -178,8 +195,8 @@ export function AccountGate({
         });
         const sj = (await send.json().catch(() => ({}))) as { message?: string; devCode?: string };
         if (!send.ok) throw new Error(sj.message || "Verify this email first.");
-        if (sj.devCode) setHint(`Dev preview code: ${sj.devCode}`);
-        else setHint("We emailed a 6-digit code to verify this account.");
+        if (sj.devCode) setNote(`Dev preview code: ${sj.devCode}`);
+        else setNote("We emailed a 6-digit code to verify this account.");
         setMode("signup");
         setTos(true);
         setPrivacy(true);
@@ -190,6 +207,13 @@ export function AccountGate({
       if (loginJ.totp) {
         setScreen("totp");
         return;
+      }
+      if (loginJ.error === "no_account") {
+        setMode("signup");
+        throw new Error("No Solphia account for that email. Switch to Create account, or use Google.");
+      }
+      if (loginJ.error === "use_google") {
+        throw new Error("That email uses Google. Tap Sign in with Google.");
       }
       if (!r.ok || !loginJ.account) throw new Error(loginJ.message || "Could not sign in.");
       await finish(loginJ.account);
@@ -224,7 +248,7 @@ export function AccountGate({
   async function resendOtp() {
     setBusy(true);
     setErr("");
-    setHint("");
+    setNote("");
     try {
       const r = await fetch("/api/auth/otp", {
         method: "POST",
@@ -234,8 +258,8 @@ export function AccountGate({
       });
       const j = (await r.json().catch(() => ({}))) as { message?: string; devCode?: string };
       if (!r.ok) throw new Error(j.message || "Could not resend the code.");
-      if (j.devCode) setHint(`Dev preview code: ${j.devCode}`);
-      else setHint("We emailed a new 6-digit code. It expires in 15 minutes.");
+      if (j.devCode) setNote(`Dev preview code: ${j.devCode}`);
+      else setNote("We emailed a new 6-digit code. It expires in 15 minutes.");
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Could not resend the code.");
     } finally {
@@ -280,7 +304,7 @@ export function AccountGate({
   function backToPick() {
     setScreen("pick");
     setErr("");
-    setHint("");
+    setNote("");
   }
 
   async function startTotpSetup() {
@@ -429,7 +453,7 @@ export function AccountGate({
     return (
       <WalletSheet title="Check your email" subtitle={`Enter the 6-digit code we sent to ${email}.`} onClose={onClose}>
         {err ? <p className="mb-3 font-mono text-[13px] text-blood">{err}</p> : null}
-        {hint ? <p className="mb-3 text-[13px] text-white/55">{hint}</p> : null}
+        {note ? <p className="mb-3 text-[13px] text-white/55">{note}</p> : null}
         <label className="block">
           <span className="font-mono text-[11px] tracking-[0.16em] text-white/40">ONE-TIME CODE</span>
           <input

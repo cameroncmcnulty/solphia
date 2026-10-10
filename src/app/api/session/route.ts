@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
   });
   const token = signToken(`user:${parsed.data.pubkey}:${Date.now()}`, secret);
   const res = NextResponse.json({ ok: true, pubkey: parsed.data.pubkey });
-  res.cookies.set("solphia_session", token, {
+  res.cookies.set("solphia_siws", token, {
     httpOnly: true,
     sameSite: "strict",
     secure: process.env.NODE_ENV === "production",

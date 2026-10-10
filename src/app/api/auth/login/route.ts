@@ -33,7 +33,13 @@ export async function POST(req: NextRequest) {
   if (!out.ok) {
     const status = out.error === "verify_email" ? 403 : 401;
     const message =
-      out.error === "verify_email" ? "Verify this email with the one-time code we send." : out.error;
+      out.error === "verify_email"
+        ? "Verify this email with the one-time code we send."
+        : out.error === "no_account"
+          ? "No Solphia account for that email. Switch to Create account, or use Google."
+          : out.error === "use_google"
+            ? "That email uses Google. Tap Sign in with Google."
+            : out.error;
     return NextResponse.json({ error: out.error, message }, { status });
   }
   if (totpEnabled(out.account)) {
