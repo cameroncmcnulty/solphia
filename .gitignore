@@ -19,3 +19,4 @@ tsconfig.tsbuildinfo
 .env*
 programs/solphia-pad/keys/
 programs/solphia-pad/target/
+programs/spha-hook/target/

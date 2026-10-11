@@ -16,7 +16,8 @@ import {
   sphaReservedTokens,
   type SphaNetwork,
 } from "@/lib/token/omics";
-import { sphaRpc } from "@/lib/token/mint";
+import { encodeTx, sphaRpc, buildSphaTeamMintTx } from "@/lib/token/mint";
+import { connection } from "@/lib/solana/connection";
 import { createCoin, emptyLaunchBook } from "@/lib/launch/engine";
 import { dbcEnabled, liveDbcConfig } from "@/lib/launch/dbcIds";
 
@@ -76,6 +77,12 @@ const Prepare = z.object({
   uri: z.string().max(400).optional(),
 });
 
+const Team = z.object({
+  action: z.literal("prepareTeam"),
+  payer: z.string(),
+  mint: z.string(),
+});
+
 const Recorded = z.object({
   action: z.literal("record").optional(),
   mode: z.enum(["test", "official"]).optional(),
@@ -100,6 +107,8 @@ export async function POST(req: NextRequest) {
   const raw = await req.json().catch(() => null);
   const asPrep = Prepare.safeParse(raw);
   if (asPrep.success) return prepare(req, asPrep.data);
+  const asTeam = Team.safeParse(raw);
+  if (asTeam.success) return prepareTeam(asTeam.data);
   const parsed = Recorded.safeParse(raw);
   if (!parsed.success) return NextResponse.json({ error: "bad_request" }, { status: 400 });
   return record(req, parsed.data);
@@ -151,6 +160,33 @@ async function prepare(req: NextRequest, b: z.infer<typeof Prepare>) {
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Could not build the launch.";
+    return NextResponse.json({ error: "chain_failed", message }, { status: 400 });
+  }
+}
+
+async function prepareTeam(b: z.infer<typeof Team>) {
+  if (!isSolanaAddress(b.payer) || !isSolanaAddress(b.mint)) {
+    return NextResponse.json({ error: "bad_wallet", message: "Owner wallet and mint are required." }, { status: 400 });
+  }
+  const s = await readyState();
+  const dest = destOf(s);
+  const missing = sphaMissingDest(dest);
+  if (missing.length) {
+    return NextResponse.json(
+      { error: "missing_wallets", message: `Set project wallets first: ${missing.join(", ")}` },
+      { status: 400 },
+    );
+  }
+  try {
+    const built = await buildSphaTeamMintTx({ conn: connection(), payer: b.payer, mint: b.mint, dest });
+    return NextResponse.json({
+      ok: true,
+      mint: b.mint,
+      tx: encodeTx(built.transaction),
+      legs: built.legs,
+    });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Could not build team mint.";
     return NextResponse.json({ error: "chain_failed", message }, { status: 400 });
   }
 }

@@ -7,6 +7,7 @@ import {
 } from "@solana/web3.js";
 import {
   AuthorityType,
+  TOKEN_2022_PROGRAM_ID,
   TOKEN_PROGRAM_ID,
   createAssociatedTokenAccountIdempotentInstruction,
   createInitializeMint2Instruction,
@@ -14,6 +15,7 @@ import {
   createSetAuthorityInstruction,
   getAssociatedTokenAddressSync,
   getMinimumBalanceForRentExemptMint,
+  unpackMint,
   MINT_SIZE,
 } from "@solana/spl-token";
 import {
@@ -21,11 +23,13 @@ import {
   SPHA_SUPPLY,
   sphaAllocations,
   sphaRawAmount,
+  sphaTeamLegs,
   type SphaAllocation,
   type SphaDestinations,
   type SphaNetwork,
 } from "./omics";
 import { createMetadataV3Ix } from "./metadata";
+import { sphaHookInitIx } from "./sphaHook";
 
 export function sphaRpc(network: SphaNetwork, mainnetRpc: string): string {
   if (network === "devnet") return "https://api.devnet.solana.com";
@@ -101,6 +105,42 @@ export async function buildSphaLaunchTxs(opts: {
   lock.recentBlockhash = blockhash;
 
   return { mint: mint.toBase58(), txs: [create, seed, lock], allocations };
+}
+
+/** After DBC pool create: mint 8.6 / 9.7 / 4.6 into project wallets, then revoke mint (+ freeze if set). */
+export async function buildSphaTeamMintTx(opts: {
+  conn: Connection;
+  payer: string;
+  mint: string;
+  dest: SphaDestinations;
+}): Promise<{ transaction: Transaction; legs: { id: string; to: string; tokens: number }[] }> {
+  const payer = new PublicKey(opts.payer);
+  const mint = new PublicKey(opts.mint);
+  const info = await opts.conn.getAccountInfo(mint, "confirmed");
+  if (!info) throw new Error("Mint not on-chain yet.");
+  const tokenProgram = info.owner.equals(TOKEN_2022_PROGRAM_ID) ? TOKEN_2022_PROGRAM_ID : TOKEN_PROGRAM_ID;
+  const mintState = unpackMint(mint, info, tokenProgram);
+  const legs = sphaTeamLegs(opts.dest);
+  if (!legs.length) throw new Error("Set owner, foundation, and treasury wallets first.");
+  const { blockhash, lastValidBlockHeight } = await opts.conn.getLatestBlockhash("confirmed");
+  const tx = new Transaction();
+  if (tokenProgram.equals(TOKEN_2022_PROGRAM_ID)) tx.add(sphaHookInitIx(payer, mint));
+  for (const leg of legs) {
+    const owner = new PublicKey(leg.to);
+    const ata = getAssociatedTokenAddressSync(mint, owner, false, tokenProgram);
+    tx.add(createAssociatedTokenAccountIdempotentInstruction(payer, ata, owner, mint, tokenProgram));
+    tx.add(createMintToCheckedInstruction(mint, ata, payer, sphaRawAmount(leg.tokens, mintState.decimals), mintState.decimals, [], tokenProgram));
+  }
+  if (mintState.mintAuthority && mintState.mintAuthority.equals(payer)) {
+    tx.add(createSetAuthorityInstruction(mint, payer, AuthorityType.MintTokens, null, [], tokenProgram));
+  }
+  if (mintState.freezeAuthority && mintState.freezeAuthority.equals(payer)) {
+    tx.add(createSetAuthorityInstruction(mint, payer, AuthorityType.FreezeAccount, null, [], tokenProgram));
+  }
+  tx.feePayer = payer;
+  tx.recentBlockhash = blockhash;
+  tx.lastValidBlockHeight = lastValidBlockHeight;
+  return { transaction: tx, legs };
 }
 
 export function encodeTx(tx: Transaction | { serialize: (opts?: any) => Uint8Array | Buffer }): string {

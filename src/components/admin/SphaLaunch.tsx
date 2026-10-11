@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Keypair } from "@solana/web3.js";
-import { SPHA_NAME, SPHA_SUPPLY, SPHA_SYMBOL, sphaSplitLegs, type SphaDestinations, type SphaNetwork } from "@/lib/token/omics";
+import { SPHA_NAME, SPHA_SUPPLY, SPHA_SYMBOL, type SphaNetwork } from "@/lib/token/omics";
 import { useAdmin } from "./AdminProvider";
 import { Tokenomics } from "@/components/Tokenomics";
 import { shortPk } from "./ui";
@@ -124,17 +124,17 @@ export function SphaLaunch() {
           payer,
         }),
       });
-      if (mode === "official" && prep?.dest) {
-        setLog("Splitting leftover to owner and foundation…");
+      if (mode === "official") {
+        setLog("Minting team allocations to owner, foundation, and treasury…");
         try {
-          const notes = await sendLeftoverSlices(ca, prep.dest);
+          const notes = await mintTeamSlices(ca, payer);
           setLog(`Official $SPHA live. CA ${ca}. ${notes.join(" · ")}`);
         } catch (splitErr) {
-          setLog(`Official $SPHA live. CA ${ca}. Leftover still in treasury — use Send leftover.`);
-          setErr(splitErr instanceof Error ? splitErr.message : "leftover split failed");
+          setLog(`Official $SPHA live. CA ${ca}. Team mint still pending — use Mint team allocations.`);
+          setErr(splitErr instanceof Error ? splitErr.message : "team mint failed");
         }
       } else {
-        setLog(mode === "official" ? `Official $SPHA live. CA ${ca}` : `Test token live. CA ${ca} — official $SPHA is unchanged.`);
+        setLog(`Test token live. CA ${ca} — official $SPHA is unchanged.`);
       }
       loadPrep().catch(() => {});
     } catch (e) {
@@ -144,56 +144,54 @@ export function SphaLaunch() {
     }
   }
 
-  async function sendLeftoverSlices(mint: string, dest: SphaDestinations): Promise<string[]> {
-    const legs = sphaSplitLegs(dest);
-    if (!legs.length) return ["Treasury keeps the leftover (owner/foundation same as treasury)."];
-    const signer = await ensureProjectSigner("treasury");
-    if (!signer) throw new Error("Unlock the treasury project wallet to send owner and foundation leftover.");
-    const notes: string[] = [];
-    for (const leg of legs) {
-      let lastErr = "leftover not in treasury yet";
-      for (let i = 0; i < 4; i++) {
-        if (i) await new Promise((r) => setTimeout(r, 1500));
-        try {
-          const r = await fetch("/api/sol/transfer", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ owner: dest.treasury, to: leg.to, amount: leg.tokens, mint, priority: "medium" }),
-          });
-          const j = (await r.json().catch(() => ({}))) as { transaction?: string; error?: string };
-          if (!r.ok || !j.transaction) {
-            lastErr = j.error || "transfer build failed";
-            continue;
-          }
-          const sig = await signAndSendProjectTx("treasury", j.transaction);
-          notes.push(`${leg.id} ${leg.tokens.toLocaleString("en-US")} · ${sig.slice(0, 8)}…`);
-          lastErr = "";
-          break;
-        } catch (e) {
-          lastErr = e instanceof Error ? e.message : "split failed";
+  async function mintTeamSlices(mint: string, payer: string): Promise<string[]> {
+    const signer = await ensureProjectSigner("owner");
+    if (!signer) throw new Error("Unlock the owner project wallet to mint team allocations.");
+    let lastErr = "mint not on-chain yet";
+    for (let i = 0; i < 6; i++) {
+      if (i) await new Promise((r) => setTimeout(r, 1500));
+      try {
+        const r = await fetch("/api/admin/spha", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ action: "prepareTeam", payer, mint }),
+        });
+        const j = (await r.json().catch(() => ({}))) as {
+          tx?: string;
+          error?: string;
+          message?: string;
+          legs?: { id: string; tokens: number }[];
+        };
+        if (!r.ok || !j.tx) {
+          lastErr = j.message || j.error || "team mint build failed";
+          continue;
         }
+        const sig = await signAndSendProjectTx("owner", j.tx);
+        const notes = (j.legs || []).map((leg) => `${leg.id} ${leg.tokens.toLocaleString("en-US")}`);
+        notes.push(`mint ${sig.slice(0, 8)}…`);
+        return notes;
+      } catch (e) {
+        lastErr = e instanceof Error ? e.message : "team mint failed";
       }
-      if (lastErr) throw new Error(`${leg.id} leftover: ${lastErr}`);
     }
-    notes.push("Treasury keeps 4.6%.");
-    return notes;
+    throw new Error(lastErr);
   }
 
   async function splitNow() {
     setErr("");
-    const dest = prep?.dest;
     const ca = prep?.launch?.mint || "";
-    if (!dest || !ca) {
+    const payer = projectWallet("owner")?.pubkey || data?.ownerWallet || "";
+    if (!ca || !payer) {
       setErr("Launch official $SPHA first.");
       return;
     }
     setSplitRun(true);
     try {
-      setLog("Splitting leftover to owner and foundation…");
-      const notes = await sendLeftoverSlices(ca, dest);
+      setLog("Minting team allocations to owner, foundation, and treasury…");
+      const notes = await mintTeamSlices(ca, payer);
       setLog(notes.join(" · "));
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "leftover split failed");
+      setErr(e instanceof Error ? e.message : "team mint failed");
     } finally {
       setSplitRun(false);
     }
@@ -211,9 +209,9 @@ export function SphaLaunch() {
           <div>
             <div className="font-mono text-[10px] tracking-[0.22em] text-acid">SOLPHIA TOKEN LAUNCHER</div>
             <p className="mt-1 max-w-xl text-sm text-mute">
-              Official $SPHA is 200,000,000. 8.6 / 9.7 / 4.6 leftover splits to owner, foundation, and treasury at
-              launch. 77.1% on the same bonding curve as every other pad token so the 1% lasts after graduate. Sign
-              with the owner project wallet — not Phantom. Run a test ticker first.
+              Official $SPHA is 200,000,000. 8.6 / 9.7 / 4.6 mint into the owner, foundation, and treasury project
+              wallets at launch. 77.1% on the same bonding curve as every other pad token so the 1% lasts after
+              graduate. Sign with the owner project wallet — not Phantom. Run a test ticker first.
             </p>
           </div>
           <div className="flex rounded-full border border-violet/30 p-0.5">
@@ -349,9 +347,8 @@ export function SphaLaunch() {
 
         <p className="mt-3 text-sm text-mute">
           Payer is the owner project wallet {ownerPk ? shortPk(ownerPk, 4) : "(create it above)"}. Fund it with a little
-          SOL for rent. Official leftover 22.9% mints to treasury, then this launcher sends 8.6% to owner and 9.7% to
-          the foundation. Treasury keeps 4.6%. Unlock treasury too so those transfers can sign. Test launches use the
-          shared pad 1B config (no leftover) and do not set the official CA.
+          SOL for rent. Official 22.9% mints straight into owner / foundation / treasury at T0 — 17.2M / 19.4M / 9.2M.
+          77.1% (154.2M) is the curve. Test launches use the shared pad 1B config and do not set the official CA.
         </p>
 
         <button
@@ -369,7 +366,7 @@ export function SphaLaunch() {
             onClick={() => void splitNow()}
             className="btn-ghost mt-2 rounded-full px-6 py-2 text-sm disabled:opacity-40"
           >
-            {splitRun ? "Sending leftover…" : "Send leftover to owner and foundation"}
+            {splitRun ? "Minting team…" : "Mint team allocations"}
           </button>
         ) : null}
         {log && <p className="mt-2 font-mono text-[12px] text-acid">{log}</p>}

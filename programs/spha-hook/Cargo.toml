@@ -1,0 +1,24 @@
+[package]
+name = "spha-hook"
+version = "0.1.0"
+edition = "2021"
+description = "No-op Token-2022 transfer hook so $SPHA can keep mint authority at launch."
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "spha_hook"
+
+[dependencies]
+pinocchio = "0.8"
+pinocchio-system = "0.2"
+
+[features]
+no-entrypoint = []
+
+[profile.release]
+overflow-checks = false
+lto = "fat"
+codegen-units = 1
+opt-level = "z"
+panic = "abort"
+strip = true

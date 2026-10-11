@@ -9,13 +9,15 @@ import BN from "bn.js";
 
 import { connection } from "../solana/connection";
 import { Keypair, PublicKey, Transaction, VersionedTransaction } from "@solana/web3.js";
+import { TOKEN_2022_PROGRAM_ID, getTransferHook, unpackMint } from "@solana/spl-token";
 import { encodeTx } from "../token/mint";
 import { bytesToB64 } from "../solana/wire";
 import { treasuryAddress } from "../treasury";
 import { liveDbcConfig, dbcEnabled } from "./dbcIds";
 import { emptyCurve, MIN_TRADE_SOL, quoteBuy } from "./curve";
 import { CLAIM_DUST_SOL, feesFromPoolAccount } from "./claim";
-import { SPHA_SUPPLY, sphaReservedTokens } from "../token/omics";
+import { sphaCurveTokens } from "../token/omics";
+import { SPHA_TRANSFER_HOOK } from "../token/sphaHook";
 
 const WSOL = "So11111111111111111111111111111111111111112";
 /** Unsigned mint/config signers make RPC sim a false fail. Size is the real gate. */
@@ -88,19 +90,21 @@ export async function solphiaCurveConfig() {
 
 /**
  * Dedicated $SPHA curve. Same 1% / 50% creator / DAMM 100 bps as the pad.
- * Only supply and leftover change — leftover is the 22.9% team slices (owner + foundation + treasury).
+ * Curve supply is 77.1% (154.2M). Team 22.9% is minted to project wallets at T0
+ * (DBC leftover is post-graduation only). Token-2022 + transfer hook is the only
+ * DBC path that leaves mint authority with the creator long enough to mint those slices.
  * Never write this config onto the shared pad dbcConfig.
  */
 export async function sphaCurveConfig() {
   const m = sdk();
   return m.buildCurveWithMarketCap({
     token: {
-      tokenType: m.TokenType.SPLToken,
+      tokenType: m.TokenType.Token2022,
       tokenBaseDecimal: m.TokenDecimal.SIX,
       tokenQuoteDecimal: m.TokenDecimal.NINE,
-      tokenAuthorityOption: m.TokenAuthorityOption.Immutable,
-      totalTokenSupply: SPHA_SUPPLY,
-      leftover: sphaReservedTokens(SPHA_SUPPLY),
+      tokenAuthorityOption: m.TokenAuthorityOption.CreatorUpdateAndMintAuthority,
+      totalTokenSupply: sphaCurveTokens(),
+      leftover: 0,
     },
     fee: {
       baseFeeParams: {
@@ -246,6 +250,18 @@ export async function dbcPoolByMint(mint: string) {
   }
 }
 
+async function mintUsesTransferHook(mint: string): Promise<boolean> {
+  try {
+    const pk = new PublicKey(mint);
+    const info = await connection().getAccountInfo(pk, "confirmed");
+    if (!info || !info.owner.equals(TOKEN_2022_PROGRAM_ID)) return false;
+    const hook = getTransferHook(unpackMint(pk, info, TOKEN_2022_PROGRAM_ID));
+    return Boolean(hook && !hook.programId.equals(PublicKey.default));
+  } catch {
+    return false;
+  }
+}
+
 export async function waitForDbcPool(mint: string, tries = 24) {
   let pool = await dbcPoolByMint(mint);
   for (let i = 0; i < tries && !pool; i++) {
@@ -358,7 +374,7 @@ export async function buildDbcLaunchTx(opts: {
   return launched;
 }
 
-/** Official $SPHA: always a fresh 200M config. Does not touch the shared pad config. */
+/** Official $SPHA: always a fresh 154.2M-curve config. Does not touch the shared pad config. */
 export async function buildSphaDbcLaunchTx(opts: {
   payer: string;
   mint: string;
@@ -380,13 +396,14 @@ export async function buildSphaDbcLaunchTx(opts: {
   const configKp = Keypair.generate();
   const treasury = new PublicKey(treasuryAddress());
   const curve = await sphaCurveConfig();
-  const raw = await client().partner.createConfigAndPool({
+  const raw = await client().partner.createConfigAndPoolWithTransferHook({
     ...curve,
     config: configKp.publicKey,
     feeClaimer: treasury,
     leftoverReceiver: treasury,
     quoteMint: new PublicKey(WSOL),
     payer,
+    transferHookProgram: new PublicKey(SPHA_TRANSFER_HOOK),
     preCreatePoolParam: {
       name: opts.name.slice(0, 32),
       symbol: opts.symbol.slice(0, 10),
@@ -670,13 +687,23 @@ export async function buildDbcClaimCreatorBatch(opts: {
   if (!hit) return { ok: false, error: "empty" };
   let raw: Transaction;
   try {
-    raw = (await dbc.creator.claimCreatorTradingFee({
-      creator,
-      payer: creator,
-      pool: hit.pool,
-      maxBaseAmount: max,
-      maxQuoteAmount: max,
-    })) as Transaction;
+    const hook = await mintUsesTransferHook(hit.mint);
+    raw = (hook
+      ? await dbc.creator.claimCreatorTradingFee2({
+          creator,
+          payer: creator,
+          pool: hit.pool,
+          maxBaseAmount: max,
+          maxQuoteAmount: max,
+          receiver: creator,
+        })
+      : await dbc.creator.claimCreatorTradingFee({
+          creator,
+          payer: creator,
+          pool: hit.pool,
+          maxBaseAmount: max,
+          maxQuoteAmount: max,
+        })) as Transaction;
   } catch {
     return { ok: false, error: "empty" };
   }
@@ -771,14 +798,25 @@ export async function buildDbcClaimPartnerBatch(opts: {
       /* split falls back to partner-only */
     }
     try {
-      const raw = await dbc.partner.claimPartnerTradingFee({
-        feeClaimer: claimer,
-        payer,
-        pool: hit.pool,
-        maxBaseAmount: max,
-        maxQuoteAmount: max,
-        receiver: opts.receiver ? new PublicKey(opts.receiver) : undefined,
-      });
+      const hook = await mintUsesTransferHook(hit.mint);
+      const receiver = opts.receiver ? new PublicKey(opts.receiver) : claimer;
+      const raw = hook
+        ? await dbc.partner.claimPartnerTradingFee2({
+            feeClaimer: claimer,
+            payer,
+            pool: hit.pool,
+            maxBaseAmount: max,
+            maxQuoteAmount: max,
+            receiver,
+          })
+        : await dbc.partner.claimPartnerTradingFee({
+            feeClaimer: claimer,
+            payer,
+            pool: hit.pool,
+            maxBaseAmount: max,
+            maxQuoteAmount: max,
+            receiver,
+          });
       const tx = await readyTx(raw as Transaction, payer);
       if (!(await simulateClaim(tx))) continue;
       const rest = unpaid.filter((p) => p.mint !== hit.mint);
@@ -863,7 +901,7 @@ export async function buildDbcTradeTx(opts: {
   const minOut = buy
     ? new BN(Math.floor((quoted.tokensOut || 0) * 1e6 * 0.99))
     : new BN(Math.floor((quoted.solOut || 0) * 1e9 * 0.99));
-  const raw = await dbc.pool.swap2({
+  const swapArg = {
     owner,
     pool: row.publicKey,
     swapBaseForQuote: !buy,
@@ -871,7 +909,10 @@ export async function buildDbcTradeTx(opts: {
     amountIn,
     minimumAmountOut: minOut.toString() === "0" ? new BN(1) : minOut,
     referralTokenAccount: null,
-  });
+  };
+  const raw = (await mintUsesTransferHook(opts.mint))
+    ? await dbc.pool.swap2WithTransferHook(swapArg)
+    : await dbc.pool.swap2(swapArg);
   const tx = await readyTx(raw, owner);
   return {
     ok: true,

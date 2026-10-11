@@ -7,9 +7,9 @@ import { applyOpsConfig, emptyState } from "../lib/store";
 
 describe("treasury default", () => {
   it("pins the founder treasury when env/state are empty", () => {
-    assert.equal(DEFAULT_TREASURY, "BobXWqFWhRwyBS3Wra3fornbmnwpmN1Ctp5brN1RZ9y3");
-    assert.equal(DEFAULT_OWNER, "AidbgKaN6BhMmqQSERaW2rc3i8Dax4i295q3UTpTdhg4");
-    assert.equal(DEFAULT_FUND, "BtVQGxHtCpaBZcKmFHegeD7yxXUTsNXVgMfdrHk6gQ8C");
+    assert.equal(DEFAULT_TREASURY, "J5gf13obSKq41ff91ejGSWiCE3kqatc6N7nUCan5ArYS");
+    assert.equal(DEFAULT_OWNER, "BdPJxSmyeShh9erdUdikru9bYaKYqW5KT1hQph59n1Wt");
+    assert.equal(DEFAULT_FUND, "f6PTXuKgL3hWUpToTEc5bfqggqaCe1FJtLn8rJeHiWm");
     assert.ok(TREASURY.length >= 32);
     const addr = treasuryAddress();
     assert.ok(addr.length >= 32);

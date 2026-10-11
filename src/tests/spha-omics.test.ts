@@ -11,7 +11,7 @@ import {
   sphaMissingDest,
   sphaRawAmount,
   sphaReservedTokens,
-  sphaSplitLegs,
+  sphaTeamLegs,
   sphaTokensFor,
 } from "../lib/token/omics";
 
@@ -50,7 +50,7 @@ describe("spha tokenomics", () => {
     assert.equal(sphaRawAmount(1), 1_000_000n);
   });
 
-  it("splits leftover to owner and foundation and keeps treasury in leftoverReceiver", () => {
+  it("mints team slices to owner, foundation, and treasury at launch", () => {
     const dest = {
       owner: "Own111111111111111111111111111111111111111",
       foundation: "Fnd111111111111111111111111111111111111111",
@@ -58,16 +58,24 @@ describe("spha tokenomics", () => {
       treasury: "Trs111111111111111111111111111111111111111",
       lp: "",
     };
-    const legs = sphaSplitLegs(dest);
-    assert.equal(legs.length, 2);
+    const legs = sphaTeamLegs(dest);
+    assert.equal(legs.length, 3);
     assert.equal(legs.find((l) => l.id === "owner")?.tokens, 17_200_000);
     assert.equal(legs.find((l) => l.id === "owner")?.to, dest.owner);
     assert.equal(legs.find((l) => l.id === "foundation")?.tokens, 19_400_000);
     assert.equal(legs.find((l) => l.id === "foundation")?.to, dest.foundation);
-    assert.equal(sphaSplitLegs({ ...dest, owner: dest.treasury, foundation: dest.treasury }).length, 0);
+    assert.equal(legs.find((l) => l.id === "treasury")?.tokens, 9_200_000);
+    assert.equal(legs.find((l) => l.id === "treasury")?.to, dest.treasury);
     const src = readFileSync(path.join(process.cwd(), "src/components/admin/SphaLaunch.tsx"), "utf8");
-    assert.match(src, /sphaSplitLegs/);
-    assert.match(src, /Send leftover to owner and foundation/);
-    assert.equal(src.includes("with the send widget"), false);
+    assert.match(src, /prepareTeam/);
+    assert.match(src, /Mint team allocations/);
+    assert.equal(src.includes("Send leftover to owner and foundation"), false);
+    const dbc = readFileSync(path.join(process.cwd(), "src/lib/launch/dbc.ts"), "utf8");
+    assert.match(dbc, /sphaCurveTokens\(\)/);
+    assert.match(dbc, /leftover: 0/);
+    assert.match(dbc, /CreatorUpdateAndMintAuthority/);
+    assert.match(dbc, /createConfigAndPoolWithTransferHook/);
+    assert.match(dbc, /claimCreatorTradingFee2\(/);
+    assert.match(dbc, /receiver: creator/);
   });
 });

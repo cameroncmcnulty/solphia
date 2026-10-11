@@ -116,15 +116,17 @@ export function sphaMissingDest(dest: Partial<SphaDestinations>): SphaSliceId[] 
   return (Object.keys(need) as SphaSliceId[]).filter((k) => !need[k]);
 }
 
-/** Owner + foundation leftover legs. Treasury keeps its 4.6% in leftoverReceiver. */
-export function sphaSplitLegs(dest: SphaDestinations, supply = SPHA_SUPPLY): { id: SphaSliceId; to: string; tokens: number }[] {
-  const treasury = (dest.treasury || "").trim();
+/** Team slices minted to project wallets at launch. Curve supply is separate (DBC totalTokenSupply). */
+export function sphaTeamLegs(dest: SphaDestinations, supply = SPHA_SUPPLY): { id: SphaSliceId; to: string; tokens: number }[] {
   const owner = (dest.owner || "").trim();
   const foundation = (dest.airdrop || dest.foundation || "").trim();
+  const treasury = (dest.treasury || "").trim();
   const rows: { id: SphaSliceId; to: string; tokens: number }[] = [];
   const ownerTok = sphaTokensFor(860, supply);
   const fndTok = sphaTokensFor(970, supply);
-  if (owner && owner !== treasury && ownerTok > 0) rows.push({ id: "owner", to: owner, tokens: ownerTok });
-  if (foundation && foundation !== treasury && fndTok > 0) rows.push({ id: "foundation", to: foundation, tokens: fndTok });
+  const treasTok = sphaTokensFor(460, supply);
+  if (owner && ownerTok > 0) rows.push({ id: "owner", to: owner, tokens: ownerTok });
+  if (foundation && fndTok > 0) rows.push({ id: "foundation", to: foundation, tokens: fndTok });
+  if (treasury && treasTok > 0) rows.push({ id: "treasury", to: treasury, tokens: treasTok });
   return rows;
 }
