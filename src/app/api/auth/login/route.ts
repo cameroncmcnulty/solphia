@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { loginEmail, publicAccount } from "@/lib/auth/accounts";
-import { verifyBot } from "@/lib/auth/challenge";
 import { clearAccountCookie, setAccountCookie, setTotpPendingCookie } from "@/lib/auth/session";
 import { totpEnabled } from "@/lib/auth/totp";
 import { clientIp, rateLimit } from "@/lib/security";
@@ -27,8 +26,9 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) {
     return NextResponse.json({ error: "bad_request", message: "Email or password is wrong." }, { status: 400 });
   }
-  const bot = await verifyBot(parsed.data, ip);
-  if (!bot.ok) return NextResponse.json({ error: "bot", message: bot.error }, { status: 400 });
+  if ((parsed.data.website || "").trim()) {
+    return NextResponse.json({ error: "bot", message: "Could not verify this request." }, { status: 400 });
+  }
   const out = await mutateState((s) => loginEmail(s, parsed.data));
   if (!out.ok) {
     const status = out.error === "verify_email" ? 403 : 401;

@@ -199,3 +199,79 @@ export function detachWallet(
   row.lastSeen = Date.now();
   return { ok: true };
 }
+
+function uniqWallets(a: string[] | undefined, b: string[] | undefined): string[] {
+  return [...new Set([...(a || []), ...(b || [])].filter((pk) => isSolanaAddress(pk)))];
+}
+
+function pickLoginRow(a: LoginAccount, b: LoginAccount): LoginAccount {
+  const aNewer = (a.lastSeen || 0) >= (b.lastSeen || 0);
+  const newer = aNewer ? a : b;
+  const older = aNewer ? b : a;
+  return {
+    ...older,
+    ...newer,
+    email: newer.email || older.email,
+    emailNorm: newer.emailNorm || older.emailNorm,
+    googleId: newer.googleId || older.googleId,
+    passwordHash: newer.passwordHash || older.passwordHash,
+    totpSecret: newer.totpSecret || older.totpSecret,
+    totpBackupHashes: newer.totpBackupHashes?.length ? newer.totpBackupHashes : older.totpBackupHashes,
+    totpPendingSecret: newer.totpPendingSecret || older.totpPendingSecret,
+    totpPendingBackupHashes: newer.totpPendingBackupHashes?.length
+      ? newer.totpPendingBackupHashes
+      : older.totpPendingBackupHashes,
+    wallets: uniqWallets(newer.wallets, older.wallets),
+    tosAcceptedAt: newer.tosAcceptedAt || older.tosAcceptedAt,
+    privacyAcceptedAt: newer.privacyAcceptedAt || older.privacyAcceptedAt,
+    emailVerifiedAt: newer.emailVerifiedAt || older.emailVerifiedAt,
+    totpEnabledAt: newer.totpEnabledAt || older.totpEnabledAt,
+    createdAt: Math.min(newer.createdAt || Date.now(), older.createdAt || Date.now()),
+    lastSeen: Math.max(newer.lastSeen || 0, older.lastSeen || 0),
+  };
+}
+
+/** Merge login rows from two instances. Same id wins by lastSeen; wallets union so a stale save cannot drop them. */
+export function mergeLoginAccounts(local: LoginAccount[], remote: LoginAccount[]): LoginAccount[] {
+  const byId = new Map<string, LoginAccount>();
+  const put = (row: LoginAccount | undefined) => {
+    if (!row?.id) return;
+    const cur = byId.get(row.id);
+    byId.set(row.id, cur ? pickLoginRow(row, cur) : { ...row, wallets: uniqWallets(row.wallets, []) });
+  };
+  for (const row of remote || []) put(row);
+  for (const row of local || []) put(row);
+
+  const rows = [...byId.values()];
+  const drop = new Set<string>();
+  const byGoogle = new Map<string, LoginAccount>();
+  const byEmail = new Map<string, LoginAccount>();
+  for (const row of rows) {
+    if (row.googleId) {
+      const hit = byGoogle.get(row.googleId);
+      if (hit && hit.id !== row.id) {
+        const keep = (hit.createdAt || 0) <= (row.createdAt || 0) ? hit : row;
+        const lose = keep === hit ? row : hit;
+        byId.set(keep.id, pickLoginRow(keep, lose));
+        drop.add(lose.id);
+        byGoogle.set(row.googleId, byId.get(keep.id)!);
+      } else {
+        byGoogle.set(row.googleId, row);
+      }
+    }
+    if (row.emailNorm) {
+      const hit = byEmail.get(row.emailNorm);
+      if (hit && hit.id !== row.id) {
+        const keep = (hit.createdAt || 0) <= (row.createdAt || 0) ? hit : row;
+        const lose = keep === hit ? row : hit;
+        byId.set(keep.id, pickLoginRow(keep, lose));
+        drop.add(lose.id);
+        byEmail.set(row.emailNorm, byId.get(keep.id)!);
+      } else {
+        byEmail.set(row.emailNorm, row);
+      }
+    }
+  }
+  for (const id of drop) byId.delete(id);
+  return [...byId.values()];
+}

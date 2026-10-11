@@ -5,6 +5,7 @@ import {
   createEmailAccount,
   detachWallet,
   loginEmail,
+  mergeLoginAccounts,
   publicAccount,
   upsertGoogleAccount,
   type LoginAccount,
@@ -117,6 +118,50 @@ describe("account login", () => {
     const useGoogle = loginEmail(s, { email: "onlyg@solphia.io", password: "Hunter22!" });
     assert.equal(useGoogle.ok, false);
     if (!useGoogle.ok) assert.equal(useGoogle.error, "use_google");
+  });
+
+  it("merges login rows across instances without dropping wallets", () => {
+    const pk1 = "D4uCNcBKAbG9NAkmhQg7pBiztuejNzbWrZDcZmFGut81";
+    const pk2 = "CyaE1VxvBrahnPWkqm5VsdCvyS2QmNht2UFrKJHga54o";
+    const local: LoginAccount[] = [
+      {
+        id: "acct_a",
+        email: "a@solphia.io",
+        emailNorm: "a@solphia.io",
+        googleId: "g-a",
+        wallets: [pk1],
+        createdAt: 1,
+        lastSeen: 20,
+      },
+    ];
+    const remote: LoginAccount[] = [
+      {
+        id: "acct_a",
+        email: "a@solphia.io",
+        emailNorm: "a@solphia.io",
+        googleId: "g-a",
+        wallets: [pk2],
+        createdAt: 1,
+        lastSeen: 10,
+      },
+      {
+        id: "acct_b",
+        email: "b@solphia.io",
+        emailNorm: "b@solphia.io",
+        wallets: [],
+        createdAt: 2,
+        lastSeen: 2,
+      },
+    ];
+    const merged = mergeLoginAccounts(local, remote);
+    const a = merged.find((r) => r.id === "acct_a");
+    const b = merged.find((r) => r.id === "acct_b");
+    assert.ok(a);
+    assert.ok(b);
+    assert.equal(merged.length, 2);
+    assert.equal(a!.lastSeen, 20);
+    assert.ok(a!.wallets.includes(pk1));
+    assert.ok(a!.wallets.includes(pk2));
   });
 
   it("signs an account session token", () => {

@@ -47,7 +47,9 @@ export function WalletHost() {
 
   const afterAccount = useCallback(() => {
     setAccount(false);
-    if (!syncOwnerToSignedInAccount()) setOnboard(true);
+    void refreshAccount().then(() => {
+      if (!syncOwnerToSignedInAccount()) setOnboard(true);
+    });
   }, []);
 
   useEffect(() => {

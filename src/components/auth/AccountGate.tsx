@@ -120,13 +120,21 @@ export function AccountGate({
       setScreen("totp");
       setMode("signin");
     }
+    let live = true;
     fetch("/api/auth/me", { credentials: "include", cache: "no-store" })
       .then((r) => r.json())
-      .then((j) => {
+      .then(async (j) => {
+        if (!live) return;
         if (typeof j?.googleEnabled === "boolean") setGoogleOn(j.googleEnabled);
-        if (j?.account?.id) onReady(j.account as PublicAccount);
+        if (j?.account?.id) {
+          await refreshAccount();
+          if (live) onReady(j.account as PublicAccount);
+        }
       })
       .catch(() => undefined);
+    return () => {
+      live = false;
+    };
   }, [onReady, authHint]);
 
   async function finish(account: PublicAccount) {
@@ -240,8 +248,7 @@ export function AccountGate({
       });
       const j = (await r.json().catch(() => ({}))) as { message?: string; account?: PublicAccount };
       if (!r.ok || !j.account) throw new Error(j.message || "That code did not work.");
-      setPendingAccount(j.account);
-      setScreen("totp-opt");
+      await finish(j.account);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "That code did not work.");
     } finally {
@@ -272,15 +279,17 @@ export function AccountGate({
   }
 
   function google() {
-    if (mode === "signup" && (!tos || !privacy)) {
+    const agreed = mode === "signin" || (tos && privacy);
+    if (!agreed) {
       setErr("Agree to the terms and privacy policy first.");
+      setScreen("google");
       return;
     }
     setBusy(true);
     setErr("");
     const q = new URLSearchParams();
-    if (tos) q.set("tos", "1");
-    if (privacy) q.set("privacy", "1");
+    q.set("tos", "1");
+    q.set("privacy", "1");
     window.location.assign(`/api/auth/google?${q.toString()}`);
   }
 
@@ -578,10 +587,10 @@ export function AccountGate({
             <TosBoxes tos={tos} privacy={privacy} setTos={setTos} setPrivacy={setPrivacy} />
           </>
         ) : null}
-        <BotCheck onChange={onBot} />
+        {mode === "signup" ? <BotCheck onChange={onBot} /> : null}
         <button
           type="button"
-          disabled={busy || !botReady}
+          disabled={busy || (mode === "signup" && !botReady)}
           onClick={() => void submitEmail()}
           className="btn-acid mt-4 min-h-[48px] w-full rounded-full disabled:opacity-40"
         >
@@ -636,7 +645,15 @@ export function AccountGate({
         {mode === "signup" ? "Sign up with email" : "Sign in with email"}
       </button>
       <p className="mt-3 text-center text-[12px] text-white/35">
-        Solphia never holds a seed or PIN. Sign-in is your account. Wallets stay on this device.
+        By continuing with Google you agree to the{" "}
+        <Link href="/legal#terms" target="_blank" className="text-acid underline">
+          Terms of Service
+        </Link>{" "}
+        and{" "}
+        <Link href="/legal#privacy" target="_blank" className="text-acid underline">
+          Privacy Policy
+        </Link>
+        . Solphia never holds a seed or PIN. Sign-in is your account. Wallets stay on this device.
       </p>
     </WalletSheet>
   );

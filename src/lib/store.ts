@@ -3,6 +3,8 @@ import path from "path";
 import { DEFAULT_SETTINGS } from "./config";
 import { DEFAULT_FUND, DEFAULT_OWNER, DEFAULT_TREASURY } from "./protocolWallets";
 import { DEFAULT_ADMIN_OTP_EMAIL, type AdminOtpPending } from "./admin/otp";
+import type { LoginAccount } from "./auth/accounts";
+import { mergeLoginAccounts } from "./auth/accounts";
 import type { SignupPending } from "./auth/otp";
 import { emptyBook, emptyTrader, lockedAuto } from "./auto";
 import { emptyLaunchBook, mergeAccountMaps, mergeLaunch, slimLaunch, type LaunchAccount, type LaunchBook } from "./launch/engine";
@@ -316,6 +318,34 @@ function opsView(state: AppState): AppState {
   };
 }
 
+function loginRowsOf(raw: unknown): LoginAccount[] {
+  if (Array.isArray(raw)) return raw as LoginAccount[];
+  if (raw && typeof raw === "object" && Array.isArray((raw as { accounts?: unknown }).accounts)) {
+    return (raw as { accounts: LoginAccount[] }).accounts;
+  }
+  return [];
+}
+
+async function overlayLoginAccounts(state: AppState) {
+  if (!durableConfigured()) return;
+  try {
+    const raw = await kvGetJson(KEYS.loginAccounts);
+    const remote = loginRowsOf(raw);
+    if (!remote.length && !(state.accounts || []).length) return;
+    state.accounts = mergeLoginAccounts(state.accounts || [], remote);
+  } catch {
+    /* keep mem */
+  }
+}
+
+async function persistLoginAccounts(state: AppState) {
+  if (!durableConfigured()) return;
+  const raw = await kvGetJson(KEYS.loginAccounts);
+  const merged = mergeLoginAccounts(state.accounts || [], loginRowsOf(raw));
+  state.accounts = merged;
+  await kvSetJson(KEYS.loginAccounts, merged);
+}
+
 async function overlayAuthOtps(state: AppState) {
   if (!durableConfigured()) return;
   try {
@@ -518,6 +548,7 @@ async function overlayBacktests(state: AppState) {
 }
 
 async function persistShards(next: AppState, owners: string[]) {
+  await persistLoginAccounts(next);
   await persistBacktests(next);
   await persistLaunch(next);
   await persistCircle(next);
@@ -563,6 +594,7 @@ export async function saveOps(next: AppState): Promise<void> {
     writeFs(next);
     if (durableConfigured()) {
       try {
+        await persistLoginAccounts(next);
         await persistBacktests(next);
         await persistLaunch(next);
         await persistCircle(next);
@@ -699,6 +731,7 @@ async function hydrate(): Promise<AppState> {
         await overlayShill(mem);
         await overlayMail(mem);
         await overlayAuthOtps(mem);
+        await overlayLoginAccounts(mem);
         knownTraderOwners = await kvSmembers(KEYS.traders);
         memMtime = Date.now();
         hydrated = true;
@@ -715,6 +748,7 @@ async function hydrate(): Promise<AppState> {
         await overlayShill(mem);
         await overlayMail(mem);
         await overlayAuthOtps(mem);
+        await overlayLoginAccounts(mem);
         await persistShards(mem, owners);
         memMtime = Date.now();
         hydrated = true;
@@ -734,6 +768,7 @@ async function hydrate(): Promise<AppState> {
       await overlayShill(local);
       await overlayMail(local);
       await overlayAuthOtps(local);
+      await overlayLoginAccounts(local);
     } catch {
       /* disk still usable */
     }
@@ -746,6 +781,7 @@ async function hydrate(): Promise<AppState> {
 export async function readyState(): Promise<AppState> {
   if (hydrated && mem) {
     await maybeOverlayOps(mem);
+    await overlayLoginAccounts(mem);
     return mem;
   }
   if (!boot) boot = hydrate();

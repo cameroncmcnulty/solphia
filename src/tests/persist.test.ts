@@ -43,6 +43,16 @@ describe("ops overlay", () => {
     assert.equal(local.sphaMint, "CyaE1VxvBrahnPWkqm5VsdCvyS2QmNht2UFrKJHga54o");
   });
 
+  it("dual-writes login accounts onto their own durable key", async () => {
+    const { readFileSync } = await import("node:fs");
+    const persist = readFileSync(new URL("../lib/persist.ts", import.meta.url), "utf8");
+    assert.match(persist, /loginAccounts: "solphia:login-accounts"/);
+    const store = readFileSync(new URL("../lib/store.ts", import.meta.url), "utf8");
+    assert.match(store, /overlayLoginAccounts\(mem\)/);
+    assert.match(store, /persistLoginAccounts\(next\)/);
+    assert.match(store, /mergeLoginAccounts/);
+  });
+
   it("does not clobber a newer local save with stale remote ops", () => {
     const local = emptyState();
     local.opsUpdatedAt = 9;

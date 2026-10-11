@@ -12,6 +12,8 @@ export const KEYS = {
   launch: "solphia:launch",
   /** Rank, usernames, referrals. Dual-written so a fat tape save cannot be the only copy. */
   launchAccounts: "solphia:launch-accounts",
+  /** Google/email login rows. Dual-written so a warm instance cannot drop a session. */
+  loginAccounts: "solphia:login-accounts",
   account: (owner: string) => `solphia:account:${owner}`,
   circle: "solphia:circle",
   shill: "solphia:shill",

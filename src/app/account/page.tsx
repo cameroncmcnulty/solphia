@@ -14,7 +14,8 @@ import { RankBadge } from "@/components/RankBadge";
 import { ProfileOverlay } from "@/components/ProfileOverlay";
 import { INTRO_MAX } from "@/lib/rank/engine";
 import { isSolanaAddress } from "@/lib/wallet/addr";
-import { peekAccount, AUTH_EVENT, type PublicAccount } from "@/lib/auth/client";
+import { peekAccount, refreshAccount, AUTH_EVENT, type PublicAccount } from "@/lib/auth/client";
+import { openWalletOnboard } from "@/components/wallet/WalletHost";
 import { TotpSettings } from "@/components/auth/TotpSettings";
 
 type Invited = { pubkey: string; launched: number };
@@ -105,6 +106,7 @@ export default function AccountPage() {
   useEffect(() => {
     const sync = () => setLoginAccount(peekAccount());
     sync();
+    void refreshAccount().then((a) => setLoginAccount(a));
     window.addEventListener(AUTH_EVENT, sync);
     return () => window.removeEventListener(AUTH_EVENT, sync);
   }, []);
@@ -188,16 +190,32 @@ export default function AccountPage() {
       <main className="pump-shell">
         <div className="pump-wrap py-16">
         <h1 className="pump-h1">Account</h1>
-        <p className="pump-p mt-2">Connect a wallet to manage PFP, launches, and referrals. Rank and profile follow that address.</p>
         {loginAccount ? (
-          <section className="panel-bubble mt-6 overflow-hidden rounded-3xl p-5">
-            <h2 className="text-[22px] font-semibold tracking-tight text-white">Two-factor auth</h2>
-            <TotpSettings account={loginAccount} />
-          </section>
-        ) : null}
-        <div className="mt-6">
-          <WalletConnect />
-        </div>
+          <>
+            <p className="pump-p mt-2">
+              Signed in{loginAccount.email ? ` as ${loginAccount.email}` : ""}. Create or recover a Solphia wallet on this
+              device to save a username, PFP, launches, and referrals. Rank follows that wallet.
+            </p>
+            <button
+              type="button"
+              onClick={() => openWalletOnboard()}
+              className="btn-acid mt-6 inline-flex min-h-[48px] items-center justify-center rounded-full px-6"
+            >
+              Create or recover wallet
+            </button>
+            <section className="panel-bubble mt-6 overflow-hidden rounded-3xl p-5">
+              <h2 className="text-[22px] font-semibold tracking-tight text-white">Two-factor auth</h2>
+              <TotpSettings account={loginAccount} />
+            </section>
+          </>
+        ) : (
+          <>
+            <p className="pump-p mt-2">Sign in to save your account, then create or recover a Solphia wallet on this device.</p>
+            <div className="mt-6">
+              <WalletConnect />
+            </div>
+          </>
+        )}
         </div>
       </main>
     );

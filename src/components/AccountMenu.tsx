@@ -35,15 +35,14 @@ export function AccountMenu() {
   const btn = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
-    let ready = false;
     const sync = () => {
-      if (!ready) return;
       const a = peekAccount();
       setEmail(a?.email || "");
       setSignedIn(Boolean(a?.id));
     };
+    sync();
+    if (peekAccount()?.id) setAuthReady(true);
     void refreshAccount().then((a) => {
-      ready = true;
       setEmail(a?.email || "");
       setSignedIn(Boolean(a?.id));
       setAuthReady(true);
