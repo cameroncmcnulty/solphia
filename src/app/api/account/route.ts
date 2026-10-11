@@ -17,7 +17,7 @@ import { IMAGE_DATA_MAX } from "@/lib/launch/validate";
 import { lastPairPrices } from "@/lib/tick";
 import { airdropMultiplier, referralBoostPct } from "@/lib/circle/types";
 import { payReferralXp, profilePhotoUrl, publicRank } from "@/lib/rank/engine";
-import { displayMedia, pinDataUrl } from "@/lib/pinata";
+import { pinDataUrl, pinDisplayUrl } from "@/lib/pinata";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -90,10 +90,13 @@ export async function POST(req: NextRequest) {
   let pfpUrl = (b.pfp || "").trim();
   if (b.action === "pfp" && pfpUrl.startsWith("data:image/")) {
     try {
-      const pinned = await pinDataUrl(pfpUrl, `pfp-${b.pubkey.slice(0, 8)}`);
-      if (pinned?.url) pfpUrl = pinned.url.startsWith("http") ? pinned.url : displayMedia(pinned.url) || pinned.url;
+      const pinned = await pinDataUrl(pfpUrl, `pfp-${b.pubkey.slice(0, 8)}`, { budgetMs: 8_000 });
+      if (pinned?.url) {
+        const fast = pinDisplayUrl(pinned.url);
+        if (fast.startsWith("https:")) pfpUrl = fast;
+      }
     } catch {
-      /* keep the data URL; slimLaunch drops only huge ones */
+      /* keep the compressed data URL so the photo still saves */
     }
   }
 
@@ -149,6 +152,12 @@ export async function POST(req: NextRequest) {
   }, true);
 
   if (!out || !("ok" in out) || !out.ok) {
+    if (b.action === "pfp") {
+      return NextResponse.json(
+        { error: "bad_image", message: "Could not save that photo. Try a smaller JPEG or PNG." },
+        { status: 400 },
+      );
+    }
     return fail((out as { error?: string })?.error || "failed");
   }
 

@@ -100,10 +100,17 @@ function fileName(name: string, type: string) {
   return `${name.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 24) || "token"}.${ext}`;
 }
 
-async function pinOnce(bytes: Buffer, type: string, name: string): Promise<{ cid: string; url: string } | null> {
+async function pinOnce(
+  bytes: Buffer,
+  type: string,
+  name: string,
+  budgetMs = 25_000,
+): Promise<{ cid: string; url: string } | null> {
   const blob = new Blob([new Uint8Array(bytes)], { type });
   const file = fileName(name, type);
   const jwt = (process.env.PINATA_JWT || "").trim();
+  const t0 = Date.now();
+  const left = () => Math.max(400, budgetMs - (Date.now() - t0));
 
   const v2 = new FormData();
   v2.append("file", blob, file);
@@ -113,7 +120,7 @@ async function pinOnce(bytes: Buffer, type: string, name: string): Promise<{ cid
       method: "POST",
       headers: authHeaders(),
       body: v2,
-      signal: AbortSignal.timeout(25_000),
+      signal: AbortSignal.timeout(Math.min(25_000, left())),
     });
     const j = (await r.json().catch(() => ({}))) as { IpfsHash?: string };
     if (r.ok && j.IpfsHash) return { cid: j.IpfsHash, url: pinataPublicUrl(j.IpfsHash) };
@@ -121,7 +128,7 @@ async function pinOnce(bytes: Buffer, type: string, name: string): Promise<{ cid
     /* try v3 */
   }
 
-  if (!jwt) return null;
+  if (!jwt || left() < 400) return null;
   const v3 = new FormData();
   v3.append("file", blob, file);
   v3.append("network", "public");
@@ -130,7 +137,7 @@ async function pinOnce(bytes: Buffer, type: string, name: string): Promise<{ cid
       method: "POST",
       headers: { authorization: `Bearer ${jwt}` },
       body: v3,
-      signal: AbortSignal.timeout(25_000),
+      signal: AbortSignal.timeout(Math.min(25_000, left())),
     });
     const j = (await r.json().catch(() => ({}))) as { data?: { cid?: string }; IpfsHash?: string };
     const cid = j.data?.cid || j.IpfsHash;
@@ -145,14 +152,21 @@ export async function pinBytes(
   buf: Buffer | Uint8Array,
   mime: string,
   name: string,
+  opts?: { budgetMs?: number },
 ): Promise<{ cid: string; url: string } | null> {
   if (!pinataConfigured()) return null;
   const bytes = Buffer.isBuffer(buf) ? buf : Buffer.from(buf);
   if (bytes.length < 32 || bytes.length > 4_000_000) return null;
   const type = (mime || "image/jpeg").split(";")[0].trim() || "image/jpeg";
-  for (let i = 0; i < 3; i++) {
-    const got = await pinOnce(bytes, type, name);
+  const budget = Math.max(1500, opts?.budgetMs ?? 20_000);
+  const deadline = Date.now() + budget;
+  const attempts = budget <= 10_000 ? 1 : 3;
+  for (let i = 0; i < attempts; i++) {
+    const left = deadline - Date.now();
+    if (left < 400) return null;
+    const got = await pinOnce(bytes, type, name, left);
     if (got?.cid) return got;
+    if (Date.now() + 400 >= deadline) return null;
     await new Promise((r) => setTimeout(r, 400 * (i + 1)));
   }
   return null;
@@ -164,12 +178,22 @@ export async function pinJson(value: unknown, name: string): Promise<{ cid: stri
   return pinBytes(Buffer.from(body, "utf8"), "application/json", name);
 }
 
-export async function pinDataUrl(dataUrl: string, name: string): Promise<{ cid: string; url: string } | null> {
+export async function pinDataUrl(
+  dataUrl: string,
+  name: string,
+  opts?: { budgetMs?: number },
+): Promise<{ cid: string; url: string } | null> {
   if (!dataUrl.startsWith("data:")) return null;
   const comma = dataUrl.indexOf(",");
   if (comma < 0) return null;
   const meta = dataUrl.slice(5, comma);
   const b64 = dataUrl.slice(comma + 1);
   const mime = (meta.split(";")[0] || "image/png").trim();
-  return pinBytes(Buffer.from(b64, "base64"), mime, name);
+  return pinBytes(Buffer.from(b64, "base64"), mime, name, opts);
+}
+
+/** Fast public URL for a pin. Never store gateway.pinata.cloud — browsers 403 or hang. */
+export function pinDisplayUrl(url: string): string {
+  const fast = rewriteImageUrl(url);
+  return fast.startsWith("https:") ? fast : url;
 }

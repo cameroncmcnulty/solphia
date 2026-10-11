@@ -350,7 +350,7 @@ export default function AccountPage() {
             <input
               ref={fileRef}
               type="file"
-              accept="image/png,image/jpeg,image/webp"
+              accept="image/*"
               className="hidden"
               onChange={async (e) => {
                 const f = e.target.files?.[0];
@@ -580,17 +580,17 @@ function WalletRow({ k, pk, bal }: { k: string; pk: string; bal: number }) {
 }
 
 async function squarePfp(file: File): Promise<string> {
-  if (file.size > 4_000_000) throw new Error("Image must be under 4 MB.");
+  if (file.size > 12_000_000) throw new Error("Image must be under 12 MB.");
   const url = URL.createObjectURL(file);
   try {
     const img = await new Promise<HTMLImageElement>((resolve, reject) => {
       const el = new Image();
       el.onload = () => resolve(el);
-      el.onerror = () => reject(new Error("Could not read that image."));
+      el.onerror = () => reject(new Error("Could not read that image. Try a JPEG or PNG."));
       el.src = url;
     });
     const side = Math.min(img.naturalWidth, img.naturalHeight);
-    if (side < 64) throw new Error("Use a square image at least 64×64.");
+    if (side < 64) throw new Error("Use a photo at least 64×64.");
     const canvas = document.createElement("canvas");
     canvas.width = 256;
     canvas.height = 256;
@@ -601,7 +601,7 @@ async function squarePfp(file: File): Promise<string> {
       const data = canvas.toDataURL("image/jpeg", q);
       if (data.length <= 80_000) return data;
     }
-    throw new Error("Image is too heavy.");
+    throw new Error("Image is too heavy. Try a simpler photo.");
   } finally {
     URL.revokeObjectURL(url);
   }

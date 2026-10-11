@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isSolanaAddress, rateLimit, clientIp } from "@/lib/security";
 import { housePfpPath } from "@/lib/launch/validate";
-import { readyState } from "@/lib/store";
+import { pinDisplayUrl } from "@/lib/pinata";
+import { withLaunch } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
@@ -11,7 +12,7 @@ export async function GET(req: NextRequest) {
   }
   const pk = req.nextUrl.searchParams.get("pk") || "";
   if (!isSolanaAddress(pk)) return new NextResponse(null, { status: 404 });
-  const s = await readyState();
+  const s = await withLaunch((st) => st, false);
   const kind = req.nextUrl.searchParams.get("kind") || "pfp";
   const pfp = (kind === "banner" ? s.launch?.accounts?.[pk]?.banner : s.launch?.accounts?.[pk]?.pfp) || "";
   if (!pfp) return new NextResponse(null, { status: 404 });
@@ -19,8 +20,12 @@ export async function GET(req: NextRequest) {
   if (house) {
     return NextResponse.redirect(new URL(house, req.nextUrl.origin), 302);
   }
+  if (pfp.startsWith("/api/media") || pfp.startsWith("/api/token-art") || pfp.startsWith("/api/circle/avatar")) {
+    return NextResponse.redirect(new URL(pfp, req.nextUrl.origin), 302);
+  }
   if (/^https?:\/\//i.test(pfp)) {
-    return NextResponse.redirect(pfp, 302);
+    const fast = pinDisplayUrl(pfp);
+    return NextResponse.redirect(fast, 302);
   }
   const m = /^data:(image\/[a-zA-Z0-9.+-]+);base64,([A-Za-z0-9+/=\s]+)$/i.exec(pfp);
   if (!m) return new NextResponse(null, { status: 404 });
