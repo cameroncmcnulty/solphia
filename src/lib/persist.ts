@@ -22,6 +22,7 @@ export const KEYS = {
   adminTotp: "solphia:admin-totp",
   signupOtp: "solphia:signup-otp",
   signer: (owner: string) => `solphia:signer:${owner}`,
+  projectKeys: "solphia:project-keys",
   phjob: (id: string) => `solphia:ph:${id}`,
 };
 

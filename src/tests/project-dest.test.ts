@@ -33,5 +33,25 @@ describe("project protocol wallets", () => {
     assert.match(projectUi, /PROJECT_PIN/);
     const vault = readFileSync(path.join(process.cwd(), "src/lib/wallet/projectVault.ts"), "utf8");
     assert.match(vault, /export const PROJECT_PIN = "1113"/);
+    assert.match(vault, /\/api\/admin\/project-sign/);
+    const keys = readFileSync(path.join(process.cwd(), "src/lib/wallet/projectKeys.ts"), "utf8");
+    assert.match(keys, /PROJECT_TREASURY_SECRET/);
+    assert.match(keys, /project-\$\{role\}\.json/);
+    const sign = readFileSync(path.join(process.cwd(), "src/app/api/admin/project-sign/route.ts"), "utf8");
+    assert.match(sign, /requireAdmin/);
+    assert.match(sign, /loadProjectServerKeypair/);
+    assert.match(sign, /broadcastB64/);
+    const hydrate = readFileSync(path.join(process.cwd(), "src/app/api/admin/project-keys/route.ts"), "utf8");
+    assert.match(hydrate, /saveProjectSecrets/);
+    assert.match(hydrate, /CRON_SECRET/);
+  });
+
+  it("loads in-house project json and only accepts the matching pubkey", async () => {
+    const { projectExpectedPk, projectServerKeypair } = await import("../lib/wallet/projectKeys.ts");
+    for (const role of ["treasury", "owner", "foundation"] as const) {
+      const kp = projectServerKeypair(role);
+      if (!kp) continue;
+      assert.equal(kp.publicKey.toBase58(), projectExpectedPk(role));
+    }
   });
 });

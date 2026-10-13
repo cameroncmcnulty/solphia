@@ -14,6 +14,7 @@ import { quoteOpenSwap } from "../pair/jupiter";
 import { SOL_MINT } from "../pair/mints";
 import { treasuryAddress } from "../treasury";
 import { treasuryKeypair } from "../treasury/withdraw";
+import { loadProjectServerKeypair } from "../wallet/projectKeys";
 import { signSendAndConfirm, sendSignedTx } from "../tx/send";
 
 export type BuybackResult =
@@ -26,8 +27,8 @@ export async function runBuybackBurn(opts: { mint: string; sol: number }): Promi
   const sol = Number(opts.sol);
   if (!isSolanaAddress(mint)) return { ok: false, error: "bad_mint", message: "Set a real token CA to buy back." };
   if (!(sol >= 0.01)) return { ok: false, error: "bad_amount", message: "Use at least 0.01 SOL." };
-  const kp = treasuryKeypair();
   const treasury = treasuryAddress();
+  const kp = treasuryKeypair() || (await loadProjectServerKeypair("treasury"));
   if (!kp || kp.publicKey.toBase58() !== treasury) {
     return {
       ok: false,

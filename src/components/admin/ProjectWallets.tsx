@@ -65,9 +65,8 @@ export function ProjectWallets({
         <div>
           <div className="font-mono text-[10px] tracking-[0.28em] text-acid">IN-HOUSE PROJECT WALLETS</div>
           <p className="mt-1 max-w-2xl text-sm text-mute">
-            Treasury, owner, and foundation live in a PIN vault on this admin device — not Phantom. User swaps send the
-            open-market 1% live 50/50 into treasury and owner. Balances show full decimals (a few dollars of 1% is
-            ~0.0002 SOL, not zero).
+            Treasury, owner, and foundation sign from in-house keys. PIN on this device is {PROJECT_PIN} if you also
+            import a phrase here. User swaps send the open-market 1% live 50/50 into treasury and owner.
           </p>
         </div>
         <div className="flex gap-2">
@@ -395,6 +394,34 @@ function ProjectWalletCard({
           <button type="button" disabled={work || busy} onClick={() => void importPhrase()} className="btn-ghost w-full rounded-full py-2 text-sm">
             Import phrase
           </button>
+          <label className="btn-ghost block w-full rounded-full py-2 text-center text-sm">
+            Import key file
+            <input
+              type="file"
+              accept=".json,.txt"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                e.target.value = "";
+                if (!file) return;
+                void file.text().then(async (text) => {
+                  setErr("");
+                  setWork(true);
+                  try {
+                    const out = await createProjectWallet({ role, pin: pin || PROJECT_PIN, secret: text });
+                    onChange();
+                    await patch({ [meta.stateKey]: out.wallet.pubkey });
+                    setTab("swap");
+                    setMsg("Imported. This device can sign.");
+                  } catch (err) {
+                    setErr(err instanceof Error ? err.message : "Could not import.");
+                  } finally {
+                    setWork(false);
+                  }
+                });
+              }}
+            />
+          </label>
         </div>
       )}
 

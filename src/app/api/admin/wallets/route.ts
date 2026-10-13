@@ -6,6 +6,7 @@ import { isSolanaAddress, clientIp } from "@/lib/security";
 import { rpcUrl } from "@/lib/config";
 import { treasuryAddress } from "@/lib/treasury";
 import { planTreasuryWithdraw, treasuryHot, treasuryKeypair } from "@/lib/treasury/withdraw";
+import { loadProjectServerKeypair, projectServerReady } from "@/lib/wallet/projectKeys";
 import { audit, loadAllTraders, mutateState, pushBounded, readyState } from "@/lib/store";
 import { lastPairPrices } from "@/lib/tick";
 import { sphaMintOf } from "@/lib/token/solphia";
@@ -86,6 +87,7 @@ export async function GET(req: NextRequest) {
     ok: true,
     solUsd,
     hot: treasuryHot(),
+    projectHot: await projectServerReady(),
     treasury: { pk: treasury, sol: bal[treasury] || 0 },
     owner: { pk: owner, sol: owner ? bal[owner] || 0 : 0 },
     dev: { pk: dev, sol: dev ? bal[dev] || 0 : 0, tokens, mint, decimals },
@@ -148,7 +150,7 @@ export async function POST(req: NextRequest) {
       transaction: Buffer.from(unsigned).toString("base64"),
     });
   }
-  const kp = treasuryKeypair();
+  const kp = treasuryKeypair() || (await loadProjectServerKeypair("treasury"));
   if (kp) {
     tx.sign(kp);
     const sent = await sendSignedTx(tx, { conn });

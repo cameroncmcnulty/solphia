@@ -7,7 +7,7 @@ import { useAdmin } from "./AdminProvider";
 import { Tokenomics } from "@/components/Tokenomics";
 import { shortPk } from "./ui";
 import { b64ToBytes } from "@/lib/solana/wire";
-import { ensureProjectSigner, projectWallet, signAndSendProjectTx } from "@/lib/wallet/projectVault";
+import { canSignProject, projectWallet, signAndSendProjectTx } from "@/lib/wallet/projectVault";
 
 type Prep = {
   network: SphaNetwork;
@@ -73,9 +73,8 @@ export function SphaLaunch() {
     if (mode === "official" && net === "mainnet-beta" && !confirm("MAINNET $SPHA. 200,000,000 supply. 77.1% on the curve. Continue?")) {
       return;
     }
-    const signer = await ensureProjectSigner("owner");
-    if (!signer) {
-      setErr("Unlock the owner project wallet to sign.");
+    if (!(await canSignProject("owner"))) {
+      setErr("Owner project wallet cannot sign yet.");
       return;
     }
     setRun(true);
@@ -145,8 +144,7 @@ export function SphaLaunch() {
   }
 
   async function mintTeamSlices(mint: string, payer: string): Promise<string[]> {
-    const signer = await ensureProjectSigner("owner");
-    if (!signer) throw new Error("Unlock the owner project wallet to mint team allocations.");
+    if (!(await canSignProject("owner"))) throw new Error("Owner project wallet cannot sign yet.");
     let lastErr = "mint not on-chain yet";
     for (let i = 0; i < 6; i++) {
       if (i) await new Promise((r) => setTimeout(r, 1500));

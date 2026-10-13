@@ -962,7 +962,7 @@ export function SwapWidget({
           title="Review swap"
           subtitle={
             signTx
-              ? "Unlock the project wallet to sign. Keys stay on this device."
+              ? "Sign with the project wallet."
               : embedded
                 ? "Sign in-app. Solphia never holds this key."
                 : "Phantom will pop up to sign."

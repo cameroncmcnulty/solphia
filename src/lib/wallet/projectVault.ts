@@ -3,7 +3,7 @@
 import { Keypair, Transaction } from "@solana/web3.js";
 import { isSolanaAddress } from "./addr";
 import { encodeTx } from "../token/mint";
-import { b64ToBytes } from "../solana/wire";
+import { b64ToBytes, bytesToB64 } from "../solana/wire";
 import { parseTx, signPackedB64 } from "../solana/extraSign";
 import {
   decodeSecretPayload,
@@ -227,8 +227,17 @@ export async function setProjectPin(pin: string): Promise<void> {
 async function requirePin(pin?: string): Promise<string> {
   if (projectUnlocked()) return pinKey;
   const clean = pin && pinOk(pin.trim()) ? pin.trim() : PROJECT_PIN;
-  if (readProjectMeta().pin) await unlockProjectVault(clean);
-  else await setProjectPin(clean);
+  if (readProjectMeta().pin) {
+    try {
+      await unlockProjectVault(clean);
+    } catch {
+      if (clean !== PROJECT_PIN) throw new Error("Unlock project wallets with your PIN first.");
+      resetProjectVaultOnThisDevice();
+      await setProjectPin(PROJECT_PIN);
+    }
+  } else {
+    await setProjectPin(clean);
+  }
   return pinKey;
 }
 
@@ -341,6 +350,43 @@ export function finishProjectUnlock(ok: boolean) {
   }
 }
 
+let serverReady: Partial<Record<ProjectRole, boolean>> | null = null;
+let serverPub: Partial<Record<ProjectRole, string>> = {};
+
+export async function projectServerReady(): Promise<Record<ProjectRole, boolean>> {
+  if (serverReady?.treasury != null && serverReady.owner != null && serverReady.foundation != null) {
+    return { treasury: Boolean(serverReady.treasury), owner: Boolean(serverReady.owner), foundation: Boolean(serverReady.foundation) };
+  }
+  try {
+    const r = await fetch("/api/admin/project-sign", { cache: "no-store" });
+    const j = (await r.json().catch(() => ({}))) as {
+      ready?: Partial<Record<ProjectRole, boolean>>;
+      pubkeys?: Partial<Record<ProjectRole, string>>;
+    };
+    serverReady = {
+      treasury: Boolean(j.ready?.treasury),
+      owner: Boolean(j.ready?.owner),
+      foundation: Boolean(j.ready?.foundation),
+    };
+    serverPub = j.pubkeys || {};
+  } catch {
+    serverReady = { treasury: false, owner: false, foundation: false };
+  }
+  return {
+    treasury: Boolean(serverReady.treasury),
+    owner: Boolean(serverReady.owner),
+    foundation: Boolean(serverReady.foundation),
+  };
+}
+
+export async function canSignProject(role: ProjectRole): Promise<boolean> {
+  if (projectKeypair(role)) return true;
+  await unlockProjectVaultWithDefault();
+  if (projectKeypair(role)) return true;
+  const ready = await projectServerReady();
+  return Boolean(ready[role]);
+}
+
 export async function ensureProjectSigner(role: ProjectRole): Promise<Keypair | null> {
   const have = projectKeypair(role);
   if (have) return have;
@@ -348,35 +394,54 @@ export async function ensureProjectSigner(role: ProjectRole): Promise<Keypair | 
     const ready = projectKeypair(role);
     if (ready) return ready;
   }
+  if (await canSignProject(role)) return projectKeypair(role);
   const ok = await requestProjectUnlock();
   if (!ok) return null;
   return projectKeypair(role);
 }
 
-export async function signAndSendProjectTx(role: ProjectRole, packed: string, extra?: Keypair[]): Promise<string> {
-  const kp = await ensureProjectSigner(role);
-  if (!kp) throw new Error("Unlock the project wallet to sign.");
-  const signers = extra ? [kp, ...extra] : [kp];
-  const signed = signPackedB64(packed, signers);
-  const r = await fetch("/api/sol/send", {
+async function signOnServer(role: ProjectRole, packed: string, extra?: Keypair[]): Promise<string> {
+  const extraSecrets = (extra || []).map((k) => bytesToB64(k.secretKey));
+  const r = await fetch("/api/admin/project-sign", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ transaction: signed, skipPreflight: false }),
-    signal: AbortSignal.timeout(12_000),
+    body: JSON.stringify({ role, transaction: packed, extraSecrets }),
+    signal: AbortSignal.timeout(20_000),
   });
-  const j = (await r.json().catch(() => ({}))) as { error?: string; signature?: string };
-  if (!r.ok || !j.signature) throw new Error(j.error || "send failed");
-  touch();
+  const j = (await r.json().catch(() => ({}))) as { error?: string; message?: string; signature?: string };
+  if (!r.ok || !j.signature) throw new Error(j.message || j.error || "Unlock the project wallet to sign.");
   return j.signature;
+}
+
+export async function signAndSendProjectTx(role: ProjectRole, packed: string, extra?: Keypair[]): Promise<string> {
+  if (!projectKeypair(role)) await unlockProjectVaultWithDefault();
+  const kp = projectKeypair(role);
+  if (kp) {
+    const signers = extra ? [kp, ...extra] : [kp];
+    const signed = signPackedB64(packed, signers);
+    const r = await fetch("/api/sol/send", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ transaction: signed, skipPreflight: false }),
+      signal: AbortSignal.timeout(12_000),
+    });
+    const j = (await r.json().catch(() => ({}))) as { error?: string; signature?: string };
+    if (!r.ok || !j.signature) throw new Error(j.error || "send failed");
+    touch();
+    return j.signature;
+  }
+  return signOnServer(role, packed, extra);
 }
 
 export async function sendProjectSol(role: ProjectRole, to: string, sol: number): Promise<string> {
   if (!isSolanaAddress(to)) throw new Error("That is not a valid Solana address.");
   if (!(sol > 0)) throw new Error("Enter an amount.");
-  const kp = await ensureProjectSigner(role);
-  if (!kp) throw new Error("Unlock the project wallet to sign.");
+  const local = projectKeypair(role);
+  if (!serverPub[role]) await projectServerReady();
+  const from = local?.publicKey.toBase58() || projectWallet(role)?.pubkey || serverPub[role] || "";
+  if (!isSolanaAddress(from)) throw new Error("Create or import this project wallet first.");
   const { buildTransfer } = await import("./trading");
-  const tx = await buildTransfer(kp.publicKey.toBase58(), to, sol);
+  const tx = await buildTransfer(from, to, sol);
   return signAndSendProjectTx(role, encodeTx(tx));
 }
 

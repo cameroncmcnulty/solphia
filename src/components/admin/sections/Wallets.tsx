@@ -6,7 +6,7 @@ import { FieldError, useConfirmErrors } from "@/components/form/confirm";
 import { walletOk } from "@/lib/launch/validate";
 import { planTreasuryWithdraw } from "@/lib/treasury/plan";
 import { signAndSendPhantom } from "@/lib/wallet/trading";
-import { ensureProjectSigner, projectKeypair, sendProjectSol, signAndSendProjectTx } from "@/lib/wallet/projectVault";
+import { canSignProject, sendProjectSol, signAndSendProjectTx } from "@/lib/wallet/projectVault";
 import { useAdmin } from "../AdminProvider";
 import { SphaLaunch } from "../SphaLaunch";
 import { ProjectWallets } from "../ProjectWallets";
@@ -20,6 +20,7 @@ type BalRow = { pk: string; sol: number };
 type Pack = {
   solUsd: number;
   hot: boolean;
+  projectHot?: { treasury?: boolean; owner?: boolean; foundation?: boolean };
   treasury: BalRow;
   treasuryVault?: BalRow | null;
   owner: BalRow;
@@ -191,7 +192,7 @@ export function WalletsSection() {
     if (!confirm(`Send ${preview.sol.toFixed(4)} SOL from treasury to owner?`)) return;
     setWBusy(true);
     try {
-      if (projectKeypair("treasury") && data.ownerWallet) {
+      if ((await canSignProject("treasury")) && data.ownerWallet) {
         const sig = await sendProjectSol("treasury", data.ownerWallet, preview.sol);
         setMsg(`Sent ${preview.sol.toFixed(4)} SOL · ${sig.slice(0, 8)}…`);
         await loadBal();
@@ -211,7 +212,7 @@ export function WalletsSection() {
       }
       if (j.needsSignature && j.transaction) {
         const tx = j.transaction as string;
-        if (projectKeypair("treasury")) {
+        if (await canSignProject("treasury")) {
           const sig = await signAndSendProjectTx("treasury", tx);
           await fetch("/api/admin/wallets", {
             method: "PUT",
@@ -380,9 +381,9 @@ export function WalletsSection() {
         </button>
         {msg && <p className="mt-2 text-sm text-acid">{msg}</p>}
         {err && <p className="mt-2 text-sm text-blood">{err}</p>}
-        {!projectKeypair("treasury") && !pack?.hot && (
-          <p className="mt-2 text-sm text-mute">Unlock the treasury project wallet above to sign.</p>
-        )}
+        {!pack?.hot && !pack?.projectHot?.treasury ? (
+          <p className="mt-2 text-sm text-mute">Treasury signs from the in-house project key.</p>
+        ) : null}
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
@@ -661,8 +662,8 @@ function ProfitsPanel() {
     setClaimMsg("");
     setClaimBusy(true);
     try {
-      if (!(await ensureProjectSigner("treasury"))) {
-        throw new Error("Unlock the treasury project wallet to claim.");
+      if (!(await canSignProject("treasury"))) {
+        throw new Error("Treasury project wallet cannot sign yet.");
       }
       const r = await fetch("/api/admin/claim", {
         method: "POST",
