@@ -221,7 +221,8 @@ describe("vault localStorage isolation", () => {
     };
     g.fetch = (async () => ({ ok: true, json: async () => ({}) })) as unknown as typeof fetch;
 
-    const { createEmbeddedWallet, lockVault, listWallets } = await import("../lib/wallet/vault");
+    const { createEmbeddedWallet, lockVault, listWallets, addDerivedWallet, wipeVault, readVaultMeta } =
+      await import("../lib/wallet/vault");
     lockVault();
     mem.clear();
     const first = await createEmbeddedWallet({ pin: "2468", phrase: newPhrase() });
@@ -231,12 +232,28 @@ describe("vault localStorage isolation", () => {
       () => createEmbeddedWallet({ phrase: recover }),
       /Unlock with your PIN first/,
     );
-    const imported = await createEmbeddedWallet({ pin: "2468", phrase: recover });
+    await assert.rejects(
+      () => createEmbeddedWallet({ pin: "2468", phrase: recover }),
+      /This device already has a wallet/,
+    );
+    const imported = await createEmbeddedWallet({ pin: "2468", phrase: recover, replace: true });
     assert.notEqual(imported.wallet.pubkey, first.wallet.pubkey);
     assert.equal(
       listWallets({ hidden: true }).some((w) => w.pubkey === imported.wallet.pubkey),
       true,
     );
+    assert.equal(
+      listWallets({ hidden: true }).some((w) => w.pubkey === first.wallet.pubkey),
+      false,
+    );
+
+    const seed = newPhrase();
+    wipeVault();
+    const origin = await createEmbeddedWallet({ pin: "2468", phrase: seed });
+    const extra = await addDerivedWallet();
+    assert.notEqual(extra.pubkey, origin.wallet.pubkey);
+    assert.equal(extra.account, 1);
+    assert.equal(readVaultMeta().wallets.length, 2);
   });
 
   it("reclaims a phrase already on this device instead of treating it as an error", async () => {
@@ -288,8 +305,7 @@ describe("vault localStorage isolation", () => {
     assert.equal(listWallets({ hidden: true }).filter((w) => w.pubkey === first.wallet.pubkey).length, 1);
 
     const phantomPhrase = newPhrase();
-    const phantom = await createEmbeddedWallet({ pin: "2468", phrase: phantomPhrase });
-    const pk = phantom.wallet.pubkey;
+    const pk = keypairFromPhrase(phantomPhrase, 0).publicKey.toBase58();
     lockVault();
     mem.clear();
     addPhantomWallet(pk, "Phantom");
@@ -303,8 +319,8 @@ describe("vault localStorage isolation", () => {
 describe("wallet path labels and fees", () => {
   it("offers create or phrase import, not Phantom login", () => {
     assert.equal("phantom" in WALLET_PATHS, false);
-    assert.match(WALLET_PATHS.create.hint, /sending funds/i);
-    assert.match(WALLET_PATHS.import.title, /account/i);
+    assert.match(WALLET_PATHS.create.hint, /new account/i);
+    assert.match(WALLET_PATHS.import.title, /recovery phrase/i);
     assert.match(WALLET_PATHS.import.hint, /account/i);
     assert.match(WALLET_PATHS.import.hint, /never leaves this device/i);
     assert.equal(CONNECT_WALLET_FIRST, "Connect a wallet first.");

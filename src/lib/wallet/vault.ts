@@ -1,6 +1,6 @@
 import { Keypair } from "@solana/web3.js";
 import { isSolanaAddress } from "./addr";
-import { loadOwner, persistOwner } from "./owner";
+import { forgetOwner, loadOwner, persistOwner } from "./owner";
 import {
   decodeSecretPayload,
   encodeSecretPayload,
@@ -11,7 +11,7 @@ import {
   wrapWithPin,
   type Cipher,
 } from "./vaultCrypto";
-import { importKeypair, newPhrase, phraseOk, secretB58 } from "./phrase";
+import { importKeypair, newPhrase, normalizePhrase, phraseOk, secretB58 } from "./phrase";
 
 export const VAULT_EVENT = "solphia:vault";
 export const VAULT_UNLOCK_EVENT = "solphia:wallet-unlock";
@@ -165,6 +165,24 @@ export function lockVault() {
   unlocked.clear();
 }
 
+/** Drop every key on this device. Sign-out + create new uses this so the last seed cannot leak. */
+export function wipeVault() {
+  lockVault();
+  const s = store();
+  if (s) {
+    try {
+      s.removeItem(META_KEY);
+      s.removeItem(SECRETS_KEY);
+    } catch {
+      /* private mode */
+    }
+  }
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent(VAULT_EVENT, { detail: emptyMeta() }));
+  }
+  forgetOwner();
+}
+
 export async function unlockVault(pin: string): Promise<void> {
   const clean = pin.trim();
   if (!pinOk(clean)) throw new Error("PIN is 4–8 digits.");
@@ -221,8 +239,15 @@ export async function createEmbeddedWallet(opts: {
   phrase?: string;
   secret?: string;
   account?: number;
+  /** Wipe this device first. New seed = new account. */
+  replace?: boolean;
 }): Promise<{ wallet: VaultWallet; phrase?: string; firstTime: boolean }> {
-  const firstTime = !vaultHasPin();
+  if (opts.replace) {
+    const keepPin = (opts.pin || pinKey).trim();
+    wipeVault();
+    if (keepPin && pinOk(keepPin)) await setVaultPin(keepPin);
+  }
+  const firstTime = !readVaultMeta().wallets.length;
   const pin = await requirePin(opts.pin);
   const account = Math.max(0, Math.floor(opts.account || 0));
   let phrase: string | undefined;
@@ -244,6 +269,12 @@ export async function createEmbeddedWallet(opts: {
   const pubkey = keypair.publicKey.toBase58();
   const meta = readVaultMeta();
   const imported = Boolean(opts.phrase || opts.secret);
+  const sameSeed = phrase
+    ? [...unlocked.values()].some((row) => row.mnemonic && normalizePhrase(row.mnemonic) === normalizePhrase(phrase))
+    : false;
+  if (meta.wallets.length && phrase && !sameSeed && !meta.wallets.some((w) => w.pubkey === pubkey) && !opts.replace) {
+    throw new Error("This device already has a wallet. Create a new wallet to replace it, or add another address from the same phrase.");
+  }
   const existing = meta.wallets.find((w) => w.pubkey === pubkey);
   if (existing) {
     existing.hidden = false;
@@ -286,6 +317,25 @@ export async function createEmbeddedWallet(opts: {
   rememberUnlocked(id, keypair.secretKey, phrase, pubkey);
   announceOwner(pubkey);
   return { wallet, phrase, firstTime };
+}
+
+/** Extra address from the same recovery phrase (Phantom-style account index). */
+export async function addDerivedWallet(opts?: { nickname?: string }): Promise<VaultWallet> {
+  const pin = await requirePin();
+  const seedPhrase =
+    unlockedMnemonic() ||
+    [...unlocked.values()].map((row) => row.mnemonic).find((m): m is string => Boolean(m));
+  if (!seedPhrase) throw new Error("Unlock this wallet first.");
+  const used = new Set(readVaultMeta().wallets.map((w) => w.account));
+  let account = 0;
+  while (used.has(account)) account += 1;
+  const created = await createEmbeddedWallet({
+    pin,
+    phrase: seedPhrase,
+    account,
+    nickname: opts?.nickname,
+  });
+  return created.wallet;
 }
 
 export function addPhantomWallet(pubkey: string, nickname?: string): VaultWallet {

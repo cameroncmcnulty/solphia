@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { CartoonPfp } from "@/components/CartoonPfp";
-import { PhantomMark } from "@/components/PhantomMark";
 import {
   activeWallet,
   hideWallet,
@@ -40,10 +39,10 @@ export function WalletSwitcher({ onClose, onAdd }: { onClose: () => void; onAdd:
   }, []);
 
   return (
-    <WalletSheet title="Wallets" subtitle="Each wallet is its own account, rank, and referral cut. Balances are never merged." onClose={onClose}>
+    <WalletSheet title="Wallets" subtitle="Every address here shares one recovery phrase. A new phrase is a new account." onClose={onClose}>
       {err ? <p className="mb-3 font-mono text-[13px] text-blood">{err}</p> : null}
       <div className="space-y-2">
-        {rows.filter((w) => !w.hidden).map((w) => (
+        {rows.filter((w) => !w.hidden && w.kind !== "phantom").map((w) => (
           <div key={w.id} className={`rounded-2xl border px-3 py-3 ${w.id === activeId ? "border-acid/40 bg-acid/[0.06]" : "border-white/10 bg-white/[0.03]"}`}>
             <button
               type="button"
@@ -57,7 +56,7 @@ export function WalletSwitcher({ onClose, onAdd }: { onClose: () => void; onAdd:
               <span className="min-w-0 flex-1">
                 <span className="flex items-center gap-1.5 text-[15px] font-semibold text-white">
                   {w.nickname}
-                  {w.kind === "phantom" ? <PhantomMark className="h-3.5 w-3.5 text-white/70" /> : null}
+
                 </span>
                 <span className="block font-mono text-[11px] text-white/40">
                   {w.pubkey.slice(0, 4)}…{w.pubkey.slice(-4)}
@@ -141,7 +140,7 @@ export function WalletSwitcher({ onClose, onAdd }: { onClose: () => void; onAdd:
         ))}
       </div>
       <button type="button" onClick={onAdd} className="btn-acid mt-4 min-h-[48px] w-full rounded-full">
-        Add wallet
+        Add address from this phrase
       </button>
     </WalletSheet>
   );

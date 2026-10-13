@@ -7,7 +7,7 @@ import { CircleUser, Gift, Rocket, Users, Wallet } from "lucide-react";
 import { useOwner } from "@/lib/hooks";
 import { CartoonPfp } from "./CartoonPfp";
 import { WalletConnect } from "./WalletConnect";
-import { openAccountGate, openWalletOnboard, openWalletSwitcher } from "./wallet/WalletHost";
+import { openWalletOnboard, openWalletSwitcher } from "./wallet/WalletHost";
 import { useActiveWallet } from "@/lib/wallet/useVault";
 import { logoutAccount, peekAccount, refreshAccount, AUTH_EVENT } from "@/lib/auth/client";
 import { flashNotice } from "@/lib/notice";
@@ -27,7 +27,6 @@ export function AccountMenu() {
   const vault = useActiveWallet();
   const [open, setOpen] = useState(false);
   const [desk, setDesk] = useState<Desk | null>(null);
-  const [email, setEmail] = useState("");
   const [signedIn, setSignedIn] = useState(false);
   const [authReady, setAuthReady] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -38,13 +37,11 @@ export function AccountMenu() {
   useEffect(() => {
     const sync = () => {
       const a = peekAccount();
-      setEmail(a?.email || "");
       setSignedIn(Boolean(a?.id));
     };
     sync();
     if (peekAccount()?.id) setAuthReady(true);
     void refreshAccount().then((a) => {
-      setEmail(a?.email || "");
       setSignedIn(Boolean(a?.id));
       setAuthReady(true);
     });
@@ -101,10 +98,10 @@ export function AccountMenu() {
   if (!authReady) return <div className="h-10 w-[7.25rem] sm:h-11" aria-hidden />;
   if (!signedIn) return <WalletConnect />;
 
-  const seed = owner || email || "account";
+  const seed = owner || "account";
   const nickname = desk?.username
     ? `@${desk.username}`
-    : vault?.nickname || (owner ? `${owner.slice(0, 4)}…${owner.slice(-4)}` : email || "Account");
+    : vault?.nickname || (owner ? `${owner.slice(0, 4)}…${owner.slice(-4)}` : "Account");
 
   const menu = open && mounted && createPortal(
     <div
@@ -118,8 +115,7 @@ export function AccountMenu() {
         <div className="min-w-0">
           <div className="truncate font-mono text-xs text-ghost">{nickname}</div>
           <div className="truncate font-mono text-[10px] text-mute">
-            {email || (owner ? `${owner.slice(0, 4)}…${owner.slice(-4)}` : "Signed in")}
-            {vault?.kind === "embedded" ? " · Solphia" : ""}
+            {owner ? `${owner.slice(0, 4)}…${owner.slice(-4)}` : "Solphia wallet"}
           </div>
         </div>
       </div>
@@ -170,26 +166,13 @@ export function AccountMenu() {
             onClick={() => {
               setOpen(false);
               setSignedIn(false);
-              setEmail("");
               void logoutAccount().then(() => flashNotice("Signed out"));
             }}
             className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left text-sm text-mute hover:bg-white/5 hover:text-ghost"
           >
             Sign out
           </button>
-        ) : (
-          <button
-            type="button"
-            role="menuitem"
-            onClick={() => {
-              setOpen(false);
-              openAccountGate();
-            }}
-            className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left text-sm text-mute hover:bg-white/5 hover:text-ghost"
-          >
-            Sign in
-          </button>
-        )}
+        ) : null}
       </nav>
     </div>,
     document.body,

@@ -1,18 +1,28 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { SphaMark } from "@/components/SphaMark";
 import { CopyButton } from "@/components/CopyButton";
-import { createEmbeddedWallet, vaultHasPin, vaultUnlocked } from "@/lib/wallet/vault";
+import {
+  addDerivedWallet,
+  createEmbeddedWallet,
+  listWallets,
+  unlockVault,
+  vaultHasPin,
+  vaultUnlocked,
+  wipeVault,
+} from "@/lib/wallet/vault";
 import { newPhrase, phraseFile, phraseOk, phraseWords, pickConfirmSlots } from "@/lib/wallet/phrase";
 import { pinOk } from "@/lib/wallet/vaultCrypto";
 import { WalletSheet } from "./sheet";
 import { WALLET_PATHS } from "@/lib/wallet/paths";
-import { linkAccountWallet, refreshAccount } from "@/lib/auth/client";
+import { flashNotice } from "@/lib/notice";
+import { linkAccountWallet, peekAccount, startWalletSession } from "@/lib/auth/client";
 import { syncOwnerToSignedInAccount } from "@/lib/wallet/identity";
 
-type Step = "chooser" | "phrase" | "confirm" | "import" | "pin";
-type Kind = "create" | "import";
+type Step = "chooser" | "replace" | "phrase" | "confirm" | "import" | "pin";
+type Kind = "create" | "import" | "unlock";
 
 function downloadPhrase(phrase: string, pubkey: string) {
   const blob = new Blob([phraseFile(phrase, pubkey)], { type: "text/plain" });
@@ -24,35 +34,80 @@ function downloadPhrase(phrase: string, pubkey: string) {
   URL.revokeObjectURL(url);
 }
 
+function TosBoxes({
+  tos,
+  privacy,
+  setTos,
+  setPrivacy,
+}: {
+  tos: boolean;
+  privacy: boolean;
+  setTos: (v: boolean) => void;
+  setPrivacy: (v: boolean) => void;
+}) {
+  return (
+    <div className="space-y-2">
+      <label className="flex items-start gap-2 text-sm text-ghost">
+        <input type="checkbox" checked={tos} onChange={(e) => setTos(e.target.checked)} className="mt-1" />
+        <span>
+          I agree to the{" "}
+          <Link href="/legal#terms" target="_blank" className="text-acid underline">
+            Terms of Service
+          </Link>
+          .
+        </span>
+      </label>
+      <label className="flex items-start gap-2 text-sm text-ghost">
+        <input type="checkbox" checked={privacy} onChange={(e) => setPrivacy(e.target.checked)} className="mt-1" />
+        <span>
+          I have read the{" "}
+          <Link href="/legal#privacy" target="_blank" className="text-acid underline">
+            Privacy Policy
+          </Link>
+          .
+        </span>
+      </label>
+    </div>
+  );
+}
+
 export function WalletOnboard({ onClose }: { onClose: () => void }) {
+  const signedIn = Boolean(peekAccount()?.id);
+  const hasVault = vaultHasPin();
   const [step, setStep] = useState<Step>("chooser");
-  const [kind, setKind] = useState<Kind>("create");
+  const [kind, setKind] = useState<Kind>(hasVault ? "unlock" : "create");
   const [phrase, setPhrase] = useState("");
   const [importText, setImportText] = useState("");
   const [pin, setPin] = useState("");
   const [pin2, setPin2] = useState("");
   const [slots, setSlots] = useState<number[]>([]);
   const [typed, setTyped] = useState<Record<number, string>>({});
+  const [tos, setTos] = useState(false);
+  const [privacy, setPrivacy] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const words = useMemo(() => phraseWords(phrase), [phrase]);
   const unlockPin = vaultHasPin();
-  const pinReady = vaultUnlocked();
 
   function seedPhrase() {
     return kind === "import" ? importText : phrase;
   }
 
-  function goPinOrSave() {
-    setErr("");
-    if (!pinReady) {
-      setStep("pin");
+  function startCreate() {
+    if (hasVault && !signedIn) {
+      setKind("create");
+      setErr("");
+      setStep("replace");
       return;
     }
-    void finish();
+    if (signedIn) {
+      void addAddress();
+      return;
+    }
+    beginCreate();
   }
 
-  function startCreate() {
+  function beginCreate() {
     const next = newPhrase();
     setKind("create");
     setPhrase(next);
@@ -62,27 +117,78 @@ export function WalletOnboard({ onClose }: { onClose: () => void }) {
     setStep("phrase");
   }
 
+  function startImport() {
+    setKind("import");
+    setErr("");
+    if (hasVault && !signedIn) {
+      setStep("replace");
+      return;
+    }
+    setStep("import");
+  }
+
+  async function addAddress() {
+    setBusy(true);
+    setErr("");
+    try {
+      const wallet = await addDerivedWallet();
+      if (peekAccount()?.id) await linkAccountWallet(wallet.pubkey);
+      syncOwnerToSignedInAccount();
+      flashNotice("New address from the same phrase.");
+      onClose();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Could not add an address.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function finishUnlock() {
+    setBusy(true);
+    setErr("");
+    try {
+      if (!pinOk(pin)) throw new Error("PIN is 4–8 digits.");
+      await unlockVault(pin);
+      const active = listWallets().find((w) => w.kind === "embedded") || listWallets({ hidden: true }).find((w) => w.kind === "embedded");
+      if (!active) throw new Error("No Solphia wallet on this device.");
+      await startWalletSession(active.pubkey, { tos: true, privacy: true });
+      syncOwnerToSignedInAccount();
+      flashNotice("Wallet unlocked");
+      onClose();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Could not unlock.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function finish() {
+    if (kind === "unlock") {
+      await finishUnlock();
+      return;
+    }
     setBusy(true);
     setErr("");
     try {
       if (!vaultUnlocked()) {
         if (!pinOk(pin)) throw new Error("PIN is 4–8 digits.");
-        if (!vaultHasPin() && pin !== pin2) throw new Error("PINs do not match.");
+        if (!unlockPin && pin !== pin2) throw new Error("PINs do not match.");
       }
+      if (!tos || !privacy) throw new Error("Agree to the terms and privacy policy.");
       const created = await createEmbeddedWallet({
         pin: vaultUnlocked() ? undefined : pin,
         phrase: seedPhrase(),
+        replace: !signedIn,
       });
-      await linkAccountWallet(created.wallet.pubkey);
-      await refreshAccount();
+      await startWalletSession(created.wallet.pubkey, { tos, privacy });
       syncOwnerToSignedInAccount();
+      flashNotice(kind === "import" ? "Wallet recovered" : "Wallet created");
       onClose();
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Could not save this wallet.";
       if (/unlock with your pin first/i.test(msg)) {
         setStep("pin");
-        setErr("Enter the PIN for this device, then we save the recovery phrase.");
+        setErr("Enter the PIN for this device.");
       } else {
         setErr(msg);
       }
@@ -98,36 +204,41 @@ export function WalletOnboard({ onClose }: { onClose: () => void }) {
         return;
       }
     }
-    goPinOrSave();
+    setErr("");
+    setStep("pin");
   }
 
   const title =
     step === "chooser"
-      ? "Your wallet"
-      : step === "phrase"
-        ? "Recovery phrase"
-        : step === "confirm"
-          ? "Confirm the phrase"
-          : step === "import"
-            ? "Recover wallet"
-            : unlockPin
-              ? "Unlock with PIN"
-              : "Set a PIN";
+      ? "Wallet"
+      : step === "replace"
+        ? "New account"
+        : step === "phrase"
+          ? "Secret recovery phrase"
+          : step === "confirm"
+            ? "Confirm the phrase"
+            : step === "import"
+              ? "Import recovery phrase"
+              : kind === "unlock"
+                ? "Unlock wallet"
+                : unlockPin
+                  ? "Unlock with PIN"
+                  : "Create a PIN";
 
   const subtitle =
     step === "chooser"
-      ? "Create a Solphia wallet, or recover one onto your account with a phrase. Phantom is only for sending funds in or out."
-      : step === "phrase"
-        ? "Write these 12 words down. If you lose them, the funds are gone. We cannot recover them."
-        : step === "confirm"
-          ? "Type the three words below so we know you saved the phrase."
-          : step === "import"
-            ? "Paste a 12/24-word phrase. The wallet is attached to your account. The phrase never leaves this device."
-            : unlockPin
-              ? kind === "import"
-                ? "Unlock this device, then the wallet is attached to your account. The phrase never leaves here."
-                : "This device already has a PIN. Unlock, then the recovery phrase is saved here."
-              : "Unlocks this device only. Solphia never receives this PIN.";
+      ? "Create a new Solphia wallet or import a 12-word phrase. No email. No Google. No Phantom."
+      : step === "replace"
+        ? "This wipes the wallet on this device and starts a new account. Only continue if you saved the old recovery phrase."
+        : step === "phrase"
+          ? "Write these 12 words down and copy them somewhere offline. Anyone with them can take the funds. Solphia never has a copy."
+          : step === "confirm"
+            ? "Type the three words below so we know you saved the phrase."
+            : step === "import"
+              ? "Paste the 12 or 24 words. This restores that account only. The phrase never leaves this device."
+              : kind === "unlock"
+                ? "Unlock the wallet already on this device."
+                : "This PIN encrypts the phrase on this device. Solphia never receives it.";
 
   return (
     <WalletSheet title={title} subtitle={subtitle} onClose={onClose}>
@@ -135,31 +246,73 @@ export function WalletOnboard({ onClose }: { onClose: () => void }) {
 
       {step === "chooser" ? (
         <div className="space-y-2">
+          {hasVault ? (
+            <button
+              type="button"
+              onClick={() => {
+                setKind("unlock");
+                setErr("");
+                setStep("pin");
+              }}
+              className="flex w-full items-center gap-3 rounded-2xl border border-acid/30 bg-acid/[0.06] px-4 py-3 text-left"
+            >
+              <SphaMark className="h-8 w-8" />
+              <span>
+                <span className="block text-[15px] font-semibold text-white">Unlock this wallet</span>
+                <span className="block text-[13px] text-white/45">PIN for the seed already on this device.</span>
+              </span>
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={startCreate}
+            disabled={busy}
             className="flex w-full items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-left"
           >
             <SphaMark className="h-8 w-8" />
             <span>
-              <span className="block text-[15px] font-semibold text-white">{WALLET_PATHS.create.title}</span>
-              <span className="block text-[13px] text-white/45">{WALLET_PATHS.create.hint}</span>
+              <span className="block text-[15px] font-semibold text-white">
+                {signedIn ? "Add address from this phrase" : WALLET_PATHS.create.title}
+              </span>
+              <span className="block text-[13px] text-white/45">
+                {signedIn ? "Same recovery phrase. New Solana address." : WALLET_PATHS.create.hint}
+              </span>
             </span>
           </button>
+          {signedIn ? null : (
+            <button
+              type="button"
+              onClick={startImport}
+              className="flex w-full items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-left"
+            >
+              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 font-mono text-[11px] text-white">IN</span>
+              <span>
+                <span className="block text-[15px] font-semibold text-white">{WALLET_PATHS.import.title}</span>
+                <span className="block text-[13px] text-white/45">{WALLET_PATHS.import.hint}</span>
+              </span>
+            </button>
+          )}
+        </div>
+      ) : null}
+
+      {step === "replace" ? (
+        <div>
+          <p className="text-[14px] text-white/70">
+            Sign-out does not keep the last seed attached. Create or import starts a clean account. The old phrase is the only way back.
+          </p>
           <button
             type="button"
+            className="btn-acid mt-4 min-h-[48px] w-full rounded-full"
             onClick={() => {
-              setKind("import");
-              setErr("");
-              setStep("import");
+              wipeVault();
+              if (kind === "import") setStep("import");
+              else beginCreate();
             }}
-            className="flex w-full items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-left"
           >
-            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 font-mono text-[11px] text-white">IN</span>
-            <span>
-              <span className="block text-[15px] font-semibold text-white">{WALLET_PATHS.import.title}</span>
-              <span className="block text-[13px] text-white/45">{WALLET_PATHS.import.hint}</span>
-            </span>
+            Wipe this device and continue
+          </button>
+          <button type="button" className="mt-3 w-full text-center text-[13px] text-white/45" onClick={() => setStep("chooser")}>
+            Back
           </button>
         </div>
       ) : null}
@@ -189,7 +342,7 @@ export function WalletOnboard({ onClose }: { onClose: () => void }) {
               Download .txt
             </button>
           </div>
-          <p className="mt-3 text-[13px] text-blood">Anyone with this phrase can empty the wallet. Do not screenshot a cloud backup.</p>
+          <p className="mt-3 text-[13px] text-blood">Never share this phrase. Never screenshot it to iCloud or Google Photos. Solphia cannot recover it.</p>
           <button type="button" className="btn-acid mt-4 min-h-[48px] w-full rounded-full" onClick={() => setStep("confirm")}>
             I saved these words
           </button>
@@ -236,7 +389,8 @@ export function WalletOnboard({ onClose }: { onClose: () => void }) {
                 setErr("That recovery phrase is not valid.");
                 return;
               }
-              goPinOrSave();
+              setErr("");
+              setStep("pin");
             }}
           >
             Continue
@@ -247,7 +401,9 @@ export function WalletOnboard({ onClose }: { onClose: () => void }) {
       {step === "pin" ? (
         <div className="space-y-3">
           <label className="block">
-            <span className="font-mono text-[11px] tracking-[0.16em] text-white/40">{unlockPin ? "DEVICE PIN" : "PIN"}</span>
+            <span className="font-mono text-[11px] tracking-[0.16em] text-white/40">
+              {kind === "unlock" || unlockPin ? "DEVICE PIN" : "PIN"}
+            </span>
             <input
               inputMode="numeric"
               autoComplete="off"
@@ -255,12 +411,12 @@ export function WalletOnboard({ onClose }: { onClose: () => void }) {
               value={pin}
               onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 8))}
               onKeyDown={(e) => {
-                if (e.key === "Enter" && (unlockPin || pin === pin2)) void finish();
+                if (e.key === "Enter" && (kind === "unlock" || unlockPin || pin === pin2)) void finish();
               }}
               className="mt-1 min-h-[44px] w-full rounded-2xl border border-white/10 bg-white/[0.06] px-3 font-mono text-[18px] tracking-[0.4em] text-white outline-none"
             />
           </label>
-          {unlockPin ? null : (
+          {kind !== "unlock" && !unlockPin ? (
             <label className="block">
               <span className="font-mono text-[11px] tracking-[0.16em] text-white/40">CONFIRM PIN</span>
               <input
@@ -271,22 +427,26 @@ export function WalletOnboard({ onClose }: { onClose: () => void }) {
                 className="mt-1 min-h-[44px] w-full rounded-2xl border border-white/10 bg-white/[0.06] px-3 font-mono text-[18px] tracking-[0.4em] text-white outline-none"
               />
             </label>
-          )}
+          ) : null}
+          {kind === "unlock" ? null : <TosBoxes tos={tos} privacy={privacy} setTos={setTos} setPrivacy={setPrivacy} />}
           <button
             type="button"
-            disabled={busy || !pinOk(pin) || (!unlockPin && pin !== pin2)}
+            disabled={
+              busy ||
+              !pinOk(pin) ||
+              (kind !== "unlock" && !unlockPin && pin !== pin2) ||
+              (kind !== "unlock" && (!tos || !privacy))
+            }
             className="btn-acid min-h-[48px] w-full rounded-full disabled:opacity-40"
             onClick={() => void finish()}
           >
             {busy
               ? "Saving…"
-              : kind === "import"
-                ? unlockPin
-                  ? "Unlock and recover onto account"
-                  : "Recover onto your account"
-                : unlockPin
-                  ? "Unlock and save wallet"
-                  : "Save wallet on this device"}
+              : kind === "unlock"
+                ? "Unlock"
+                : kind === "import"
+                  ? "Import wallet"
+                  : "Create wallet"}
           </button>
           <button
             type="button"
@@ -294,7 +454,7 @@ export function WalletOnboard({ onClose }: { onClose: () => void }) {
             className="w-full text-center text-[13px] text-white/45"
             onClick={() => {
               setErr("");
-              setStep(kind === "import" ? "import" : "confirm");
+              setStep(kind === "import" ? "import" : kind === "unlock" ? "chooser" : "confirm");
             }}
           >
             Back

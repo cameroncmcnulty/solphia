@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowDownLeft, ArrowUpRight, Plus, Repeat } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, Plus, RefreshCw, Repeat } from "lucide-react";
 import { CartoonPfp } from "@/components/CartoonPfp";
 import { SolanaMark } from "@/components/SolanaMark";
 import { TokenArt } from "@/components/TokenArt";
@@ -76,6 +76,7 @@ export default function WalletPage() {
   const [sendAmt, setSendAmt] = useState("");
   const [priority, setPriority] = useState<"low" | "medium" | "high">("medium");
   const [busy, setBusy] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [err, setErr] = useState("");
   const [sig, setSig] = useState("");
   const [secret, setSecret] = useState("");
@@ -212,7 +213,7 @@ export default function WalletPage() {
       <main className="pump-shell">
         <div className="pump-wrap py-16">
           <h1 className="pump-h1">Wallet</h1>
-          <p className="pump-p mt-2">Create a Solphia wallet or import a recovery phrase. Phantom is only for sending funds in or out. Keys never sit on Solphia servers.</p>
+          <p className="pump-p mt-2">Create a Solphia wallet or import a recovery phrase. Keys never sit on Solphia servers.</p>
           <div className="mt-6">
             <WalletConnect />
           </div>
@@ -234,6 +235,18 @@ export default function WalletPage() {
               {active?.kind === "phantom" ? " · external" : " · Solphia"}
             </p>
           </div>
+          <button
+            type="button"
+            onClick={() => {
+              setRefreshing(true);
+              void load().finally(() => setRefreshing(false));
+            }}
+            className="rounded-full bg-white/10 p-2 text-white"
+            aria-label="Refresh balances"
+            title="Refresh balances"
+          >
+            <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+          </button>
           <button type="button" onClick={() => openWalletSwitcher()} className="rounded-full bg-white/10 px-3 py-2 text-[13px] text-white">
             Switch
           </button>
@@ -329,11 +342,9 @@ export default function WalletPage() {
 
         {active?.kind === "embedded" ? (
           <button type="button" onClick={() => void revealExport()} className="mt-4 w-full text-center text-[13px] text-white/45">
-            Export this key
+            Show secret recovery phrase
           </button>
-        ) : (
-          <p className="mt-4 text-center text-[13px] text-white/35">Phantom keys stay in Phantom. They cannot be exported here.</p>
-        )}
+        ) : null}
 
         <section className="mt-8">
           <h2 className="text-[16px] font-semibold text-white">Recent</h2>
@@ -365,7 +376,7 @@ export default function WalletPage() {
             copiedLabel="Copied"
             className="btn-acid mt-4 min-h-[48px] w-full rounded-full"
           />
-          <p className="mt-3 text-center text-[13px] text-white/40">Send SOL in from Phantom or any wallet. This address is yours.</p>
+          <p className="mt-3 text-center text-[13px] text-white/40">Send SOL to this address from any wallet.</p>
           <a href={solscanAccount(owner)} target="_blank" rel="noreferrer" className="mt-3 block text-center text-[13px] text-white/45">
             View on Solscan
           </a>
@@ -515,7 +526,7 @@ export default function WalletPage() {
       ) : null}
 
       {sheet === "export" ? (
-        <WalletSheet title="Export key" subtitle="Anyone with this can empty the wallet. Solphia never has a copy." onClose={() => setSheet(null)}>
+        <WalletSheet title="Secret recovery phrase" subtitle="Anyone with these words can empty the wallet. Solphia never has a copy and will never ask for them." onClose={() => setSheet(null)}>
           {phrase ? (
             <>
               <p className="text-[12px] text-white/45">Recovery phrase</p>

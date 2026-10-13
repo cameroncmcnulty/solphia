@@ -65,7 +65,32 @@ describe("header identity", () => {
     assert.equal(loadOwner(), null);
   });
 
-  it("keeps a local embedded wallet only while the account cache is present", async () => {
+  it("does not attach a leftover vault wallet to an account that does not own it", async () => {
+    const { mem } = mockBrowser();
+    const { createEmbeddedWallet } = await import("../lib/wallet/vault");
+    const { newPhrase } = await import("../lib/wallet/phrase");
+    const created = await createEmbeddedWallet({ pin: "2468", phrase: newPhrase() });
+    mem.set(
+      "solphia_account",
+      JSON.stringify({
+        id: "acct_other",
+        email: null,
+        google: false,
+        emailVerified: false,
+        tosAcceptedAt: 1,
+        wallets: [] as string[],
+        createdAt: 1,
+        totpEnabled: false,
+      }),
+    );
+    const { syncOwnerToSignedInAccount, ownerIsEmbedded } = await import("../lib/wallet/identity");
+    assert.equal(ownerIsEmbedded(created.wallet.pubkey), true);
+    assert.equal(syncOwnerToSignedInAccount(), null);
+    const { loadOwner } = await import("../lib/wallet/owner");
+    assert.equal(loadOwner(), null);
+  });
+
+  it("keeps a local embedded wallet only while the account cache lists that pubkey", async () => {
     const { mem } = mockBrowser();
     const { createEmbeddedWallet } = await import("../lib/wallet/vault");
     const { newPhrase } = await import("../lib/wallet/phrase");
@@ -74,9 +99,9 @@ describe("header identity", () => {
       "solphia_account",
       JSON.stringify({
         id: "acct_test",
-        email: "a@solphia.io",
-        google: true,
-        emailVerified: true,
+        email: null,
+        google: false,
+        emailVerified: false,
         tosAcceptedAt: 1,
         wallets: [created.wallet.pubkey],
         createdAt: 1,
@@ -114,75 +139,64 @@ describe("header identity", () => {
     assert.match(sheet, /createPortal/);
   });
 
-  it("Google sign-in skips the bot check and pins OAuth to SITE_URL", async () => {
+  it("connect is wallet create/import only — no email, no Google, no Phantom login", async () => {
     const { readFileSync } = await import("node:fs");
-    const start = readFileSync(new URL("../app/api/auth/google/route.ts", import.meta.url), "utf8");
-    assert.equal(start.includes("verifyBot"), false);
-    assert.match(start, /SITE_URL/);
-    const cb = readFileSync(new URL("../app/api/auth/google/callback/route.ts", import.meta.url), "utf8");
-    assert.match(cb, /SITE_URL/);
-    assert.match(cb, /readOauthState\(state\)/);
-    assert.match(cb, /\/api\/auth\/claim/);
-    assert.match(cb, /no_account/);
-    assert.equal(cb.includes("state !== cookieState"), false);
-    const startGet = start.includes("export async function GET");
-    assert.equal(startGet, true);
+    const connectSrc = readFileSync(new URL("../components/WalletConnect.tsx", import.meta.url), "utf8");
+    const connectBtn = connectSrc.slice(connectSrc.indexOf("export function WalletConnect"));
+    assert.match(connectBtn, />WALLET</);
+    assert.equal(connectBtn.includes("SIGN IN"), false);
+    assert.equal(connectBtn.includes(">CONNECT<"), false);
     const gate = readFileSync(new URL("../components/auth/AccountGate.tsx", import.meta.url), "utf8");
-    const googleBlock = gate.slice(gate.indexOf('screen === "google"'), gate.indexOf('screen === "email"'));
-    assert.equal(googleBlock.includes("BotCheck"), false);
-    assert.match(gate, /\/api\/auth\/google\?/);
-    assert.match(gate, /No Solphia account for that Google login/);
-    assert.match(gate, /By continuing with Google you agree/);
-    assert.match(gate, /q.set\("tos", "1"\)/);
-    assert.match(gate, /mode === "signin" \|\| \(tos && privacy\)/);
-    assert.match(gate, /hint: authHint/);
-    assert.match(gate, /await refreshAccount\(\)/);
+    assert.match(gate, /WalletOnboard/);
+    assert.equal(gate.includes("/api/auth/google"), false);
+    assert.equal(gate.includes("/api/auth/signup"), false);
+    const host = readFileSync(new URL("../components/wallet/WalletHost.tsx", import.meta.url), "utf8");
+    assert.match(host, /CONNECT_FLOW/);
+    assert.equal(host.includes("<AccountGate"), false);
+    const google = readFileSync(new URL("../app/api/auth/google/route.ts", import.meta.url), "utf8");
+    assert.match(google, /retiredAuthBody/);
+    const signup = readFileSync(new URL("../app/api/auth/signup/route.ts", import.meta.url), "utf8");
+    assert.match(signup, /retiredAuthBody/);
     const login = readFileSync(new URL("../app/api/auth/login/route.ts", import.meta.url), "utf8");
-    assert.equal(login.includes("verifyBot"), false);
-    assert.match(login, /website/);
+    assert.match(login, /retiredAuthBody/);
     const client = readFileSync(new URL("../lib/auth/client.ts", import.meta.url), "utf8");
-    assert.equal(client.includes("prevId !== nextId"), false);
-    assert.match(client, /dispatchEvent\(new CustomEvent\(AUTH_EVENT/);
+    assert.match(client, /startWalletSession/);
+    assert.equal(client.includes("linkDeviceWallets"), false);
     const persist = readFileSync(new URL("../lib/persist.ts", import.meta.url), "utf8");
     assert.match(persist, /loginAccounts: "solphia:login-accounts"/);
     const store = readFileSync(new URL("../lib/store.ts", import.meta.url), "utf8");
     assert.match(store, /overlayLoginAccounts/);
     assert.match(store, /persistLoginAccounts/);
     assert.match(store, /KEYS.loginAccounts/);
-    const connectSrc = readFileSync(new URL("../components/WalletConnect.tsx", import.meta.url), "utf8");
-    const connectBtn = connectSrc.slice(connectSrc.indexOf("export function WalletConnect"));
-    assert.match(connectBtn, /SIGN IN/);
-    assert.equal(connectBtn.includes(">CONNECT<"), false);
-    assert.match(cb, /method="POST"/);
-    assert.match(cb, /name="ticket"/);
-    const host = readFileSync(new URL("../components/wallet/WalletHost.tsx", import.meta.url), "utf8");
-    assert.match(host, /gateHint/);
     const menu = readFileSync(new URL("../components/AccountMenu.tsx", import.meta.url), "utf8");
     assert.match(menu, /authReady/);
   });
 
-  it("import recovery asks for the device PIN instead of bouncing back to the phrase", async () => {
+  it("create flow copies the phrase, then confirm words, then a PIN", async () => {
     const { readFileSync } = await import("node:fs");
     const onboard = readFileSync(new URL("../components/wallet/WalletOnboard.tsx", import.meta.url), "utf8");
-    assert.match(onboard, /vaultUnlocked/);
-    assert.match(onboard, /Unlock with PIN/);
-    assert.match(onboard, /Unlock and save wallet/);
-    assert.match(onboard, /goPinOrSave/);
-    assert.equal(onboard.includes("const needPin = !vaultHasPin()"), false);
+    assert.match(onboard, /Copy phrase/);
+    assert.match(onboard, /I saved these words/);
+    assert.match(onboard, /pickConfirmSlots/);
+    assert.match(onboard, /Create a PIN/);
+    assert.match(onboard, /wipeVault/);
+    assert.match(onboard, /startWalletSession/);
+    assert.match(onboard, /addDerivedWallet/);
+    assert.equal(onboard.includes("/api/auth/google"), false);
+    assert.equal(onboard.includes("/api/auth/signup"), false);
   });
 
-  it("recovery attaches the wallet to the signed-in account instead of erroring if it is already local", async () => {
+  it("a new seed after sign-out wipes the leftover vault instead of attaching it", async () => {
     const { readFileSync } = await import("node:fs");
     const onboard = readFileSync(new URL("../components/wallet/WalletOnboard.tsx", import.meta.url), "utf8");
-    assert.match(onboard, /linkAccountWallet/);
-    assert.match(onboard, /refreshAccount/);
-    assert.match(onboard, /syncOwnerToSignedInAccount/);
-    assert.match(onboard, /attached to your account/);
+    assert.match(onboard, /replace: !signedIn/);
+    assert.match(onboard, /wipeVault\(\)/);
+    assert.match(onboard, /startWalletSession/);
     const vault = readFileSync(new URL("../lib/wallet/vault.ts", import.meta.url), "utf8");
-    assert.equal(vault.includes("already on this device"), false);
-    assert.match(vault, /existing\.kind = "embedded"/);
+    assert.match(vault, /export function wipeVault/);
+    assert.match(vault, /This device already has a wallet/);
     const client = readFileSync(new URL("../lib/auth/client.ts", import.meta.url), "utf8");
-    assert.match(client, /Sign in first so this wallet can sit on your account/);
+    assert.match(client, /Unlock this wallet first/);
     assert.match(client, /acceptAccount\(j\.account\)/);
   });
 
@@ -191,7 +205,7 @@ describe("header identity", () => {
     const { linkAccountWallet } = await import("../lib/auth/client");
     await assert.rejects(
       () => linkAccountWallet("D4uCNcBKAbG9NAkmhQg7pBiztuejNzbWrZDcZmFGut81"),
-      /Sign in first so this wallet can sit on your account/,
+      /Unlock this wallet first/,
     );
   });
 
@@ -200,9 +214,9 @@ describe("header identity", () => {
     const pk = "D4uCNcBKAbG9NAkmhQg7pBiztuejNzbWrZDcZmFGut81";
     const account = {
       id: "acct_test",
-      email: "a@solphia.io",
-      google: true,
-      emailVerified: true,
+      email: null as string | null,
+      google: false,
+      emailVerified: false,
       tosAcceptedAt: 1,
       wallets: [] as string[],
       createdAt: 1,
@@ -225,6 +239,33 @@ describe("header identity", () => {
     assert.deepEqual(peekAccount()?.wallets, [pk]);
   });
 
+  it("startWalletSession writes the account for that pubkey only", async () => {
+    mockBrowser();
+    const pk = "D4uCNcBKAbG9NAkmhQg7pBiztuejNzbWrZDcZmFGut81";
+    const account = {
+      id: "acct_wallet",
+      email: null as string | null,
+      google: false,
+      emailVerified: false,
+      tosAcceptedAt: 1,
+      wallets: [pk],
+      createdAt: 1,
+      totpEnabled: false,
+    };
+    const g = globalThis as unknown as { fetch?: typeof fetch };
+    g.fetch = (async (url: string) => {
+      if (String(url).includes("/api/auth/wallet-session")) {
+        return { ok: true, json: async () => ({ ok: true, account }) };
+      }
+      return { ok: true, json: async () => ({ account }) };
+    }) as unknown as typeof fetch;
+    const { startWalletSession, peekAccount } = await import("../lib/auth/client");
+    const opened = await startWalletSession(pk, { tos: true, privacy: true });
+    assert.equal(opened.id, "acct_wallet");
+    assert.deepEqual(opened.wallets, [pk]);
+    assert.equal(peekAccount()?.id, "acct_wallet");
+  });
+
   it("wallet remember cookie is not an identity without an account session", async () => {
     const { readFileSync } = await import("node:fs");
     const remember = readFileSync(new URL("../app/api/wallet/remember/route.ts", import.meta.url), "utf8");
@@ -233,12 +274,9 @@ describe("header identity", () => {
     assert.match(owner, /accountCached/);
     const logout = readFileSync(new URL("../lib/auth/client.ts", import.meta.url), "utf8");
     assert.match(logout, /forgetOwner/);
+    assert.match(logout, /lockVault/);
     assert.match(logout, /solphia_signed_out/);
     assert.match(logout, /lockSignedOut\(\)/);
-    const gate = readFileSync(new URL("../components/auth/AccountGate.tsx", import.meta.url), "utf8");
-    assert.match(gate, /waitForLogout/);
-    assert.equal(gate.includes("onReady(j.account"), false);
-    assert.match(gate, /acceptAccount\(account\)/);
     const host = readFileSync(new URL("../components/wallet/WalletHost.tsx", import.meta.url), "utf8");
     assert.match(host, /clearSignedOutLock/);
     assert.match(host, /signedin/);
@@ -252,9 +290,9 @@ describe("header identity", () => {
     const { mem } = mockBrowser();
     const account = {
       id: "acct_test",
-      email: "a@solphia.io",
-      google: true,
-      emailVerified: true,
+      email: null as string | null,
+      google: false,
+      emailVerified: false,
       tosAcceptedAt: 1,
       wallets: [] as string[],
       createdAt: 1,
@@ -287,19 +325,19 @@ describe("header identity", () => {
     assert.equal(meCalls, 1);
   });
 
-  it("email sign-in keeps the submitted account when /me still has the other cookie", async () => {
+  it("a newer wallet session stays when /me still has the other cookie", async () => {
     const { mem } = mockBrowser();
     const a = {
       id: "acct_a",
-      email: "a@solphia.io",
-      google: true,
-      emailVerified: true,
+      email: null as string | null,
+      google: false,
+      emailVerified: false,
       tosAcceptedAt: 1,
       wallets: [] as string[],
       createdAt: 1,
       totpEnabled: false,
     };
-    const b = { ...a, id: "acct_b", email: "b@solphia.io", google: false };
+    const b = { ...a, id: "acct_b", wallets: ["D4uCNcBKAbG9NAkmhQg7pBiztuejNzbWrZDcZmFGut81"] };
     mem.set("solphia_account", JSON.stringify(a));
     const g = globalThis as unknown as { fetch?: typeof fetch };
     g.fetch = (async (url: string) => {
@@ -316,6 +354,20 @@ describe("header identity", () => {
     const raced = await refreshAccount();
     assert.equal(raced?.id, "acct_b");
     assert.equal(peekAccount()?.id, "acct_b");
-    assert.equal(peekAccount()?.email, "b@solphia.io");
+  });
+
+  it("account settings reveals the phrase only after a warning", async () => {
+    const { readFileSync } = await import("node:fs");
+    const settings = readFileSync(new URL("../components/wallet/RecoveryPhrase.tsx", import.meta.url), "utf8");
+    assert.match(settings, /Do not share this phrase/);
+    assert.match(settings, /Solphia will never ask for it/);
+    assert.match(settings, /Show recovery phrase/);
+    const account = readFileSync(new URL("../app/account/page.tsx", import.meta.url), "utf8");
+    assert.match(account, /RecoveryPhraseSettings/);
+    assert.equal(account.includes("TotpSettings"), false);
+    const wallet = readFileSync(new URL("../app/wallet/page.tsx", import.meta.url), "utf8");
+    assert.match(wallet, /RefreshCw/);
+    assert.match(wallet, /Refresh balances/);
+    assert.match(wallet, /Show secret recovery phrase/);
   });
 });

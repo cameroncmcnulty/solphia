@@ -62,7 +62,10 @@ export function BackupBar({ onOpen }: { onOpen: () => void }) {
         <div className="app-layer z-[97] bg-black/75" onClick={() => setOpen(false)}>
           <div className="app-layer-card rounded-[1.5rem] border border-white/10 bg-[#0b0714] p-5" onClick={(e) => e.stopPropagation()}>
             <p className="text-[18px] font-semibold text-white">Recovery phrase</p>
-            <p className="mt-1 text-[13px] text-white/45">Viewing again requires unlock. Confirm three words to dismiss the banner.</p>
+            <p className="mt-1 text-[13px] text-white/45">
+              Never share this phrase. Solphia will never ask for it. Anyone with these words can take the funds. Confirm
+              three words to dismiss the banner.
+            </p>
             {err ? <p className="mt-2 font-mono text-[13px] text-blood">{err}</p> : null}
             <ol className="mt-3 grid grid-cols-2 gap-2 rounded-2xl border border-white/10 p-3">
               {words.map((w, i) => (

@@ -4,8 +4,10 @@ import {
   attachWallet,
   createEmailAccount,
   detachWallet,
+  findByWallet,
   loginEmail,
   mergeLoginAccounts,
+  openWalletAccount,
   publicAccount,
   upsertGoogleAccount,
   type LoginAccount,
@@ -198,6 +200,53 @@ describe("account login", () => {
 
   it("does not advertise Phantom as a login path", () => {
     assert.equal("phantom" in WALLET_PATHS, false);
+  });
+
+  it("opens a wallet account by pubkey and restores the same account on the same seed", () => {
+    const s = blank();
+    const pk = "D4uCNcBKAbG9NAkmhQg7pBiztuejNzbWrZDcZmFGut81";
+    const denied = openWalletAccount(s, { pubkey: pk, tos: false, privacy: false });
+    assert.equal(denied.ok, false);
+    const made = openWalletAccount(s, { pubkey: pk, tos: true, privacy: true });
+    assert.equal(made.ok, true);
+    if (!made.ok) return;
+    assert.equal(made.created, true);
+    assert.deepEqual(made.account.wallets, [pk]);
+    const again = openWalletAccount(s, { pubkey: pk, tos: false, privacy: false });
+    assert.equal(again.ok, true);
+    if (!again.ok) return;
+    assert.equal(again.created, false);
+    assert.equal(again.account.id, made.account.id);
+  });
+
+  it("refuses to attach a pubkey that already belongs to another account", () => {
+    const s = blank();
+    const pk = "D4uCNcBKAbG9NAkmhQg7pBiztuejNzbWrZDcZmFGut81";
+    const a = openWalletAccount(s, { pubkey: pk, tos: true, privacy: true });
+    const otherPk = "So11111111111111111111111111111111111111112";
+    const b = openWalletAccount(s, { pubkey: otherPk, tos: true, privacy: true });
+    assert.equal(a.ok, true);
+    assert.equal(b.ok, true);
+    if (!a.ok || !b.ok) return;
+    const taken = attachWallet(b.account, pk, s);
+    assert.equal(taken.ok, false);
+    if (!taken.ok) assert.equal(taken.error, "taken");
+    assert.equal(findByWallet(s, pk)?.id, a.account.id);
+  });
+
+  it("merge keeps a leaked pubkey on the oldest account only", () => {
+    const pk = "D4uCNcBKAbG9NAkmhQg7pBiztuejNzbWrZDcZmFGut81";
+    const local: LoginAccount[] = [
+      { id: "acct_old", wallets: [pk], createdAt: 1, lastSeen: 1 },
+      { id: "acct_new", wallets: [pk], createdAt: 9, lastSeen: 9 },
+    ];
+    const merged = mergeLoginAccounts(local, []);
+    const old = merged.find((r) => r.id === "acct_old");
+    const newer = merged.find((r) => r.id === "acct_new");
+    assert.ok(old);
+    assert.ok(newer);
+    assert.deepEqual(old!.wallets, [pk]);
+    assert.deepEqual(newer!.wallets, []);
   });
 
   it("lets leftover unverified password accounts in and marks them verified", () => {

@@ -1,52 +1,8 @@
-import { NextRequest, NextResponse } from "next/server";
-import { z } from "zod";
-import { loginEmail, publicAccount } from "@/lib/auth/accounts";
-import { clearAccountCookie, setAccountCookie, setTotpPendingCookie } from "@/lib/auth/session";
-import { totpEnabled } from "@/lib/auth/totp";
-import { clientIp, rateLimit } from "@/lib/security";
-import { mutateState } from "@/lib/store";
+import { NextResponse } from "next/server";
+import { retiredAuthBody } from "@/lib/auth/retired";
 
 export const dynamic = "force-dynamic";
 
-const Body = z.object({
-  email: z.string(),
-  password: z.string(),
-  website: z.string().optional(),
-  challengeToken: z.string().optional(),
-  challengeAnswer: z.string().optional(),
-  turnstile: z.string().optional(),
-});
-
-export async function POST(req: NextRequest) {
-  const ip = clientIp(req);
-  if (!rateLimit(ip + ":login", 10, 10 * 60_000)) {
-    return NextResponse.json({ error: "rate_limited", message: "Too many tries. Wait a bit." }, { status: 429 });
-  }
-  const parsed = Body.safeParse(await req.json().catch(() => null));
-  if (!parsed.success) {
-    return NextResponse.json({ error: "bad_request", message: "Email or password is wrong." }, { status: 400 });
-  }
-  if ((parsed.data.website || "").trim()) {
-    return NextResponse.json({ error: "bot", message: "Could not verify this request." }, { status: 400 });
-  }
-  const out = await mutateState((s) => loginEmail(s, parsed.data));
-  if (!out.ok) {
-    const status = 401;
-    const message =
-      out.error === "no_account"
-        ? "No Solphia account for that email. Switch to Create account, or use Google."
-        : out.error === "use_google"
-          ? "That email uses Google. Tap Sign in with Google."
-          : out.error;
-    return NextResponse.json({ error: out.error, message }, { status });
-  }
-  if (totpEnabled(out.account)) {
-    const res = NextResponse.json({ ok: true, totp: true });
-    clearAccountCookie(res);
-    setTotpPendingCookie(res, out.account.id);
-    return res;
-  }
-  const res = NextResponse.json({ ok: true, account: publicAccount(out.account) });
-  setAccountCookie(res, out.account.id);
-  return res;
+export async function POST() {
+  return NextResponse.json(retiredAuthBody(), { status: 410 });
 }

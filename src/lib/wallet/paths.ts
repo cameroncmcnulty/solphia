@@ -1,12 +1,12 @@
-/** Labels that keep the two wallet paths distinct. Phantom is a fund rail, not login. */
+/** Labels that keep the two wallet paths distinct. The seed is the account. */
 export const WALLET_PATHS = {
   create: {
-    title: "Create a Solphia wallet",
-    hint: "Keys stay on this device. Phantom is only for sending funds in or out.",
+    title: "Create a new wallet",
+    hint: "New 12-word phrase. New account. Keys stay on this device.",
   },
   import: {
-    title: "Recover wallet to your account",
-    hint: "12 or 24 words. Attaches the wallet to your account. The phrase never leaves this device.",
+    title: "Import recovery phrase",
+    hint: "12 or 24 words. Restores that account only. The phrase never leaves this device.",
   },
 } as const;
 

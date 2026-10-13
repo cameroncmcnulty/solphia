@@ -20,7 +20,7 @@ export function syncOwnerToSignedInAccount(): string | null {
   }
   const linked = Array.isArray(account.wallets) ? account.wallets.filter((pk) => ownerIsEmbedded(pk)) : [];
   const active = activeWallet();
-  if (active?.kind === "embedded" && (!linked.length || linked.includes(active.pubkey))) {
+  if (active?.kind === "embedded" && linked.includes(active.pubkey)) {
     persistOwner(active.pubkey);
     return active.pubkey;
   }
@@ -28,16 +28,7 @@ export function syncOwnerToSignedInAccount(): string | null {
     persistOwner(linked[0]);
     return linked[0];
   }
-  if (active?.kind === "embedded") {
-    persistOwner(active.pubkey);
-    return active.pubkey;
-  }
-  const owner = loadOwner();
-  if (ownerIsEmbedded(owner)) {
-    persistOwner(owner!);
-    return owner;
-  }
-  if (owner) forgetOwner();
+  if (loadOwner()) forgetOwner();
   return null;
 }
 

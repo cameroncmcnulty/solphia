@@ -7,16 +7,13 @@ export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
   const id = readAccountId(req);
-  const googleEnabled = Boolean(
-    (process.env.GOOGLE_CLIENT_ID || "").trim() && (process.env.GOOGLE_CLIENT_SECRET || "").trim(),
-  );
   if (!id) {
-    return NextResponse.json({ account: null, googleEnabled });
+    return NextResponse.json({ account: null, googleEnabled: false });
   }
   const state = await readyState();
   const row = findAccount(state, id);
   const account = row ? publicAccount(row) : null;
-  const res = NextResponse.json({ account, googleEnabled });
+  const res = NextResponse.json({ account, googleEnabled: false });
   if (account) setAccountCookie(res, account.id);
   return res;
 }

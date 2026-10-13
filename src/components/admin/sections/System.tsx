@@ -34,7 +34,8 @@ export function SystemSection() {
           {data.googleEnabled ? "on" : "off"}
         </p>
         <p className="mt-2 text-sm text-mute">
-          Email signup is email + password + bot check. Google is the fast path. Admin mail still uses otp@solphia.io — our SMTP + DKIM. Not Gmail, not SES, not AgentMail.
+          User identity is a Solphia wallet (create or import a recovery phrase). Email and Google sign-in are retired.
+          Admin mail still uses otp@solphia.io — our SMTP + DKIM. Not Gmail, not SES, not AgentMail.
         </p>
         <ol className="mt-3 list-decimal space-y-2 pl-5 text-[12px] text-mute">
           <li>

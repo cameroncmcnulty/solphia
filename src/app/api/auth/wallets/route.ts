@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
   const out = await mutateState((s) => {
     const row = findAccount(s, id);
     if (!row) return { ok: false as const, error: "missing" };
-    const linked = attachWallet(row, parsed.data.pubkey);
+    const linked = attachWallet(row, parsed.data.pubkey, s);
     if (!linked.ok) return linked;
     let user = s.users.find((u) => u.pubkey === parsed.data.pubkey);
     const now = Date.now();
@@ -54,7 +54,11 @@ export async function POST(req: NextRequest) {
     return { ok: true as const, account: publicAccount(row) };
   });
   if (!out.ok) {
-    return NextResponse.json({ error: out.error, message: "Could not save that wallet on the account." }, { status: 400 });
+    const message =
+      out.error === "taken"
+        ? "That wallet already belongs to another account."
+        : "Could not save that wallet on the account.";
+    return NextResponse.json({ error: out.error, message }, { status: 400 });
   }
   return NextResponse.json({ ok: true, account: out.account });
 }

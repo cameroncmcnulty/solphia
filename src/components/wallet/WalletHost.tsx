@@ -2,9 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { VAULT_EVENT, VAULT_UNLOCK_EVENT, needsBackup } from "@/lib/wallet/vault";
-import { acceptAccount, clearSignedOutLock, peekAccount, refreshAccount, waitForLogout, type PublicAccount } from "@/lib/auth/client";
+import { clearSignedOutLock, refreshAccount, waitForLogout } from "@/lib/auth/client";
 import { syncOwnerToSignedInAccount } from "@/lib/wallet/identity";
-import { AccountGate } from "@/components/auth/AccountGate";
 import { WalletOnboard } from "./WalletOnboard";
 import { WalletUnlock } from "./WalletUnlock";
 import { WalletSwitcher } from "./WalletSwitcher";
@@ -27,7 +26,7 @@ export function openWalletSwitcher() {
 
 export function openAccountGate() {
   if (typeof window === "undefined") return;
-  void waitForLogout().then(() => window.dispatchEvent(new Event(ACCOUNT_GATE)));
+  void waitForLogout().then(() => window.dispatchEvent(new Event(CONNECT_FLOW)));
 }
 
 export function openConnect() {
@@ -36,8 +35,6 @@ export function openConnect() {
 }
 
 export function WalletHost() {
-  const [account, setAccount] = useState(false);
-  const [gateHint, setGateHint] = useState("");
   const [onboard, setOnboard] = useState(false);
   const [unlock, setUnlock] = useState(false);
   const [switcher, setSwitcher] = useState(false);
@@ -45,27 +42,13 @@ export function WalletHost() {
 
   const syncBackup = useCallback(() => setBackup(needsBackup()), []);
 
-  const afterAccount = useCallback((acct?: PublicAccount) => {
-    setAccount(false);
-    setGateHint("");
-    if (acct?.id) acceptAccount(acct);
-    if (!syncOwnerToSignedInAccount()) setOnboard(true);
-  }, []);
-
   useEffect(() => {
     syncBackup();
-    const startConnect = () => {
-      const signed = peekAccount();
-      if (!signed) {
-        setAccount(true);
-        return;
-      }
-      setOnboard(true);
-    };
+    const startConnect = () => setOnboard(true);
     const onOnboard = () => setOnboard(true);
     const onSwitch = () => setSwitcher(true);
     const onUnlock = () => setUnlock(true);
-    const onAccount = () => setAccount(true);
+    const onAccount = () => setOnboard(true);
     window.addEventListener(CONNECT_FLOW, startConnect);
     window.addEventListener(WALLET_ONBOARD, onOnboard);
     window.addEventListener(WALLET_SWITCH, onSwitch);
@@ -97,32 +80,13 @@ export function WalletHost() {
       }
       const restored = syncOwnerToSignedInAccount();
       if (signed && acct && !restored) setOnboard(true);
-      if (authErr) {
-        setGateHint(authErr);
-        setAccount(true);
-      } else if (twoFa) {
-        setGateHint("2fa");
-        setAccount(true);
-      } else if (signed && !acct) {
-        setGateHint("session");
-        setAccount(true);
-      }
+      if (authErr || twoFa || (signed && !acct)) setOnboard(true);
     });
   }, []);
 
   return (
     <>
       {backup ? <BackupBar onOpen={() => setUnlock(true)} /> : null}
-      {account ? (
-        <AccountGate
-          hint={gateHint}
-          onClose={() => {
-            setAccount(false);
-            setGateHint("");
-          }}
-          onReady={(acct) => afterAccount(acct)}
-        />
-      ) : null}
       {onboard ? (
         <WalletOnboard
           onClose={() => {

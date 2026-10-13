@@ -211,11 +211,11 @@ export function WalletConnect({ compact: _compact = false }: { compact?: boolean
         e.stopPropagation();
         openConnect();
       }}
-      title="Sign in"
+      title="Wallet"
       className="inline-flex h-10 shrink-0 items-center gap-1.5 overflow-hidden rounded-full border border-white/15 bg-white/[0.06] px-2.5 py-2 font-mono text-[10px] tracking-widest text-ghost hover:border-white/30 hover:bg-white/10 sm:h-11 sm:gap-2 sm:px-4 sm:text-[11px]"
     >
       <SphaMark float={false} className="h-4 w-4 shrink-0 sm:h-5 sm:w-5" />
-      <span className="whitespace-nowrap">SIGN IN</span>
+      <span className="whitespace-nowrap">WALLET</span>
     </button>
   );
 }

@@ -180,11 +180,48 @@ export function upsertGoogleAccount(
   return { ok: true, account: row, created: true };
 }
 
+export function findByWallet(state: AppState, pubkey: string): LoginAccount | null {
+  if (!isSolanaAddress(pubkey)) return null;
+  const hits = accountsOf(state).filter((a) => a.wallets.includes(pubkey));
+  if (!hits.length) return null;
+  hits.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0) || a.id.localeCompare(b.id));
+  return hits[0] || null;
+}
+
+/** One seed/account. Opening the same pubkey restores that account; a new pubkey is a new account. */
+export function openWalletAccount(
+  state: AppState,
+  opts: { pubkey: string; tos: boolean; privacy: boolean },
+): { ok: true; account: LoginAccount; created: boolean } | { ok: false; error: string } {
+  if (!isSolanaAddress(opts.pubkey)) return { ok: false, error: "Bad wallet." };
+  const existing = findByWallet(state, opts.pubkey);
+  const now = Date.now();
+  if (existing) {
+    existing.lastSeen = now;
+    return { ok: true, account: existing, created: false };
+  }
+  if (!opts.tos || !opts.privacy) return { ok: false, error: "Agree to the terms and privacy policy." };
+  const row: LoginAccount = {
+    id: randomNonce(),
+    wallets: [opts.pubkey],
+    createdAt: now,
+    lastSeen: now,
+  };
+  acceptLegal(row, now);
+  accountsOf(state).push(row);
+  return { ok: true, account: row, created: true };
+}
+
 export function attachWallet(
   row: LoginAccount,
   pubkey: string,
+  state?: AppState,
 ): { ok: true } | { ok: false; error: string } {
   if (!isSolanaAddress(pubkey)) return { ok: false, error: "Bad wallet." };
+  if (state) {
+    const taken = findByWallet(state, pubkey);
+    if (taken && taken.id !== row.id) return { ok: false, error: "taken" };
+  }
   if (!row.wallets.includes(pubkey)) row.wallets.push(pubkey);
   row.lastSeen = Date.now();
   return { ok: true };
@@ -273,5 +310,20 @@ export function mergeLoginAccounts(local: LoginAccount[], remote: LoginAccount[]
     }
   }
   for (const id of drop) byId.delete(id);
-  return [...byId.values()];
+  return exclusiveWallets([...byId.values()]);
+}
+
+/** A pubkey belongs to the oldest account that already has it. Later rows lose the leak. */
+function exclusiveWallets(rows: LoginAccount[]): LoginAccount[] {
+  const claimed = new Map<string, string>();
+  const byAge = [...rows].sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0) || a.id.localeCompare(b.id));
+  for (const row of byAge) {
+    for (const pk of row.wallets || []) {
+      if (isSolanaAddress(pk) && !claimed.has(pk)) claimed.set(pk, row.id);
+    }
+  }
+  return rows.map((row) => ({
+    ...row,
+    wallets: (row.wallets || []).filter((pk) => claimed.get(pk) === row.id),
+  }));
 }

@@ -1,6 +1,8 @@
 "use client";
 
-import { forgetOwner } from "@/lib/wallet/owner";
+import { forgetOwner, persistOwner } from "@/lib/wallet/owner";
+import { isSolanaAddress } from "@/lib/wallet/addr";
+import { lockVault } from "@/lib/wallet/vault";
 import type { PublicAccount } from "./accounts";
 
 export type { PublicAccount };
@@ -130,9 +132,30 @@ export async function refreshAccount(): Promise<PublicAccount | null> {
   }
 }
 
+export async function startWalletSession(
+  pubkey: string,
+  legal: { tos: boolean; privacy: boolean },
+): Promise<PublicAccount> {
+  if (!isSolanaAddress(pubkey)) throw new Error("Create or import a Solphia wallet first.");
+  await waitForLogout();
+  const r = await fetch("/api/auth/wallet-session", {
+    method: "POST",
+    credentials: "include",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ pubkey, tos: legal.tos, privacy: legal.privacy }),
+  });
+  const j = (await r.json().catch(() => ({}))) as { account?: PublicAccount; message?: string };
+  if (!r.ok || !j.account) {
+    throw new Error(j.message || "Could not open this wallet.");
+  }
+  acceptAccount(j.account);
+  persistOwner(pubkey);
+  return j.account;
+}
+
 export async function linkAccountWallet(pubkey: string): Promise<PublicAccount> {
   const signedIn = peekAccount() || (await refreshAccount());
-  if (!signedIn) throw new Error("Sign in first so this wallet can sit on your account.");
+  if (!signedIn) throw new Error("Unlock this wallet first.");
   const r = await fetch("/api/auth/wallets", {
     method: "POST",
     credentials: "include",
@@ -147,16 +170,13 @@ export async function linkAccountWallet(pubkey: string): Promise<PublicAccount> 
   return j.account;
 }
 
-export async function linkDeviceWallets(pubkeys: string[]): Promise<void> {
-  for (const pk of pubkeys) await linkAccountWallet(pk);
-}
-
 export async function logoutAccount(): Promise<void> {
   const existing = readCache();
   if (existing?.id) lastLogoutId = existing.id;
   lockSignedOut();
   trustedUntil = 0;
   writeCache(null);
+  lockVault();
   forgetOwner();
   const work = Promise.all([
     fetch("/api/auth/logout", {
