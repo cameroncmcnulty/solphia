@@ -7,6 +7,7 @@ export type { PublicAccount };
 
 export const AUTH_EVENT = "solphia:auth";
 export const ACCOUNT_CACHE_KEY = "solphia_account";
+export const SIGNED_OUT_KEY = "solphia_signed_out";
 const CACHE_KEY = ACCOUNT_CACHE_KEY;
 
 function store(): Storage | null {
@@ -18,7 +19,7 @@ function store(): Storage | null {
   }
 }
 
-export function peekAccount(): PublicAccount | null {
+function readCache(): PublicAccount | null {
   const s = store();
   if (!s) return null;
   try {
@@ -30,6 +31,11 @@ export function peekAccount(): PublicAccount | null {
   } catch {
     return null;
   }
+}
+
+export function peekAccount(): PublicAccount | null {
+  if (isSignedOutLocked()) return null;
+  return readCache();
 }
 
 function writeCache(account: PublicAccount | null) {
@@ -47,14 +53,79 @@ function writeCache(account: PublicAccount | null) {
   }
 }
 
+export function isSignedOutLocked(): boolean {
+  const s = store();
+  if (!s) return false;
+  try {
+    return s.getItem(SIGNED_OUT_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function clearSignedOutLock() {
+  const s = store();
+  if (!s) return;
+  try {
+    s.removeItem(SIGNED_OUT_KEY);
+  } catch {
+    /* private mode */
+  }
+}
+
+function lockSignedOut() {
+  const s = store();
+  if (!s) return;
+  try {
+    s.setItem(SIGNED_OUT_KEY, "1");
+  } catch {
+    /* private mode */
+  }
+}
+
+let trustedUntil = 0;
+let logoutTail: Promise<void> | null = null;
+let lastLogoutId = "";
+
+export function waitForLogout(): Promise<void> {
+  return logoutTail || Promise.resolve();
+}
+
+/** Write a freshly signed-in account and drop the forced-logout lock. */
+export function acceptAccount(account: PublicAccount) {
+  if (!account?.id) return;
+  lastLogoutId = "";
+  clearSignedOutLock();
+  trustedUntil = Date.now() + 15_000;
+  writeCache(account);
+}
+
 export async function refreshAccount(): Promise<PublicAccount | null> {
+  if (isSignedOutLocked()) {
+    writeCache(null);
+    return null;
+  }
+  const held = readCache();
   try {
     const r = await fetch("/api/auth/me", { credentials: "include", cache: "no-store" });
     const j = (await r.json().catch(() => ({}))) as { account?: PublicAccount | null };
     const account = j.account || null;
+    if (isSignedOutLocked()) {
+      writeCache(null);
+      return null;
+    }
+    const grace = Date.now() < trustedUntil;
+    if (held?.id && account?.id && held.id !== account.id) {
+      if (grace) return held;
+    }
+    if (held?.id && !account && grace) return held;
     writeCache(account);
     return account;
   } catch {
+    if (isSignedOutLocked()) {
+      writeCache(null);
+      return null;
+    }
     return peekAccount();
   }
 }
@@ -72,7 +143,7 @@ export async function linkAccountWallet(pubkey: string): Promise<PublicAccount> 
   if (!r.ok || !j.account) {
     throw new Error(j.message || "Could not save that wallet on the account.");
   }
-  writeCache(j.account);
+  acceptAccount(j.account);
   return j.account;
 }
 
@@ -81,10 +152,25 @@ export async function linkDeviceWallets(pubkeys: string[]): Promise<void> {
 }
 
 export async function logoutAccount(): Promise<void> {
+  const existing = readCache();
+  if (existing?.id) lastLogoutId = existing.id;
+  lockSignedOut();
+  trustedUntil = 0;
   writeCache(null);
   forgetOwner();
-  await Promise.all([
-    fetch("/api/auth/logout", { method: "POST", credentials: "include" }).catch(() => undefined),
+  const work = Promise.all([
+    fetch("/api/auth/logout", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ id: existing?.id || lastLogoutId || "" }),
+    }).catch(() => undefined),
     fetch("/api/wallet/remember", { method: "DELETE", credentials: "include" }).catch(() => undefined),
-  ]);
+  ]).then(() => undefined);
+  logoutTail = work;
+  try {
+    await work;
+  } finally {
+    if (logoutTail === work) logoutTail = null;
+  }
 }

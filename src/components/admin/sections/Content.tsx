@@ -2,6 +2,7 @@
 
 import { useAdmin } from "../AdminProvider";
 import { Field } from "../ui";
+import { copyText } from "@/lib/copyText";
 
 export function ContentSection() {
   const { data, busy, patch, hint, setHint, copied, setCopied, saved, setSaved } = useAdmin();
@@ -55,8 +56,8 @@ export function ContentSection() {
                 <button
                   type="button"
                   className="btn-ghost rounded-full px-4 py-1.5 text-xs"
-                  onClick={async () => {
-                    await navigator.clipboard.writeText(item.caption);
+                  onClick={() => {
+                    copyText(item.caption, "Caption copied");
                     setCopied(item.id);
                     setTimeout(() => setCopied(""), 1500);
                   }}

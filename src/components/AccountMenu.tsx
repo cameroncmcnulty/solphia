@@ -10,6 +10,7 @@ import { WalletConnect } from "./WalletConnect";
 import { openAccountGate, openWalletOnboard, openWalletSwitcher } from "./wallet/WalletHost";
 import { useActiveWallet } from "@/lib/wallet/useVault";
 import { logoutAccount, peekAccount, refreshAccount, AUTH_EVENT } from "@/lib/auth/client";
+import { flashNotice } from "@/lib/notice";
 
 type Desk = { pfp?: string; username?: string };
 
@@ -168,7 +169,9 @@ export function AccountMenu() {
             role="menuitem"
             onClick={() => {
               setOpen(false);
-              void logoutAccount();
+              setSignedIn(false);
+              setEmail("");
+              void logoutAccount().then(() => flashNotice("Signed out"));
             }}
             className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left text-sm text-mute hover:bg-white/5 hover:text-ghost"
           >

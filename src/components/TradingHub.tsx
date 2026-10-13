@@ -16,6 +16,7 @@ import { WalletMove } from "./WalletMove";
 import { FieldError, FormAlert, useConfirmErrors } from "./form/confirm";
 import { useMarket, useOwner } from "@/lib/hooks";
 import { SOL_MINT, USDC_MINT, XSTOCKS, xstockMint } from "@/lib/pair/mints";
+import { copyText } from "@/lib/copyText";
 
 type Auto = {
   armed?: boolean;
@@ -387,11 +388,10 @@ export function TradingHub() {
           <div className="mt-3 flex flex-col gap-2 sm:flex-row">
             <button
               type="button"
-              onClick={async () => {
-                try {
-                  await navigator.clipboard.writeText(exportSecret());
+              onClick={() => {
+                if (copyText(exportSecret(), "Trading key copied")) {
                   setMsg("Trading key copied. Store it offline. Anyone with it can spend this wallet.");
-                } catch {
+                } else {
                   setMsg("Could not copy the trading key.");
                 }
               }}

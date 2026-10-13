@@ -19,7 +19,7 @@ export function CopyButton({
   function onClick(e: MouseEvent<HTMLButtonElement>) {
     e.preventDefault();
     e.stopPropagation();
-    if (!copyText(text)) return;
+    if (!copyText(text, copiedLabel || "Copied")) return;
     setOk(true);
     window.setTimeout(() => setOk(false), 1600);
   }

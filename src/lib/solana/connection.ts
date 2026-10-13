@@ -108,32 +108,95 @@ export function subscriptionLamports(): number {
   return Math.round(SUBSCRIPTION_SOL * LAMPORTS_PER_SOL);
 }
 
+type ParsedTransfer = {
+  parsed?: { type?: string; info?: { source?: string; destination?: string; lamports?: number | string } };
+};
+
+export type HousePayTx = {
+  meta?: {
+    err?: unknown;
+    innerInstructions?: { instructions: unknown[] }[] | null;
+    preBalances?: number[];
+    postBalances?: number[];
+  } | null;
+  transaction: { message: { instructions: unknown[]; accountKeys: unknown[] } };
+};
+
+function pubkeyOf(key: unknown): string {
+  if (!key) return "";
+  if (typeof key === "string") return key;
+  if (typeof key !== "object") return "";
+  const row = key as { pubkey?: unknown; toBase58?: () => string };
+  if (typeof row.toBase58 === "function") return row.toBase58();
+  if (typeof row.pubkey === "string") return row.pubkey;
+  if (row.pubkey && typeof row.pubkey === "object" && typeof (row.pubkey as { toBase58?: () => string }).toBase58 === "function") {
+    return (row.pubkey as { toBase58: () => string }).toBase58();
+  }
+  return "";
+}
+
+function collectTransfers(ixs: unknown[], from: string, paid: Map<string, number>) {
+  for (const ix of ixs) {
+    if (!ix || typeof ix !== "object" || !("parsed" in ix)) continue;
+    const parsed = (ix as ParsedTransfer).parsed;
+    if (parsed?.type !== "transfer") continue;
+    if (parsed.info?.source !== from) continue;
+    const dest = parsed.info?.destination || "";
+    paid.set(dest, (paid.get(dest) || 0) + Number(parsed.info?.lamports || 0));
+  }
+}
+
+/** Match house SOL legs from top-level ixs, inner ixs, or pre/post balance deltas. */
+export function matchHouseTransfers(
+  tx: HousePayTx,
+  from: string,
+  legs: { to: string; lamports: number }[],
+): { ok: boolean; error?: string } {
+  if (tx.meta?.err) return { ok: false, error: "Transaction failed on-chain." };
+  const paid = new Map<string, number>();
+  collectTransfers(tx.transaction.message.instructions || [], from, paid);
+  for (const inner of tx.meta?.innerInstructions || []) {
+    collectTransfers(inner.instructions || [], from, paid);
+  }
+  if (legs.every((leg) => (paid.get(leg.to) || 0) >= leg.lamports)) return { ok: true };
+
+  const keys = (tx.transaction.message.accountKeys || []).map(pubkeyOf);
+  const pre = tx.meta?.preBalances || [];
+  const post = tx.meta?.postBalances || [];
+  if (keys.length && pre.length === keys.length && post.length === keys.length) {
+    const gained = new Map<string, number>();
+    for (let i = 0; i < keys.length; i++) {
+      const delta = (post[i] || 0) - (pre[i] || 0);
+      if (delta > 0) gained.set(keys[i], (gained.get(keys[i]) || 0) + delta);
+    }
+    if (legs.every((leg) => (gained.get(leg.to) || 0) >= leg.lamports)) return { ok: true };
+  }
+  return { ok: false, error: "No matching SOL transfer instruction." };
+}
+
 export async function confirmedHouseTransfers(opts: {
   signature: string;
   from: string;
   legs: { to: string; lamports: number }[];
 }): Promise<{ ok: boolean; error?: string }> {
   try {
-    const tx = await connection().getParsedTransaction(opts.signature, {
-      maxSupportedTransactionVersion: 0,
-      commitment: "confirmed",
-    });
+    if (!opts.signature) return { ok: false, error: "Transaction not found yet." };
+    const landed = await waitForSignature(opts.signature, 30);
+    if (!landed.ok) {
+      if (landed.err === "failed") return { ok: false, error: "Transaction failed on-chain." };
+      return { ok: false, error: "Transaction not found yet." };
+    }
+    let tx = null as Awaited<ReturnType<ReturnType<typeof connection>["getParsedTransaction"]>>;
+    for (let i = 0; i < 8; i++) {
+      tx = await connection().getParsedTransaction(opts.signature, {
+        maxSupportedTransactionVersion: 0,
+        commitment: "confirmed",
+      });
+      if (tx) break;
+      await new Promise((r) => setTimeout(r, 400));
+    }
     if (!tx) return { ok: false, error: "Transaction not found yet." };
-    if (tx.meta?.err) return { ok: false, error: "Transaction failed on-chain." };
-    const paid = new Map<string, number>();
-    for (const ix of tx.transaction.message.instructions) {
-      if (!("parsed" in ix)) continue;
-      const parsed = ix.parsed as { type?: string; info?: { source?: string; destination?: string; lamports?: number } };
-      if (parsed.type !== "transfer" || parsed.info?.source !== opts.from) continue;
-      const dest = parsed.info?.destination || "";
-      paid.set(dest, (paid.get(dest) || 0) + Number(parsed.info?.lamports || 0));
-    }
-    for (const leg of opts.legs) {
-      if ((paid.get(leg.to) || 0) < leg.lamports) {
-        return { ok: false, error: "No matching SOL transfer instruction." };
-      }
-    }
-    return { ok: true };
+    return matchHouseTransfers(tx, opts.from, opts.legs);
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "rpc error" };
   }

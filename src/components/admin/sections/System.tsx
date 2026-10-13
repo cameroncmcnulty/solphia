@@ -34,7 +34,7 @@ export function SystemSection() {
           {data.googleEnabled ? "on" : "off"}
         </p>
         <p className="mt-2 text-sm text-mute">
-          Signup still emails a one-time code from otp@solphia.io — our SMTP + DKIM. Not Gmail, not SES, not AgentMail.
+          Email signup is email + password + bot check. Google is the fast path. Admin mail still uses otp@solphia.io — our SMTP + DKIM. Not Gmail, not SES, not AgentMail.
         </p>
         <ol className="mt-3 list-decimal space-y-2 pl-5 text-[12px] text-mute">
           <li>

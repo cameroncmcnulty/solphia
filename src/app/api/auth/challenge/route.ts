@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { issueChallenge, turnstileSiteKey } from "@/lib/auth/challenge";
+import { issueChallenge, turnstileLive, turnstileSiteKey } from "@/lib/auth/challenge";
 
 export const dynamic = "force-dynamic";
 
@@ -8,6 +8,6 @@ export async function GET() {
   return NextResponse.json({
     token: chal.token,
     prompt: chal.prompt,
-    turnstileSiteKey: turnstileSiteKey() || null,
+    turnstileSiteKey: turnstileLive() ? turnstileSiteKey() : null,
   });
 }

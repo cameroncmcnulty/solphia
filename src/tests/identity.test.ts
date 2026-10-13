@@ -183,7 +183,7 @@ describe("header identity", () => {
     assert.match(vault, /existing\.kind = "embedded"/);
     const client = readFileSync(new URL("../lib/auth/client.ts", import.meta.url), "utf8");
     assert.match(client, /Sign in first so this wallet can sit on your account/);
-    assert.match(client, /writeCache\(j\.account\)/);
+    assert.match(client, /acceptAccount\(j\.account\)/);
   });
 
   it("linkAccountWallet refuses when there is no signed-in account", async () => {
@@ -233,5 +233,89 @@ describe("header identity", () => {
     assert.match(owner, /accountCached/);
     const logout = readFileSync(new URL("../lib/auth/client.ts", import.meta.url), "utf8");
     assert.match(logout, /forgetOwner/);
+    assert.match(logout, /solphia_signed_out/);
+    assert.match(logout, /lockSignedOut\(\)/);
+    const gate = readFileSync(new URL("../components/auth/AccountGate.tsx", import.meta.url), "utf8");
+    assert.match(gate, /waitForLogout/);
+    assert.equal(gate.includes("onReady(j.account"), false);
+    assert.match(gate, /acceptAccount\(account\)/);
+    const host = readFileSync(new URL("../components/wallet/WalletHost.tsx", import.meta.url), "utf8");
+    assert.match(host, /clearSignedOutLock/);
+    assert.match(host, /signedin/);
+    const keep = readFileSync(new URL("../components/WalletConnect.tsx", import.meta.url), "utf8");
+    assert.match(keep, /isSignedOutLocked\(\)/);
+    const session = readFileSync(new URL("../lib/auth/session.ts", import.meta.url), "utf8");
+    assert.match(session, /cookies\.delete\(SESSION_COOKIE\)/);
+  });
+
+  it("forced sign-out stays signed out until an explicit sign-in", async () => {
+    const { mem } = mockBrowser();
+    const account = {
+      id: "acct_test",
+      email: "a@solphia.io",
+      google: true,
+      emailVerified: true,
+      tosAcceptedAt: 1,
+      wallets: [] as string[],
+      createdAt: 1,
+      totpEnabled: false,
+    };
+    mem.set("solphia_account", JSON.stringify(account));
+    let meCalls = 0;
+    const g = globalThis as unknown as { fetch?: typeof fetch };
+    g.fetch = (async (url: string) => {
+      if (String(url).includes("/api/auth/me")) {
+        meCalls += 1;
+        return { ok: true, json: async () => ({ account }) };
+      }
+      return { ok: true, json: async () => ({ ok: true }) };
+    }) as unknown as typeof fetch;
+    const { logoutAccount, refreshAccount, peekAccount, acceptAccount, isSignedOutLocked } = await import("../lib/auth/client");
+    await logoutAccount();
+    assert.equal(peekAccount(), null);
+    assert.equal(isSignedOutLocked(), true);
+    assert.equal(mem.get("solphia_signed_out"), "1");
+    const restored = await refreshAccount();
+    assert.equal(restored, null);
+    assert.equal(peekAccount(), null);
+    assert.equal(meCalls, 0);
+    acceptAccount(account);
+    assert.equal(isSignedOutLocked(), false);
+    assert.equal(peekAccount()?.id, "acct_test");
+    const after = await refreshAccount();
+    assert.equal(after?.id, "acct_test");
+    assert.equal(meCalls, 1);
+  });
+
+  it("email sign-in keeps the submitted account when /me still has the other cookie", async () => {
+    const { mem } = mockBrowser();
+    const a = {
+      id: "acct_a",
+      email: "a@solphia.io",
+      google: true,
+      emailVerified: true,
+      tosAcceptedAt: 1,
+      wallets: [] as string[],
+      createdAt: 1,
+      totpEnabled: false,
+    };
+    const b = { ...a, id: "acct_b", email: "b@solphia.io", google: false };
+    mem.set("solphia_account", JSON.stringify(a));
+    const g = globalThis as unknown as { fetch?: typeof fetch };
+    g.fetch = (async (url: string) => {
+      if (String(url).includes("/api/auth/me")) {
+        return { ok: true, json: async () => ({ account: a }) };
+      }
+      return { ok: true, json: async () => ({ ok: true }) };
+    }) as unknown as typeof fetch;
+    const { logoutAccount, refreshAccount, peekAccount, acceptAccount } = await import("../lib/auth/client");
+    await logoutAccount();
+    assert.equal(peekAccount(), null);
+    acceptAccount(b);
+    assert.equal(peekAccount()?.id, "acct_b");
+    const raced = await refreshAccount();
+    assert.equal(raced?.id, "acct_b");
+    assert.equal(peekAccount()?.id, "acct_b");
+    assert.equal(peekAccount()?.email, "b@solphia.io");
   });
 });

@@ -294,4 +294,19 @@ describe("shill zone", () => {
     assert.match(page, /onOpen=\{\(\) => openTokenCard\(m\.token!\)\}/);
     assert.match(page, /app-layer shill-overlay-dock/);
   });
+
+  it("retries a pin on the same signature and confirms copy and votes", () => {
+    const page = readFileSync(join(process.cwd(), "src/app/shill/page.tsx"), "utf8");
+    assert.match(page, /lastPin/);
+    assert.match(page, /not found yet\|Payment not found/);
+    assert.match(page, /Confirming payment/);
+    assert.match(page, /copyText\(mint, "CA copied"\)/);
+    assert.match(page, /flashNotice/);
+    assert.match(page, /nextVoteAt: nextAt/);
+    const conn = readFileSync(join(process.cwd(), "src/lib/solana/connection.ts"), "utf8");
+    assert.match(conn, /waitForSignature\(opts\.signature/);
+    assert.match(conn, /innerInstructions/);
+    const shell = readFileSync(join(process.cwd(), "src/components/Shell.tsx"), "utf8");
+    assert.match(shell, /NoticeHost/);
+  });
 });

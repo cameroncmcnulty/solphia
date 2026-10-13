@@ -17,6 +17,7 @@ import { isSolanaAddress } from "@/lib/wallet/addr";
 import { peekAccount, refreshAccount, AUTH_EVENT, type PublicAccount } from "@/lib/auth/client";
 import { openWalletOnboard } from "@/components/wallet/WalletHost";
 import { TotpSettings } from "@/components/auth/TotpSettings";
+import { copyText } from "@/lib/copyText";
 
 type Invited = { pubkey: string; launched: number };
 type Coin = {
@@ -520,8 +521,8 @@ export default function AccountPage() {
             <button
               type="button"
               className="btn-acid rounded-full px-5 py-2 text-sm"
-              onClick={async () => {
-                await navigator.clipboard.writeText(invite);
+              onClick={() => {
+                copyText(invite, "Invite link copied");
                 setNoteErr(false);
                 setNote("Invite link copied.");
               }}

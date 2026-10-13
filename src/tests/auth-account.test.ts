@@ -56,6 +56,25 @@ describe("account login", () => {
     assert.equal(dup.ok, false);
   });
 
+  it("logs each email into its own account, never the other", () => {
+    const s = blank();
+    const a = createEmailAccount(s, { email: "alpha@solphia.io", password: "Hunter22!", tos: true, privacy: true, verified: true });
+    const b = createEmailAccount(s, { email: "bravo@solphia.io", password: "Hunter23!", tos: true, privacy: true, verified: true });
+    assert.equal(a.ok, true);
+    assert.equal(b.ok, true);
+    if (!a.ok || !b.ok) return;
+    const loginA = loginEmail(s, { email: "alpha@solphia.io", password: "Hunter22!" });
+    const loginB = loginEmail(s, { email: "bravo@solphia.io", password: "Hunter23!" });
+    assert.equal(loginA.ok, true);
+    assert.equal(loginB.ok, true);
+    if (!loginA.ok || !loginB.ok) return;
+    assert.equal(loginA.account.id, a.account.id);
+    assert.equal(loginB.account.id, b.account.id);
+    assert.notEqual(loginA.account.id, loginB.account.id);
+    const mixed = loginEmail(s, { email: "alpha@solphia.io", password: "Hunter23!" });
+    assert.equal(mixed.ok, false);
+  });
+
   it("logs in with email and attaches public wallets only", () => {
     const s = blank();
     const made = createEmailAccount(s, { email: "b@solphia.io", password: "Hunter22!", tos: true, privacy: true, verified: true });
@@ -181,13 +200,16 @@ describe("account login", () => {
     assert.equal("phantom" in WALLET_PATHS, false);
   });
 
-  it("blocks login until the email one-time code is verified", () => {
+  it("lets leftover unverified password accounts in and marks them verified", () => {
     const s = blank();
     const made = createEmailAccount(s, { email: "raw@solphia.io", password: "Hunter22!", tos: true, privacy: true });
     assert.equal(made.ok, true);
-    const blocked = loginEmail(s, { email: "raw@solphia.io", password: "Hunter22!" });
-    assert.equal(blocked.ok, false);
-    if (!blocked.ok) assert.equal(blocked.error, "verify_email");
+    if (!made.ok) return;
+    assert.equal(made.account.emailVerifiedAt, undefined);
+    const login = loginEmail(s, { email: "raw@solphia.io", password: "Hunter22!" });
+    assert.equal(login.ok, true);
+    if (!login.ok) return;
+    assert.ok(login.account.emailVerifiedAt);
   });
 
   it("public account JSON never includes custody fields", () => {
@@ -228,6 +250,28 @@ describe("signup bot check and OTP", () => {
     assert.equal(bot.ok, false);
     const ok = await verifyBot({ website: "", challengeToken: chal.token, challengeAnswer: sum });
     assert.equal(ok.ok, true);
+  });
+
+  it("accepts the math answer when Turnstile is only half-configured", async () => {
+    const prevSecret = process.env.TURNSTILE_SECRET;
+    const prevSite = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
+    process.env.TURNSTILE_SECRET = "only-secret";
+    delete process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
+    try {
+      const chal = issueChallenge();
+      const payload = chal.prompt.match(/What is (\d+) \+ (\d+)\?/);
+      assert.ok(payload);
+      const sum = String(Number(payload![1]) + Number(payload![2]));
+      const ok = await verifyBot({ challengeToken: chal.token, challengeAnswer: sum });
+      assert.equal(ok.ok, true);
+      const wrong = await verifyBot({ challengeToken: chal.token, challengeAnswer: "0" });
+      assert.equal(wrong.ok, false);
+    } finally {
+      if (prevSecret === undefined) delete process.env.TURNSTILE_SECRET;
+      else process.env.TURNSTILE_SECRET = prevSecret;
+      if (prevSite === undefined) delete process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
+      else process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY = prevSite;
+    }
   });
 
   it("blocks password signup on a Google-only email", () => {

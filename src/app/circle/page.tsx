@@ -8,6 +8,7 @@ import { TealConfetti } from "@/components/TealConfetti";
 import { WalletConnect } from "@/components/WalletConnect";
 import { peekRef } from "@/components/ReferralCapture";
 import { useOwner } from "@/lib/hooks";
+import { copyText } from "@/lib/copyText";
 
 type Promo = { id: string; url: string; caption?: string };
 type Job = { id: string; title: string; blurb: string; href?: string };
@@ -183,8 +184,8 @@ function CircleInner() {
             err={err}
             copied={copied}
             onWithdraw={withdraw}
-            onCopyInvite={async () => {
-              await navigator.clipboard.writeText(link);
+            onCopyInvite={() => {
+              copyText(link, "Invite link copied");
               setCopied(true);
               setTimeout(() => setCopied(false), 1200);
             }}

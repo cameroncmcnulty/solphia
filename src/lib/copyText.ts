@@ -1,5 +1,7 @@
+import { flashNotice } from "./notice";
+
 /** Copy in the click gesture. Clipboard API often fails in-app / non-HTTPS; execCommand is the fallback. */
-export function copyText(text: string): boolean {
+export function copyText(text: string, notice?: string): boolean {
   if (typeof document === "undefined" || !text) return false;
   let ok = false;
   try {
@@ -21,7 +23,9 @@ export function copyText(text: string): boolean {
   const clip = typeof navigator !== "undefined" ? navigator.clipboard : undefined;
   if (clip?.writeText) {
     void clip.writeText(text).catch(() => undefined);
+    if (notice) flashNotice(notice);
     return true;
   }
+  if (notice) flashNotice(ok ? notice : "Could not copy", ok ? "ok" : "err");
   return ok;
 }

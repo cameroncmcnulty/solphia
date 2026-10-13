@@ -136,7 +136,7 @@ export function loginEmail(
     return { ok: false, error: "no_account" };
   }
   if (!verifyPassword(opts.password, row.passwordHash)) return { ok: false, error: "Email or password is wrong." };
-  if (!row.emailVerifiedAt && !row.googleId) return { ok: false, error: "verify_email" };
+  if (!row.emailVerifiedAt) row.emailVerifiedAt = Date.now();
   row.lastSeen = Date.now();
   return { ok: true, account: row };
 }

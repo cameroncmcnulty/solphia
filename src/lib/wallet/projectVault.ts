@@ -19,6 +19,7 @@ import { importKeypair, newPhrase, phraseOk } from "./phrase";
 
 export const PROJECT_VAULT_EVENT = "solphia:project-vault";
 export const PROJECT_UNLOCK_EVENT = "solphia:project-unlock";
+export const PROJECT_PIN = "1113";
 
 const META_KEY = "solphia_project_vault_meta";
 const SECRETS_KEY = "solphia_project_vault_secrets";
@@ -170,6 +171,15 @@ export function lockProjectVault() {
   unlocked.clear();
 }
 
+/** Wipes the PIN vault on this browser only. On-chain wallets stay; re-import phrases with PROJECT_PIN. */
+export function resetProjectVaultOnThisDevice() {
+  lockProjectVault();
+  const s = store();
+  s?.removeItem(META_KEY);
+  s?.removeItem(SECRETS_KEY);
+  writeMeta(emptyMeta());
+}
+
 export async function unlockProjectVault(pin: string): Promise<void> {
   const clean = pin.trim();
   if (!pinOk(clean)) throw new Error("PIN is 4–8 digits.");
@@ -216,12 +226,24 @@ export async function setProjectPin(pin: string): Promise<void> {
 
 async function requirePin(pin?: string): Promise<string> {
   if (projectUnlocked()) return pinKey;
-  if (pin && pinOk(pin.trim())) {
-    if (readProjectMeta().pin) await unlockProjectVault(pin.trim());
-    else await setProjectPin(pin.trim());
-    return pinKey;
+  const clean = pin && pinOk(pin.trim()) ? pin.trim() : PROJECT_PIN;
+  if (readProjectMeta().pin) await unlockProjectVault(clean);
+  else await setProjectPin(clean);
+  return pinKey;
+}
+
+export async function unlockProjectVaultWithDefault(): Promise<boolean> {
+  if (projectUnlocked()) return true;
+  if (!projectHasPin()) {
+    await setProjectPin(PROJECT_PIN);
+    return true;
   }
-  throw new Error("Unlock project wallets with your PIN first.");
+  try {
+    await unlockProjectVault(PROJECT_PIN);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export async function createProjectWallet(opts: {
@@ -322,6 +344,10 @@ export function finishProjectUnlock(ok: boolean) {
 export async function ensureProjectSigner(role: ProjectRole): Promise<Keypair | null> {
   const have = projectKeypair(role);
   if (have) return have;
+  if (await unlockProjectVaultWithDefault()) {
+    const ready = projectKeypair(role);
+    if (ready) return ready;
+  }
   const ok = await requestProjectUnlock();
   if (!ok) return null;
   return projectKeypair(role);

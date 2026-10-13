@@ -504,7 +504,7 @@ export default function WalletPage() {
           <button
             type="button"
             className="mt-3 w-full rounded-2xl bg-white/8 py-2.5 font-mono text-[12px] text-white/70"
-            onClick={() => copyText(token.mint)}
+            onClick={() => copyText(token.mint, "CA copied")}
           >
             Copy CA · {token.mint.slice(0, 4)}…{token.mint.slice(-4)}
           </button>

@@ -13,6 +13,7 @@ import { ProjectWallets } from "../ProjectWallets";
 import { SphaSection } from "./Spha";
 import { Field, Mini, shortPk } from "../ui";
 import { BuybackPanel } from "../BuybackPanel";
+import { copyText } from "@/lib/copyText";
 import { formatSol, formatSolUsd } from "@/lib/formatSol";
 
 type BalRow = { pk: string; sol: number };
@@ -61,14 +62,10 @@ function CopyPk({ pk }: { pk: string }) {
     <button
       type="button"
       className="break-all text-left font-mono text-[11px] text-ghost hover:text-acid"
-      onClick={async () => {
-        try {
-          await navigator.clipboard.writeText(pk);
-          setDone(true);
-          setTimeout(() => setDone(false), 1200);
-        } catch {
-          /* ignore */
-        }
+      onClick={() => {
+        if (!copyText(pk, "Copied")) return;
+        setDone(true);
+        setTimeout(() => setDone(false), 1200);
       }}
       title="Copy"
     >

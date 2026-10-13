@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { VAULT_EVENT, VAULT_UNLOCK_EVENT, needsBackup } from "@/lib/wallet/vault";
-import { peekAccount, refreshAccount } from "@/lib/auth/client";
+import { acceptAccount, clearSignedOutLock, peekAccount, refreshAccount, waitForLogout, type PublicAccount } from "@/lib/auth/client";
 import { syncOwnerToSignedInAccount } from "@/lib/wallet/identity";
 import { AccountGate } from "@/components/auth/AccountGate";
 import { WalletOnboard } from "./WalletOnboard";
@@ -27,12 +27,12 @@ export function openWalletSwitcher() {
 
 export function openAccountGate() {
   if (typeof window === "undefined") return;
-  window.dispatchEvent(new Event(ACCOUNT_GATE));
+  void waitForLogout().then(() => window.dispatchEvent(new Event(ACCOUNT_GATE)));
 }
 
 export function openConnect() {
   if (typeof window === "undefined") return;
-  window.dispatchEvent(new Event(CONNECT_FLOW));
+  void waitForLogout().then(() => window.dispatchEvent(new Event(CONNECT_FLOW)));
 }
 
 export function WalletHost() {
@@ -45,11 +45,11 @@ export function WalletHost() {
 
   const syncBackup = useCallback(() => setBackup(needsBackup()), []);
 
-  const afterAccount = useCallback(() => {
+  const afterAccount = useCallback((acct?: PublicAccount) => {
     setAccount(false);
-    void refreshAccount().then(() => {
-      if (!syncOwnerToSignedInAccount()) setOnboard(true);
-    });
+    setGateHint("");
+    if (acct?.id) acceptAccount(acct);
+    if (!syncOwnerToSignedInAccount()) setOnboard(true);
   }, []);
 
   useEffect(() => {
@@ -83,6 +83,8 @@ export function WalletHost() {
   }, [syncBackup]);
 
   useEffect(() => {
+    const q0 = typeof window === "undefined" ? null : new URLSearchParams(window.location.search);
+    if (q0?.get("signedin") === "1") clearSignedOutLock();
     void refreshAccount().then((acct) => {
       if (typeof window === "undefined") return;
       const q = new URLSearchParams(window.location.search);
@@ -118,7 +120,7 @@ export function WalletHost() {
             setAccount(false);
             setGateHint("");
           }}
-          onReady={() => afterAccount()}
+          onReady={(acct) => afterAccount(acct)}
         />
       ) : null}
       {onboard ? (

@@ -44,8 +44,25 @@ export function setAccountCookie(res: NextResponse, accountId: string) {
   res.cookies.set(SESSION_COOKIE, accountToken(accountId), sessionCookieOpts());
 }
 
+/** A late logout must not wipe a newer sign-in on this browser. */
+export function logoutClearsCookie(cookieAccountId: string | null | undefined, requestedId: string | null | undefined): boolean {
+  const want = (requestedId || "").trim();
+  const have = (cookieAccountId || "").trim();
+  if (!want) return true;
+  if (!have) return true;
+  return want === have;
+}
+
 export function clearAccountCookie(res: NextResponse) {
-  res.cookies.set(SESSION_COOKIE, "", { ...sessionCookieOpts(), maxAge: 0, expires: new Date(0) });
+  res.cookies.set(SESSION_COOKIE, "", {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: 0,
+    expires: new Date(0),
+  });
+  res.cookies.delete(SESSION_COOKIE);
 }
 
 export function totpPendingToken(accountId: string): string {

@@ -30,5 +30,8 @@ describe("project protocol wallets", () => {
     assert.match(projectUi, /SwapWidget/);
     assert.match(projectUi, /formatSol/);
     assert.match(projectUi, /\/api\/sol\/balance/);
+    assert.match(projectUi, /PROJECT_PIN/);
+    const vault = readFileSync(path.join(process.cwd(), "src/lib/wallet/projectVault.ts"), "utf8");
+    assert.match(vault, /export const PROJECT_PIN = "1113"/);
   });
 });

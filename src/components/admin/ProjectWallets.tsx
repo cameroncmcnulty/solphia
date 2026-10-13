@@ -13,6 +13,7 @@ import {
   PROJECT_ROLES,
   PROJECT_UNLOCK_EVENT,
   PROJECT_VAULT_EVENT,
+  PROJECT_PIN,
   createProjectWallet,
   finishProjectUnlock,
   listProjectWallets,
@@ -23,9 +24,11 @@ import {
   projectUnlocked,
   projectWallet,
   requestProjectUnlock,
+  resetProjectVaultOnThisDevice,
   sendProjectSol,
   signAndSendProjectTx,
   unlockProjectVault,
+  unlockProjectVaultWithDefault,
   type ProjectRole,
   type ProjectWallet,
 } from "@/lib/wallet/projectVault";
@@ -44,6 +47,9 @@ export function ProjectWallets({
   const sync = useCallback(() => setRows(listProjectWallets()), []);
   useEffect(() => {
     sync();
+    void unlockProjectVaultWithDefault().then((ok) => {
+      if (ok) sync();
+    });
     const onUnlock = () => setOpen(true);
     window.addEventListener(PROJECT_VAULT_EVENT, sync);
     window.addEventListener(PROJECT_UNLOCK_EVENT, onUnlock);
@@ -98,19 +104,39 @@ export function ProjectWallets({
 }
 
 function ProjectUnlock({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
-  const [pin, setPin] = useState("");
+  const [pin, setPin] = useState(PROJECT_PIN);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
-  async function go() {
-    if (!pinOk(pin)) {
+  useEffect(() => {
+    let live = true;
+    setBusy(true);
+    void unlockProjectVaultWithDefault()
+      .then((ok) => {
+        if (!live) return;
+        if (ok && projectUnlocked()) {
+          finishProjectUnlock(true);
+          onDone();
+          onClose();
+        }
+      })
+      .finally(() => {
+        if (live) setBusy(false);
+      });
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  async function go(next = pin) {
+    if (!pinOk(next)) {
       setErr("PIN is 4–8 digits.");
       return;
     }
     setBusy(true);
     setErr("");
     try {
-      await unlockProjectVault(pin);
+      await unlockProjectVault(next);
       finishProjectUnlock(true);
       onDone();
       onClose();
@@ -130,7 +156,7 @@ function ProjectUnlock({ onClose, onDone }: { onClose: () => void; onDone: () =>
     <div className="app-layer z-[97] bg-black/75" onClick={close}>
       <div className="app-layer-card rounded-[1.5rem] border border-white/10 bg-[#0b0714] p-5" onClick={(e) => e.stopPropagation()}>
         <p className="text-[18px] font-semibold text-white">Unlock project wallets</p>
-        <p className="mt-1 text-[13px] text-white/45">PIN stays on this device. Solphia never receives it.</p>
+        <p className="mt-1 text-[13px] text-white/45">PIN on this device is {PROJECT_PIN}. Solphia never receives it.</p>
         {err ? <p className="mt-2 font-mono text-[13px] text-blood">{err}</p> : null}
         <input
           inputMode="numeric"
@@ -146,6 +172,20 @@ function ProjectUnlock({ onClose, onDone }: { onClose: () => void; onDone: () =>
         <button type="button" disabled={busy} onClick={() => void go()} className="btn-acid mt-4 min-h-[48px] w-full rounded-full disabled:opacity-40">
           {busy ? "Unlocking…" : "Unlock"}
         </button>
+        {err ? (
+          <button
+            type="button"
+            disabled={busy}
+            className="mt-2 w-full text-center text-[13px] text-white/45"
+            onClick={() => {
+              resetProjectVaultOnThisDevice();
+              setErr(`This browser vault is cleared. Import the three phrases on each card. PIN is ${PROJECT_PIN}.`);
+              onDone();
+            }}
+          >
+            Wrong PIN on this browser? Reset this device vault
+          </button>
+        ) : null}
       </div>
     </div>
   );
@@ -170,7 +210,7 @@ function ProjectWalletCard({
     role === "treasury" ? data?.treasury || "" : role === "owner" ? data?.ownerWallet || "" : data?.foundationWallet || "";
   const pk = local?.pubkey || savedPk;
   const [tab, setTab] = useState<"swap" | "create" | "receive" | "send" | "backup">("swap");
-  const [pin, setPin] = useState("");
+  const [pin, setPin] = useState(PROJECT_PIN);
   const [phrase, setPhrase] = useState("");
   const [fresh, setFresh] = useState("");
   const [to, setTo] = useState("");
@@ -215,7 +255,7 @@ function ProjectWalletCard({
     setMsg("");
     setWork(true);
     try {
-      const out = await createProjectWallet({ role, pin: pin || undefined });
+      const out = await createProjectWallet({ role, pin: pin || PROJECT_PIN });
       setFresh(out.phrase || "");
       setTab("backup");
       onChange();
@@ -232,7 +272,7 @@ function ProjectWalletCard({
     setErr("");
     setWork(true);
     try {
-      const out = await createProjectWallet({ role, pin: pin || undefined, phrase });
+      const out = await createProjectWallet({ role, pin: pin || PROJECT_PIN, phrase });
       onChange();
       await patch({ [meta.stateKey]: out.wallet.pubkey });
       setTab("swap");
@@ -338,7 +378,7 @@ function ProjectWalletCard({
               autoComplete="off"
               value={pin}
               onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 8))}
-              placeholder="PIN 4–8 digits"
+              placeholder={`PIN ${PROJECT_PIN}`}
               className="w-full rounded-full border border-white/10 bg-white/[0.06] px-4 py-2 font-mono text-sm text-white outline-none"
             />
           ) : null}

@@ -55,7 +55,7 @@ export function TotpSetup({
           type="button"
           className="mt-2 w-full rounded-full bg-white/10 py-2 text-[13px] text-white"
           onClick={() => {
-            copyText(backupCodes.join("\n"));
+            copyText(backupCodes.join("\n"), "Backup codes copied");
             setCopied(true);
           }}
         >

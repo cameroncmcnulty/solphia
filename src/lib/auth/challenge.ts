@@ -12,6 +12,11 @@ export function turnstileSecret(): string {
   return (process.env.TURNSTILE_SECRET || "").trim();
 }
 
+/** UI and verify must agree. Secret-only Turnstile would hide math and then reject it. */
+export function turnstileLive(): boolean {
+  return Boolean(turnstileSecret() && turnstileSiteKey());
+}
+
 export function issueChallenge(now = Date.now()): { token: string; prompt: string } {
   const buf = randomBytes(2);
   const a = 2 + (buf[0] % 9);
@@ -66,7 +71,7 @@ export type BotProof = {
 
 export async function verifyBot(proof: BotProof, ip?: string): Promise<{ ok: true } | { ok: false; error: string }> {
   if ((proof.website || "").trim()) return { ok: false, error: "Could not verify this request." };
-  if (turnstileSecret()) {
+  if (turnstileLive()) {
     const ok = await verifyTurnstile(proof.turnstile, ip);
     if (!ok) return { ok: false, error: "Complete the bot check." };
     return { ok: true };

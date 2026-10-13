@@ -32,6 +32,8 @@ import { useOwner } from "@/lib/hooks";
 import { persistOwner } from "@/lib/wallet/owner";
 import { paySeatFromPhantom, signAndSendPhantom } from "@/lib/wallet/trading";
 import { SHILL_PIN_MS, SHILL_PIN_SOL, SHILL_REACTS, SHILL_STICKERS, type ShillToken } from "@/lib/shill/types";
+import { copyText } from "@/lib/copyText";
+import { flashNotice } from "@/lib/notice";
 
 type Msg = {
   id: string;
@@ -420,6 +422,8 @@ export default function ShillPage() {
   const [err, setErr] = useState("");
   const [pinMint, setPinMint] = useState("");
   const [pinBusy, setPinBusy] = useState(false);
+  const [pinPhase, setPinPhase] = useState<"" | "pay" | "confirm">("");
+  const lastPin = useRef<{ mint: string; sig: string } | null>(null);
   const [sheet, setSheet] = useState<"pin" | "ranks" | "swap" | null>(null);
   const [tab, setTab] = useState<"chat" | "pins" | "board">("chat");
   const lastType = useRef(0);
@@ -431,7 +435,6 @@ export default function ShillPage() {
   const lastAt = useRef(0);
   const loadGen = useRef(0);
   const [peek, setPeek] = useState<string | null>(null);
-  const [toast, setToast] = useState("");
   const [now, setNow] = useState(() => Date.now());
   const stickToBottom = useRef(true);
   const [atBottom, setAtBottom] = useState(true);
@@ -641,10 +644,7 @@ export default function ShillPage() {
     setBusy(true);
     try {
       const sent = await act({ action: "chat", text: bodyText, replyTo: optimistic.replyTo, ...extra });
-      if (sent?.leveled) {
-        setToast(`Rank up. You are ${sent.rank}.`);
-        window.setTimeout(() => setToast(""), 3200);
-      }
+      if (sent?.leveled) flashNotice(`Rank up. You are ${sent.rank}.`);
       const real = sent?.message as Msg | undefined;
       if (real?.id) {
         setPack((prev) => {
@@ -690,55 +690,99 @@ export default function ShillPage() {
 
   async function pin() {
     if (!owner) return;
+    const mint = pinMint.trim();
+    if (!mint) return;
     setErr("");
     setPinBusy(true);
+    setPinPhase("pay");
     try {
-      const prep = await act({ action: "pin", mint: pinMint.trim() });
-      if (!prep.transaction && (!prep.treasury || !prep.sol)) throw new Error(prep.message || "Could not start the pin.");
-      const sig = prep.transaction
-        ? await signAndSendPhantom(prep.transaction)
-        : await paySeatFromPhantom(owner, prep.treasury, Number(prep.sol));
-      if (!sig) throw new Error("Payment did not send.");
-      await act({ action: "pin", mint: pinMint.trim(), signature: sig });
-      setPinMint("");
-      setSheet(null);
-      flash("Pinned");
-      await load(true);
+      let sig = lastPin.current?.mint === mint ? lastPin.current.sig : "";
+      if (!sig) {
+        const prep = await act({ action: "pin", mint });
+        if (!prep.transaction && (!prep.treasury || !prep.sol)) throw new Error(prep.message || "Could not start the pin.");
+        sig = prep.transaction
+          ? await signAndSendPhantom(prep.transaction)
+          : await paySeatFromPhantom(owner, prep.treasury, Number(prep.sol));
+        if (!sig) throw new Error("Payment did not send.");
+        lastPin.current = { mint, sig };
+      }
+      setPinPhase("confirm");
+      let lastMsg = "Transaction not found yet.";
+      for (let i = 0; i < 10; i++) {
+        try {
+          await act({ action: "pin", mint, signature: sig });
+          lastPin.current = null;
+          setPinMint("");
+          setSheet(null);
+          flashNotice("Pinned");
+          await load(true);
+          return;
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : "pin failed";
+          if (/already used/i.test(msg)) {
+            lastPin.current = null;
+            setPinMint("");
+            setSheet(null);
+            flashNotice("Pinned");
+            await load(true);
+            return;
+          }
+          lastMsg = msg;
+          if (!/not found yet|Payment not found/i.test(msg) || i === 9) throw e;
+          await new Promise((r) => setTimeout(r, 700));
+        }
+      }
+      throw new Error(lastMsg);
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "pin failed");
+      const msg = e instanceof Error ? e.message : "pin failed";
+      setErr(msg);
+      flashNotice(msg, "err");
     } finally {
       setPinBusy(false);
+      setPinPhase("");
     }
-  }
-
-  function flash(msg: string) {
-    setToast(msg);
-    window.setTimeout(() => setToast(""), 1800);
   }
 
   async function upvote(mint: string) {
     if (!owner) {
       setErr("Connect a wallet to vote.");
+      flashNotice("Connect a wallet to vote.", "err");
       return;
     }
     try {
       const j = await act({ action: "vote", mint });
-      flash(`${j.votes || 1} votes · next in 1h`);
+      const votes = Number(j.votes || 1);
+      const nextAt = Number(j.nextAt || Date.now() + 3_600_000);
+      setPack((prev) => {
+        if (!prev) return prev;
+        const voteBoard = [...(prev.voteBoard || [])];
+        const i = voteBoard.findIndex((r) => r.mint === mint);
+        const row = voteBoard[i];
+        const pinRow = (prev.pins || []).find((p) => p.mint === mint);
+        const nextRow: VoteRow = {
+          mint,
+          symbol: row?.symbol || pinRow?.symbol || mint.slice(0, 4),
+          name: row?.name || pinRow?.name || "token",
+          image: row?.image || pinRow?.image,
+          votes: Math.max(row?.votes || 0, votes),
+        };
+        if (i >= 0) voteBoard[i] = nextRow;
+        else voteBoard.push(nextRow);
+        voteBoard.sort((a, b) => b.votes - a.votes);
+        return { ...prev, voteBoard, nextVoteAt: nextAt };
+      });
+      setOpenPin((p) => (p && p.mint === mint ? { ...p, votes: Math.max(p.votes || 0, votes) } : p));
+      flashNotice(`${votes} vote${votes === 1 ? "" : "s"} · next in 1h`);
       await load(true).catch(() => {});
     } catch (e) {
       const msg = e instanceof Error ? e.message : "vote failed";
       if (/abort/i.test(msg)) return;
-      flash(msg);
+      flashNotice(msg, "err");
     }
   }
 
-  async function copyMint(mint: string) {
-    try {
-      await navigator.clipboard.writeText(mint);
-      flash("CA copied");
-    } catch {
-      flash("Could not copy");
-    }
+  function copyMint(mint: string) {
+    copyText(mint, "CA copied");
   }
 
   function openSwap(mint = "") {
@@ -1182,12 +1226,6 @@ export default function ShillPage() {
             onModerated={() => load(true).catch(() => {})}
           />
         )}
-        {toast && (
-          <div className="pointer-events-none absolute inset-x-0 top-4 z-[60] flex justify-center">
-            <div className="rounded-full bg-acid px-5 py-2 font-display text-base text-void">{toast}</div>
-          </div>
-        )}
-
         {openPin && (
           <PinSpotlight
             pin={{ ...openPin, votes: openPin.votes || voteByMint[openPin.mint] || 0 }}
@@ -1218,8 +1256,15 @@ export default function ShillPage() {
                 className="btn-acid mt-3 inline-flex w-full items-center justify-center gap-2 rounded-full py-2.5 text-[15px] disabled:opacity-40"
               >
                 <Rocket className="h-4 w-4" />
-                {pinBusy ? "Paying…" : `Pin · ${SHILL_PIN_SOL} SOL`}
+                {pinBusy
+                  ? pinPhase === "confirm"
+                    ? "Confirming payment…"
+                    : "Paying…"
+                  : lastPin.current?.mint === pinMint.trim()
+                    ? "Retry pin"
+                    : `Pin · ${SHILL_PIN_SOL} SOL`}
               </button>
+              {err ? <p className="mt-2 text-sm text-blood">{err}</p> : null}
             </>
           ) : (
             <div className="mt-3">

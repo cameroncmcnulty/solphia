@@ -12,6 +12,7 @@ import { WalletKeepalive } from "./WalletConnect";
 import { WalletHost } from "./wallet/WalletHost";
 import { TosGate } from "./TosGate";
 import { SiteFooter } from "./SiteFooter";
+import { NoticeHost } from "./NoticeHost";
 import { clearScrollLock, lockPageScroll } from "@/lib/scrollLock";
 
 export function Shell({ children }: { children: React.ReactNode }) {
@@ -34,6 +35,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
       <WalletHost />
       <LiveRunner />
       <SeatRunner />
+      <NoticeHost />
     </>
   );
 

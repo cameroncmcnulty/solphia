@@ -103,7 +103,7 @@ export function TotpSettings({ account }: { account: PublicAccount }) {
         <button
           type="button"
           className="w-full rounded-full bg-white/10 py-2 text-[13px] text-white"
-          onClick={() => copyText(backupCodes.join("\n"))}
+          onClick={() => copyText(backupCodes.join("\n"), "Backup codes copied")}
         >
           Copy all 8 codes
         </button>

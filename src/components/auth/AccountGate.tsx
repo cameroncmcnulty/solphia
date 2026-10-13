@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { WalletSheet } from "@/components/wallet/sheet";
-import { linkDeviceWallets, refreshAccount, type PublicAccount } from "@/lib/auth/client";
+import { acceptAccount, linkDeviceWallets, peekAccount, refreshAccount, waitForLogout, type PublicAccount } from "@/lib/auth/client";
+import { flashNotice } from "@/lib/notice";
 import { syncOwnerToSignedInAccount } from "@/lib/wallet/identity";
 import { PASSWORD_HINT, passwordIssue, passwordRules } from "@/lib/auth/passwordPolicy";
 import { listWallets } from "@/lib/wallet/vault";
@@ -11,7 +12,7 @@ import { BotCheck, type BotFields } from "./BotCheck";
 import { TotpSetup } from "./TotpSetup";
 
 type Mode = "signup" | "signin";
-type Screen = "pick" | "google" | "email" | "otp" | "totp-opt" | "totp" | "totp-setup";
+type Screen = "pick" | "google" | "email" | "totp-opt" | "totp" | "totp-setup";
 
 function GoogleMark() {
   return (
@@ -86,7 +87,6 @@ export function AccountGate({
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [password2, setPassword2] = useState("");
-  const [otp, setOtp] = useState("");
   const [totpCode, setTotpCode] = useState("");
   const [pendingAccount, setPendingAccount] = useState<PublicAccount | null>(null);
   const [totpQr, setTotpQr] = useState("");
@@ -94,6 +94,8 @@ export function AccountGate({
   const [tos, setTos] = useState(false);
   const [privacy, setPrivacy] = useState(false);
   const [bot, setBot] = useState<BotFields>({ website: "", challengeToken: "", challengeAnswer: "", turnstile: "" });
+  const botRef = useRef(bot);
+  botRef.current = bot;
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [note, setNote] = useState("");
@@ -121,15 +123,12 @@ export function AccountGate({
       setMode("signin");
     }
     let live = true;
-    fetch("/api/auth/me", { credentials: "include", cache: "no-store" })
+    void waitForLogout()
+      .then(() => fetch("/api/auth/me", { credentials: "include", cache: "no-store" }))
       .then((r) => r.json())
-      .then(async (j) => {
+      .then((j) => {
         if (!live) return;
         if (typeof j?.googleEnabled === "boolean") setGoogleOn(j.googleEnabled);
-        if (j?.account?.id) {
-          await refreshAccount();
-          if (live) onReady(j.account as PublicAccount);
-        }
       })
       .catch(() => undefined);
     return () => {
@@ -138,22 +137,27 @@ export function AccountGate({
   }, [onReady, authHint]);
 
   async function finish(account: PublicAccount) {
+    if (!account?.id) throw new Error("Could not sign in.");
+    acceptAccount(account);
     try {
       await linkDeviceWallets(listWallets({ hidden: true }).map((w) => w.pubkey));
     } catch {
       /* signed in; recover/create still attaches the wallet to this account */
     }
     await refreshAccount();
+    if (peekAccount()?.id !== account.id) acceptAccount(account);
     syncOwnerToSignedInAccount();
+    flashNotice("Signed in");
     onReady(account);
   }
 
   function botBody() {
+    const b = botRef.current;
     return {
-      website: bot.website,
-      challengeToken: bot.challengeToken,
-      challengeAnswer: bot.challengeAnswer,
-      turnstile: bot.turnstile,
+      website: b.website,
+      challengeToken: b.challengeToken,
+      challengeAnswer: b.challengeAnswer,
+      turnstile: b.turnstile,
     };
   }
 
@@ -164,12 +168,13 @@ export function AccountGate({
     setErr("");
     setNote("");
     try {
+      await waitForLogout();
       if (mode === "signup") {
         if (password !== password2) throw new Error("Passwords do not match.");
         const issue = passwordIssue(password);
         if (issue) throw new Error(issue);
         if (!tos || !privacy) throw new Error("Agree to the terms and privacy policy.");
-        const r = await fetch("/api/auth/otp", {
+        const r = await fetch("/api/auth/signup", {
           method: "POST",
           credentials: "include",
           headers: { "content-type": "application/json" },
@@ -178,17 +183,18 @@ export function AccountGate({
         const j = (await r.json().catch(() => ({}))) as {
           message?: string;
           error?: string;
-          pending?: boolean;
-          preview?: boolean;
-          devCode?: string;
+          account?: PublicAccount;
+          totp?: boolean;
         };
-        if (!r.ok) {
-          if (j.error === "mail_off") throw new Error(j.message || "Email codes are down. Sign in with Google instead.");
-          throw new Error(j.message || "Could not send a code.");
+        if (j.totp) {
+          setScreen("totp");
+          return;
         }
-        if (j.devCode) setNote(`Dev preview code: ${j.devCode}`);
-        else setNote("We emailed a 6-digit code. It expires in 15 minutes.");
-        setScreen("otp");
+        if (!r.ok || !j.account) {
+          if (j.error === "bot") throw new Error(j.message || "Solve the bot check.");
+          throw new Error(j.message || "Could not create the account.");
+        }
+        await finish(j.account);
         return;
       }
       const r = await fetch("/api/auth/login", {
@@ -197,25 +203,7 @@ export function AccountGate({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ email, password, ...botBody() }),
       });
-      const j = (await r.json().catch(() => ({}))) as { message?: string; error?: string; account?: PublicAccount };
-      if (j.error === "verify_email") {
-        const send = await fetch("/api/auth/otp", {
-          method: "POST",
-          credentials: "include",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ email, password, tos: true, privacy: true, ...botBody() }),
-        });
-        const sj = (await send.json().catch(() => ({}))) as { message?: string; devCode?: string };
-        if (!send.ok) throw new Error(sj.message || "Verify this email first.");
-        if (sj.devCode) setNote(`Dev preview code: ${sj.devCode}`);
-        else setNote("We emailed a 6-digit code to verify this account.");
-        setMode("signup");
-        setTos(true);
-        setPrivacy(true);
-        setScreen("otp");
-        return;
-      }
-      const loginJ = j as { message?: string; error?: string; account?: PublicAccount; totp?: boolean };
+      const loginJ = (await r.json().catch(() => ({}))) as { message?: string; error?: string; account?: PublicAccount; totp?: boolean };
       if (loginJ.totp) {
         setScreen("totp");
         return;
@@ -236,48 +224,6 @@ export function AccountGate({
     }
   }
 
-  async function submitOtp() {
-    setBusy(true);
-    setErr("");
-    try {
-      const r = await fetch("/api/auth/otp", {
-        method: "POST",
-        credentials: "include",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action: "verify", email, otp }),
-      });
-      const j = (await r.json().catch(() => ({}))) as { message?: string; account?: PublicAccount };
-      if (!r.ok || !j.account) throw new Error(j.message || "That code did not work.");
-      await finish(j.account);
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "That code did not work.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function resendOtp() {
-    setBusy(true);
-    setErr("");
-    setNote("");
-    try {
-      const r = await fetch("/api/auth/otp", {
-        method: "POST",
-        credentials: "include",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ email, password, tos: true, privacy: true, ...botBody() }),
-      });
-      const j = (await r.json().catch(() => ({}))) as { message?: string; devCode?: string };
-      if (!r.ok) throw new Error(j.message || "Could not resend the code.");
-      if (j.devCode) setNote(`Dev preview code: ${j.devCode}`);
-      else setNote("We emailed a new 6-digit code. It expires in 15 minutes.");
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "Could not resend the code.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
   function google() {
     const agreed = mode === "signin" || (tos && privacy);
     if (!agreed) {
@@ -290,7 +236,9 @@ export function AccountGate({
     const q = new URLSearchParams();
     q.set("tos", "1");
     q.set("privacy", "1");
-    window.location.assign(`/api/auth/google?${q.toString()}`);
+    void waitForLogout().then(() => {
+      window.location.assign(`/api/auth/google?${q.toString()}`);
+    });
   }
 
   function modeToggle() {
@@ -367,6 +315,7 @@ export function AccountGate({
     setBusy(true);
     setErr("");
     try {
+      await waitForLogout();
       const r = await fetch("/api/auth/totp", {
         method: "POST",
         credentials: "include",
@@ -462,48 +411,6 @@ export function AccountGate({
     );
   }
 
-  if (screen === "otp") {
-    return (
-      <WalletSheet title="Check your email" subtitle={`Enter the 6-digit code we sent to ${email}.`} onClose={onClose}>
-        {err ? <p className="mb-3 font-mono text-[13px] text-blood">{err}</p> : null}
-        {note ? <p className="mb-3 text-[13px] text-white/55">{note}</p> : null}
-        <label className="block">
-          <span className="font-mono text-[11px] tracking-[0.16em] text-white/40">ONE-TIME CODE</span>
-          <input
-            inputMode="numeric"
-            autoComplete="one-time-code"
-            value={otp}
-            onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
-            className="mt-1 min-h-[48px] w-full rounded-2xl border border-white/10 bg-white/[0.06] px-3 text-center font-mono text-[22px] tracking-[0.4em] text-white outline-none"
-          />
-        </label>
-        <button
-          type="button"
-          disabled={busy || otp.length !== 6}
-          onClick={() => void submitOtp()}
-          className="btn-acid mt-4 min-h-[48px] w-full rounded-full disabled:opacity-40"
-        >
-          {busy ? "…" : "Verify and create account"}
-        </button>
-        <button type="button" disabled={busy} className="mt-2 w-full text-center text-[13px] text-acid" onClick={() => void resendOtp()}>
-          Resend code
-        </button>
-        <button
-          type="button"
-          disabled={busy}
-          className="mt-2 w-full text-center text-[13px] text-white/45"
-          onClick={() => {
-            setScreen("email");
-            setOtp("");
-            setErr("");
-          }}
-        >
-          Back
-        </button>
-      </WalletSheet>
-    );
-  }
-
   if (screen === "google") {
     return (
       <WalletSheet
@@ -539,7 +446,7 @@ export function AccountGate({
         title={mode === "signup" ? "Sign up with email" : "Sign in with email"}
         subtitle={
           mode === "signup"
-            ? "Agree to the terms, pass the bot check, then confirm the code we email you."
+            ? "Agree to the terms, pass the bot check, then create the account."
             : "Stay signed in on this browser. Then pick or add a Solphia wallet."
         }
         onClose={onClose}
@@ -594,7 +501,7 @@ export function AccountGate({
           onClick={() => void submitEmail()}
           className="btn-acid mt-4 min-h-[48px] w-full rounded-full disabled:opacity-40"
         >
-          {busy ? "…" : mode === "signup" ? "Email me a code" : "Sign in"}
+          {busy ? "…" : mode === "signup" ? "Create account" : "Sign in"}
         </button>
         <button type="button" disabled={busy} className="mt-2 w-full text-center text-[13px] text-white/45" onClick={backToPick}>
           Back

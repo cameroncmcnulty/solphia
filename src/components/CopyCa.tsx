@@ -38,7 +38,7 @@ export function CopyCa({
   async function copy(e: MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
-    if (!copyText(address)) return;
+    if (!copyText(address, "CA copied")) return;
     setOk(true);
     window.setTimeout(() => setOk(false), 1600);
   }

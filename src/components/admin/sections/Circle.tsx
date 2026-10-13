@@ -5,6 +5,7 @@ import { Gift } from "lucide-react";
 import { CircleHangout } from "@/components/CircleHangout";
 import { useAdmin } from "../AdminProvider";
 import { shortPk } from "../ui";
+import { copyText } from "@/lib/copyText";
 
 type Row = {
   pubkey: string;
@@ -97,8 +98,8 @@ export function CircleSection() {
         promos={pack?.promos || []}
         jobs={jobs}
         copied={copied}
-        onCopyInvite={async () => {
-          await navigator.clipboard.writeText(hangLink);
+        onCopyInvite={() => {
+          copyText(hangLink, "Invite link copied");
           setCopied(true);
           setTimeout(() => setCopied(false), 1200);
         }}

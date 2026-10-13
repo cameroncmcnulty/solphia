@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { CartoonPfp } from "./CartoonPfp";
 import { RankBadge, StaffBadge } from "./RankBadge";
 import { TokenArt } from "./TokenArt";
+import { copyText } from "@/lib/copyText";
 
 function media(url?: string) {
   const raw = (url || "").trim();
@@ -138,8 +139,8 @@ export function ProfileOverlay({
               <button
                 type="button"
                 className="btn-acid shrink-0 rounded-full px-3 py-1.5 text-[11px]"
-                onClick={async () => {
-                  await navigator.clipboard.writeText(fav.mint);
+                onClick={() => {
+                  copyText(fav.mint, "CA copied");
                   setCopied(true);
                   window.setTimeout(() => setCopied(false), 1400);
                 }}

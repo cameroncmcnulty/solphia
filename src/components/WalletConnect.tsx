@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { SphaMark } from "./SphaMark";
-import { AUTH_EVENT, peekAccount, refreshAccount } from "@/lib/auth/client";
+import { AUTH_EVENT, isSignedOutLocked, peekAccount, refreshAccount } from "@/lib/auth/client";
 import { forgetOwner, loadOwner, persistOwner } from "@/lib/wallet/owner";
 import { beginPhantomConnect, completePhantomConnect, completePhantomUl, injectedProvider, openPhantomLink, PHANTOM_EVENT, readPhantomReturn } from "@/lib/wallet/phantomConnect";
 import { dropPhantomWallets, ensurePhantomStub, phantomIsOwner } from "@/lib/wallet/vault";
@@ -142,6 +142,10 @@ export function WalletKeepalive() {
     const align = async () => {
       if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
       kickPhantomIdentity(phantom()?.publicKey?.toString() || null);
+      if (isSignedOutLocked()) {
+        if (loadOwner()) forgetOwner();
+        return;
+      }
       const acct = await refreshAccount();
       if (!acct?.id) {
         if (loadOwner()) forgetOwner();
