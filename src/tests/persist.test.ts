@@ -48,9 +48,40 @@ describe("ops overlay", () => {
     const persist = readFileSync(new URL("../lib/persist.ts", import.meta.url), "utf8");
     assert.match(persist, /loginAccounts: "solphia:login-accounts"/);
     const store = readFileSync(new URL("../lib/store.ts", import.meta.url), "utf8");
-    assert.match(store, /overlayLoginAccounts\(mem\)/);
+    assert.match(store, /overlayLoginAccounts\(mem/);
     assert.match(store, /persistLoginAccounts\(next\)/);
     assert.match(store, /mergeLoginAccounts/);
+    assert.match(store, /LOGIN_PULL_MS/);
+    assert.match(store, /export async function peekLoginAccount/);
+    const me = readFileSync(new URL("../app/api/auth/me/route.ts", import.meta.url), "utf8");
+    assert.match(me, /peekLoginAccount/);
+    assert.equal(me.includes("readyState"), false);
+  });
+
+  it("does not ship unused desk shells", async () => {
+    const { existsSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    for (const f of [
+      "src/components/TerminalView.tsx",
+      "src/components/TerminalClient.tsx",
+      "src/components/TokenTable.tsx",
+      "src/components/CircleSwap.tsx",
+      "src/components/TickerCharts.tsx",
+      "src/components/WalletDesk.tsx",
+      "src/components/ChatDock.tsx",
+      "src/components/OrbitTickers.tsx",
+      "src/components/PumpLoop.tsx",
+      "src/components/SafetyBadge.tsx",
+      "src/components/LivePnl.tsx",
+      "src/components/ToolsSheet.tsx",
+      "src/components/SparkCandles.tsx",
+      "src/components/HoverMarks.tsx",
+      "src/components/Cursor.tsx",
+      "src/components/auth/TotpSettings.tsx",
+      "src/components/auth/BotCheck.tsx",
+    ]) {
+      assert.equal(existsSync(join(process.cwd(), f)), false, f);
+    }
   });
 
   it("does not clobber a newer local save with stale remote ops", () => {

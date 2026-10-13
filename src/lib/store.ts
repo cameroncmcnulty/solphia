@@ -3,8 +3,7 @@ import path from "path";
 import { DEFAULT_SETTINGS } from "./config";
 import { DEFAULT_FUND, DEFAULT_OWNER, DEFAULT_TREASURY } from "./protocolWallets";
 import { DEFAULT_ADMIN_OTP_EMAIL, type AdminOtpPending } from "./admin/otp";
-import type { LoginAccount } from "./auth/accounts";
-import { mergeLoginAccounts } from "./auth/accounts";
+import { findAccount, mergeLoginAccounts, type LoginAccount } from "./auth/accounts";
 import type { SignupPending } from "./auth/otp";
 import { emptyBook, emptyTrader, lockedAuto } from "./auto";
 import { emptyLaunchBook, mergeAccountMaps, mergeLaunch, slimLaunch, type LaunchAccount, type LaunchBook } from "./launch/engine";
@@ -42,8 +41,10 @@ let hydrated = false;
 let boot: Promise<AppState> | null = null;
 let knownTraderOwners: string[] = [];
 let lastOpsPull = 0;
+let lastLoginPull = 0;
 let lastMutateAt = 0;
 const OPS_PULL_MS = 2500;
+const LOGIN_PULL_MS = 4_000;
 
 function touchMutate(state?: AppState) {
   lastMutateAt = Date.now();
@@ -326,8 +327,10 @@ function loginRowsOf(raw: unknown): LoginAccount[] {
   return [];
 }
 
-async function overlayLoginAccounts(state: AppState) {
+async function overlayLoginAccounts(state: AppState, force = false) {
   if (!durableConfigured()) return;
+  if (!force && Date.now() - lastLoginPull < LOGIN_PULL_MS) return;
+  lastLoginPull = Date.now();
   try {
     const raw = await kvGetJson(KEYS.loginAccounts);
     const remote = loginRowsOf(raw);
@@ -338,11 +341,35 @@ async function overlayLoginAccounts(state: AppState) {
   }
 }
 
+/** Session cookie lookup. Does not hydrate launch/circle/shill/traders. */
+export async function peekLoginAccount(id: string | null | undefined): Promise<LoginAccount | null> {
+  if (!id) return null;
+  if (hydrated && mem) {
+    await overlayLoginAccounts(mem);
+    const hit = findAccount(mem, id);
+    if (hit) return hit;
+  }
+  if (durableConfigured()) {
+    try {
+      const raw = await kvGetJson(KEYS.loginAccounts);
+      lastLoginPull = Date.now();
+      const rows = loginRowsOf(raw);
+      if (hydrated && mem && rows.length) mem.accounts = mergeLoginAccounts(mem.accounts || [], rows);
+      return rows.find((a) => a.id === id) || null;
+    } catch {
+      /* fall through */
+    }
+  }
+  const state = await readyState();
+  return findAccount(state, id);
+}
+
 async function persistLoginAccounts(state: AppState) {
   if (!durableConfigured()) return;
   const raw = await kvGetJson(KEYS.loginAccounts);
   const merged = mergeLoginAccounts(state.accounts || [], loginRowsOf(raw));
   state.accounts = merged;
+  lastLoginPull = Date.now();
   await kvSetJson(KEYS.loginAccounts, merged);
 }
 
@@ -731,7 +758,7 @@ async function hydrate(): Promise<AppState> {
         await overlayShill(mem);
         await overlayMail(mem);
         await overlayAuthOtps(mem);
-        await overlayLoginAccounts(mem);
+        await overlayLoginAccounts(mem, true);
         knownTraderOwners = await kvSmembers(KEYS.traders);
         memMtime = Date.now();
         hydrated = true;
@@ -748,7 +775,7 @@ async function hydrate(): Promise<AppState> {
         await overlayShill(mem);
         await overlayMail(mem);
         await overlayAuthOtps(mem);
-        await overlayLoginAccounts(mem);
+        await overlayLoginAccounts(mem, true);
         await persistShards(mem, owners);
         memMtime = Date.now();
         hydrated = true;
@@ -768,7 +795,7 @@ async function hydrate(): Promise<AppState> {
       await overlayShill(local);
       await overlayMail(local);
       await overlayAuthOtps(local);
-      await overlayLoginAccounts(local);
+      await overlayLoginAccounts(local, true);
     } catch {
       /* disk still usable */
     }

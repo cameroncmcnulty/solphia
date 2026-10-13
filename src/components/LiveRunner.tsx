@@ -39,6 +39,7 @@ export function LiveRunner() {
     }
     async function pulse() {
       if (stop || lock.current) return;
+      if (typeof document !== "undefined" && document.hidden) return;
       try {
         const tpk = tradingPubkey();
         const a = await fetch(`/api/auto?owner=${owner}`).then((r) => r.json());

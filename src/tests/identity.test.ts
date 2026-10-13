@@ -282,6 +282,12 @@ describe("header identity", () => {
     assert.match(host, /signedin/);
     const keep = readFileSync(new URL("../components/WalletConnect.tsx", import.meta.url), "utf8");
     assert.match(keep, /isSignedOutLocked\(\)/);
+    assert.match(keep, /30_000/);
+    assert.equal(keep.includes("setInterval(() => void align(), 8000)"), false);
+    const live = readFileSync(new URL("../components/LiveRunner.tsx", import.meta.url), "utf8");
+    assert.match(live, /document\.hidden/);
+    const seat = readFileSync(new URL("../components/SeatRunner.tsx", import.meta.url), "utf8");
+    assert.match(seat, /document\.hidden/);
     const session = readFileSync(new URL("../lib/auth/session.ts", import.meta.url), "utf8");
     assert.match(session, /cookies\.delete\(SESSION_COOKIE\)/);
   });

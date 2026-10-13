@@ -79,6 +79,14 @@ describe("open market swap fees", () => {
     assert.equal(phantom.includes("if (packed !== built.transaction)"), false);
     const swapBuild = readFileSync(path.join(process.cwd(), "src/app/api/swap/build/route.ts"), "utf8");
     assert.match(swapBuild, /creditSwapHold/);
+    assert.match(swapBuild, /if \(!skipHouse && tx\.via === "jupiter"/);
+    const pad = readFileSync(path.join(process.cwd(), "src/lib/swap/pad.ts"), "utf8");
+    assert.match(pad, /buildDbcTradeTx/);
+    assert.equal(pad.includes("assemblePhantomSwapTx"), false);
+    assert.equal(pad.includes("houseFeeIxs"), false);
+    const jupQuote = readFileSync(path.join(process.cwd(), "src/lib/pair/jupiter.ts"), "utf8");
+    assert.equal(jupQuote.includes("referralAccount"), false);
+    assert.equal(jupQuote.includes("platformFeeBps"), false);
     assert.match(src, /Not enough SOL in this wallet/);
     assert.equal(liveSwapFeeSol(1), 0.01);
     assert.equal(liveSwapFeeSol(0.015), 0.00015);

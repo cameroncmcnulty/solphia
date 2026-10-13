@@ -124,6 +124,31 @@ describe("house fee legs", () => {
     assert.equal(houseFeeMissing({ from: FROM, feeSol: 0, owner: DEFAULT_OWNER, treasury: DEFAULT_TREASURY }), null);
   });
 
+  it("refuses even-mode 1% when the split cannot land on owner and treasury", () => {
+    assert.match(
+      houseFeeMissing({
+        from: FROM,
+        feeSol: 0.000001,
+        owner: DEFAULT_OWNER,
+        treasury: DEFAULT_TREASURY,
+        mode: "even",
+        vaults: false,
+      }) || "",
+      /refused/i,
+    );
+    assert.equal(
+      houseFeeMissing({
+        from: FROM,
+        feeSol: 0.2,
+        owner: DEFAULT_OWNER,
+        treasury: DEFAULT_TREASURY,
+        mode: "even",
+        vaults: false,
+      }),
+      null,
+    );
+  });
+
   it("takes exact 1% even on small SOL sizes (no floor-to-zero)", () => {
     assert.equal(liveSwapFeeSol(1), 0.01);
     assert.equal(liveSwapFeeSol(0.015), 0.00015);

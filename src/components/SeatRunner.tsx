@@ -19,6 +19,7 @@ export function SeatRunner() {
     let stop = false;
     async function pulse() {
       if (stop || lock.current) return;
+      if (typeof document !== "undefined" && document.hidden) return;
       lock.current = true;
       try {
         try {

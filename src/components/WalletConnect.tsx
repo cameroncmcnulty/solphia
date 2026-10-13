@@ -172,7 +172,7 @@ export function WalletKeepalive() {
     ingestReturn();
     void align();
 
-    poll = setInterval(() => void align(), 8000);
+    poll = setInterval(() => void align(), 30_000);
 
     const onShow = () => {
       void align();
