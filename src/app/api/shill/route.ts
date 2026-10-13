@@ -15,10 +15,12 @@ import {
   ensureShill,
   extractCas,
   fillHousePins,
+  livePinQueue,
   livePins,
   liveRoomCount,
   muteShill,
   nextPinFreeAt,
+  pinQueueOpen,
   pinSlotsLeft,
   nextVoteAt,
   pinToken,
@@ -31,7 +33,7 @@ import {
   housePubkeySet,
   type VoteBoardRow,
 } from "@/lib/shill/engine";
-import { SHILL_HOUSE_PIN_MIN, SHILL_MSG_MAX, SHILL_PIN_SOL, SHILL_REACTS, SHILL_STICKERS, type ShillMessage, type ShillPin, type ShillToken } from "@/lib/shill/types";
+import { SHILL_HOUSE_PIN_MIN, SHILL_MSG_MAX, SHILL_PIN_SOL, SHILL_REACTS, SHILL_STICKERS, type ShillMessage, type ShillPin, type ShillQueuedPin, type ShillToken } from "@/lib/shill/types";
 import { emptyLaunchBook } from "@/lib/launch/engine";
 import { creditRank, leaderboard, publicCard } from "@/lib/rank/engine";
 import { canModerateChat, staffRole } from "@/lib/access";
@@ -49,6 +51,7 @@ type LightSnap = {
   at: number;
   messages: ReturnType<typeof paintMsg>[];
   pins: ReturnType<typeof paintPin>[];
+  pinQueue: ReturnType<typeof paintQueued>[];
   voteBoard: ReturnType<typeof paintVote>[];
   members: number;
 };
@@ -64,6 +67,9 @@ function paintMsg(m: ShillMessage) {
 }
 function paintPin(p: ShillPin & { votes: number }) {
   return { ...p, image: displayMedia(p.image) };
+}
+function paintQueued(p: ShillQueuedPin) {
+  return { ...p, image: displayMedia(p.image), endsAt: 0, queued: true as const };
 }
 function paintVote(row: VoteBoardRow) {
   return { ...row, image: displayMedia(row.image) };
@@ -126,6 +132,7 @@ async function shillSnap(force = false): Promise<LightSnap> {
     at: now,
     messages: book.messages.slice(-SHILL_MSG_MAX).map(paintMsg),
     pins,
+    pinQueue: livePinQueue(book, now).map(paintQueued),
     voteBoard: voteBoard(book, now).map(paintVote),
     members: liveRoomCount(book, now),
   };
@@ -254,7 +261,6 @@ export async function GET(req: NextRequest) {
     profiles[pk] = { ...publicCard(launch.accounts?.[pk], pk), role: staffRole(s, pk) };
   }
   if (light) {
-    const quiet = messages.length === 0;
     return shillJson(req, {
       messages,
       typing,
@@ -262,13 +268,18 @@ export async function GET(req: NextRequest) {
       nextVoteAt: nextAt,
       you,
       profiles,
-      ...(quiet ? {} : { pins: snap.pins, voteBoard: snap.voteBoard }),
+      pins: snap.pins,
+      pinQueue: snap.pinQueue,
+      voteBoard: snap.voteBoard,
+      pinSlots: pinSlotsLeft(book, now),
+      nextFreeAt: nextPinFreeAt(book, now),
     });
   }
   return shillJson(req, {
     members: snap.members,
     messages,
     pins: snap.pins,
+    pinQueue: snap.pinQueue,
     pinSlots: pinSlotsLeft(book, now),
     nextFreeAt: nextPinFreeAt(book, now),
     pinSol: SHILL_PIN_SOL,
@@ -344,16 +355,20 @@ export async function POST(req: NextRequest) {
     if (!treasury) return NextResponse.json({ error: "no_treasury", message: "Pins are paused." }, { status: 400 });
     const peek = await withShill((st) => {
       const book = ensureShill(st.shill);
-      return { left: pinSlotsLeft(book), nextFreeAt: nextPinFreeAt(book) };
+      return {
+        left: pinSlotsLeft(book),
+        queueOpen: pinQueueOpen(book),
+        nextFreeAt: nextPinFreeAt(book),
+      };
     }, false);
-    if (peek.left <= 0) {
+    if (peek.left <= 0 && peek.queueOpen <= 0) {
       const wait = Math.max(0, peek.nextFreeAt - Date.now());
       const mins = Math.max(1, Math.ceil(wait / 60_000));
       return NextResponse.json(
         {
-          error: "full",
+          error: "queue_full",
           nextFreeAt: peek.nextFreeAt,
-          message: `No pin spots left. Next one frees in ${mins} min.`,
+          message: `Pin queue is full. Next live slot in ${mins} min.`,
         },
         { status: 400 },
       );
@@ -380,27 +395,50 @@ export async function POST(req: NextRequest) {
     const token = (await tokenOf(mint)) || { mint, symbol: mint.slice(0, 4), name: "token" };
     const out = await withShill((st) => {
       st.shill = ensureShill(st.shill);
-      return pinToken(st.shill, { owner: b.pubkey, token, sig: b.signature || "", paidSol: SHILL_PIN_SOL });
+      const result = pinToken(st.shill, { owner: b.pubkey, token, sig: b.signature || "", paidSol: SHILL_PIN_SOL });
+      const t = Date.now();
+      const book = st.shill;
+      return {
+        result,
+        pins: livePins(book, t).map((p) => paintPin({ ...p, votes: votesOnMint(book, p.mint, t) })),
+        pinQueue: livePinQueue(book, t).map(paintQueued),
+        pinSlots: pinSlotsLeft(book, t),
+        nextFreeAt: nextPinFreeAt(book, t),
+      };
     }, true);
-    if (!out.ok) {
+    if (!out.result.ok) {
+      const err = out.result.error;
+      const nextFreeAt = out.result.nextFreeAt;
       const message =
-        out.error === "full"
-          ? `No pin spots left. Next one frees in ${Math.max(1, Math.ceil(((out.nextFreeAt || Date.now()) - Date.now()) / 60_000))} min.`
-          : out.error === "replay"
+        err === "queue_full" || err === "full"
+          ? `Pin queue is full. Next live slot in ${Math.max(1, Math.ceil(((nextFreeAt || Date.now()) - Date.now()) / 60_000))} min.`
+          : err === "replay"
             ? "That payment was already used."
             : "Could not pin.";
-      return NextResponse.json({ error: out.error, message, nextFreeAt: out.nextFreeAt }, { status: 400 });
+      return NextResponse.json({ error: err, message, nextFreeAt }, { status: 400 });
     }
     bustShillSnap();
-    try {
-      await withLaunch((st) => {
-        if (!st.launch) st.launch = emptyLaunchBook();
-        creditEvenIncome(st.launch, SHILL_PIN_SOL, "pin");
-      }, true);
-    } catch {
-      /* pin still stands */
+    if (!out.result.replay) {
+      try {
+        await withLaunch((st) => {
+          if (!st.launch) st.launch = emptyLaunchBook();
+          creditEvenIncome(st.launch, SHILL_PIN_SOL, "pin");
+        }, true);
+      } catch {
+        /* pin still stands */
+      }
     }
-    return NextResponse.json({ ok: true, pin: out.pin });
+    const result = out.result;
+    return NextResponse.json({
+      ok: true,
+      pin: result.pin,
+      queued: Boolean(result.queued),
+      position: result.queued ? result.position : 0,
+      pins: out.pins,
+      pinQueue: out.pinQueue,
+      pinSlots: out.pinSlots,
+      nextFreeAt: result.queued ? result.nextFreeAt : out.nextFreeAt,
+    });
   }
 
   if (b.action === "chat") {

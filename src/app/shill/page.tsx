@@ -56,8 +56,9 @@ type PinRow = {
   image?: string;
   priceUsd?: number;
   mcUsd?: number;
-  endsAt: number;
+  endsAt?: number;
   votes?: number;
+  queued?: boolean;
 };
 
 type VoteRow = {
@@ -84,6 +85,7 @@ type RankCard = {
 type Pack = {
   messages?: Msg[];
   pins?: PinRow[];
+  pinQueue?: PinRow[];
   pinSlots?: number;
   nextFreeAt?: number;
   pinSol?: number;
@@ -147,10 +149,10 @@ function tick(symbol?: string) {
 function stablePins(next?: PinRow[], prev?: PinRow[]) {
   if (!next) return prev;
   if (!prev?.length) return next;
-  const byMint = new Map(next.map((p) => [p.mint, p]));
-  const same = prev.length === next.length && prev.every((p) => byMint.has(p.mint));
+  const byId = new Map(next.map((p) => [p.id || p.mint, p]));
+  const same = prev.length === next.length && prev.every((p) => byId.has(p.id || p.mint));
   if (!same) return next;
-  return prev.map((p) => ({ ...p, ...(byMint.get(p.mint) || {}) }));
+  return prev.map((p) => ({ ...p, ...(byId.get(p.id || p.mint) || {}) }));
 }
 
 function TokenBubble({
@@ -239,8 +241,8 @@ function PinSpotlight({
   onCopy: () => void;
   onBuy: () => void;
 }) {
-  const live = pin.endsAt > now;
-  const left = Math.max(0, pin.endsAt - now);
+  const live = (pin.endsAt || 0) > now;
+  const left = Math.max(0, (pin.endsAt || 0) - now);
   const pct = live ? Math.max(6, Math.min(100, (left / SHILL_PIN_MS) * 100)) : 0;
   const votes = pin.votes || 0;
   const ticker = tick(pin.symbol);
@@ -441,7 +443,7 @@ export default function ShillPage() {
   const [entered, setEntered] = useState(false);
 
   const load = useCallback(async (full = false) => {
-    const gen = ++loadGen.current;
+    const gen = full ? ++loadGen.current : loadGen.current;
     const since = !full && lastAt.current ? lastAt.current : 0;
     const q = new URLSearchParams();
     if (owner) q.set("pubkey", owner);
@@ -477,6 +479,9 @@ export default function ShillPage() {
         voteBoard: j.voteBoard !== undefined ? j.voteBoard : prev?.voteBoard,
         you: j.you ?? prev?.you,
         pins: stablePins(j.pins, prev?.pins),
+        pinQueue: stablePins(j.pinQueue, prev?.pinQueue),
+        pinSlots: j.pinSlots ?? prev?.pinSlots,
+        nextFreeAt: j.nextFreeAt ?? prev?.nextFreeAt,
         members: j.members ?? prev?.members,
       };
     });
@@ -688,6 +693,39 @@ export default function ShillPage() {
     }
   }
 
+  function applyPinBoard(j: {
+    pin?: PinRow;
+    queued?: boolean;
+    pins?: PinRow[];
+    pinQueue?: PinRow[];
+    pinSlots?: number;
+    nextFreeAt?: number;
+  }) {
+    setPack((prev) => {
+      const base = prev || {};
+      const pin = j.pin;
+      let pins = Array.isArray(j.pins) ? j.pins : base.pins || [];
+      let pinQueue = Array.isArray(j.pinQueue) ? j.pinQueue : base.pinQueue || [];
+      if (!Array.isArray(j.pins) && pin && !j.queued && !pins.some((p) => p.id === pin.id)) {
+        pins = [...pins, pin];
+      }
+      if (!Array.isArray(j.pinQueue) && pin && j.queued && !pinQueue.some((p) => p.id === pin.id)) {
+        pinQueue = [...pinQueue, { ...pin, queued: true, endsAt: 0 }];
+      }
+      return {
+        ...base,
+        pins,
+        pinQueue,
+        pinSlots: j.pinSlots ?? base.pinSlots,
+        nextFreeAt: j.nextFreeAt ?? base.nextFreeAt,
+      };
+    });
+    setTab("pins");
+    flashNotice(j.queued ? "Queued. Live when a slot opens." : "Live on the rail for 3 hours.");
+    setPinMint("");
+    setSheet(null);
+  }
+
   async function pin() {
     if (!owner) return;
     const mint = pinMint.trim();
@@ -710,20 +748,16 @@ export default function ShillPage() {
       let lastMsg = "Transaction not found yet.";
       for (let i = 0; i < 10; i++) {
         try {
-          await act({ action: "pin", mint, signature: sig });
+          const done = await act({ action: "pin", mint, signature: sig });
           lastPin.current = null;
-          setPinMint("");
-          setSheet(null);
-          flashNotice("Pinned");
+          applyPinBoard(done);
           await load(true);
           return;
         } catch (e) {
           const msg = e instanceof Error ? e.message : "pin failed";
           if (/already used/i.test(msg)) {
             lastPin.current = null;
-            setPinMint("");
-            setSheet(null);
-            flashNotice("Pinned");
+            applyPinBoard({ pin: { id: mint, mint, symbol: mint.slice(0, 4), name: "token" } });
             await load(true);
             return;
           }
@@ -828,6 +862,7 @@ export default function ShillPage() {
   const msgs = pack?.messages || [];
   const byId = useMemo(() => Object.fromEntries(msgs.map((m) => [m.id, m])), [msgs]);
   const pins = pack?.pins || [];
+  const pinQueue = pack?.pinQueue || [];
   const slots = pack?.pinSlots ?? 0;
   const nextFree = pack?.nextFreeAt || 0;
   const waitMin = Math.max(1, Math.ceil((nextFree - Date.now()) / 60_000));
@@ -890,7 +925,9 @@ export default function ShillPage() {
               >
                 <Icon className="h-4 w-4" />
                 {label}
-                {id === "pins" && pins.length > 0 ? <span className="font-mono text-[10px] text-acid">{pins.length}</span> : null}
+                {id === "pins" && pins.length + pinQueue.length > 0 ? (
+                  <span className="font-mono text-[10px] text-acid">{pins.length + pinQueue.length}</span>
+                ) : null}
               </button>
             ))}
           </nav>
@@ -899,10 +936,10 @@ export default function ShillPage() {
             <div className="shrink-0 border-b border-white/10 bg-black/15 px-2 py-1.5 backdrop-blur-sm">
               <div className="boost-rail">
                 {pins.map((p) => {
-                  const left = Math.max(0, p.endsAt - now);
+                  const left = Math.max(0, (p.endsAt || 0) - now);
                   const pct = Math.max(4, Math.min(100, (left / SHILL_PIN_MS) * 100));
                   return (
-                    <button key={p.mint} type="button" onClick={() => setOpenPin(p)} className="shill-pin-tile">
+                    <button key={p.id || p.mint} type="button" onClick={() => setOpenPin(p)} className="shill-pin-tile">
                       <TokenArt src={p.image} mint={p.mint} label={p.symbol} className="shill-pin-art" />
                       <span className="block w-full truncate text-center text-[12px] font-semibold text-white">{tick(p.symbol)}</span>
                       <span className="shill-bar">
@@ -1088,30 +1125,48 @@ export default function ShillPage() {
           <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5">
             <p className="font-mono text-[11px] tracking-[0.28em] text-acid">PINNED</p>
             <h2 className="mt-1 font-display text-[26px] tracking-tight text-ghost">On the rail</h2>
-            <p className="mt-1 text-[15px] text-white/45">Paid pins sit at the top of chat for 3 hours. {SHILL_PIN_SOL} SOL.</p>
+            <p className="mt-1 text-[15px] text-white/45">Paid pins sit at the top of chat for 3 hours. {SHILL_PIN_SOL} SOL. If the pad is full, your pin waits in queue.</p>
             <div className="mt-3 flex gap-1.5">
               {Array.from({ length: 5 }, (_, i) => (
                 <i key={i} className={`h-1.5 flex-1 rounded-full ${i < pins.length ? "bg-[#ffd24a] shadow-[0_0_10px_rgba(255,210,74,0.6)]" : "bg-white/10"}`} />
               ))}
             </div>
             <button type="button" onClick={() => setSheet("pin")} className="btn-acid mt-5 inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-[15px]">
-              <Rocket className="h-4 w-4" /> Pin a token
+              <Rocket className="h-4 w-4" /> {slots > 0 ? "Pin a token" : "Queue a pin"}
             </button>
             <div className="mt-4 divide-y divide-white/[0.06]">
-              {pins.length === 0 && <p className="py-8 text-[15px] text-white/45">No pins live. Be first.</p>}
+              {pins.length === 0 && pinQueue.length === 0 && <p className="py-8 text-[15px] text-white/45">No pins live. Be first.</p>}
               {pins.map((p) => (
                 <button key={p.id} type="button" onClick={() => setOpenPin(p)} className="flex w-full items-center gap-3 py-3 text-left">
                   <TokenArt src={p.image} mint={p.mint} label={p.symbol} className="h-14 w-14 rounded-[18px]" />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-[17px] font-semibold text-white">{tick(p.symbol)}</p>
                     <p className="truncate text-[14px] text-white/45">
-                      {p.name} · {fmtPinLeft(p.endsAt - now)} left
+                      {p.name} · {fmtPinLeft((p.endsAt || 0) - now)} left
                     </p>
                   </div>
                   <span className="text-[15px] text-acid">{p.votes || voteByMint[p.mint] || 0}</span>
                 </button>
               ))}
             </div>
+            {pinQueue.length > 0 ? (
+              <div className="mt-6">
+                <p className="font-mono text-[11px] tracking-[0.28em] text-white/40">QUEUE</p>
+                <p className="mt-1 text-[14px] text-white/45">Goes live when a rail slot frees. 3 hours starts then.</p>
+                <div className="mt-2 divide-y divide-white/[0.06]">
+                  {pinQueue.map((p, i) => (
+                    <button key={p.id} type="button" onClick={() => setOpenPin(p)} className="flex w-full items-center gap-3 py-3 text-left">
+                      <span className="w-6 font-mono text-[12px] text-white/40">{i + 1}</span>
+                      <TokenArt src={p.image} mint={p.mint} label={p.symbol} className="h-12 w-12 rounded-[16px]" />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-[16px] font-semibold text-white">{tick(p.symbol)}</p>
+                        <p className="truncate text-[13px] text-white/45">{p.name} · waiting</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
           </div>
         )}
         {tab === "board" && (
@@ -1239,8 +1294,14 @@ export default function ShillPage() {
         )}
 
         <Sheet open={sheet === "pin"} title="Pin to the rail" onClose={() => setSheet(null)}>
-          <p className="text-[14px] text-mute">Pin your project to the top of chat. {SHILL_PIN_SOL} SOL · 3 hours.</p>
-          <p className="mt-1 font-mono text-[12px] text-white/70">{slots > 0 ? `${slots} paid spots open` : `No paid spots · next in ${waitMin}m`}</p>
+          <p className="text-[14px] text-mute">Pin your project to the top of chat. {SHILL_PIN_SOL} SOL · 3 hours. Full pad queues until a slot opens.</p>
+          <p className="mt-1 font-mono text-[12px] text-white/70">
+            {slots > 0
+              ? `${slots} paid spots open`
+              : pinQueue.length
+                ? `Pad full · ${pinQueue.length} in queue · next live in ${waitMin}m`
+                : `Pad full · queue for the next slot · next in ${waitMin}m`}
+          </p>
           {owner ? (
             <>
               <input
@@ -1262,7 +1323,9 @@ export default function ShillPage() {
                     : "Paying…"
                   : lastPin.current?.mint === pinMint.trim()
                     ? "Retry pin"
-                    : `Pin · ${SHILL_PIN_SOL} SOL`}
+                    : slots > 0
+                      ? `Pin · ${SHILL_PIN_SOL} SOL`
+                      : `Queue · ${SHILL_PIN_SOL} SOL`}
               </button>
               {err ? <p className="mt-2 text-sm text-blood">{err}</p> : null}
             </>

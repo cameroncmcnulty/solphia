@@ -10,6 +10,7 @@ import {
   SHILL_MSG_MAX,
   SHILL_HOUSE_SPREAD_MS,
   SHILL_PIN_MS,
+  SHILL_PIN_QUEUE_MAX,
   SHILL_PIN_SLOTS,
   SHILL_PIN_SOL,
   SHILL_PRESENCE_MS,
@@ -21,6 +22,7 @@ import {
   type ShillMember,
   type ShillMessage,
   type ShillPin,
+  type ShillQueuedPin,
   type ShillToken,
   type ShillVote,
 } from "./types";
@@ -34,6 +36,7 @@ export function emptyShill(): ShillBook {
   return {
     messages: [],
     pins: [],
+    pinQueue: [],
     members: {},
     typing: {},
     votes: [],
@@ -60,6 +63,9 @@ export function mergeShill(local: ShillBook, remote: ShillBook): ShillBook {
   const pins = new Map<string, ShillPin>();
   for (const p of b.pins) pins.set(p.id, p);
   for (const p of a.pins) pins.set(p.id, p);
+  const queue = new Map<string, ShillQueuedPin>();
+  for (const p of b.pinQueue || []) queue.set(p.id, p);
+  for (const p of a.pinQueue || []) queue.set(p.id, p);
   const members = { ...b.members, ...a.members };
   const votes = new Map<string, ShillVote>();
   for (const v of b.votes || []) votes.set(v.id, v);
@@ -71,6 +77,7 @@ export function mergeShill(local: ShillBook, remote: ShillBook): ShillBook {
   const out: ShillBook = {
     messages: [...msgs.values()].sort((x, y) => x.at - y.at),
     pins: [...pins.values()].sort((x, y) => x.at - y.at),
+    pinQueue: [...queue.values()].sort((x, y) => x.at - y.at || x.id.localeCompare(y.id)),
     members,
     typing: {},
     votes: [...votes.values()],
@@ -94,6 +101,7 @@ export function slimShill(book?: ShillBook | null): ShillBook {
   return {
     messages: b.messages.slice(-SHILL_MSG_MAX),
     pins: b.pins.slice(-16),
+    pinQueue: (b.pinQueue || []).slice(),
     members: b.members,
     typing: {},
     votes: (b.votes || []).slice(-SHILL_VOTE_MAX),
@@ -114,6 +122,7 @@ export function ensureShill(book?: ShillBook | null): ShillBook {
   const b = book || emptyShill();
   if (!b.messages) b.messages = [];
   if (!b.pins) b.pins = [];
+  if (!b.pinQueue) b.pinQueue = [];
   if (!b.members) b.members = {};
   if (!b.typing) b.typing = {};
   if (!b.votes) b.votes = [];
@@ -152,6 +161,7 @@ export function pruneShill(book: ShillBook, now = Date.now()) {
   book.lastVoteAt = lastVoteAt;
   const expiredHouse = pins.filter((p) => p.house && p.endsAt <= now).length;
   book.pins = pins.filter((p) => p.endsAt > now);
+  promotePinQueue(book, now);
   if (expiredHouse > 0) {
     const liveHouse = book.pins.filter((p) => p.house).length;
     if (liveHouse < SHILL_HOUSE_PIN_MAX) {
@@ -200,15 +210,41 @@ export function livePins(book: ShillBook, now = Date.now()): ShillPin[] {
   return [...book.pins].sort((a, b) => a.at - b.at || a.id.localeCompare(b.id));
 }
 
+export function livePinQueue(book: ShillBook, now = Date.now()): ShillQueuedPin[] {
+  pruneShill(book, now);
+  return [...(book.pinQueue || [])];
+}
+
 export function pinSlotsLeft(book: ShillBook, now = Date.now()): number {
   const paid = livePins(book, now).filter((p) => !p.house).length;
   return Math.max(0, SHILL_PIN_SLOTS - paid);
 }
 
+export function pinQueueOpen(book: ShillBook, now = Date.now()): number {
+  const queued = livePinQueue(book, now).length;
+  return Math.max(0, SHILL_PIN_QUEUE_MAX - queued);
+}
+
 export function nextPinFreeAt(book: ShillBook, now = Date.now()): number {
-  const live = livePins(book, now);
-  if (live.length < SHILL_PIN_SLOTS) return now;
-  return Math.min(...live.map((p) => p.endsAt));
+  const paid = livePins(book, now).filter((p) => !p.house);
+  if (paid.length < SHILL_PIN_SLOTS) return now;
+  return Math.min(...paid.map((p) => p.endsAt));
+}
+
+function promotePinQueue(book: ShillBook, now: number) {
+  const liveIds = new Set(book.pins.map((p) => p.id));
+  const liveSigs = new Set(book.pins.map((p) => p.sig));
+  book.pinQueue = (book.pinQueue || []).filter((item) => !liveIds.has(item.id) && !liveSigs.has(item.sig));
+  let paid = book.pins.filter((p) => !p.house).length;
+  while (paid < SHILL_PIN_SLOTS && book.pinQueue.length) {
+    const item = book.pinQueue.shift()!;
+    book.pins.push({
+      ...item,
+      at: now,
+      endsAt: now + SHILL_PIN_MS,
+    });
+    paid += 1;
+  }
 }
 
 export function postShill(
@@ -295,6 +331,27 @@ export function deleteShill(book: ShillBook, id: string, owner?: string): boolea
   return true;
 }
 
+export type PinTokenResult =
+  | { ok: true; pin: ShillPin; queued?: false; replay?: boolean }
+  | { ok: true; pin: ShillPin; queued: true; position: number; nextFreeAt: number; replay?: boolean }
+  | { ok: false; error: string; nextFreeAt?: number };
+
+function pinPayload(token: ShillToken, owner: string, sig: string, paidSol: number, now: number): ShillQueuedPin {
+  return {
+    id: `pin${now.toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+    mint: token.mint,
+    symbol: token.symbol,
+    name: token.name,
+    image: token.image,
+    priceUsd: token.priceUsd,
+    mcUsd: token.mcUsd,
+    owner,
+    sig,
+    paidSol,
+    at: now,
+  };
+}
+
 export function pinToken(
   book: ShillBook,
   opts: {
@@ -304,7 +361,7 @@ export function pinToken(
     paidSol: number;
     now?: number;
   },
-): { ok: true; pin: ShillPin } | { ok: false; error: string; nextFreeAt?: number } {
+): PinTokenResult {
   if (!isSolanaAddress(opts.owner)) return { ok: false, error: "bad_wallet" };
   if (!isSolanaAddress(opts.token.mint)) return { ok: false, error: "bad_mint" };
   if (opts.paidSol + 1e-9 < SHILL_PIN_SOL) return { ok: false, error: "short_pay" };
@@ -312,27 +369,35 @@ export function pinToken(
   if (sig.length < 32) return { ok: false, error: "bad_sig" };
   const now = opts.now || Date.now();
   pruneShill(book, now);
-  if (book.pins.some((p) => p.sig === sig)) return { ok: false, error: "replay" };
-  const paid = book.pins.filter((p) => !p.house).length;
-  if (paid >= SHILL_PIN_SLOTS) {
-    return { ok: false, error: "full", nextFreeAt: nextPinFreeAt(book, now) };
+  const liveHit = book.pins.find((p) => p.sig === sig);
+  if (liveHit) return { ok: true, pin: liveHit, replay: true };
+  const queuedHit = (book.pinQueue || []).find((p) => p.sig === sig);
+  if (queuedHit) {
+    return {
+      ok: true,
+      pin: { ...queuedHit, endsAt: 0 },
+      queued: true,
+      position: (book.pinQueue || []).findIndex((p) => p.id === queuedHit.id) + 1,
+      nextFreeAt: nextPinFreeAt(book, now),
+      replay: true,
+    };
   }
-  const pin: ShillPin = {
-    id: `pin${now.toString(36)}${Math.random().toString(36).slice(2, 6)}`,
-    mint: opts.token.mint,
-    symbol: opts.token.symbol,
-    name: opts.token.name,
-    image: opts.token.image,
-    priceUsd: opts.token.priceUsd,
-    mcUsd: opts.token.mcUsd,
-    owner: opts.owner,
-    sig,
-    paidSol: opts.paidSol,
-    at: now,
-    endsAt: now + SHILL_PIN_MS,
+  const paid = book.pins.filter((p) => !p.house).length;
+  const row = pinPayload(opts.token, opts.owner, sig, opts.paidSol, now);
+  if (paid < SHILL_PIN_SLOTS) {
+    const pin: ShillPin = { ...row, endsAt: now + SHILL_PIN_MS };
+    book.pins.push(pin);
+    return { ok: true, pin };
+  }
+  if (!book.pinQueue) book.pinQueue = [];
+  book.pinQueue.push(row);
+  return {
+    ok: true,
+    pin: { ...row, endsAt: 0 },
+    queued: true,
+    position: book.pinQueue.length,
+    nextFreeAt: nextPinFreeAt(book, now),
   };
-  book.pins.push(pin);
-  return { ok: true, pin };
 }
 
 export type HousePinCoin = { mint: string; symbol?: string; name?: string; image?: string; priceUsd?: number; mcUsd?: number };

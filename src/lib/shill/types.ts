@@ -38,6 +38,9 @@ export type ShillPin = {
   house?: boolean;
 };
 
+/** Paid pin waiting for a free rail slot. Clock starts when it goes live. */
+export type ShillQueuedPin = Omit<ShillPin, "endsAt" | "house">;
+
 export type ShillMember = {
   pubkey: string;
   lastCaAt?: number;
@@ -78,6 +81,7 @@ export type HouseActor = {
 export type ShillBook = {
   messages: ShillMessage[];
   pins: ShillPin[];
+  pinQueue?: ShillQueuedPin[];
   members: Record<string, ShillMember>;
   typing: Record<string, number>;
   votes?: ShillVote[];
@@ -101,6 +105,8 @@ export const SHILL_CA_COOLDOWN_MS = 30_000;
 export const SHILL_PIN_SLOTS = 5;
 export const SHILL_PIN_MS = 3 * 3600_000;
 export const SHILL_PIN_SOL = 0.2;
+/** Paid overflow when all 5 live slots are taken. FIFO; 3h clock starts on promotion. */
+export const SHILL_PIN_QUEUE_MAX = 20;
 export const SHILL_HOUSE_PIN_MIN = 2;
 export const SHILL_HOUSE_PIN_MAX = 3;
 /** After a house pin expires, wait this long before pinning a replacement. */

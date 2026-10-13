@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { banShill, emptyShill, extractCas, fillHousePins, mergeShill, muteShill, pinToken, postShill, pruneShill, slimShill, touchMember, voteBoard, voteShill } from "../lib/shill/engine";
+import { banShill, emptyShill, extractCas, fillHousePins, mergeShill, muteShill, pinSlotsLeft, pinToken, postShill, pruneShill, slimShill, touchMember, voteBoard, voteShill } from "../lib/shill/engine";
 import {
   SHILL_CA_COOLDOWN_MS,
   SHILL_HOUSE_PIN_MAX,
@@ -13,6 +13,7 @@ import {
   SHILL_KEEP_MS,
   SHILL_MSG_MAX,
   SHILL_PIN_MS,
+  SHILL_PIN_QUEUE_MAX,
   SHILL_PIN_SOL,
   SHILL_PIN_SLOTS,
   SHILL_VOTE_COOLDOWN_MS,
@@ -76,33 +77,113 @@ describe("shill zone", () => {
     assert.equal(both.messages.length, 2);
   });
 
-  it("pins five tokens for 3h then reports the next free slot", () => {
+  it("pins five tokens for 3h then queues overflow until a slot frees", () => {
     const book = emptyShill();
     const t0 = 10_000;
+    const gap = 60_000;
     for (let i = 0; i < SHILL_PIN_SLOTS; i++) {
       const r = pinToken(book, {
         owner: A,
         token: { mint: CA, symbol: "SOL", name: "Solana" },
         sig: `pinsig${i}xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx`,
         paidSol: SHILL_PIN_SOL,
-        now: t0 + i,
+        now: t0 + i * gap,
       });
       assert.equal(r.ok, true);
+      if (r.ok) assert.equal(r.queued, undefined);
     }
-    const full = pinToken(book, {
+    assert.equal(pinSlotsLeft(book, t0 + gap * SHILL_PIN_SLOTS), 0);
+    const overflow = pinToken(book, {
       owner: B,
-      token: { mint: CA, symbol: "SOL", name: "Solana" },
+      token: { mint: B, symbol: "BBB", name: "Beta" },
       sig: "pinsigfullxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      paidSol: SHILL_PIN_SOL,
+      now: t0 + gap * SHILL_PIN_SLOTS,
+    });
+    assert.equal(overflow.ok, true);
+    if (!overflow.ok) throw new Error("expected queue");
+    assert.equal(overflow.queued, true);
+    assert.equal(overflow.position, 1);
+    assert.ok((overflow.nextFreeAt || 0) >= t0 + SHILL_PIN_MS);
+    assert.equal(book.pins.filter((p) => !p.house).length, SHILL_PIN_SLOTS);
+    assert.equal((book.pinQueue || []).length, 1);
+    assert.equal(book.pinQueue![0].mint, B);
+
+    const second = pinToken(book, {
+      owner: B,
+      token: { mint: A, symbol: "AAA", name: "Alpha" },
+      sig: "pinsigfull2xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      paidSol: SHILL_PIN_SOL,
+      now: t0 + gap * SHILL_PIN_SLOTS + 1,
+    });
+    assert.equal(second.ok, true);
+    if (second.ok) {
+      assert.equal(second.queued, true);
+      assert.equal(second.position, 2);
+    }
+
+    pruneShill(book, t0 + SHILL_PIN_MS + 1);
+    assert.equal(book.pins.filter((p) => !p.house).length, SHILL_PIN_SLOTS);
+    assert.ok(book.pins.some((p) => p.mint === B && p.endsAt === t0 + SHILL_PIN_MS + 1 + SHILL_PIN_MS));
+    assert.equal((book.pinQueue || []).length, 1);
+    assert.equal(book.pinQueue![0].mint, A);
+
+    pruneShill(book, t0 + gap + SHILL_PIN_MS + 1);
+    assert.ok(book.pins.some((p) => p.mint === A));
+    assert.equal((book.pinQueue || []).length, 0);
+
+    const replay = pinToken(book, {
+      owner: B,
+      token: { mint: B, symbol: "BBB", name: "Beta" },
+      sig: "pinsigfullxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      paidSol: SHILL_PIN_SOL,
+      now: t0 + SHILL_PIN_MS + 50,
+    });
+    assert.equal(replay.ok, true);
+    if (replay.ok) assert.equal(replay.replay, true);
+
+    pruneShill(book, t0 + gap * SHILL_PIN_SLOTS + SHILL_PIN_MS + SHILL_PIN_MS + 1);
+    assert.equal(book.pins.filter((p) => !p.house).length, 0);
+    assert.equal((book.pinQueue || []).length, 0);
+    assert.ok(SHILL_PIN_QUEUE_MAX >= 20);
+  });
+
+  it("keeps a pin queue across merge and slim", () => {
+    const live = emptyShill();
+    const t0 = Date.now();
+    for (let i = 0; i < SHILL_PIN_SLOTS; i++) {
+      pinToken(live, {
+        owner: A,
+        token: { mint: CA, symbol: "SOL", name: "Solana" },
+        sig: `qmerge${i}xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx`,
+        paidSol: SHILL_PIN_SOL,
+        now: t0 + i,
+      });
+    }
+    pinToken(live, {
+      owner: B,
+      token: { mint: B, symbol: "BBB", name: "Beta" },
+      sig: "qmergefullxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
       paidSol: SHILL_PIN_SOL,
       now: t0 + 10,
     });
-    assert.equal(full.ok, false);
-    if (!full.ok) {
-      assert.equal(full.error, "full");
-      assert.ok((full.nextFreeAt || 0) >= t0 + SHILL_PIN_MS);
+    const merged = mergeShill(emptyShill(), live);
+    assert.equal((merged.pinQueue || []).length, 1);
+    assert.equal(merged.pinQueue![0].mint, B);
+    const slim = slimShill(merged);
+    assert.equal((slim.pinQueue || []).length, 1);
+    const replayQ = pinToken(merged, {
+      owner: B,
+      token: { mint: B, symbol: "BBB", name: "Beta" },
+      sig: "qmergefullxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      paidSol: SHILL_PIN_SOL,
+      now: t0 + 11,
+    });
+    assert.equal(replayQ.ok, true);
+    if (replayQ.ok) {
+      assert.equal(replayQ.queued, true);
+      assert.equal(replayQ.replay, true);
     }
-    pruneShill(book, t0 + SHILL_PIN_SLOTS + SHILL_PIN_MS + 1);
-    assert.equal(book.pins.length, 0);
   });
 
   it("keeps house pins until they expire, then restocks one after a short wait", () => {
@@ -308,5 +389,24 @@ describe("shill zone", () => {
     assert.match(conn, /innerInstructions/);
     const shell = readFileSync(join(process.cwd(), "src/components/Shell.tsx"), "utf8");
     assert.match(shell, /NoticeHost/);
+  });
+
+  it("toasts pin success, paints the rail immediately, and queues when the pad is full", () => {
+    const page = readFileSync(join(process.cwd(), "src/app/shill/page.tsx"), "utf8");
+    const api = readFileSync(join(process.cwd(), "src/app/api/shill/route.ts"), "utf8");
+    assert.match(page, /applyPinBoard/);
+    assert.match(page, /Live on the rail for 3 hours/);
+    assert.match(page, /Queued\. Live when a slot opens/);
+    assert.match(page, /setTab\("pins"\)/);
+    assert.match(page, /pinQueue/);
+    assert.match(page, /Queue · \$\{SHILL_PIN_SOL\} SOL/);
+    assert.match(page, /const gen = full \? \+\+loadGen\.current : loadGen\.current/);
+    assert.match(page, /Goes live when a rail slot frees/);
+    assert.match(api, /pinQueue: snap\.pinQueue/);
+    assert.match(api, /error: "queue_full"/);
+    assert.equal(api.includes("No pin spots left"), false);
+    assert.equal(api.includes("quiet ? {} : { pins:"), false);
+    assert.match(api, /queued: Boolean\(result\.queued\)/);
+    assert.match(api, /if \(!out\.result\.replay\)/);
   });
 });
