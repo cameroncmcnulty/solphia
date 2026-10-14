@@ -198,6 +198,10 @@ export function openWalletAccount(
   const now = Date.now();
   if (existing) {
     existing.lastSeen = now;
+    if (!existing.tosAcceptedAt) {
+      if (!opts.tos || !opts.privacy) return { ok: false, error: "Agree to the terms and privacy policy." };
+      acceptLegal(existing, now);
+    }
     return { ok: true, account: existing, created: false };
   }
   if (!opts.tos || !opts.privacy) return { ok: false, error: "Agree to the terms and privacy policy." };

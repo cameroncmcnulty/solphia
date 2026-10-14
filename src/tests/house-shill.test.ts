@@ -124,7 +124,11 @@ describe("house shill wallets", () => {
     const rng = mulberry32(7);
     plantHouseSchedules(book, 10_000, rng);
     isolate(book);
-    for (const a of book.houseActors!) a.nextShareAt = 50_000;
+    for (const a of book.houseActors!) {
+      a.nextShareAt = 50_000;
+      a.nextChatAt = 9e15;
+      a.nextVoteAt = 9e15;
+    }
     book.lastHouseShareAt = 0;
     const pad = CA;
     const out = tickHouseActions(book, market.concat([{ mint: pad, symbol: "PAD", name: "Pad" }]), 50_000, rng, new Set([pad]));
@@ -183,7 +187,11 @@ describe("house shill wallets", () => {
     assert.equal((book.housePresent || []).length, book.houseLive);
     assert.ok(book.messages.length >= 10);
     assert.ok(book.messages.some((m) => !m.token), "plain chat, not only CA dumps");
-    assert.ok(book.messages.some((m) => m.replyTo), "they answer each other");
+    assert.equal(
+      book.messages.filter((m) => m.replyTo).length,
+      0,
+      "boot does not thread house-to-house",
+    );
     assert.equal(liveRoomCount(book, t0 + 1_000), book.houseLive);
     assert.ok(out.chats >= 0);
   });
@@ -246,6 +254,23 @@ describe("house shill wallets", () => {
     assert.equal(want, 1);
   });
 
+  it("does not share a CA in the same tick as a chat", () => {
+    const book = emptyShill();
+    const rng = mulberry32(21);
+    plantHouseSchedules(book, 10_000, rng);
+    isolate(book);
+    book.messages = [];
+    book.lastHouseChatAt = 0;
+    book.lastHouseShareAt = 0;
+    for (const a of book.houseActors!) {
+      a.nextChatAt = 50_000;
+      a.nextShareAt = 50_000;
+      a.nextVoteAt = 9e15;
+    }
+    const out = tickHouseActions(book, market, 50_000, rng);
+    assert.ok(!(out.chats > 0 && out.shares > 0), "chat and share must not land together");
+  });
+
   it("counts only wallets still in the room, not old ones that switched out", () => {
     const book = emptyShill();
     plantHouseSchedules(book, 1_000, mulberry32(5));
@@ -287,7 +312,11 @@ describe("house shill wallets", () => {
     const rng = mulberry32(7);
     plantHouseSchedules(book, 10_000, rng);
     isolate(book);
-    for (const a of book.houseActors!) a.nextShareAt = 50_000;
+    for (const a of book.houseActors!) {
+      a.nextShareAt = 50_000;
+      a.nextChatAt = 9e15;
+      a.nextVoteAt = 9e15;
+    }
     book.lastHouseShareAt = 0;
     const out = tickHouseActions(book, market, 50_000, rng);
     assert.equal(out.shares, 1);
@@ -480,6 +509,7 @@ describe("house chat phrases", () => {
       );
       assert.equal(forced.replyTo, "h1");
       assert.ok((forced.text || "").length > 0);
+      assert.match(forced.text, /reclaim|hold|level|close|higher low|watching/i);
     }
   });
 

@@ -311,11 +311,6 @@ function replyLine(rng: () => number, ctx: HouseChatCtx): string {
     return pick(["lmao", "that's wild", "ok", "I see you", "wait", "lol", "say less", "what is that", "chat is chat"], rng);
   }
   const last = (ctx.lastText || "").toLowerCase();
-  if (isHangoutText(last) && rng() < 0.82) return hangoutReply(rng, last);
-  if (!ctx.lastHasToken && rng() < 0.55) return hangoutReply(rng, last);
-  if (ctx.lastHasToken && ctx.lastSymbol && rng() < 0.4) {
-    return pick(tokenHits(ctx.lastSymbol), rng);
-  }
   if (/\b(gm|morning)\b/.test(last)) return pick(["gm", "gm gm", "morning", "gm chat", "hey", "you good", "morning crew", "gm back"], rng);
   if (/\bgn\b/.test(last)) return pick(["gn", "gn gn", "later", "go sleep", "night crew", "rest"], rng);
   if (/\b(lmao|lol)\b/.test(last)) return pick(["lmao", "lol", "true", "facts", "you're funny", "y'all wild", "yeah that"], rng);
@@ -328,7 +323,7 @@ function replyLine(rng: () => number, ctx: HouseChatCtx): string {
   if (/\b(buy|bought|aping|ape)\b/.test(last)) {
     return pick(["I'm small", "same", "wait for a better add", "don't size the first test", "nfa", "already in"], rng);
   }
-  if (/\b(sell|sold|out|dump)\b/.test(last)) {
+  if (/\b(sell|sold|dump)\b/.test(last)) {
     return pick(["fair", "I'm flat", "don't be the liquidity", "if it loses this I'm out too", "paper is a position"], rng);
   }
   if (/\b(trap|fakeout|fake|poke)\b/.test(last)) {
@@ -346,8 +341,11 @@ function replyLine(rng: () => number, ctx: HouseChatCtx): string {
   if (/\b(range|chop|mid)\b/.test(last)) {
     return pick(["range until it isn't", "mid is a blender", "respect the range", "waiting on the edge with you", "choppy is not a setup"], rng);
   }
-  if (/\b(in|long|adding|size)\b/.test(last) && rng() < 0.45) {
+  if (/\b(long|adding|size)\b/.test(last) && rng() < 0.45) {
     return pick(["same", "I'm small", "already in", "waiting for a better add", "size talks", "I'm with you small", "don't size the first test"], rng);
+  }
+  if (ctx.lastHasToken && ctx.lastSymbol && rng() < 0.4) {
+    return pick(tokenHits(ctx.lastSymbol), rng);
   }
   if (/\?|anyone|thoughts|wen|you seeing|you in|volume/.test(last)) {
     if (rng() < 0.28) return pick(PHRASE_FOLLOW, rng);
@@ -356,6 +354,7 @@ function replyLine(rng: () => number, ctx: HouseChatCtx): string {
       rng,
     );
   }
+  if (isHangoutText(last) && rng() < 0.82) return hangoutReply(rng, last);
   if (rng() < 0.45) return hangoutReply(rng, last);
   if (rng() < 0.22) return pick(PHRASE_FOLLOW, rng);
   if (rng() < 0.16) return pick(PHRASE_CANNED, rng);

@@ -106,7 +106,10 @@ export function storedImage(raw?: string): string {
   return "";
 }
 
-export function validateLaunchCreate(input: LaunchCreateInput): Partial<Record<LaunchField, string>> {
+export function validateLaunchCreate(
+  input: LaunchCreateInput,
+  opts?: { requireImage?: boolean },
+): Partial<Record<LaunchField, string>> {
   const errors: Partial<Record<LaunchField, string>> = {};
   if (!input.creator || !walletOk(input.creator)) {
     errors.wallet = "Connect your wallet to launch.";
@@ -131,6 +134,8 @@ export function validateLaunchCreate(input: LaunchCreateInput): Partial<Record<L
         ? "Image is too heavy. Try a simpler photo."
         : "Use a photo from your camera roll. We crop a 512×512 square.";
     }
+  } else if (opts?.requireImage) {
+    errors.image = "Add a photo. We crop a 512×512 square.";
   }
 
   if ((input.website || "").trim() && !socialHref("website", input.website)) {

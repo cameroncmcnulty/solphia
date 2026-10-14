@@ -217,6 +217,13 @@ describe("account login", () => {
     if (!again.ok) return;
     assert.equal(again.created, false);
     assert.equal(again.account.id, made.account.id);
+    const s2 = blank();
+    s2.accounts = [{ id: "acct_legacy", wallets: [pk], createdAt: 1, lastSeen: 1 }];
+    const blocked = openWalletAccount(s2, { pubkey: pk, tos: false, privacy: false });
+    assert.equal(blocked.ok, false);
+    const accepted = openWalletAccount(s2, { pubkey: pk, tos: true, privacy: true });
+    assert.equal(accepted.ok, true);
+    if (accepted.ok) assert.ok(accepted.account.tosAcceptedAt);
   });
 
   it("refuses to attach a pubkey that already belongs to another account", () => {

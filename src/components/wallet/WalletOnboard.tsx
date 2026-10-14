@@ -8,6 +8,7 @@ import {
   addDerivedWallet,
   createEmbeddedWallet,
   listWallets,
+  markBackupConfirmed,
   unlockVault,
   vaultHasPin,
   vaultUnlocked,
@@ -180,6 +181,7 @@ export function WalletOnboard({ onClose }: { onClose: () => void }) {
         phrase: seedPhrase(),
         replace: !signedIn,
       });
+      if (kind === "create") markBackupConfirmed(created.wallet.id);
       await startWalletSession(created.wallet.pubkey, { tos, privacy });
       syncOwnerToSignedInAccount();
       flashNotice(kind === "import" ? "Wallet recovered" : "Wallet created");

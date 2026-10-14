@@ -81,18 +81,22 @@ export default function WalletPage() {
   const [sig, setSig] = useState("");
   const [secret, setSecret] = useState("");
   const [phrase, setPhrase] = useState("");
+  const [pfp, setPfp] = useState("");
 
   const load = useCallback(async () => {
     if (!owner) return;
-    const [h, t] = await Promise.all([
+    const [h, t, a] = await Promise.all([
       fetch(`/api/sol/holdings?pubkey=${encodeURIComponent(owner)}`, { cache: "no-store" }).then((r) => r.json()).catch(() => null),
       fetch(`/api/sol/history?pubkey=${encodeURIComponent(owner)}`, { cache: "no-store" }).then((r) => r.json()).catch(() => null),
+      fetch(`/api/account?pubkey=${encodeURIComponent(owner)}`, { cache: "no-store" }).then((r) => r.json()).catch(() => null),
     ]);
     if (Array.isArray(h?.holdings)) setHoldings(h.holdings as Holding[]);
     if (Array.isArray(t?.transfers)) setHist(t.transfers as Hist[]);
+    setPfp(typeof a?.pfp === "string" && a.pfp ? a.pfp : "");
   }, [owner]);
 
   useEffect(() => {
+    setPfp("");
     load().catch(() => {});
   }, [load]);
 
@@ -226,7 +230,7 @@ export default function WalletPage() {
     <main className="pump-shell">
       <div className="pump-wrap pb-16">
         <div className="flex items-center gap-3">
-          <CartoonPfp seed={owner} src={`/api/circle/avatar?pk=${encodeURIComponent(owner)}`} className="h-12 w-12" />
+          <CartoonPfp seed={owner} src={pfp || undefined} className="h-12 w-12" />
           <div className="min-w-0 flex-1">
             <p className="text-[13px] font-medium text-[#14f195]">Wallet</p>
             <h1 className="truncate text-[24px] font-semibold tracking-tight text-white">{nickname}</h1>

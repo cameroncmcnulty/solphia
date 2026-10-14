@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { peekAccount, refreshAccount } from "@/lib/auth/client";
+import { peekAccount, refreshAccount, startWalletSession } from "@/lib/auth/client";
 import { openConnect } from "@/components/wallet/WalletHost";
 import { useOwner } from "@/lib/hooks";
 
@@ -29,13 +29,13 @@ export function TosGate() {
         return;
       }
       if (!owner) {
-        setNeedAccount(false);
+        setNeedAccount(Boolean(acct && !acct.tosAcceptedAt));
         setNeed(false);
         return;
       }
       if (acct && !acct.tosAcceptedAt) {
-        setNeedAccount(true);
-        setNeed(false);
+        setNeedAccount(false);
+        setNeed(true);
         return;
       }
       try {
@@ -99,12 +99,18 @@ export function TosGate() {
       });
       const j = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(j.message || "Could not save.");
+      if (peekAccount()?.id) {
+        await startWalletSession(owner, { tos: true, privacy: true });
+      } else {
+        await refreshAccount();
+      }
       try {
         localStorage.setItem(keyOf(owner), String(Date.now()));
       } catch {
         /* ignore */
       }
       setNeed(false);
+      setNeedAccount(false);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Could not save.");
     } finally {

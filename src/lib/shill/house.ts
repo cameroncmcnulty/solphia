@@ -516,15 +516,6 @@ function presentActors(book: ShillBook): HouseActor[] {
   return (book.houseActors || []).filter((a) => want.has(a.pubkey));
 }
 
-function lastHumanish(book: ShillBook): ShillMessage | undefined {
-  const msgs = book.messages || [];
-  for (let i = msgs.length - 1; i >= 0; i--) {
-    const m = msgs[i]!;
-    if (m.kind === "text" || m.kind === "sticker" || m.kind === "media") return m;
-  }
-  return undefined;
-}
-
 function lastPersonMessage(book: ShillBook, now: number): ShillMessage | undefined {
   const house = housePubkeySet(book);
   const msgs = book.messages || [];
@@ -587,8 +578,6 @@ function bootHouseRoom(book: ShillBook, candidates: HousePinCoin[], now: number,
   });
   const n = 14 + Math.floor(rng() * 12);
   const pool = candidates.filter((c) => c.mint && isSolanaAddress(c.mint) && !PIN_BLOCK.has(c.mint));
-  let prevId = "";
-  let prevOwner = "";
   let prevText = "";
   let prevSym = "";
   let prevTok = false;
@@ -599,7 +588,6 @@ function bootHouseRoom(book: ShillBook, candidates: HousePinCoin[], now: number,
     const share = pool.length && rng() < 0.18;
     let text = "";
     let token: ShillMessage["token"];
-    let replyTo: string | undefined;
     if (share) {
       const coin = pickTop(pool, rng);
       if (coin?.mint) {
@@ -619,11 +607,10 @@ function bootHouseRoom(book: ShillBook, candidates: HousePinCoin[], now: number,
     if (!text) {
       const line = composeHouseChat(
         rng,
-        { lastText: prevText, lastId: prevId, lastOwner: prevOwner, lastHasToken: prevTok, lastSymbol: prevSym },
+        { lastText: prevText, lastHasToken: prevTok, lastSymbol: prevSym },
         actor.pubkey,
       );
       text = line.text;
-      replyTo = line.replyTo;
     }
     book.messages.push({
       id,
@@ -631,13 +618,10 @@ function bootHouseRoom(book: ShillBook, candidates: HousePinCoin[], now: number,
       owner: actor.pubkey,
       kind: "text",
       text,
-      replyTo,
       reactions: {},
       token,
     });
     touchMember(book, actor.pubkey, at);
-    prevId = id;
-    prevOwner = actor.pubkey;
     prevText = text;
     prevTok = Boolean(token?.mint);
     prevSym = token?.symbol || "";
@@ -700,7 +684,7 @@ export function tickHouseActions(
     for (const actor of chatDue) {
       if (chats >= HOUSE_CHAT_CAP) break;
       if (personWant && actor.pubkey === person!.owner) continue;
-      const target = personWant ? person : lastHumanish(book);
+      const target = personWant ? person : undefined;
       const line = composeHouseChat(rng, chatCtx(target), actor.pubkey, Boolean(personWant));
       const posted = postShill(book, {
         owner: actor.pubkey,
@@ -732,7 +716,11 @@ export function tickHouseActions(
   const shareDue = room.filter((a) => a.nextShareAt <= now).sort((a, b) => a.nextShareAt - b.nextShareAt);
   const lastShare = book.lastHouseShareAt || 0;
   const gapOk = !lastShare || now - lastShare >= HOUSE_SHARE_GAP_MS;
-  if (gapOk && pool.length) {
+  if (chats > 0) {
+    for (const actor of shareDue) {
+      if ((actor.nextShareAt || 0) <= now) actor.nextShareAt = now + lerp(14_000, 48_000, rng());
+    }
+  } else if (gapOk && pool.length) {
     for (const actor of shareDue) {
       if (shares >= HOUSE_SHARE_CAP) break;
       const coin = pickTop(pool, rng);

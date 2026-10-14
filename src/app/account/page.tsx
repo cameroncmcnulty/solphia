@@ -91,16 +91,24 @@ export default function AccountPage() {
   const [ownerBal, setOwnerBal] = useState(0);
   const [tradeBal, setTradeBal] = useState(0);
   const fileRef = useRef<HTMLInputElement>(null);
+  const loadGen = useRef(0);
   const [loginAccount, setLoginAccount] = useState<PublicAccount | null>(() => peekAccount());
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (gen?: number) => {
     if (!owner) return;
+    const mine = gen ?? loadGen.current;
     const j = await fetch(`/api/account?pubkey=${encodeURIComponent(owner)}`).then((r) => r.json());
-    setDesk(j);
+    if (mine !== loadGen.current) return;
+    setDesk((d) => {
+      const incoming = typeof j.pfp === "string" ? j.pfp : "";
+      const keep = Boolean(d?.pfp && d.pfp.startsWith("data:") && !incoming.startsWith("data:"));
+      return keep ? { ...j, pfp: d!.pfp } : j;
+    });
     if (typeof j.username === "string") setUsername(j.username);
     if (typeof j.intro === "string") setIntro(j.intro);
     if (typeof j.favMint === "string") setFavMint(j.favMint);
     const b = await fetch(`/api/launch/boost?pubkey=${encodeURIComponent(owner)}`).then((r) => r.json());
+    if (mine !== loadGen.current) return;
     if (b.mine) setBoosts({ live: b.mine.live || [], queued: b.mine.queued || [] });
   }, [owner]);
 
@@ -120,7 +128,8 @@ export default function AccountPage() {
   }, []);
 
   useEffect(() => {
-    load().catch(() => {});
+    const gen = ++loadGen.current;
+    load(gen).catch(() => {});
   }, [load]);
 
   useEffect(() => {
@@ -166,8 +175,11 @@ export default function AccountPage() {
         const code = typeof j.error === "string" ? j.error : "";
         const msg = j.message || launchError(code) || "failed";
         if (body.action === "username") fieldErr.fail({ username: msg });
-        else if (body.action === "pfp") fieldErr.fail({ pfp: msg });
-        else {
+        else if (body.action === "pfp") {
+          fieldErr.fail({ pfp: msg });
+          const gen = ++loadGen.current;
+          await load(gen);
+        } else {
           setNote(msg);
           setNoteErr(true);
         }
@@ -356,6 +368,8 @@ export default function AccountPage() {
                 e.target.value = "";
                 if (!f) return;
                 fieldErr.clear("pfp");
+                const prev = desk?.pfp || "";
+                loadGen.current += 1;
                 setBusy(true);
                 try {
                   const data = await squarePfp(f);
@@ -363,6 +377,7 @@ export default function AccountPage() {
                   await post({ action: "pfp", pfp: data });
                 } catch (err) {
                   fieldErr.fail({ pfp: err instanceof Error ? err.message : "Could not use that image." });
+                  setDesk((d) => (d ? { ...d, pfp: prev } : d));
                   setBusy(false);
                 }
               }}

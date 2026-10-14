@@ -181,6 +181,7 @@ describe("header identity", () => {
     assert.match(onboard, /Create a PIN/);
     assert.match(onboard, /wipeVault/);
     assert.match(onboard, /startWalletSession/);
+    assert.match(onboard, /markBackupConfirmed/);
     assert.match(onboard, /addDerivedWallet/);
     assert.equal(onboard.includes("/api/auth/google"), false);
     assert.equal(onboard.includes("/api/auth/signup"), false);

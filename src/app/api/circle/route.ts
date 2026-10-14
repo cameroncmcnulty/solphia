@@ -117,7 +117,8 @@ export async function GET(req: NextRequest) {
   if (!me || banned) {
     return NextResponse.json({ ...base, member: null, banned: Boolean(banned), ready: false });
   }
-  const acc = s.launch?.accounts?.[pubkey];
+  const launchBook = await withLaunch((st) => st.launch || emptyLaunchBook(), false);
+  const acc = launchBook.accounts?.[pubkey];
   return NextResponse.json({
     ...base,
     ready,

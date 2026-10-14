@@ -129,6 +129,7 @@ export function tokenMetadataJson(opts: {
   website?: string;
   x?: string;
   telegram?: string;
+  discord?: string;
   mime?: string;
 }): Record<string, unknown> {
   const ext = imageExt(opts.image, opts.mime);
@@ -147,6 +148,7 @@ export function tokenMetadataJson(opts: {
     website: site,
     twitter: opts.x || undefined,
     telegram: opts.telegram || undefined,
+    discord: opts.discord || undefined,
     properties: {
       files: image ? [{ uri: image, type }] : [],
       category: "image",

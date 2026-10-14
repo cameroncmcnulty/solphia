@@ -24,6 +24,7 @@ import { treasuryAddress } from "@/lib/treasury";
 import { DEFAULT_OWNER } from "@/lib/protocolWallets";
 import { liveBoosts, publicLiveBoost, tickBoosts } from "@/lib/launch/boost";
 import { storedImage, validateLaunchCreate } from "@/lib/launch/validate";
+import { socialHref } from "@/lib/launch/links";
 import { isPlaceholderLabel } from "@/lib/launch/labels";
 import { isPlaceholderMeta, readSplMetas } from "@/lib/token/onchainMeta";
 import { ipfsMetadataUrl, pinDataUrl, pinJson } from "@/lib/pinata";
@@ -116,7 +117,7 @@ function dataMime(dataUrl?: string): string | undefined {
   return mime.startsWith("image/") ? mime : undefined;
 }
 
-async function resolveArt(opts: { image?: string; name: string; symbol: string; blurb: string; website?: string; x?: string; telegram?: string; mint: string }) {
+async function resolveArt(opts: { image?: string; name: string; symbol: string; blurb: string; website?: string; x?: string; telegram?: string; discord?: string; mint: string }) {
   let image = storedImage(opts.image);
   const mime = dataMime(opts.image);
   if (opts.image?.startsWith("data:")) {
@@ -131,9 +132,10 @@ async function resolveArt(opts: { image?: string; name: string; symbol: string; 
     symbol: opts.symbol,
     description: opts.blurb || `${opts.name} launched on Solphia`,
     image,
-    website: opts.website,
-    x: opts.x,
-    telegram: opts.telegram,
+    website: socialHref("website", opts.website) || undefined,
+    x: socialHref("x", opts.x) || undefined,
+    telegram: socialHref("telegram", opts.telegram) || undefined,
+    discord: socialHref("discord", opts.discord) || undefined,
     mime,
   });
   const meta = await pinJson(json, `${opts.symbol}-meta`);
@@ -149,18 +151,21 @@ async function prepareMint(b: LaunchBody) {
   const blurb = sanitizeText(b.blurb || "", 280);
   const website = sanitizeText(b.website || "", 160);
   const image = (b.image && b.image.length > 8 ? b.image : "") || book0.accounts?.[b.pubkey]?.draft?.image || "";
-  const issues = validateLaunchCreate({
-    creator: b.pubkey,
-    name,
-    symbol,
-    blurb,
-    image,
-    website,
-    x: b.x,
-    telegram: b.telegram,
-    discord: b.discord,
-    launchBuySol: Number(b.launchBuySol) || 0,
-  });
+  const issues = validateLaunchCreate(
+    {
+      creator: b.pubkey,
+      name,
+      symbol,
+      blurb,
+      image,
+      website,
+      x: b.x,
+      telegram: b.telegram,
+      discord: b.discord,
+      launchBuySol: Number(b.launchBuySol) || 0,
+    },
+    { requireImage: true },
+  );
   if (issues.wallet) return fail("bad_wallet");
   if (issues.name) return fail("bad_name");
   if (issues.symbol) return fail("bad_ticker");
@@ -200,7 +205,7 @@ async function prepareMint(b: LaunchBody) {
     }
     let art: { image: string; uri: string };
     try {
-      art = await resolveArt({ image, name, symbol, blurb, website, x: b.x, telegram: b.telegram, mint });
+      art = await resolveArt({ image, name, symbol, blurb, website, x: b.x, telegram: b.telegram, discord: b.discord, mint });
     } catch (e) {
       const msg = e instanceof Error ? e.message : "";
       if (msg === "pin_failed") return fail("pin_failed");
@@ -519,10 +524,17 @@ export async function POST(req: NextRequest) {
 }
 
 async function postLaunch(req: NextRequest) {
-  if (!rateLimit(clientIp(req) + ":launch", 20, 60_000)) {
+  const raw = await req.json().catch(() => null);
+  const action =
+    raw && typeof raw === "object" && raw !== null && "action" in raw ? String((raw as { action?: unknown }).action || "") : "";
+  const createActs = action === "prepare" || action === "create";
+  const keepActs = action === "confirm" || action === "save_draft" || action === "quote" || action === "recover";
+  const bucket = createActs ? "launch" : keepActs ? "launch-keep" : "launch-trade";
+  const n = createActs ? 12 : keepActs ? 80 : 40;
+  if (!rateLimit(clientIp(req) + ":" + bucket, n, 60_000)) {
     return fail("rate_limited", 429);
   }
-  const parsed = Body.safeParse(await req.json().catch(() => null));
+  const parsed = Body.safeParse(raw);
   if (!parsed.success) {
     const img = parsed.error.issues.some((i) => i.path.includes("image"));
     const first = parsed.error.issues[0];

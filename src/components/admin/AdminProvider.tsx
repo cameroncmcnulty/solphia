@@ -123,8 +123,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     if (window.location.hash !== next) window.location.hash = id;
   }, []);
 
-  const hydrate = useCallback((next: AdminDesk) => {
-    setData((prev) => mergeDesk(prev, next));
+  const hydrateFields = useCallback((next: AdminDesk) => {
     setTreasuryPk(next.treasury || "");
     setOwnerPk(next.ownerWallet || "");
     setDevPk(next.devWallet || "");
@@ -134,15 +133,18 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     setSphaDc(next.sphaSocials?.discord || "");
   }, []);
 
-  const reload = useCallback(async () => {
+  const hydrate = useCallback((next: AdminDesk, fields = true) => {
+    setData((prev) => mergeDesk(prev, next));
+    if (fields) hydrateFields(next);
+  }, [hydrateFields]);
+
+  const reload = useCallback(async (fields = false) => {
     const dash = await fetch("/api/admin");
     if (!dash.ok) {
-      setAuthed(false);
-      setData(null);
       throw new Error("denied");
     }
     const next = (await dash.json()) as AdminDesk;
-    hydrate(next);
+    hydrate(next, fields);
   }, [hydrate]);
 
   const login = useCallback(async () => {
@@ -175,7 +177,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
         setOtpHint(j.setup ? "Scan the QR, save the 8 backup codes, then enter the 6-digit code." : "Enter the 6-digit authenticator code, or one unused backup code.");
         return;
       }
-      await reload();
+      await reload(true);
       setAuthed(true);
     } catch {
       setErr("Login failed.");
@@ -199,7 +201,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
         setErr(j.message || "That code is wrong.");
         return;
       }
-      await reload();
+      await reload(true);
       setAuthed(true);
       setOtpPending(false);
       setOtp("");
@@ -306,7 +308,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     };
     const poll = setInterval(() => {
       if (live) return;
-      reload().catch(() => setAuthed(false));
+      reload(false).catch(() => {});
     }, 5000);
     return () => {
       clearInterval(tick);

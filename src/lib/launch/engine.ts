@@ -91,6 +91,8 @@ export type LaunchAccount = {
   referrer?: string;
   referredAt?: number;
   pfp?: string;
+  /** Millis when pfp last changed, including a clear. Newer stamp wins on merge. */
+  pfpAt?: number;
   username?: string;
   usernameAt?: number;
   notes?: string;
@@ -207,17 +209,20 @@ export function setAccountPfp(
   book: LaunchBook,
   pubkey: string,
   pfp: string,
+  now = Date.now(),
 ): { ok: true; account: LaunchAccount } | { ok: false; error: string } {
   if (!isSolanaAddress(pubkey)) return { ok: false, error: "bad_wallet" };
   const raw = (pfp || "").trim();
   const acc = ensureAccount(book, pubkey);
   if (!raw) {
     acc.pfp = "";
+    acc.pfpAt = now;
     return { ok: true, account: acc };
   }
   const img = profileImageOk(raw);
   if (!img) return { ok: false, error: "bad_image" };
   acc.pfp = img;
+  acc.pfpAt = now;
   return { ok: true, account: acc };
 }
 
@@ -386,6 +391,20 @@ export function mergeAccountMaps(
   return accounts;
 }
 
+function pickPfp(remote: LaunchAccount, local: LaunchAccount): { pfp?: string; pfpAt?: number } {
+  const localAt = local.pfpAt || 0;
+  const remoteAt = remote.pfpAt || 0;
+  if (localAt > remoteAt) {
+    return { pfp: typeof local.pfp === "string" ? local.pfp : remote.pfp, pfpAt: localAt };
+  }
+  if (remoteAt > localAt) {
+    return { pfp: typeof remote.pfp === "string" ? remote.pfp : local.pfp, pfpAt: remoteAt };
+  }
+  const localP = typeof local.pfp === "string" ? local.pfp : "";
+  const remoteP = typeof remote.pfp === "string" ? remote.pfp : "";
+  return { pfp: localP || remoteP, pfpAt: localAt || undefined };
+}
+
 export function mergeAccount(remote: LaunchAccount, local: LaunchAccount, key: string): LaunchAccount {
   const dayA = local.rankDay;
   const dayB = remote.rankDay;
@@ -404,7 +423,7 @@ export function mergeAccount(remote: LaunchAccount, local: LaunchAccount, key: s
     pubkey: local.pubkey || remote.pubkey || key,
     referrer: local.referrer || remote.referrer,
     referredAt: local.referredAt || remote.referredAt,
-    pfp: typeof local.pfp === "string" ? local.pfp : remote.pfp,
+    ...pickPfp(remote, local),
     username: local.username || remote.username,
     usernameAt: local.usernameAt || remote.usernameAt,
     notes: local.notes || remote.notes,
@@ -442,12 +461,13 @@ function windowFlow(fills: LaunchFill[], now: number, ms: number) {
 }
 
 function holderMix(c: LaunchCoin) {
-  const live = Object.values(c.holders).filter((h) => h.tokens > 1e-9);
+  const holders = c.holders || {};
+  const live = Object.values(holders).filter((h) => h.tokens > 1e-9);
   const sold = Math.max(c.curve.tokensSold, live.reduce((s, h) => s + h.tokens, 0), 1);
   const ranked = live.slice().sort((a, b) => b.tokens - a.tokens);
   const top10 = ranked.slice(0, 10).reduce((s, h) => s + h.tokens, 0);
   const biggest = ranked[0]?.tokens || 0;
-  const creatorTok = c.holders[c.creator]?.tokens || 0;
+  const creatorTok = holders[c.creator]?.tokens || 0;
   const nonDev = ranked.find((h) => h.owner !== c.creator);
   return {
     holders: live.length,
@@ -492,8 +512,9 @@ export function publicCoin(c: LaunchCoin, solUsd = 0, viewer?: string, book?: La
   const startPx = fills[0]?.priceSol || px;
   const volBuy = fills.filter((f) => f.side === "buy").reduce((s, f) => s + f.sol, 0);
   const volSell = fills.filter((f) => f.side === "sell").reduce((s, f) => s + f.sol, 0);
-  const liveHolders = Object.values(c.holders).filter((h) => h.tokens > 1e-9);
-  const mine = viewer ? c.holders[viewer] : undefined;
+  const holders = c.holders || {};
+  const liveHolders = Object.values(holders).filter((h) => h.tokens > 1e-9);
+  const mine = viewer ? holders[viewer] : undefined;
   const mix = holderMix(c);
   const w5 = windowFlow(fills, now, 5 * 60_000);
   const w30 = windowFlow(fills, now, 30 * 60_000);

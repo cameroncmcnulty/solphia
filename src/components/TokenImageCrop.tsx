@@ -136,6 +136,9 @@ export function TokenImageCrop({
     };
   }, []);
 
+  const onCancelRef = useRef(onCancel);
+  onCancelRef.current = onCancel;
+
   useEffect(() => {
     const prevOverflow = document.body.style.overflow;
     const prevPos = document.body.style.position;
@@ -147,7 +150,7 @@ export function TokenImageCrop({
     document.body.style.left = "0";
     document.body.style.right = "0";
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onCancel();
+      if (e.key === "Escape") onCancelRef.current();
     };
     window.addEventListener("keydown", onKey);
     return () => {
@@ -159,7 +162,7 @@ export function TokenImageCrop({
       window.scrollTo(0, y);
       window.removeEventListener("keydown", onKey);
     };
-  }, [onCancel]);
+  }, []);
 
   const stage = cropStageStyle(rect, source.w, source.h, view);
   const zoom = zoomOf(rect, source.w, source.h);

@@ -414,6 +414,8 @@ describe("launch create validation", () => {
   it("accepts a minimal valid create", () => {
     const e = validateLaunchCreate({ creator: A, name: "Test Coin", symbol: "TEST" });
     assert.deepEqual(e, {});
+    const needArt = validateLaunchCreate({ creator: A, name: "Test Coin", symbol: "TEST" }, { requireImage: true });
+    assert.ok(needArt.image);
   });
 
   it("accepts 2-character name and ticker HI — that is the minimum, not 3", () => {
@@ -456,6 +458,7 @@ describe("launch create validation", () => {
     assert.match(src, /RefreshCw/);
     assert.match(src, /onBuy/);
     assert.match(src, /hideTrade && onBuy/);
+    assert.match(src, /requireImage: true/);
   });
 
   it("stores a pinned https PFP and drops oversized data URLs on slim", () => {
@@ -508,6 +511,7 @@ describe("launch create validation", () => {
     assert.match(accountPage, /heic2any/);
     assert.match(accountPage, /solphia-desk/);
     assert.match(accountPage, /startsWith\("data:"\)/);
+    assert.match(accountPage, /loadGen/);
     const face = readFileSync(path.join(process.cwd(), "src/components/CartoonPfp.tsx"), "utf8");
     assert.match(face, /tries >= 3/);
     assert.match(face, /startsWith\("data:"\)/);
@@ -515,7 +519,10 @@ describe("launch create validation", () => {
     assert.match(pinata, /export function pinDisplayUrl/);
     assert.match(pinata, /budgetMs/);
     const wallet = readFileSync(path.join(process.cwd(), "src/app/wallet/page.tsx"), "utf8");
-    assert.match(wallet, /\/api\/circle\/avatar\?pk=/);
+    assert.match(wallet, /\/api\/account\?pubkey=/);
+    assert.match(wallet, /src=\{pfp \|\| undefined\}/);
+    const switcher = readFileSync(path.join(process.cwd(), "src/components/wallet/WalletSwitcher.tsx"), "utf8");
+    assert.equal(switcher.includes("/api/circle/avatar"), false);
     assert.match(wallet, /ArrowDownLeft/);
     assert.match(wallet, /pickedMint/);
     assert.match(wallet, /text-\[40px\]/);
@@ -524,16 +531,25 @@ describe("launch create validation", () => {
 
   it("lets a cleared PFP win over a remote photo", () => {
     const local = emptyLaunchBook();
-    local.accounts[A] = { pubkey: A, referralRewardsSol: 0, pfp: "" };
+    local.accounts[A] = { pubkey: A, referralRewardsSol: 0, pfp: "", pfpAt: 20 };
     const remote = emptyLaunchBook();
-    remote.accounts[A] = { pubkey: A, referralRewardsSol: 0, pfp: "https://example.com/x.jpg" };
+    remote.accounts[A] = { pubkey: A, referralRewardsSol: 0, pfp: "https://example.com/x.jpg", pfpAt: 10 };
     const merged = mergeLaunch(local, remote);
     assert.equal(merged.accounts[A].pfp, "");
+    const stale = emptyLaunchBook();
+    stale.accounts[A] = { pubkey: A, referralRewardsSol: 0, pfp: "" };
+    const live = emptyLaunchBook();
+    live.accounts[A] = { pubkey: A, referralRewardsSol: 0, pfp: "https://example.com/x.jpg", pfpAt: 10 };
+    const kept = mergeLaunch(stale, live);
+    assert.equal(kept.accounts[A].pfp, "https://example.com/x.jpg");
     const keep = setAccountPfp(emptyLaunchBook(), A, "https://example.com/y.jpg");
     assert.equal(keep.ok, true);
     const cleared = setAccountPfp(emptyLaunchBook(), A, "");
     assert.equal(cleared.ok, true);
-    if (cleared.ok) assert.equal(cleared.account.pfp, "");
+    if (cleared.ok) {
+      assert.equal(cleared.account.pfp, "");
+      assert.ok((cleared.account.pfpAt || 0) > 0);
+    }
   });
 
   it("rejects a 1-character name or ticker with an explicit too-short message", () => {

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse, after } from "next/server";
 import { z } from "zod";
 import { clientIp, isSolanaAddress, rateLimit, sanitizeText } from "@/lib/security";
-import { withLaunch } from "@/lib/store";
+import { mutateState, withLaunch } from "@/lib/store";
 import { emptyLaunchBook } from "@/lib/launch/engine";
 import {
   bindReferrer,
@@ -18,6 +18,9 @@ import { lastPairPrices } from "@/lib/tick";
 import { airdropMultiplier, referralBoostPct } from "@/lib/circle/types";
 import { payReferralXp, profilePhotoUrl, publicRank } from "@/lib/rank/engine";
 import { pinDataUrl } from "@/lib/pinata";
+import { acceptLegal, findAccount } from "@/lib/auth/accounts";
+import { readAccountId } from "@/lib/auth/session";
+
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -85,7 +88,12 @@ export async function POST(req: NextRequest) {
   const b = parsed.data;
   const bucket = b.action === "pfp" ? "account-pfp" : "account";
   const n = b.action === "pfp" ? 20 : 30;
-  if (!rateLimit(clientIp(req) + ":" + bucket, n, 60_000)) return fail("rate_limited", 429);
+  if (!rateLimit(clientIp(req) + ":" + bucket, n, 60_000)) {
+    if (b.action === "pfp") {
+      return NextResponse.json({ error: "rate_limited", message: "Too many photo uploads. Wait a minute." }, { status: 429 });
+    }
+    return fail("rate_limited", 429);
+  }
   if (!isSolanaAddress(b.pubkey)) return fail("bad_wallet");
   const solUsd = lastPairPrices().solUsd || 0;
 
@@ -136,10 +144,21 @@ export async function POST(req: NextRequest) {
       user.tosAcceptedAt = now;
       user.privacyAcceptedAt = now;
       user.lastSeen = now;
-      return { ok: true as const };
+      return { ok: true as const, tosAt: now };
     }
     return { ok: false as const, error: "bad_action" };
   }, true);
+
+  if (b.action === "tos") {
+    const accountId = readAccountId(req);
+    if (accountId) {
+      await mutateState((s) => {
+        const row = findAccount(s, accountId);
+        if (row) acceptLegal(row, Date.now());
+        return true;
+      });
+    }
+  }
 
   if (!out || !("ok" in out) || !out.ok) {
     if (b.action === "pfp") {

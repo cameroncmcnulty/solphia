@@ -538,7 +538,10 @@ export default function LaunchPage() {
   async function refreshPad(sync = false) {
     const q = owner ? `pubkey=${encodeURIComponent(owner)}` : "";
     const extra = [isSwap ? "list=all" : "", sync && owner ? "sync=1" : ""].filter(Boolean).join("&");
-    const pad = await fetch(`/api/launch?${q}${extra ? `&${extra}` : ""}`, { cache: "no-store" }).then((r) => r.json());
+    const r = await fetch(`/api/launch?${q}${extra ? `&${extra}` : ""}`, { cache: "no-store" });
+    if (!r.ok) return;
+    const pad = await r.json().catch(() => null);
+    if (!pad || typeof pad !== "object" || !Array.isArray(pad.coins)) return;
     if (pad.solUsd) setSolUsd(pad.solUsd);
     if (typeof pad.ownerWallet === "string") setOwnerWallet(pad.ownerWallet);
     if (typeof pad.treasuryWallet === "string") setTreasuryWallet(pad.treasuryWallet);
@@ -864,18 +867,21 @@ export default function LaunchPage() {
   }, [isSwap]);
 
   async function launchToken() {
-    const issues = validateLaunchCreate({
-      creator: owner || "",
-      name,
-      symbol,
-      blurb,
-      image,
-      website,
-      x,
-      telegram,
-      discord,
-      launchBuySol: devBuy,
-    });
+    const issues = validateLaunchCreate(
+      {
+        creator: owner || "",
+        name,
+        symbol,
+        blurb,
+        image,
+        website,
+        x,
+        telegram,
+        discord,
+        launchBuySol: devBuy,
+      },
+      { requireImage: true },
+    );
     if (Object.keys(issues).length) {
       createErr.fail(issues);
       setErr("");

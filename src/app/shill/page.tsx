@@ -1019,6 +1019,11 @@ export default function ShillPage() {
                     )}
                     {sticker ? (
                       <button type="button" onClick={() => setPicker(m.id)} className="px-1">
+                        {quoted && (
+                          <div className="mb-1 rounded-lg border-l-2 border-cyan bg-black/25 px-2 py-1 text-left text-[12px] text-white/70">
+                            {quoted.sticker || quoted.text || "message"}
+                          </div>
+                        )}
                         <BurstSticker emoji={m.sticker!} size={88} />
                       </button>
                     ) : (

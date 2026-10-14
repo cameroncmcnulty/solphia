@@ -252,9 +252,9 @@ export async function GET(req: NextRequest) {
   const messages = snap.messages.filter((m) => Number(m.at) > since);
   const s = await withShill((st) => st, false);
   const book = ensureShill(s.shill);
-  const you = youCard(s, pubkey);
+  const launch = await withLaunch((st) => st.launch || emptyLaunchBook(), false);
+  const you = youCard({ ...s, launch }, pubkey);
   const nextAt = pubkey && isSolanaAddress(pubkey) ? nextVoteAt(book, pubkey) : 0;
-  const launch = s.launch || emptyLaunchBook();
   const people = [...new Set(messages.map((m) => String(m.owner)).concat(typing, pubkey ? [pubkey] : []))];
   const profiles: Record<string, ReturnType<typeof publicCard> & { role: "admin" | "mod" | null }> = {};
   for (const pk of people) {

@@ -56,6 +56,14 @@ describe("auth flow", () => {
     assert.match(client, /lockVault/);
   });
 
+  it("TosGate shows the accept form when a wallet is already connected", () => {
+    const gate = readFileSync(new URL("../components/TosGate.tsx", import.meta.url), "utf8");
+    assert.match(gate, /startWalletSession/);
+    assert.match(gate, /acct && !acct.tosAcceptedAt/);
+    assert.match(gate, /setNeed\(true\)/);
+    assert.equal(gate.includes("setNeedAccount(true)"), false);
+  });
+
   it("wallet session is the only way to open an account", () => {
     const session = readFileSync(new URL("../app/api/auth/wallet-session/route.ts", import.meta.url), "utf8");
     assert.match(session, /openWalletAccount/);
