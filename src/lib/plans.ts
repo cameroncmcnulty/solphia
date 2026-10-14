@@ -29,7 +29,7 @@ export const PLANS: Plan[] = [
     sol: 0.15,
     tagline: "Optional 2× or 3× on SOL. 0.15 SOL / 30 days.",
     story: "Everything in Live, plus SOL leverage.",
-    points: ["Everything in Live", "SOL 2× or 3×", "Equities stay spot", "Keys never with us"],
+    points: ["Everything in Live", "SOL 2× or 3×", "Equities stay spot", "Phrase stays on this device"],
     includes: ["live", "lev"],
     icon: "/icons/plan-full.jpg",
     featured: true,
@@ -50,7 +50,7 @@ export const COMPARE_ROWS: { label: string; hint?: string; values: [string, stri
   { label: "Kill switch", values: ["Yes", "Yes"] },
   { label: "SOL vs S&P, Nasdaq, gold", values: ["Live", "Live"] },
   { label: "SOL leverage", values: ["Spot 1×", "Optional 2× / 3×"] },
-  { label: "Keys with us", values: ["Never", "Never"] },
+  { label: "Recovery phrase", values: ["On this device", "On this device"] },
   { label: "30 days", values: ["0.1 SOL", "0.15 SOL"] },
   { label: "Auto-renew", values: ["Until you unsubscribe", "Until you unsubscribe"] },
 ];
@@ -58,11 +58,11 @@ export const COMPARE_ROWS: { label: string; hint?: string; values: [string, stri
 export const FAQS: { q: string; a: string }[] = [
   {
     q: "Does she spend my SOL?",
-    a: "Connect once and add SOL to the trading wallet on this device. After that she signs from that wallet. Keys never leave the device. Backtests are free until you go live.",
+    a: "Create or import a Solphia wallet and add SOL to the trading wallet. Paper stays on this device. When you press Start on Live, this site stores an encrypted copy of the trading key so she can sign while you are away. Revoke it anytime. Backtests are free until you go live.",
   },
   {
     q: "Where does the SOL I add sit?",
-    a: "Your wallet is login. Added SOL goes to a trading wallet on this device. It stays there until you hit KILL and withdraw. We never hold that key. Back it up.",
+    a: "Login is your Solphia wallet on this device. Added SOL sits in a trading wallet derived here until you hit KILL and withdraw. Write down the 12-word phrase. We never see the phrase or PIN. If you start Live, we hold an encrypted copy of the trading key until you revoke it.",
   },
   {
     q: "What does she trade?",
@@ -78,7 +78,7 @@ export const FAQS: { q: string; a: string }[] = [
   },
   {
     q: "Do I sign every trade?",
-    a: "No. Connect and add SOL once. The trading wallet on this device signs after that. You sign again when you withdraw.",
+    a: "No. After you fund the trading wallet, Live signs with that key. When Live is on, the server signs with the encrypted copy you delegated. You sign again to withdraw, to pay the first seat in Phantom, or for pad and swap rails that still go through this wallet or Phantom.",
   },
   {
     q: "Where is leverage?",

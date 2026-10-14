@@ -75,7 +75,7 @@ export function TosGate() {
           <p className="font-mono text-[10px] tracking-[0.22em] text-acid">ACCOUNT</p>
           <h2 className="mt-2 font-display text-2xl text-ghost">Agree to continue</h2>
           <p className="mt-2 text-sm leading-relaxed text-mute">
-            Create or import a Solphia wallet to accept the terms. Keys stay on this device.
+            Create or import a Solphia wallet to accept the terms. Your recovery phrase and PIN stay on this device.
           </p>
           <button type="button" onClick={() => openConnect()} className="btn-acid mt-5 inline-flex min-h-[48px] w-full items-center justify-center rounded-full text-base">
             Open wallet

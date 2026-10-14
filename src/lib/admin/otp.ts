@@ -90,7 +90,7 @@ export function adminOtpEmailHtml(code: string): string {
     <p style="margin:0 0 8px;font-size:12px;letter-spacing:0.18em;color:#7a708c;">SOLPHIA · ADMIN</p>
     <p style="margin:0 0 8px;font-size:18px;color:#140c00;">Dashboard one-time code</p>
     <p style="margin:20px 0;font-size:36px;letter-spacing:0.24em;font-family:ui-monospace,Consolas,monospace;color:#140c00;font-weight:700;">${digits}</p>
-    <p style="margin:0;font-size:13px;color:#7a708c;line-height:1.5;">Expires in 15 minutes. Solphia never asks for a seed phrase or PIN.</p>
+    <p style="margin:0;font-size:13px;color:#7a708c;line-height:1.5;">Expires in 15 minutes. This email will never ask for your seed phrase or PIN.</p>
   </div>
 </div>`;
 }

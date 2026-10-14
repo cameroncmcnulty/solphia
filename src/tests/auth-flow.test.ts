@@ -62,6 +62,29 @@ describe("auth flow", () => {
     assert.match(gate, /acct && !acct.tosAcceptedAt/);
     assert.match(gate, /setNeed\(true\)/);
     assert.equal(gate.includes("setNeedAccount(true)"), false);
+    assert.match(gate, /\/legal#terms/);
+    assert.match(gate, /\/legal#privacy/);
+    assert.match(gate, /recovery phrase and PIN stay on this device/);
+  });
+
+  it("terms and privacy match seed-wallet login and live key delegate", () => {
+    const legal = readFileSync(new URL("../app/legal/page.tsx", import.meta.url), "utf8");
+    assert.match(legal, /id="terms"/);
+    assert.match(legal, /id="privacy"/);
+    assert.match(legal, /id="live"/);
+    assert.match(legal, /create or import/);
+    assert.match(legal, /12-word recovery phrase/);
+    assert.match(legal, /encrypted copy of the trading-wallet secret/);
+    assert.match(legal, /admin@solphia\.io/);
+    assert.equal(legal.includes("never asks for a seed phrase"), false);
+    assert.equal(legal.includes("We do not collect seed phrases or private keys"), false);
+    assert.equal(legal.includes("Your trading key stays on your phone or computer"), false);
+    const footer = readFileSync(new URL("../components/SiteFooter.tsx", import.meta.url), "utf8");
+    assert.match(footer, /\/legal#terms/);
+    assert.match(footer, /\/legal#privacy/);
+    const onboard = readFileSync(new URL("../components/wallet/WalletOnboard.tsx", import.meta.url), "utf8");
+    assert.match(onboard, /\/legal#terms/);
+    assert.match(onboard, /\/legal#privacy/);
   });
 
   it("wallet session is the only way to open an account", () => {

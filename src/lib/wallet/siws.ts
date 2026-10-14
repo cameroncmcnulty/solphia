@@ -9,7 +9,7 @@ export function siwsMessage(pubkey: string, nonce: string, origin: string): stri
     `Origin: ${origin}`,
     `Address: ${pubkey}`,
     `Nonce: ${nonce}`,
-    "This proves wallet control. Solphia never asks for your seed.",
+    "This proves wallet control. Do not share your seed or PIN.",
   ].join("\n");
 }
 
