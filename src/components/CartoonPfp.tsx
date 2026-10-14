@@ -16,9 +16,12 @@ export function CartoonPfp({
 }) {
   const uid = useId().replace(/:/g, "");
   const [dead, setDead] = useState(false);
+  const [tries, setTries] = useState(0);
   useEffect(() => {
     setDead(false);
+    setTries(0);
   }, [src]);
+  const imgSrc = src && tries > 0 ? `${src}${src.includes("?") ? "&" : "?"}r=${tries}` : src || "";
   const click = onClick
     ? {
         role: "button" as const,
@@ -37,10 +40,13 @@ export function CartoonPfp({
     return (
       // eslint-disable-next-line @next/next/no-img-element
       <img
-        src={src}
+        src={imgSrc}
         alt=""
         draggable={false}
-        onError={() => setDead(true)}
+        onError={() => {
+          if (tries >= 2) setDead(true);
+          else setTimeout(() => setTries((n) => n + 1), 400 * (tries + 1));
+        }}
         {...click}
       />
     );

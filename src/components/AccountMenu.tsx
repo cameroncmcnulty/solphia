@@ -54,10 +54,15 @@ export function AccountMenu() {
       setDesk(null);
       return;
     }
-    fetch(`/api/account?pubkey=${encodeURIComponent(owner)}`)
-      .then((r) => r.json())
-      .then((j) => setDesk(j))
-      .catch(() => {});
+    const load = () => {
+      fetch(`/api/account?pubkey=${encodeURIComponent(owner)}`, { cache: "no-store" })
+        .then((r) => r.json())
+        .then((j) => setDesk(j))
+        .catch(() => {});
+    };
+    load();
+    window.addEventListener("solphia-desk", load);
+    return () => window.removeEventListener("solphia-desk", load);
   }, [owner]);
 
   useEffect(() => {

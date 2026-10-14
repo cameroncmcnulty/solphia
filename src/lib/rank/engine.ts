@@ -260,7 +260,9 @@ export function publicRank(acc?: LaunchAccount | null) {
 export function profilePhotoUrl(raw: string | undefined, pubkey: string, kind: "pfp" | "banner"): string {
   const v = (raw || "").trim();
   if (!v) return "";
-  if (v.startsWith("data:")) return `/api/circle/avatar?pk=${encodeURIComponent(pubkey)}&kind=${kind}`;
+  if (v.startsWith("data:") || (kind === "pfp" && /^https?:\/\//i.test(v))) {
+    return `/api/circle/avatar?pk=${encodeURIComponent(pubkey)}&kind=${kind}`;
+  }
   if (v.startsWith("/")) return v;
   if (/^https?:\/\//i.test(v)) return `/api/media?u=${encodeURIComponent(v)}`;
   return v;

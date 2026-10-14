@@ -366,7 +366,7 @@ describe("house shill wallets", () => {
     const avatar = readFileSync(join(process.cwd(), "src/app/api/circle/avatar/route.ts"), "utf8");
     assert.match(avatar, /housePfpPath/);
     assert.match(avatar, /withLaunch/);
-    assert.match(avatar, /pinDisplayUrl/);
+    assert.match(avatar, /fetchFirstImage/);
     const shill = readFileSync(join(process.cwd(), "src/app/api/shill/route.ts"), "utf8");
     assert.match(shill, /paintHouseIdentities/);
     const house = readFileSync(join(process.cwd(), "src/lib/shill/house.ts"), "utf8");

@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { z } from "zod";
 import { clientIp, isSolanaAddress, rateLimit, sanitizeText } from "@/lib/security";
 import { withLaunch } from "@/lib/store";
@@ -88,18 +88,6 @@ export async function POST(req: NextRequest) {
   const solUsd = lastPairPrices().solUsd || 0;
 
   let pfpUrl = (b.pfp || "").trim();
-  if (b.action === "pfp" && pfpUrl.startsWith("data:image/")) {
-    try {
-      const pinned = await pinDataUrl(pfpUrl, `pfp-${b.pubkey.slice(0, 8)}`, { budgetMs: 8_000 });
-      if (pinned?.url) {
-        const fast = pinDisplayUrl(pinned.url);
-        if (fast.startsWith("https:")) pfpUrl = fast;
-      }
-    } catch {
-      /* keep the compressed data URL so the photo still saves */
-    }
-  }
-
   const out = await withLaunch((s) => {
     const book = bookOf(s);
     if (b.action === "hello") {
@@ -159,6 +147,22 @@ export async function POST(req: NextRequest) {
       );
     }
     return fail((out as { error?: string })?.error || "failed");
+  }
+
+  if (b.action === "pfp" && pfpUrl.startsWith("data:image/")) {
+    const pk = b.pubkey;
+    const data = pfpUrl;
+    after(async () => {
+      try {
+        const pinned = await pinDataUrl(data, `pfp-${pk.slice(0, 8)}`, { budgetMs: 8_000 });
+        if (!pinned?.url) return;
+        const fast = pinDisplayUrl(pinned.url);
+        if (!fast.startsWith("https:")) return;
+        await withLaunch((s) => setAccountPfp(bookOf(s), pk, fast), true);
+      } catch {
+        /* data URL already saved — photo still shows */
+      }
+    });
   }
 
   const s = await withLaunch((st) => st, false);

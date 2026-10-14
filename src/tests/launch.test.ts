@@ -488,16 +488,25 @@ describe("launch create validation", () => {
     assert.equal(fast.includes("gateway.pinata.cloud"), false);
     const avatar = readFileSync(path.join(process.cwd(), "src/app/api/circle/avatar/route.ts"), "utf8");
     assert.match(avatar, /withLaunch/);
-    assert.match(avatar, /pinDisplayUrl/);
+    assert.match(avatar, /fetchFirstImage/);
+    assert.match(avatar, /artCandidates/);
+    assert.match(avatar, /no-store/);
     assert.equal(avatar.includes("readyState()"), false);
+    assert.equal(avatar.includes("NextResponse.redirect(fast"), false);
     const accountApi = readFileSync(path.join(process.cwd(), "src/app/api/account/route.ts"), "utf8");
     assert.match(accountApi, /budgetMs: 8_000/);
     assert.match(accountApi, /pinDisplayUrl/);
     assert.match(accountApi, /Could not save that photo/);
+    assert.match(accountApi, /after\(/);
+    assert.ok(accountApi.indexOf("setAccountPfp") < accountApi.indexOf("pinDataUrl"));
     const accountPage = readFileSync(path.join(process.cwd(), "src/app/account/page.tsx"), "utf8");
-    assert.match(accountPage, /accept="image\/\*"/);
+    assert.match(accountPage, /accept="image\/\*/);
     assert.match(accountPage, /12_000_000/);
     assert.match(accountPage, /80_000/);
+    assert.match(accountPage, /heic2any/);
+    assert.match(accountPage, /solphia-desk/);
+    const face = readFileSync(path.join(process.cwd(), "src/components/CartoonPfp.tsx"), "utf8");
+    assert.match(face, /tries >= 2/);
     const pinata = readFileSync(path.join(process.cwd(), "src/lib/pinata.ts"), "utf8");
     assert.match(pinata, /export function pinDisplayUrl/);
     assert.match(pinata, /budgetMs/);
@@ -507,6 +516,20 @@ describe("launch create validation", () => {
     assert.match(wallet, /pickedMint/);
     assert.match(wallet, /text-\[40px\]/);
     assert.match(wallet, /picked\?\.usd/);
+  });
+
+  it("lets a cleared PFP win over a remote photo", () => {
+    const local = emptyLaunchBook();
+    local.accounts[A] = { pubkey: A, referralRewardsSol: 0, pfp: "" };
+    const remote = emptyLaunchBook();
+    remote.accounts[A] = { pubkey: A, referralRewardsSol: 0, pfp: "https://example.com/x.jpg" };
+    const merged = mergeLaunch(local, remote);
+    assert.equal(merged.accounts[A].pfp, "");
+    const keep = setAccountPfp(emptyLaunchBook(), A, "https://example.com/y.jpg");
+    assert.equal(keep.ok, true);
+    const cleared = setAccountPfp(emptyLaunchBook(), A, "");
+    assert.equal(cleared.ok, true);
+    if (cleared.ok) assert.equal(cleared.account.pfp, "");
   });
 
   it("rejects a 1-character name or ticker with an explicit too-short message", () => {

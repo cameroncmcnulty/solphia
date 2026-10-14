@@ -212,7 +212,7 @@ export function setAccountPfp(
   const raw = (pfp || "").trim();
   const acc = ensureAccount(book, pubkey);
   if (!raw) {
-    acc.pfp = undefined;
+    acc.pfp = "";
     return { ok: true, account: acc };
   }
   const img = profileImageOk(raw);
@@ -404,7 +404,7 @@ export function mergeAccount(remote: LaunchAccount, local: LaunchAccount, key: s
     pubkey: local.pubkey || remote.pubkey || key,
     referrer: local.referrer || remote.referrer,
     referredAt: local.referredAt || remote.referredAt,
-    pfp: local.pfp || remote.pfp,
+    pfp: typeof local.pfp === "string" ? local.pfp : remote.pfp,
     username: local.username || remote.username,
     usernameAt: local.usernameAt || remote.usernameAt,
     notes: local.notes || remote.notes,

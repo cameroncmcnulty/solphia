@@ -176,7 +176,12 @@ export default function AccountPage() {
       setDesk(j);
       if (typeof j.username === "string") setUsername(j.username);
       if (j.withdrawn) setNote(`Withdrew ${Number(j.withdrawn).toFixed(4)} SOL in referral rewards.`);
-      if (body.action === "pfp") setSaved((s) => ({ ...s, pfp: body.pfp ? "PFP saved." : "Cartoon is back." }));
+      if (body.action === "pfp") {
+        const photo = typeof j.pfp === "string" && j.pfp ? `${j.pfp}${j.pfp.includes("?") ? "&" : "?"}t=${Date.now()}` : "";
+        setDesk({ ...j, pfp: photo });
+        setSaved((s) => ({ ...s, pfp: body.pfp ? "PFP saved." : "Cartoon is back." }));
+        window.dispatchEvent(new Event("solphia-desk"));
+      }
       if (body.action === "username") setSaved((s) => ({ ...s, username: j.username ? `Saved @${j.username}` : "Username cleared." }));
     } finally {
       setBusy(false);
@@ -323,8 +328,8 @@ export default function AccountPage() {
             <div data-field="pfp" className={`mt-4 flex items-center gap-4 ${fieldErr.errors.pfp ? "rounded-2xl p-1 ring-1 ring-blood/60" : ""}`}>
               <CartoonPfp seed={owner} src={desk?.pfp} className="h-24 w-24" />
               <div className="flex flex-wrap gap-2">
-                <button type="button" className="btn-acid rounded-full px-5 py-2 text-sm" onClick={() => fileRef.current?.click()}>
-                  Upload
+                <button type="button" disabled={busy} className="btn-acid rounded-full px-5 py-2 text-sm disabled:opacity-40" onClick={() => fileRef.current?.click()}>
+                  {busy ? "Saving…" : "Upload"}
                 </button>
                 <button
                   type="button"
@@ -341,18 +346,20 @@ export default function AccountPage() {
             <input
               ref={fileRef}
               type="file"
-              accept="image/*"
+              accept="image/*,.heic,.heif,image/heic,image/heif"
               className="hidden"
               onChange={async (e) => {
                 const f = e.target.files?.[0];
                 e.target.value = "";
                 if (!f) return;
                 fieldErr.clear("pfp");
+                setBusy(true);
                 try {
                   const data = await squarePfp(f);
                   await post({ action: "pfp", pfp: data });
                 } catch (err) {
                   fieldErr.fail({ pfp: err instanceof Error ? err.message : "Could not use that image." });
+                  setBusy(false);
                 }
               }}
             />
@@ -570,30 +577,62 @@ function WalletRow({ k, pk, bal }: { k: string; pk: string; bal: number }) {
   );
 }
 
+async function readPfpBlob(file: File): Promise<Blob> {
+  const heic = /heic|heif/i.test(file.type) || /\.hei[cf]$/i.test(file.name);
+  if (!heic) return file;
+  try {
+    const { default: heic2any } = await import("heic2any");
+    const out = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.9 });
+    return (Array.isArray(out) ? out[0] : out) as Blob;
+  } catch {
+    return file;
+  }
+}
+
 async function squarePfp(file: File): Promise<string> {
   if (file.size > 12_000_000) throw new Error("Image must be under 12 MB.");
-  const url = URL.createObjectURL(file);
+  const blob = await readPfpBlob(file);
+  let bmp: ImageBitmap | null = null;
   try {
-    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
-      const el = new Image();
-      el.onload = () => resolve(el);
-      el.onerror = () => reject(new Error("Could not read that image. Try a JPEG or PNG."));
-      el.src = url;
-    });
-    const side = Math.min(img.naturalWidth, img.naturalHeight);
+    bmp = await createImageBitmap(blob, { imageOrientation: "from-image" } as ImageBitmapOptions);
+  } catch {
+    bmp = null;
+  }
+  const url = bmp ? "" : URL.createObjectURL(blob);
+  try {
+    let src: CanvasImageSource;
+    let w: number;
+    let h: number;
+    if (bmp) {
+      src = bmp;
+      w = bmp.width;
+      h = bmp.height;
+    } else {
+      const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const el = new Image();
+        el.onload = () => resolve(el);
+        el.onerror = () => reject(new Error("Could not read that image. Try a JPEG or PNG."));
+        el.src = url;
+      });
+      src = img;
+      w = img.naturalWidth;
+      h = img.naturalHeight;
+    }
+    const side = Math.min(w, h);
     if (side < 64) throw new Error("Use a photo at least 64×64.");
     const canvas = document.createElement("canvas");
     canvas.width = 256;
     canvas.height = 256;
     const ctx = canvas.getContext("2d");
     if (!ctx) throw new Error("Could not crop image.");
-    ctx.drawImage(img, (img.naturalWidth - side) / 2, (img.naturalHeight - side) / 2, side, side, 0, 0, 256, 256);
+    ctx.drawImage(src, (w - side) / 2, (h - side) / 2, side, side, 0, 0, 256, 256);
     for (const q of [0.82, 0.68, 0.5, 0.36, 0.24]) {
       const data = canvas.toDataURL("image/jpeg", q);
       if (data.length <= 80_000) return data;
     }
     throw new Error("Image is too heavy. Try a simpler photo.");
   } finally {
-    URL.revokeObjectURL(url);
+    if (url) URL.revokeObjectURL(url);
+    bmp?.close();
   }
 }
