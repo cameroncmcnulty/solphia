@@ -12,6 +12,10 @@ export function socialHref(kind: SocialKind, raw?: string): string {
     return `https://x.com/${h}`;
   }
   if (kind === "telegram") {
+    const plus = s.match(/(?:t\.me|telegram\.me)\/(\+[A-Za-z0-9_-]+)/i);
+    if (plus?.[1]) return `https://t.me/${plus[1]}`;
+    const join = s.match(/(?:t\.me|telegram\.me)\/joinchat\/([A-Za-z0-9_-]+)/i);
+    if (join?.[1]) return `https://t.me/joinchat/${join[1]}`;
     let h = s.replace(/^https?:\/\//i, "").replace(/^(www\.)?/i, "");
     h = h.replace(/^(t\.me|telegram\.me|telegram\.org)\//i, "").replace(/^@/, "");
     h = h.split(/[/?#\s]/)[0] || "";
@@ -22,7 +26,7 @@ export function socialHref(kind: SocialKind, raw?: string): string {
     const invite = s.match(/(?:discord\.gg|discord\.com\/invite)\/([A-Za-z0-9-]+)/i);
     if (invite?.[1]) return `https://discord.gg/${invite[1]}`;
     const code = s.replace(/^@/, "").split(/[/?#\s]/)[0] || "";
-    if (/^[A-Za-z0-9-]{3,32}$/.test(code)) return `https://discord.gg/${code}`;
+    if (/^[A-Za-z0-9-]{3,32}$/.test(code) && !/^https?:$/i.test(code)) return `https://discord.gg/${code}`;
     return "";
   }
   try {

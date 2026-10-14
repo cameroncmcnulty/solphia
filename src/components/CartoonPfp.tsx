@@ -44,8 +44,9 @@ export function CartoonPfp({
         alt=""
         draggable={false}
         onError={() => {
-          if (tries >= 2) setDead(true);
-          else setTimeout(() => setTries((n) => n + 1), 400 * (tries + 1));
+          const local = Boolean(src && (src.startsWith("data:") || src.startsWith("blob:")));
+          if (local || tries >= 3) setDead(true);
+          else setTimeout(() => setTries((n) => n + 1), 250 * (tries + 1));
         }}
         {...click}
       />

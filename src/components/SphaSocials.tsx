@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { socialHref } from "@/lib/launch/links";
 
 const TEAL = "#14F195";
 
@@ -33,27 +34,21 @@ function TealIcon({
   label,
   children,
 }: {
-  href?: string;
+  href: string;
   label: string;
   children: ReactNode;
 }) {
-  const live = Boolean(href);
-  const cls = `inline-flex h-12 w-12 items-center justify-center rounded-full border sm:h-14 sm:w-14 ${
-    live
-      ? "border-[#14F195]/50 bg-[#14F195]/12 text-[#14F195] shadow-[0_0_18px_rgba(20,241,149,0.18)] transition hover:bg-[#14F195] hover:text-[#04000a]"
-      : "cursor-default border-[#14F195]/25 bg-[#14F195]/8 text-[#14F195]/45"
-  }`;
-  if (live) {
-    return (
-      <a href={href} target="_blank" rel="noreferrer" aria-label={label} title={label} className={cls}>
-        {children}
-      </a>
-    );
-  }
   return (
-    <span aria-label={`${label} coming soon`} title={`${label} — link not set`} className={cls}>
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      aria-label={label}
+      title={label}
+      className="inline-flex h-12 w-12 items-center justify-center rounded-full border border-[#14F195]/50 bg-[#14F195]/12 text-[#14F195] shadow-[0_0_18px_rgba(20,241,149,0.18)] transition hover:bg-[#14F195] hover:text-[#04000a] sm:h-14 sm:w-14"
+    >
       {children}
-    </span>
+    </a>
   );
 }
 
@@ -66,17 +61,19 @@ export function SphaSocials({
   telegram?: string;
   discord?: string;
 }) {
+  const links = [
+    { href: socialHref("x", x), label: "X", node: <XLogo /> },
+    { href: socialHref("telegram", telegram), label: "Telegram", node: <Telegram /> },
+    { href: socialHref("discord", discord), label: "Discord", node: <Discord /> },
+  ].filter((l) => l.href);
+  if (!links.length) return null;
   return (
     <div className="flex items-center gap-3" style={{ color: TEAL }}>
-      <TealIcon href={x} label="X">
-        <XLogo />
-      </TealIcon>
-      <TealIcon href={telegram} label="Telegram">
-        <Telegram />
-      </TealIcon>
-      <TealIcon href={discord} label="Discord">
-        <Discord />
-      </TealIcon>
+      {links.map((l) => (
+        <TealIcon key={l.label} href={l.href} label={l.label}>
+          {l.node}
+        </TealIcon>
+      ))}
     </div>
   );
 }

@@ -177,7 +177,10 @@ export default function AccountPage() {
       if (typeof j.username === "string") setUsername(j.username);
       if (j.withdrawn) setNote(`Withdrew ${Number(j.withdrawn).toFixed(4)} SOL in referral rewards.`);
       if (body.action === "pfp") {
-        const photo = typeof j.pfp === "string" && j.pfp ? `${j.pfp}${j.pfp.includes("?") ? "&" : "?"}t=${Date.now()}` : "";
+        const keep = typeof body.pfp === "string" && body.pfp.startsWith("data:") ? body.pfp : "";
+        const photo =
+          keep ||
+          (typeof j.pfp === "string" && j.pfp ? `${j.pfp}${j.pfp.includes("?") ? "&" : "?"}t=${Date.now()}` : "");
         setDesk({ ...j, pfp: photo });
         setSaved((s) => ({ ...s, pfp: body.pfp ? "PFP saved." : "Cartoon is back." }));
         window.dispatchEvent(new Event("solphia-desk"));
@@ -356,6 +359,7 @@ export default function AccountPage() {
                 setBusy(true);
                 try {
                   const data = await squarePfp(f);
+                  setDesk((d) => (d ? { ...d, pfp: data } : d));
                   await post({ action: "pfp", pfp: data });
                 } catch (err) {
                   fieldErr.fail({ pfp: err instanceof Error ? err.message : "Could not use that image." });
@@ -589,15 +593,23 @@ async function readPfpBlob(file: File): Promise<Blob> {
   }
 }
 
+async function decodePfpBitmap(blob: Blob): Promise<ImageBitmap | null> {
+  try {
+    return await createImageBitmap(blob, { imageOrientation: "from-image" } as ImageBitmapOptions);
+  } catch {
+    try {
+      return await createImageBitmap(blob);
+    } catch {
+      return null;
+    }
+  }
+}
+
 async function squarePfp(file: File): Promise<string> {
   if (file.size > 12_000_000) throw new Error("Image must be under 12 MB.");
   const blob = await readPfpBlob(file);
-  let bmp: ImageBitmap | null = null;
-  try {
-    bmp = await createImageBitmap(blob, { imageOrientation: "from-image" } as ImageBitmapOptions);
-  } catch {
-    bmp = null;
-  }
+  let bmp = await decodePfpBitmap(blob);
+  if (!bmp && blob !== file) bmp = await decodePfpBitmap(file);
   const url = bmp ? "" : URL.createObjectURL(blob);
   try {
     let src: CanvasImageSource;

@@ -4,6 +4,9 @@ import { DEFAULT_FUND, DEFAULT_OWNER, DEFAULT_TREASURY, LIVE_TRADING, TREASURY }
 import { durableKind } from "../lib/persist";
 import { treasuryAddress } from "../lib/treasury";
 import { applyOpsConfig, emptyState } from "../lib/store";
+import { socialHref } from "../lib/launch/links";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 describe("treasury default", () => {
   it("pins the founder treasury when env/state are empty", () => {
@@ -94,5 +97,30 @@ describe("ops overlay", () => {
     });
     assert.equal(dirty, false);
     assert.equal(local.sphaSocials?.x, "https://x.com/fresh");
+  });
+});
+
+describe("spha social links", () => {
+  it("turns handles and URLs into https links", () => {
+    assert.equal(socialHref("x", "@solphia"), "https://x.com/solphia");
+    assert.equal(socialHref("x", "https://twitter.com/solphia"), "https://x.com/solphia");
+    assert.equal(socialHref("telegram", "t.me/solphia"), "https://t.me/solphia");
+    assert.equal(socialHref("telegram", "https://t.me/+AbC123_xyz"), "https://t.me/+AbC123_xyz");
+    assert.equal(socialHref("discord", "discord.gg/solphia"), "https://discord.gg/solphia");
+    assert.equal(socialHref("discord", "https://discord.com/invite/solphia"), "https://discord.gg/solphia");
+    assert.equal(socialHref("x", ""), "");
+    assert.equal(socialHref("x", "javascript:alert(1)"), "");
+  });
+
+  it("hides empty social icons on the token page and previews live links in admin", () => {
+    const socials = readFileSync(join(process.cwd(), "src/components/SphaSocials.tsx"), "utf8");
+    assert.match(socials, /socialHref\("x"/);
+    assert.match(socials, /if \(!links\.length\) return null/);
+    assert.equal(socials.includes("coming soon"), false);
+    const admin = readFileSync(join(process.cwd(), "src/components/admin/sections/Spha.tsx"), "utf8");
+    assert.match(admin, /SphaSocials/);
+    assert.match(admin, /PREVIEW/);
+    const token = readFileSync(join(process.cwd(), "src/app/token/page.tsx"), "utf8");
+    assert.match(token, /SphaSocials/);
   });
 });

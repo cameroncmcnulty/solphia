@@ -8,7 +8,7 @@ import { setUsername, usernameOk } from "../launch/username";
 import { creditRank, rankFromXp, resetRank } from "../rank/engine";
 import { GLDX_MINT_OFFICIAL, QQQX_MINT_OFFICIAL, SOL_MINT, SPYX_MINT_OFFICIAL, USDC_MINT, USDT_MINT } from "../pair/mints";
 import { withLaunch, withShill } from "../store";
-import { ensureShill, fillHousePins, postShill, touchMember, voteShill, type HousePinCoin } from "./engine";
+import { ensureShill, fillHousePins, housePubkeySet, postShill, touchMember, voteShill, type HousePinCoin } from "./engine";
 import { composeHouseChat } from "./phrases";
 import { SHILL_HOUSE_PIN_MIN, type HouseActor, type ShillBook, type ShillMessage } from "./types";
 
@@ -19,7 +19,10 @@ export const HOUSE_LIVE_MIN = 51;
 export const HOUSE_LIVE_MAX = 87;
 export const HOUSE_SHARE_CAP = 1;
 export const HOUSE_VOTE_CAP = 2;
-export const HOUSE_CHAT_CAP = 2;
+export const HOUSE_CHAT_CAP = 1;
+/** Most human messages get 1 house reply. Questions / busy rooms can get 2, rarely 3. */
+export const HOUSE_REPLY_MAX = 3;
+export const HOUSE_HUMAN_REPLY_MS = 8 * 60_000;
 export const HOUSE_SHARE_CLUSTER_MS = 2 * 60_000;
 export const HOUSE_VOTE_CLUSTER_MS = 4 * 60_000;
 export const HOUSE_SHARE_GAP_MS = 2.5 * 60_000;
@@ -517,9 +520,59 @@ function lastHumanish(book: ShillBook): ShillMessage | undefined {
   const msgs = book.messages || [];
   for (let i = msgs.length - 1; i >= 0; i--) {
     const m = msgs[i]!;
-    if (m.kind === "text" || m.kind === "sticker") return m;
+    if (m.kind === "text" || m.kind === "sticker" || m.kind === "media") return m;
   }
   return undefined;
+}
+
+function lastPersonMessage(book: ShillBook, now: number): ShillMessage | undefined {
+  const house = housePubkeySet(book);
+  const msgs = book.messages || [];
+  for (let i = msgs.length - 1; i >= 0; i--) {
+    const m = msgs[i]!;
+    if (house.has(m.owner)) continue;
+    if (now - m.at > HOUSE_HUMAN_REPLY_MS) continue;
+    if (m.kind === "text" || m.kind === "sticker" || m.kind === "media") return m;
+  }
+  return undefined;
+}
+
+function houseReplyCount(book: ShillBook, id: string): number {
+  const house = housePubkeySet(book);
+  let n = 0;
+  for (const m of book.messages || []) {
+    if (m.replyTo === id && house.has(m.owner)) n += 1;
+  }
+  return n;
+}
+
+export function houseReplyBudget(rng: Rng, msg: ShillMessage, book: ShillBook, now: number): number {
+  const text = (msg.text || "").toLowerCase();
+  const asked = /\?|anyone|thoughts|wen|you seeing|you in|what's|whats|how|why|should/.test(text);
+  const house = housePubkeySet(book);
+  const seen = new Set<string>();
+  for (const m of book.messages || []) {
+    if (now - m.at > 3 * 60_000) continue;
+    if (house.has(m.owner) || seen.has(m.owner)) continue;
+    seen.add(m.owner);
+  }
+  const humans = seen.size;
+  if (humans >= 3 && asked) return rng() < 0.45 ? 3 : 2;
+  if (humans >= 2 && asked) return rng() < 0.4 ? 3 : 2;
+  if (asked) return rng() < 0.55 ? 2 : 1;
+  if (humans >= 2) return rng() < 0.3 ? 2 : 1;
+  return 1;
+}
+
+function chatCtx(msg?: ShillMessage) {
+  return {
+    lastText: msg?.text || (msg?.sticker ? "sticker" : msg?.media ? "pic" : ""),
+    lastId: msg?.id,
+    lastOwner: msg?.owner,
+    lastHasToken: Boolean(msg?.token?.mint),
+    lastSymbol: msg?.token?.symbol,
+    lastKind: msg?.kind,
+  };
 }
 
 function bootHouseRoom(book: ShillBook, candidates: HousePinCoin[], now: number, rng: Rng) {
@@ -641,20 +694,14 @@ export function tickHouseActions(
   const lastChat = book.lastHouseChatAt || 0;
   const chatGapOk = !lastChat || now - lastChat >= HOUSE_CHAT_GAP_MS;
   if (chatGapOk) {
+    const person = lastPersonMessage(book, now);
+    const personWant =
+      person && houseReplyCount(book, person.id) < Math.min(HOUSE_REPLY_MAX, houseReplyBudget(rng, person, book, now));
     for (const actor of chatDue) {
       if (chats >= HOUSE_CHAT_CAP) break;
-      const last = lastHumanish(book);
-      const line = composeHouseChat(
-        rng,
-        {
-          lastText: last?.text,
-          lastId: last?.id,
-          lastOwner: last?.owner,
-          lastHasToken: Boolean(last?.token?.mint),
-          lastSymbol: last?.token?.symbol,
-        },
-        actor.pubkey,
-      );
+      if (personWant && actor.pubkey === person!.owner) continue;
+      const target = personWant ? person : lastHumanish(book);
+      const line = composeHouseChat(rng, chatCtx(target), actor.pubkey, Boolean(personWant));
       const posted = postShill(book, {
         owner: actor.pubkey,
         text: line.text,
@@ -666,6 +713,13 @@ export function tickHouseActions(
         chats += 1;
         book.lastHouseChatAt = now;
         noteXp(actor.pubkey);
+        for (const other of chatDue) {
+          if (other.pubkey === actor.pubkey) continue;
+          if ((other.nextChatAt || 0) <= now) {
+            other.nextChatAt = now + lerp(14_000, 48_000, rng());
+          }
+        }
+        break;
       }
     }
   } else {

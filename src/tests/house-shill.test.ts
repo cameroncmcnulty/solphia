@@ -34,6 +34,9 @@ import {
   recycleHouseActors,
   shouldPaintHousePfp,
   tickHouseActions,
+  HOUSE_CHAT_CAP,
+  HOUSE_REPLY_MAX,
+  houseReplyBudget,
 } from "../lib/shill/house";
 import { housePfpPath, profileImageOk } from "../lib/launch/validate";
 import { creditRank, leaderboard } from "../lib/rank/engine";
@@ -183,6 +186,64 @@ describe("house shill wallets", () => {
     assert.ok(book.messages.some((m) => m.replyTo), "they answer each other");
     assert.equal(liveRoomCount(book, t0 + 1_000), book.houseLive);
     assert.ok(out.chats >= 0);
+  });
+
+  it("replies to a real person one at a time and caps the pile-on", () => {
+    assert.equal(HOUSE_CHAT_CAP, 1);
+    assert.equal(HOUSE_REPLY_MAX, 3);
+    const book = emptyShill();
+    const rng = mulberry32(9);
+    plantHouseSchedules(book, 10_000, rng);
+    isolate(book);
+    book.lastHouseChatAt = 0;
+    book.messages = [];
+    for (const a of book.houseActors!) {
+      a.nextChatAt = 50_000;
+      a.nextShareAt = 9e15;
+      a.nextVoteAt = 9e15;
+    }
+    book.messages.push({
+      id: "human1",
+      at: 49_000,
+      owner: A,
+      kind: "text",
+      text: "thoughts on this reclaim?",
+      reactions: {},
+    });
+    const first = tickHouseActions(book, market, 50_000, rng);
+    const round1 = book.messages.filter((m) => m.replyTo === "human1");
+    assert.equal(first.chats, 1);
+    assert.equal(round1.length, 1);
+    assert.equal(round1[0]!.owner === A, false);
+    assert.ok((round1[0]!.text || "").length > 0);
+    const house = new Set(book.houseActors!.map((a) => a.pubkey));
+    assert.ok(house.has(round1[0]!.owner));
+
+    for (const a of book.houseActors!) {
+      if ((a.nextChatAt || 0) > 50_000) a.nextChatAt = 62_000;
+    }
+    book.lastHouseChatAt = 50_000;
+    tickHouseActions(book, market, 62_000, rng);
+    for (const a of book.houseActors!) {
+      if ((a.nextChatAt || 0) > 62_000) a.nextChatAt = 74_000;
+    }
+    tickHouseActions(book, market, 74_000, rng);
+    for (const a of book.houseActors!) {
+      if ((a.nextChatAt || 0) > 74_000) a.nextChatAt = 86_000;
+    }
+    tickHouseActions(book, market, 86_000, rng);
+    const piled = book.messages.filter((m) => m.replyTo === "human1" && house.has(m.owner));
+    assert.ok(piled.length >= 1);
+    assert.ok(piled.length <= HOUSE_REPLY_MAX);
+
+    const quiet = emptyShill();
+    plantHouseSchedules(quiet, 10_000, mulberry32(3));
+    isolate(quiet);
+    quiet.messages = [
+      { id: "gm1", at: 49_000, owner: A, kind: "text", text: "gm", reactions: {} },
+    ];
+    const want = houseReplyBudget(() => 0.9, quiet.messages[0]!, quiet, 50_000);
+    assert.equal(want, 1);
   });
 
   it("counts only wallets still in the room, not old ones that switched out", () => {
@@ -410,6 +471,16 @@ describe("house chat phrases", () => {
       if (m.replyTo === "m1") replies += 1;
     }
     assert.ok(replies > 120);
+    for (let i = 0; i < 40; i++) {
+      const forced = composeHouseChat(
+        rng,
+        { lastText: "this reclaim looks heavy", lastId: "h1", lastOwner: "person" },
+        "bot",
+        true,
+      );
+      assert.equal(forced.replyTo, "h1");
+      assert.ok((forced.text || "").length > 0);
+    }
   });
 
   it("has thousands of regular hangout lines and replies to each other with them", () => {

@@ -57,7 +57,10 @@ export function AccountMenu() {
     const load = () => {
       fetch(`/api/account?pubkey=${encodeURIComponent(owner)}`, { cache: "no-store" })
         .then((r) => r.json())
-        .then((j) => setDesk(j))
+        .then((j) => {
+          const pfp = typeof j?.pfp === "string" && j.pfp ? `${j.pfp}${j.pfp.includes("?") ? "&" : "?"}t=${Date.now()}` : "";
+          setDesk({ ...j, pfp });
+        })
         .catch(() => {});
     };
     load();

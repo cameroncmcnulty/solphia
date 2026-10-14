@@ -17,7 +17,7 @@ function miss(status = 404) {
 }
 
 export async function GET(req: NextRequest) {
-  if (!rateLimit(clientIp(req) + ":circpfp", 80, 60_000)) {
+  if (!rateLimit(clientIp(req) + ":circpfp", 200, 60_000)) {
     return miss(429);
   }
   const pk = req.nextUrl.searchParams.get("pk") || "";
@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(new URL(pfp, req.nextUrl.origin), 302);
   }
   if (/^https?:\/\//i.test(pfp)) {
-    const got = await fetchFirstImage(artCandidates(pfp));
+    const got = await fetchFirstImage(artCandidates(pfp), 4_000);
     if (!got) return miss();
     return new NextResponse(Buffer.from(got.body), {
       headers: {
@@ -50,7 +50,9 @@ export async function GET(req: NextRequest) {
   return new NextResponse(buf, {
     headers: {
       "content-type": m[1],
-      "cache-control": "public, max-age=120, stale-while-revalidate=600",
+      "cache-control": "private, no-cache, no-store, must-revalidate",
+      "cdn-cache-control": "no-store",
+      "vercel-cdn-cache-control": "no-store",
     },
   });
 }

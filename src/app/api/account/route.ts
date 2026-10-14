@@ -17,7 +17,7 @@ import { IMAGE_DATA_MAX } from "@/lib/launch/validate";
 import { lastPairPrices } from "@/lib/tick";
 import { airdropMultiplier, referralBoostPct } from "@/lib/circle/types";
 import { payReferralXp, profilePhotoUrl, publicRank } from "@/lib/rank/engine";
-import { pinDataUrl, pinDisplayUrl } from "@/lib/pinata";
+import { pinDataUrl } from "@/lib/pinata";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -80,10 +80,12 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  if (!rateLimit(clientIp(req) + ":account", 30, 60_000)) return fail("rate_limited", 429);
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return fail("bad_request");
   const b = parsed.data;
+  const bucket = b.action === "pfp" ? "account-pfp" : "account";
+  const n = b.action === "pfp" ? 20 : 30;
+  if (!rateLimit(clientIp(req) + ":" + bucket, n, 60_000)) return fail("rate_limited", 429);
   if (!isSolanaAddress(b.pubkey)) return fail("bad_wallet");
   const solUsd = lastPairPrices().solUsd || 0;
 
@@ -150,17 +152,13 @@ export async function POST(req: NextRequest) {
   }
 
   if (b.action === "pfp" && pfpUrl.startsWith("data:image/")) {
-    const pk = b.pubkey;
     const data = pfpUrl;
+    const name = `pfp-${b.pubkey.slice(0, 8)}`;
     after(async () => {
       try {
-        const pinned = await pinDataUrl(data, `pfp-${pk.slice(0, 8)}`, { budgetMs: 8_000 });
-        if (!pinned?.url) return;
-        const fast = pinDisplayUrl(pinned.url);
-        if (!fast.startsWith("https:")) return;
-        await withLaunch((s) => setAccountPfp(bookOf(s), pk, fast), true);
+        await pinDataUrl(data, name, { budgetMs: 8_000 });
       } catch {
-        /* data URL already saved — photo still shows */
+        /* data URL is the photo — Pinata is backup only, never overwrite it */
       }
     });
   }

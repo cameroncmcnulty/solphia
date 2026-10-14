@@ -251,6 +251,7 @@ export type HouseChatCtx = {
   lastOwner?: string;
   lastHasToken?: boolean;
   lastSymbol?: string;
+  lastKind?: "text" | "sticker" | "media";
 };
 
 export function phraseCardinality(): number {
@@ -306,6 +307,9 @@ function tokenHits(symbol: string): string[] {
 }
 
 function replyLine(rng: () => number, ctx: HouseChatCtx): string {
+  if (ctx.lastKind === "sticker" || ctx.lastKind === "media") {
+    return pick(["lmao", "that's wild", "ok", "I see you", "wait", "lol", "say less", "what is that", "chat is chat"], rng);
+  }
   const last = (ctx.lastText || "").toLowerCase();
   if (isHangoutText(last) && rng() < 0.82) return hangoutReply(rng, last);
   if (!ctx.lastHasToken && rng() < 0.55) return hangoutReply(rng, last);
@@ -315,6 +319,18 @@ function replyLine(rng: () => number, ctx: HouseChatCtx): string {
   if (/\b(gm|morning)\b/.test(last)) return pick(["gm", "gm gm", "morning", "gm chat", "hey", "you good", "morning crew", "gm back"], rng);
   if (/\bgn\b/.test(last)) return pick(["gn", "gn gn", "later", "go sleep", "night crew", "rest"], rng);
   if (/\b(lmao|lol)\b/.test(last)) return pick(["lmao", "lol", "true", "facts", "you're funny", "y'all wild", "yeah that"], rng);
+  if (/\b(rug|rugged|honeypot|scam)\b/.test(last)) {
+    return pick(["if it's cooked it's cooked", "show the lock", "I'm out if that's real", "that's nasty", "leave it"], rng);
+  }
+  if (/\b(moon|lfg|pump|send it)\b/.test(last)) {
+    return pick(["lfg", "easy", "don't chase the first spike", "if it holds", "size talks", "I'm small"], rng);
+  }
+  if (/\b(buy|bought|aping|ape)\b/.test(last)) {
+    return pick(["I'm small", "same", "wait for a better add", "don't size the first test", "nfa", "already in"], rng);
+  }
+  if (/\b(sell|sold|out|dump)\b/.test(last)) {
+    return pick(["fair", "I'm flat", "don't be the liquidity", "if it loses this I'm out too", "paper is a position"], rng);
+  }
   if (/\b(trap|fakeout|fake|poke)\b/.test(last)) {
     return pick(["that's the trap", "yeah fakeout", "give them the wick", "wait for the real one", "too obvious", "I saw that poke too", "don't buy the first spike"], rng);
   }
@@ -350,6 +366,7 @@ export function composeHouseChat(
   rng: () => number,
   ctx: HouseChatCtx = {},
   actorPk?: string,
+  forceReply = false,
 ): { text: string; replyTo?: string } {
   const canReply = Boolean(ctx.lastId && ctx.lastOwner && ctx.lastOwner !== actorPk);
   const last = (ctx.lastText || "").toLowerCase();
@@ -358,7 +375,7 @@ export function composeHouseChat(
   if (canReply && ctx.lastHasToken && !isHangoutText(last)) replyP = 0.5;
   if (canReply && /\?|anyone|thoughts|wen|you seeing|you in|you good|you eat|you still/.test(last)) replyP = 0.86;
   if (canReply && /^(gm|gn|yo|hey|hi|morning|what's up|sup)\b/.test(last.trim())) replyP = 0.8;
-  if (canReply && rng() < replyP) {
+  if (canReply && (forceReply || rng() < replyP)) {
     return { text: replyLine(rng, ctx), replyTo: ctx.lastId };
   }
   const roll = rng();
