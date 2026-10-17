@@ -183,7 +183,8 @@ export async function quoteOpenSwap(opts: {
   inDecimals?: number;
   outDecimals?: number;
 }): Promise<QuoteResult> {
-  return quoteOnce({ ...opts, open: true });
+  /** Jupiter v0 quotes reject asLegacyTransaction on /swap, so house 1% cannot attach. */
+  return quoteOnce({ ...opts, open: true, extra: "asLegacyTransaction=true" });
 }
 
 export function pickBestQuote(rows: QuoteResult[]): QuoteResult {

@@ -87,6 +87,7 @@ describe("open market swap fees", () => {
     const jupQuote = readFileSync(path.join(process.cwd(), "src/lib/pair/jupiter.ts"), "utf8");
     assert.equal(jupQuote.includes("referralAccount"), false);
     assert.equal(jupQuote.includes("platformFeeBps"), false);
+    assert.match(jupQuote, /quoteOpenSwap[\s\S]*asLegacyTransaction=true/);
     assert.match(src, /Not enough SOL in this wallet/);
     assert.equal(liveSwapFeeSol(1), 0.01);
     assert.equal(liveSwapFeeSol(0.015), 0.00015);
