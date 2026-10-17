@@ -150,7 +150,7 @@ export function TradingHub() {
   }, [armed]);
 
   async function patch(partial: Record<string, unknown>) {
-    if (!owner) return setMsg("Connect Phantom first.");
+    if (!owner) return setMsg("Connect a wallet first.");
     const r = await fetch("/api/auto", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -188,7 +188,7 @@ export function TradingHub() {
   }
 
   async function kill() {
-    if (!owner) return setMsg("Connect Phantom first.");
+    if (!owner) return setMsg("Connect a wallet first.");
     setBusy(true);
     try {
       if (delegated || auto?.mode === "live") {
@@ -291,7 +291,7 @@ export function TradingHub() {
               type="button"
               disabled={busy}
               onClick={async () => {
-                if (!owner) return setMsg("Connect Phantom first.");
+                if (!owner) return setMsg("Connect a wallet first.");
                 if (!canStart) {
                   setMsg(
                     seat?.liveSeat || seat?.founder
@@ -383,7 +383,7 @@ export function TradingHub() {
               }}
             />
           ) : (
-            <p className="text-sm text-mute">Connect Phantom to move SOL between your wallet and the trading wallet.</p>
+            <p className="text-sm text-mute">Connect a Solphia wallet to move SOL between this wallet and the trading wallet.</p>
           )}
           <div className="mt-3 flex flex-col gap-2 sm:flex-row">
             <button

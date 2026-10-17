@@ -67,6 +67,21 @@ describe("auth flow", () => {
     assert.match(gate, /recovery phrase and PIN stay on this device/);
   });
 
+  it("admin backtest can push the public homepage curve", () => {
+    const admin = readFileSync(new URL("../app/api/admin/route.ts", import.meta.url), "utf8");
+    assert.match(admin, /publishBacktest/);
+    assert.match(admin, /packFromAdminRuns/);
+    assert.match(admin, /KEYS.backtestPublic/);
+    const ui = readFileSync(new URL("../components/admin/sections/Backtest.tsx", import.meta.url), "utf8");
+    assert.match(ui, /Push live to website/);
+    assert.match(ui, /publishBacktest: true/);
+    const pub = readFileSync(new URL("../app/api/backtest/route.ts", import.meta.url), "utf8");
+    assert.match(pub, /loadPublicBacktestPack/);
+    const launch = readFileSync(new URL("../app/launch/page.tsx", import.meta.url), "utf8");
+    assert.equal(/One Phantom prompt/.test(launch), false);
+    assert.equal(/Connect a Solphia wallet or Phantom/.test(launch), false);
+  });
+
   it("terms and privacy match seed-wallet login and live key delegate", () => {
     const legal = readFileSync(new URL("../app/legal/page.tsx", import.meta.url), "utf8");
     assert.match(legal, /id="terms"/);

@@ -9,6 +9,7 @@ export const KEYS = {
   traders: "solphia:traders",
   trader: (owner: string) => `solphia:trader:${owner}`,
   backtest: (lev: 1 | 2 | 3) => `solphia:backtest:${lev}`,
+  backtestPublic: "solphia:backtest:public",
   launch: "solphia:launch",
   /** Rank, usernames, referrals. Dual-written so a fat tape save cannot be the only copy. */
   launchAccounts: "solphia:launch-accounts",

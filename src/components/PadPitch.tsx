@@ -40,13 +40,13 @@ export function PadPitch() {
             <span className="block text-acid">Devs take half.</span>
           </h2>
           <p className="mt-3 max-w-lg text-sm leading-relaxed text-mute">
-            Solphia’s own bonding curve. One Phantom sign. Buy and sell on the pad. Creators keep half of every swap fee for life.
+            Solphia’s own bonding curve. You sign once. Buy and sell on the pad. Creators keep half of every swap fee for life.
           </p>
           <div className="mt-5 grid grid-cols-3 gap-2">
             {[
               ["1.00%", "total fee"],
               ["50%", "of that fee to the creator"],
-              ["1 sig", "Phantom prompt"],
+              ["1 sig", "you sign once"],
             ].map(([n, l]) => (
               <div key={l} className="rounded-2xl border border-white/10 bg-void/60 px-3 py-3">
                 <p className="stat-num text-xl text-acid sm:text-2xl">{n}</p>

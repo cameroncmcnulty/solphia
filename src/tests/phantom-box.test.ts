@@ -61,7 +61,7 @@ describe("phantom box", () => {
 
   it("maps Phantom 4001 unauthorized into a connect-again prompt", () => {
     const err = phantomSignError({ code: 4001, message: "The requested method and/or account has not been authorized by the user." });
-    assert.match(err.message, /Approve Phantom/);
+    assert.match(err.message, /Approve the wallet connect prompt/);
     assert.equal(isPhantomUnauthorized("The requested method and/or account has not been authorized by the user.", "4001"), true);
     assert.equal(isPhantomUnauthorized("Signature declined in Phantom.", "user_rejected"), false);
   });

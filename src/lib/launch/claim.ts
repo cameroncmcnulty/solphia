@@ -95,7 +95,7 @@ export function nextCreatorPayout<T extends { mint?: string; creatorUnclaimedSol
   };
 }
 
-/** Master Claim all amount — the wallet sum. Each Phantom signature still pays one pool. */
+/** Master Claim all amount — the wallet sum. Each signature still pays one pool. */
 export function claimButtonSol(p: { totalUnclaimed: number; nextSol?: number }): number {
   return Number(p.totalUnclaimed) || 0;
 }
@@ -105,15 +105,15 @@ export function claimHint(p: { nextSol: number; restCount: number; restSol: numb
   const all = fmtClaimSol(p.totalUnclaimed);
   if (p.restCount > 0) {
     const n = p.restCount + 1;
-    return `Claim all ${all} SOL. Phantom asks once per token (${n} approvals) until this hits 0.`;
+    return `Claim all ${all} SOL. Your wallet asks once per token (${n} approvals) until this hits 0.`;
   }
-  return `Phantom will credit ${all} SOL, minus the network fee.`;
+  return `This wallet will credit ${all} SOL, minus the network fee.`;
 }
 
-/** Vault drain — one transfer, no per-pool Phantom. */
+/** Vault drain — one transfer, no per-pool extra signature. */
 export function vaultClaimHint(sol: number): string {
   if (!(sol > 0)) return "";
-  return `Claim all ${fmtClaimSol(sol)} SOL. One transfer from your Solphia vault into this Phantom.`;
+  return `Claim all ${fmtClaimSol(sol)} SOL. One transfer from your Solphia vault into this wallet.`;
 }
 
 export function claimablePartner<T extends { mint?: string; partnerUnclaimedSol?: number }>(rows: T[]): T[] {

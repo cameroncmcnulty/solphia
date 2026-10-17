@@ -1,8 +1,8 @@
-/** Last Jupiter swap result. Survives Phantom UL remounts until the user dismisses it. */
+/** Last Jupiter swap result. Survives wallet-redirect remounts until the user dismisses it. */
 export const SWAP_NOTICE_KEY = "solphia_jup_notice";
 export const SWAP_NOTICE_EVENT = "solphia:jup-notice";
 export const PHANTOM_SWAP_PENDING =
-  "Opening Phantom to sign. Come back here — the swap lands after you approve.";
+  "Approve in your wallet. Come back here — the swap lands after you approve.";
 
 export type SwapNoticeKind = "error" | "ok" | "pending";
 export type SwapNotice = { kind: SwapNoticeKind; text: string; at: number; sig?: string };
@@ -46,7 +46,7 @@ export function formatSwapError(err: unknown): string {
 }
 
 export function isPhantomSwapPending(text: string): boolean {
-  return /approve in phantom|opening phantom|swap lands when you come back|PHANTOM_REDIRECT/i.test(text);
+  return /approve in phantom|approve in your wallet|opening phantom|swap lands when you come back|swap lands after you|PHANTOM_REDIRECT/i.test(text);
 }
 
 export function noticeFromSwapError(err: unknown): SwapNotice {

@@ -189,7 +189,7 @@ export default function WalletPage() {
       void load();
     } catch (e) {
       if (isPhantomRedirect(e)) {
-        setErr("Approve in Phantom. You'll come back here.");
+        setErr("Approve in your wallet. You'll come back here.");
         return;
       }
       setErr(e instanceof Error ? e.message : "Send failed.");
@@ -562,7 +562,7 @@ export default function WalletPage() {
               <CopyButton text={secret} label="Copy private key" copiedLabel="Copied" className="mt-2 rounded-full bg-white/10 px-3 py-1.5 text-[13px] text-white" />
             </>
           ) : (
-            <p className="text-[13px] text-white/45">Unlock to export. Phantom wallets cannot be exported from Solphia.</p>
+            <p className="text-[13px] text-white/45">Unlock to export. Only Solphia wallets on this device can be exported here.</p>
           )}
         </WalletSheet>
       ) : null}

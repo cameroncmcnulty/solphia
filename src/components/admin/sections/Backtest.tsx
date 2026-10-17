@@ -16,18 +16,37 @@ export function BacktestSection() {
           <div className="font-mono text-[10px] tracking-[0.3em] text-mute">ENGINE BACKTEST</div>
           <h2 className="mt-1 font-display text-2xl text-ghost">Does this engine print?</h2>
           <p className="mt-2 max-w-2xl text-sm text-mute">
-            Replay spot 1× plus SOL-PERP 2× and 3× on the same ~40d 15m tape. Jupiter Perps fees and liquidation are in the lev marks.
+            Replay the live engine on the latest ~30-day 15m tape (spot 1× plus SOL 2× / 3×). Fees and liquidation are in the lev marks. Run first, then push live so the homepage curve updates.
           </p>
         </div>
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => patch({ runBacktest: true })}
-          className="btn-acid rounded-full px-5 py-3 text-sm disabled:opacity-40"
-        >
-          {busy ? "Replaying history…" : "Run backtest"}
-        </button>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => patch({ runBacktest: true })}
+            className="btn-ghost rounded-full px-5 py-3 text-sm disabled:opacity-40"
+          >
+            {busy ? "Replaying history…" : "Run backtest"}
+          </button>
+          <button
+            type="button"
+            disabled={busy || !shownBt}
+            onClick={() => patch({ publishBacktest: true })}
+            className="btn-acid rounded-full px-5 py-3 text-sm disabled:opacity-40"
+          >
+            {busy ? "Publishing…" : "Push live to website"}
+          </button>
+        </div>
       </div>
+      {shownBt && data.backtestPublishedAt ? (
+        <p className="mt-3 font-mono text-[11px] text-mute">
+          {data.backtestPublishedAt >= (shownBt.ranAt || 0) - 1000
+            ? `Live on the site · pushed ${age(now - data.backtestPublishedAt)} ago`
+            : `Site still shows an older curve · last push ${age(now - data.backtestPublishedAt)} ago`}
+        </p>
+      ) : shownBt ? (
+        <p className="mt-3 font-mono text-[11px] text-mute">This run is on the dashboard only. Push live to update the homepage.</p>
+      ) : null}
       {shownBt ? (
         <div className="mt-6 space-y-6">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">

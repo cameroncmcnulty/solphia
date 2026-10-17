@@ -68,7 +68,7 @@ function toBytes(ser: Uint8Array | number[]): Uint8Array {
 
 export function serializeTx(tx: Transaction | VersionedTransaction): Uint8Array {
   if (typeof (tx as Transaction).serialize !== "function") {
-    throw new Error("Phantom returned an unusable transaction.");
+    throw new Error("Wallet returned an unusable transaction.");
   }
   if (isLegacy(tx)) return toBytes(tx.serialize({ requireAllSignatures: true }));
   return toBytes((tx as VersionedTransaction).serialize());

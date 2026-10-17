@@ -62,7 +62,7 @@ export function SphaLaunch() {
     const ownerW = projectWallet("owner");
     const payer = ownerW?.pubkey || data?.ownerWallet || "";
     if (!payer) {
-      setErr("Create the owner project wallet first. It signs the launch — not Phantom.");
+      setErr("Create the owner project wallet first. It signs the launch.");
       return;
     }
     if (mode === "official" && prep?.missing?.length) {
@@ -209,7 +209,7 @@ export function SphaLaunch() {
             <p className="mt-1 max-w-xl text-sm text-mute">
               Official $SPHA is 200,000,000. 8.6 / 9.7 / 4.6 mint into the owner, foundation, and treasury project
               wallets at launch. 77.1% on the same bonding curve as every other pad token so the 1% lasts after
-              graduate. Sign with the owner project wallet — not Phantom. Run a test ticker first.
+              graduate. Sign with the owner project wallet. Run a test ticker first.
             </p>
           </div>
           <div className="flex rounded-full border border-violet/30 p-0.5">

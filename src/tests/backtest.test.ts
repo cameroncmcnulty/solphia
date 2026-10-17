@@ -4,6 +4,8 @@ import {
   dailyStats,
   latestBacktest,
   monthlyStats,
+  overlayPublishedPack,
+  packFromAdminRuns,
   publicBacktest,
   publicBacktestPack,
   runBacktest,
@@ -104,6 +106,24 @@ describe("backtest replay", () => {
       assert.equal(pack.reports[3].leverage, 3);
       assert.ok((pack.reports[3].curve?.length || 0) > 8);
     }
+  });
+
+  it("admin push overlays the 1m public curve without wiping 3m/6m seeds", () => {
+    const seed = publicBacktestPack();
+    const spot = latestBacktest(null, 1);
+    const fresh = {
+      ...spot,
+      pnlPct: 0.42,
+      ranAt: Date.now(),
+      curve: Array.from({ length: 12 }, (_, i) => ({ t: i, equity: 1000 + i })),
+    };
+    const pack = packFromAdminRuns(fresh, latestBacktest(null, 2), latestBacktest(null, 3));
+    assert.equal(pack.windows["1m"][1].pnlPct, 0.42);
+    assert.ok(pack.publishedAt);
+    const merged = overlayPublishedPack(seed, pack);
+    assert.equal(merged.windows["1m"][1].pnlPct, 0.42);
+    assert.equal(merged.windows["3m"][1].pnlPct, seed.windows["3m"][1].pnlPct);
+    assert.equal(publicBacktest(fresh).ready, true);
   });
 
   it("ignores a stale Redis report older than the shipped seed", () => {

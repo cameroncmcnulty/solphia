@@ -29,6 +29,7 @@ import seed3mLev3 from "./backtestSeed3mLev3.json";
 import seed6m from "./backtestSeed6m.json";
 import seed6mLev2 from "./backtestSeed6mLev2.json";
 import seed6mLev3 from "./backtestSeed6mLev3.json";
+import { KEYS, kvGetJson } from "../persist";
 
 function normalizeDay(d: BacktestDay): BacktestDay {
   const entries = d.entries ?? 0;
@@ -451,6 +452,71 @@ export function publicBacktestPack() {
     "6m": one("6m"),
   };
   return { ready: true as const, reports, windows };
+}
+
+export type PublicBacktestPack = ReturnType<typeof publicBacktestPack> & { publishedAt?: number };
+
+function asPublicBt(raw: unknown): PublicBacktest | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as PublicBacktest;
+  if (!o.ready || !Array.isArray(o.curve) || o.curve.length < 8) return null;
+  return o;
+}
+
+/** Admin push overlays the seeded brochure. Missing cells keep the seed. */
+export function overlayPublishedPack(seed: PublicBacktestPack, stored: unknown): PublicBacktestPack {
+  if (!stored || typeof stored !== "object") return seed;
+  const s = stored as Partial<PublicBacktestPack> & { reports?: Partial<Record<1 | 2 | 3, unknown>>; windows?: Partial<Record<BacktestWindow, Partial<Record<1 | 2 | 3, unknown>>>> };
+  const reports = { ...seed.reports };
+  const windows: PublicBacktestPack["windows"] = {
+    "1m": { ...seed.windows["1m"] },
+    "3m": { ...seed.windows["3m"] },
+    "6m": { ...seed.windows["6m"] },
+  };
+  for (const lev of [1, 2, 3] as const) {
+    const r = asPublicBt(s.reports?.[lev]);
+    if (r) reports[lev] = r;
+    for (const w of ["1m", "3m", "6m"] as const) {
+      const cell = asPublicBt(s.windows?.[w]?.[lev]);
+      if (cell) windows[w][lev] = cell;
+    }
+  }
+  const publishedAt = Number(s.publishedAt) || seed.publishedAt;
+  return publishedAt ? { ready: true as const, publishedAt, reports, windows } : { ready: true as const, reports, windows };
+}
+
+/** Homepage 1m curve from the admin run. 3m / 6m stay on the seed until those are pushed. */
+export function packFromAdminRuns(spot1: BacktestReport, spot2: BacktestReport, spot3: BacktestReport): PublicBacktestPack {
+  const seed = publicBacktestPack();
+  const one: HorizonLevPack = {
+    1: publicBacktest(spot1),
+    2: publicBacktest(spot2),
+    3: publicBacktest(spot3),
+  };
+  return overlayPublishedPack(seed, {
+    publishedAt: Date.now(),
+    reports: one,
+    windows: { "1m": one },
+  });
+}
+
+/** Slim payload for Redis — 1m overlay only. Seed fills the rest on read. */
+export function slimPublishedPack(pack: PublicBacktestPack) {
+  return {
+    publishedAt: pack.publishedAt,
+    reports: pack.reports,
+    windows: { "1m": pack.windows["1m"] },
+  };
+}
+
+export async function loadPublicBacktestPack(): Promise<PublicBacktestPack> {
+  const seed = publicBacktestPack();
+  try {
+    const stored = await kvGetJson(KEYS.backtestPublic);
+    return overlayPublishedPack(seed, stored);
+  } catch {
+    return seed;
+  }
 }
 
 export type BacktestOpts = {

@@ -51,7 +51,7 @@ export default function PricingPage() {
 
   async function subscribe() {
     const issues: Partial<Record<"wallet" | "tos" | "plan", string>> = {};
-    if (!owner) issues.wallet = "Connect Phantom first.";
+    if (!owner) issues.wallet = "Connect a wallet first.";
     if (!planId) issues.plan = "Pick a live plan.";
     if (!tos) issues.tos = "Agree to the terms to start a live seat.";
     if (Object.keys(issues).length) {
@@ -64,7 +64,7 @@ export default function PricingPage() {
     try {
       const j = await subscribeWithPhantom({ owner: owner!, email: email || undefined, plan: planId });
       setMsg(
-        `${selected.name} on until ${new Date(j.subscribedUntil).toLocaleDateString()}. ${selected.sol} SOL left Phantom for the treasury.`,
+        `${selected.name} on until ${new Date(j.subscribedUntil).toLocaleDateString()}. ${selected.sol} SOL left this wallet for the treasury.`,
       );
       await refreshSeat(owner);
     } catch (e) {

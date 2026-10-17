@@ -251,7 +251,7 @@ export function TokenImageCrop({
       <div className="w-full max-w-md rounded-3xl border border-white/10 bg-[#0a0614] p-4 shadow-2xl sm:p-5">
         <p className="font-mono text-[11px] tracking-[0.28em] text-acid">TOKEN ART · 512×512</p>
         <h3 className="mt-1 font-display text-2xl text-ghost">Frame the square</h3>
-        <p className="mt-1 text-sm text-mute">Drag to pan. Pinch or zoom. We save a 512×512 square Phantom and Jupiter can show.</p>
+        <p className="mt-1 text-sm text-mute">Drag to pan. Pinch or zoom. We save a 512×512 square wallets and Jupiter can show.</p>
 
         <div className="mt-4 flex items-center justify-center gap-4">
           <div
@@ -290,7 +290,7 @@ export function TokenImageCrop({
                 style={{ width: stage.width * (64 / view), height: stage.height * (64 / view), marginLeft: stage.left * (64 / view), marginTop: stage.top * (64 / view) }}
               />
             </div>
-            <p className="font-mono text-[10px] text-mute">Phantom</p>
+            <p className="font-mono text-[10px] text-mute">Wallet</p>
           </div>
         </div>
 

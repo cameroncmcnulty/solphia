@@ -91,13 +91,13 @@ describe("creator claim amounts", () => {
     assert.match(claimHint(p), /once per token/);
     const last = nextCreatorPayout([rows[1]!]);
     assert.equal(fmtClaimSol(claimButtonSol(last)), fmtClaimSol(last.totalUnclaimed));
-    assert.match(claimHint(last), /Phantom will credit 0\.021962 SOL/);
+    assert.match(claimHint(last), /This wallet will credit 0\.021962 SOL/);
     assert.match(vaultClaimHint(0.083811), /Claim all 0\.083811 SOL/);
     assert.match(vaultClaimHint(0.083811), /One transfer/);
     assert.equal(vaultClaimHint(0), "");
   });
 
-  it("advertises the simulated SOL credit Phantom shows, not a stale pool field", () => {
+  it("advertises the simulated SOL credit this wallet shows, not a stale pool field", () => {
     const pre = 1_000_000_000;
     const post = 1_000_195_000;
     const fee = 8_000;

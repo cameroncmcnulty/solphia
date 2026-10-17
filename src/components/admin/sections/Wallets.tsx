@@ -318,7 +318,7 @@ export function WalletsSection() {
         <WalletCard
           kicker="ADMIN · FREE SEAT"
           title="Founder seats"
-          blurb="Connected Phantom that skips the paid seat. Keys stay in the wallet."
+          blurb="Connected wallet that skips the paid seat. Phrase stays on this device."
           pk={data.adminWallets[0] || ""}
           sol={(data.adminWallets || []).reduce((s, pk) => s + (pack?.admins.find((a) => a.pk === pk)?.sol || 0), 0)}
           solUsd={solUsd}
@@ -537,7 +537,7 @@ export function WalletsSection() {
       <div className="rounded-3xl border border-violet/20 bg-void/40 p-5">
         <div className="font-mono text-[10px] tracking-[0.2em] text-mute">ADMIN WALLET · FREE SEAT</div>
         <p className="mt-2 text-sm text-mute">
-          Connect the Phantom you trade with. That address skips the {data.seatSol} / {data.seatSolLev} SOL seat.
+          Connect the wallet you trade with. That address skips the {data.seatSol} / {data.seatSolLev} SOL seat.
         </p>
         <div className="mt-3">
           <WalletConnect />
@@ -560,7 +560,7 @@ export function WalletsSection() {
             disabled={busy}
             onClick={() => {
               if (!adminPk) {
-                adminErr.fail({ adminPk: "Paste a Solana address or connect Phantom." });
+                adminErr.fail({ adminPk: "Paste a Solana address or connect a wallet." });
                 return;
               }
               if (!walletOk(adminPk)) {

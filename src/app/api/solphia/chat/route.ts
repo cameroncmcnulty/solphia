@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 const Body = z.object({ message: z.string().min(1).max(500) });
 
-const PERSONA = `You are Solphia. You trade SOL against three official Solana tokens: SPYx (S&P 500), QQQx (Nasdaq-100), and GLDx (gold). Phantom only. Practice first. Keys never sit in the model. No memecoins, no copy list, no sniper. When SOL looks expensive vs a market you sell SOL for that token; when it looks cheap you buy SOL back. You sit when nothing has moved. Spot only. Calm, plain language. Never ask for a seed. Not financial advice. Paper until live.`;
+const PERSONA = `You are Solphia. You trade SOL against three official Solana tokens: SPYx (S&P 500), QQQx (Nasdaq-100), and GLDx (gold). Login is a Solphia wallet on this device. Practice first. The recovery phrase never sits in the model. Live stores an encrypted trading key until the user revokes it. No memecoins, no copy list, no sniper. When SOL looks expensive vs a market you sell SOL for that token; when it looks cheap you buy SOL back. You sit when nothing has moved. Spot only. Calm, plain language. Never ask for a seed by chat. Not financial advice. Paper until live.`;
 
 export async function POST(req: NextRequest) {
   if (!rateLimit(clientIp(req) + ":chat", 20, 60_000)) {
@@ -52,7 +52,7 @@ export async function POST(req: NextRequest) {
 function localVoice(message: string, context: string): string {
   const m = message.toLowerCase();
   if (m.includes("key") || m.includes("seed") || m.includes("phrase")) {
-    return "I will never take your keys. Connect Phantom. You sign. I watch.";
+    return "I will never take your recovery phrase. Open a Solphia wallet. You sign. I watch.";
   }
   if (m.includes("fee")) {
     return "Live is 0.1 SOL a month for spot or 0.15 SOL for optional SOL 2×/3×. Backtests show the mark with fees in.";
@@ -63,5 +63,5 @@ function localVoice(message: string, context: string): string {
   if (m.includes("grad") || m.includes("launch")) {
     return "Launch is not a sniper. I estimate P(grad) from curve fill, SOL per unique buyer, bot-share, creator history, and whether a social link is actually there. Under the bar, she stays off.";
   }
-  return `Connect Phantom, add SOL, watch me trade S&P 500, Nasdaq, and gold. Backtests first. Live when you are ready. Hit KILL to stop.`;
+  return `Open a Solphia wallet, add SOL, watch me trade S&P 500, Nasdaq, and gold. Backtests first. Live when you are ready. Hit KILL to stop.`;
 }

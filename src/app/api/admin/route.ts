@@ -10,8 +10,9 @@ import { grantFounder, grantMod, revokeFounder, revokeMod } from "@/lib/access";
 import { accountsOf, findAccount, normalizeEmail } from "@/lib/auth/accounts";
 import { isSolanaAddress, isEmail, clientIp } from "@/lib/security";
 import { lockedAuto } from "@/lib/auto";
-import { runBacktest } from "@/lib/pair/backtest";
+import { latestBacktest, packFromAdminRuns, runBacktest, slimPublishedPack } from "@/lib/pair/backtest";
 import { loadBacktestTape } from "@/lib/pair/backtestTape";
+import { KEYS, kvSetJson } from "@/lib/persist";
 import { mutateState, audit, pushBounded, readyState, loadAllTraders, deleteTrader, withLaunch, saveTrader } from "@/lib/store";
 import { emptyLaunchBook } from "@/lib/launch/engine";
 import { setUsername } from "@/lib/launch/username";
@@ -72,6 +73,7 @@ const Patch = z.object({
     })
     .optional(),
   runBacktest: z.boolean().optional(),
+  publishBacktest: z.boolean().optional(),
   user: z
     .object({
       pubkey: z.string().optional(),
@@ -219,7 +221,7 @@ export async function POST(req: NextRequest) {
       });
       return NextResponse.json({
         ok: true,
-        note: `Spot ${(report.pnlPct * 100).toFixed(1)}% · 2x ${(lev2.pnlPct * 100).toFixed(1)}% · 3x ${(lev3.pnlPct * 100).toFixed(1)}% after fees`,
+        note: `Spot ${(report.pnlPct * 100).toFixed(1)}% · 2x ${(lev2.pnlPct * 100).toFixed(1)}% · 3x ${(lev3.pnlPct * 100).toFixed(1)}% after fees. Push live to put this curve on the site.`,
         desk: buildAdminDesk(),
       });
     } catch (e) {
@@ -228,6 +230,26 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       );
     }
+  }
+  if (body.publishBacktest) {
+    const state = await readyState();
+    const spot1 = latestBacktest(state.backtest, 1);
+    const spot2 = latestBacktest(state.backtestLev2, 2);
+    const spot3 = latestBacktest(state.backtestLev3, 3);
+    const pack = packFromAdminRuns(spot1, spot2, spot3);
+    const saved = await kvSetJson(KEYS.backtestPublic, slimPublishedPack(pack));
+    if (!saved) {
+      return NextResponse.json({ error: "Could not publish the backtest.", desk: buildAdminDesk() }, { status: 500 });
+    }
+    await mutateState((s) => {
+      s.backtestPublishedAt = pack.publishedAt || Date.now();
+      pushBounded(s.audit, audit("admin", "backtest_publish", `1x ${(spot1.pnlPct * 100).toFixed(1)}%`, ip), 400);
+    });
+    return NextResponse.json({
+      ok: true,
+      note: `Live on the site. Spot ${(spot1.pnlPct * 100).toFixed(1)}% · 2x ${(spot2.pnlPct * 100).toFixed(1)}% · 3x ${(spot3.pnlPct * 100).toFixed(1)}%.`,
+      desk: buildAdminDesk(),
+    });
   }
   if (typeof body.publishLiveWallet === "boolean") {
     await mutateState((s) => {

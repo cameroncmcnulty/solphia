@@ -10,9 +10,9 @@ export function swapSimReason(err: unknown, logs?: string[] | null): string {
     return "Price moved. Try again.";
   }
   if (/custom program error: 0x1\b|insufficient lamports/i.test(blob)) {
-    return "Not enough SOL left for fees. Keep a little SOL in Phantom.";
+    return "Not enough SOL left for fees. Keep a little SOL in this wallet.";
   }
-  return "This swap would fail on-chain. It was not sent to Phantom.";
+  return "This swap would fail on-chain. It was not sent.";
 }
 
 /** Blowfish flags a failing sim as malicious. Never hand Phantom a tx that already fails. */

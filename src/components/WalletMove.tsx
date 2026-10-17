@@ -40,7 +40,7 @@ export function WalletMove({
       setTimeout(() => onDone?.(), 2500);
     } catch (e) {
       if (isPhantomRedirect(e)) {
-        setMsg("Approve in Phantom…");
+        setMsg("Approve in your wallet…");
         return;
       }
       err.fail({}, e instanceof Error ? e.message : "transfer rejected");

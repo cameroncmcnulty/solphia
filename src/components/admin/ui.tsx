@@ -15,6 +15,7 @@ export function mergeDesk(prev: AdminDesk | null, next: AdminDesk): AdminDesk {
     backtest: next.backtest || prev.backtest,
     backtestLev2: next.backtestLev2 || prev.backtestLev2,
     backtestLev3: next.backtestLev3 || prev.backtestLev3,
+    backtestPublishedAt: next.backtestPublishedAt ?? prev.backtestPublishedAt,
   };
 }
 

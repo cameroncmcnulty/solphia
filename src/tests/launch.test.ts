@@ -450,7 +450,7 @@ describe("launch create validation", () => {
     assert.equal(/k === "live" \? "Curve"/.test(src), false);
     assert.equal(src.includes("Open a token below"), false);
     assert.match(src, /onPick/);
-    assert.match(src, /Approve this claim in Phantom/);
+    assert.match(src, /Approve this claim in your wallet/);
     assert.match(src, /id="creator-fees"/);
     assert.match(src, /id="protocol-fees"/);
     assert.match(src, /scrollToSpot\("swap-widget"\)/);

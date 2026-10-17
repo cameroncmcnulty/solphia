@@ -220,6 +220,7 @@ export function buildAdminDesk(opts?: { light?: boolean; profits?: ProfitDesk; o
     backtest: latestBacktest(s.backtest, 1),
     backtestLev2: latestBacktest(s.backtestLev2, 2),
     backtestLev3: latestBacktest(s.backtestLev3, 3),
+    backtestPublishedAt: s.backtestPublishedAt || null,
     shill: (() => {
       const b = ensureShill(s.shill);
       return { messages: b.messages.length, pins: livePins(b).length, members: Object.keys(b.members).length };

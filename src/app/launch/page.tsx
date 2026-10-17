@@ -441,7 +441,7 @@ export default function LaunchPage() {
         setMsg("Finishing on Solana…");
       }
       void finishPhantomRef.current(j.signature, after).catch((err) => {
-        setErr(err instanceof Error ? err.message : claiming ? "Claim failed after Phantom." : "Launch failed after Phantom.");
+        setErr(err instanceof Error ? err.message : claiming ? "Claim failed after signing." : "Launch failed after signing.");
         setBusy(false);
         setWork("");
         if (claiming) {
@@ -463,8 +463,8 @@ export default function LaunchPage() {
         setMsg("");
         setErr(
           readLaunchTab() === "mine"
-            ? "Phantom closed without a signature. Tap Claim again."
-            : "Phantom closed without a signature. Tap Launch again.",
+            ? "Wallet closed without a signature. Tap Claim again."
+            : "Wallet closed without a signature. Tap Launch again.",
         );
       }, 1800);
     };
@@ -910,7 +910,7 @@ export default function LaunchPage() {
     }).catch(() => {});
     if (!phantomProvider()) {
       const inside = inPhantomWebView();
-      if (inside) setMsg("Waiting for Phantom…");
+      if (inside) setMsg("Waiting for your wallet…");
       await waitForInjected(inside ? 8000 : /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ? 1200 : 200);
     }
     setBusy(true);
@@ -956,7 +956,7 @@ export default function LaunchPage() {
         throw new Error(message);
       }
       if (typeof pj.image === "string" && pj.image.startsWith("https://")) setPinnedUrl(pj.image);
-      setMsg("Sign in Phantom… CA " + mintPk);
+      setMsg("Sign in your wallet… CA " + mintPk);
       const extras: import("@solana/web3.js").Keypair[] = [];
       if (mintKp) extras.push(mintKp);
       if (typeof pj.configSecret === "string") extras.push(Keypair.fromSecretKey(b64ToBytes(pj.configSecret)));
@@ -1079,8 +1079,8 @@ export default function LaunchPage() {
       }
       setMsg(
         devBuy > 0
-          ? `Live on the Solphia curve. CA ${mintPk}. First buy is in this wallet. If Phantom hides it: Manage Tokens, toggle on, Report as not spam.`
-          : `Live on the Solphia curve. CA ${mintPk}. If Phantom hides it: Manage Tokens, toggle on, Report as not spam.`,
+          ? `Live on the Solphia curve. CA ${mintPk}. First buy is in this wallet. If a wallet hides it: Manage Tokens, toggle on, Report as not spam.`
+          : `Live on the Solphia curve. CA ${mintPk}. If a wallet hides it: Manage Tokens, toggle on, Report as not spam.`,
       );
       const routed = await waitForPhantomRoute(mintPk);
       setMsg(
@@ -1090,7 +1090,7 @@ export default function LaunchPage() {
       );
     } catch (e) {
       if (isPhantomRedirect(e)) {
-        setMsg("Approve in Phantom. You'll come back here.");
+        setMsg("Approve in your wallet. You'll come back here.");
         return;
       }
       const timed = e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError");
@@ -1163,7 +1163,7 @@ export default function LaunchPage() {
         );
       }
       const mintKp = after.mintSecret ? Keypair.fromSecretKey(b64ToBytes(after.mintSecret)) : null;
-      setMsg("Sign in Phantom… CA " + (after.mint || ""));
+      setMsg("Sign in your wallet… CA " + (after.mint || ""));
       await signPhantomAndSend(packed, mintKp ? [mintKp] : undefined, {
         ...after,
         kind: "launch_pool",
@@ -1277,8 +1277,8 @@ export default function LaunchPage() {
       }, 80);
       setMsg(
         (after.launchBuySol || 0) > 0
-          ? `Live on the Solphia curve. CA ${mintPk}. First buy is in this wallet. If Phantom hides it: Manage Tokens, toggle on, Report as not spam.`
-          : `Live on the Solphia curve. CA ${mintPk}. If Phantom hides it: Manage Tokens, toggle on, Report as not spam.`,
+          ? `Live on the Solphia curve. CA ${mintPk}. First buy is in this wallet. If a wallet hides it: Manage Tokens, toggle on, Report as not spam.`
+          : `Live on the Solphia curve. CA ${mintPk}. If a wallet hides it: Manage Tokens, toggle on, Report as not spam.`,
       );
       const routed = await waitForPhantomRoute(mintPk);
       setMsg(routed.ok ? `Live. CA ${mintPk}` : `Live on the curve. CA ${mintPk}`);
@@ -1296,8 +1296,8 @@ export default function LaunchPage() {
         claimSeqRef.current += 1;
         setMsg(
           paid
-            ? `Claimed ${fmtClaimSol(paid)} SOL. Approve the next unpaid token in Phantom…`
-            : "Claimed. Approve the next unpaid token in Phantom…",
+            ? `Claimed ${fmtClaimSol(paid)} SOL. Approve the next unpaid token in your wallet…`
+            : "Claimed. Approve the next unpaid token in your wallet…",
         );
         await act({
           action: after.partner ? "withdraw_partner" : "withdraw_dev",
@@ -1365,7 +1365,7 @@ export default function LaunchPage() {
     if (!(sol >= 0.01) || !mint || !payer) return;
     setBusy(true);
     setWork("swap");
-    setMsg(`Live. Sign the ${sol} SOL first buy in Phantom…`);
+    setMsg(`Live. Sign the ${sol} SOL first buy in your wallet…`);
     let last = "curve_missing";
     for (let i = 0; i < 8; i++) {
       if (i) await new Promise((r) => setTimeout(r, 2000));
@@ -1439,8 +1439,8 @@ export default function LaunchPage() {
         if (j.claim && !(Number(j.claimSol) > 0)) throw new Error("This claim pays nothing on-chain.");
         setMsg(
           j.claim
-            ? `Sign ${fmtClaimSol(Number(j.claimSol))} SOL in Phantom…`
-            : "Sign the swap in Phantom…",
+            ? `Sign ${fmtClaimSol(Number(j.claimSol))} SOL in your wallet…`
+            : "Sign the swap in your wallet…",
         );
         const remainingMints = Array.isArray(j.remainingMints) ? j.remainingMints.filter((m: unknown) => typeof m === "string") : [];
         const claimAll = Boolean(body.claimAll) || Boolean(j.claim && !j.partner);
@@ -1469,7 +1469,7 @@ export default function LaunchPage() {
             claimSeqRef.current += 1;
             setTab("mine");
             writeLaunchTab("mine");
-            setMsg(`Claimed ${fmtClaimSol(amt)} SOL. Approve the next unpaid token in Phantom…`);
+            setMsg(`Claimed ${fmtClaimSol(amt)} SOL. Approve the next unpaid token in your wallet…`);
             await Promise.all([refreshPad(true), refreshTape()]);
             await act({
               action: j.partner ? "withdraw_partner" : "withdraw_dev",
@@ -1532,7 +1532,7 @@ export default function LaunchPage() {
         setDiscord("");
         setDevBuy(0);
         setTab("mine");
-        setMsg("Live on the Solphia curve. If Phantom hides it: Manage Tokens, toggle on, Report as not spam.");
+        setMsg("Live on the Solphia curve. If a wallet hides it: Manage Tokens, toggle on, Report as not spam.");
       } else if (body.action === "withdraw_dev" || body.action === "withdraw_partner") {
         setMsg("Fees claimed.");
         scrollToSpot(body.action === "withdraw_partner" ? "protocol-fees" : "creator-fees");
@@ -1546,9 +1546,9 @@ export default function LaunchPage() {
         if (body.action === "withdraw_dev" || body.action === "withdraw_partner") {
           setTab("mine");
           writeLaunchTab("mine");
-          setMsg("Approve this claim in Phantom. You'll come back to Your tokens.");
+          setMsg("Approve this claim in your wallet. You'll come back to Your tokens.");
         } else {
-          setMsg("Approve in Phantom. You'll come back here.");
+          setMsg("Approve in your wallet. You'll come back here.");
         }
       } else if (body.action !== "create") setErr(e instanceof Error ? e.message : "failed");
     } finally {
@@ -1849,7 +1849,7 @@ export default function LaunchPage() {
             <p className="mb-4 text-[15px] text-white/45">Name, ticker, art. You sign. It lives on the Solphia curve.</p>
             {!owner ? (
               <div className="mt-6 space-y-3">
-                <p className="text-sm text-mute">Launch signs in your wallet. Connect a Solphia wallet or Phantom.</p>
+                <p className="text-sm text-mute">Launch signs in your Solphia wallet. Create or import to continue.</p>
                 <WalletConnect />
               </div>
             ) : (
@@ -2108,7 +2108,7 @@ export default function LaunchPage() {
                     {busy && work === "launch" ? "Launching…" : "Launch on Solana"}
                   </button>
                 </div>
-                <p className="mt-2 text-xs text-mute">One Phantom prompt. 1% total. Half of that fee hits the creator on-chain.</p>
+                <p className="mt-2 text-xs text-mute">You sign once. The token lives on the Solphia curve.</p>
                 <FieldError error={createErr.errors.wallet} />
                 <div id="launch-form-status" className="mt-3">
                   <FormAlert error={createErr.banner} />
@@ -2289,8 +2289,8 @@ export default function LaunchPage() {
                 <h2 className="mt-1 text-[22px] font-semibold tracking-tight text-white">Claim fees</h2>
                 <p className="mt-1 text-[14px] leading-snug text-white/45">
                   {vault && (vault.claimableSol || 0) > 0
-                    ? "Some fees are in your Solphia vault. Claim sends that vault into this Phantom in one transfer. Unpaid curve fees still need one Phantom approval per token."
-                    : "Unclaimed is every unpaid token added up. Claim all — Phantom asks once per token until this hits 0."}
+                    ? "Some fees are in your Solphia vault. Claim sends that vault into this wallet in one transfer. Unpaid curve fees still need one approval per token."
+                    : "Unclaimed is every unpaid token added up. Claim all — your wallet asks once per token until this hits 0."}
                 </p>
                 <div className="mt-4 grid grid-cols-2 gap-3">
                   <div>
@@ -2367,7 +2367,7 @@ export default function LaunchPage() {
                   <p className={`mt-2 font-mono text-[13px] ${err ? "text-blood" : "text-acid"}`}>{err || msg}</p>
                 ) : null}
                 <p className="mt-2 text-[12px] text-white/35">
-                  If Phantom hides a new token: Manage Tokens, toggle it on, Report as not spam.
+                  If a wallet hides a new token: Manage Tokens, toggle it on, Report as not spam.
                 </p>
               </div>
             )}

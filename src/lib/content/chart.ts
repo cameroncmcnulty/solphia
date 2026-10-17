@@ -106,7 +106,7 @@ export function fakeCurve(rng: () => number, n = 22): CurveBar[] {
 }
 
 export const STEPS: Step[] = [
-  { n: "1", t: "Connect Phantom", d: "Keys stay in the wallet." },
+  { n: "1", t: "Open wallet", d: "Create or import a Solphia wallet." },
   { n: "2", t: "Add SOL", d: "Move size onto this device." },
   { n: "3", t: "She runs", d: "Clips the stretch. You sleep." },
 ];

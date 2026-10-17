@@ -229,7 +229,7 @@ export function WalletOnboard({ onClose }: { onClose: () => void }) {
 
   const subtitle =
     step === "chooser"
-      ? "Create a new Solphia wallet or import a 12-word phrase. No email. No Google. No Phantom."
+      ? "Create a new Solphia wallet or import a 12-word phrase. No email. No Google."
       : step === "replace"
         ? "This wipes the wallet on this device and starts a new account. Only continue if you saved the old recovery phrase."
         : step === "phrase"

@@ -15,13 +15,13 @@ export default function LegalPage() {
           By creating or importing a Solphia wallet, checking the terms boxes, or using solphia.io you agree to these terms. If you do not agree, leave.
         </p>
         <p>
-          Login is a Solphia wallet you create or import on this device. You write down a 12-word recovery phrase and set a PIN. The phrase and PIN stay in this browser, encrypted with that PIN. We do not receive them and cannot recover them. Clearing this browser without a backup can make funds unrecoverable. Phantom is a signing rail for some on-chain pays, claims, and swaps — not how you log in.
+          Login is a Solphia wallet you create or import on this device. You write down a 12-word recovery phrase and set a PIN. The phrase and PIN stay in this browser, encrypted with that PIN. We do not receive them and cannot recover them. Clearing this browser without a backup can make funds unrecoverable. Some on-chain pays, claims, and swaps are signed in this wallet.
         </p>
         <p>
           The desk trades tokenized S&amp;P 500, Nasdaq, gold, and SOL via official xStock mints. She stays off until you pay the SOL seat, fund the trading wallet, and press Start. Paper and backtests sign on this device. When you start Live, this site stores an encrypted copy of the trading-wallet secret so the desk can sign while you are away. Stop Live or revoke that key anytime. Markets move. You can lose SOL. This is not financial, tax, or investment advice. Tokens shown on the launch pad and Shill Zone are not endorsed.
         </p>
         <p>
-          Live seats are paid in SOL for a 30-day window as listed on the pricing page (Live 0.1 SOL, SOL 2×/3× 0.15 SOL). First payment is signed in Phantom. Later months may renew from the trading wallet while this site is open. Unsubscribe any time. We do not refund a started window. Optional 2×/3× is on SOL only; equities and gold stay spot. Leverage can liquidate.
+          Live seats are paid in SOL for a 30-day window as listed on the pricing page (Live 0.1 SOL, SOL 2×/3× 0.15 SOL). First payment is signed in your wallet. Later months may renew from the trading wallet while this site is open. Unsubscribe any time. We do not refund a started window. Optional 2×/3× is on SOL only; equities and gold stay spot. Leverage can liquidate.
         </p>
         <p>
           Shill Zone, launch, $SPHA pages, and chat are public. Do not post illegal content. We may mute, ban, or delete to keep the room usable. Boosts and pins are paid placements, not investment offers.

@@ -171,6 +171,7 @@ export function emptyState(): AppState {
     backtest: null,
     backtestLev2: null,
     backtestLev3: null,
+    backtestPublishedAt: null,
     launch: emptyLaunchBook(),
     ownerWallet: DEFAULT_OWNER,
     devWallet: "",
@@ -241,6 +242,7 @@ function hydrateFromRaw(raw: AppState): AppState {
     backtest: raw.backtest || null,
     backtestLev2: raw.backtestLev2 || null,
     backtestLev3: raw.backtestLev3 || null,
+    backtestPublishedAt: Number(raw.backtestPublishedAt) || null,
     launch:
       raw.launch && Array.isArray(raw.launch.coins)
         ? { ...emptyLaunchBook(), ...raw.launch, accounts: raw.launch.accounts || {} }

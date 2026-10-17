@@ -113,14 +113,14 @@ async function completeJob(req: NextRequest, body: Record<string, unknown>) {
   }
   const err = typeof body.errorCode === "string" ? body.errorCode : "";
   if (err) {
-    const message = typeof body.errorMessage === "string" && body.errorMessage ? body.errorMessage : "Signature declined in Phantom.";
+    const message = typeof body.errorMessage === "string" && body.errorMessage ? body.errorMessage : "Signature declined.";
     if (isPhantomUnauthorized(message, err)) {
       job.session = undefined;
       job.phantomPk = undefined;
       await putPhJob(job);
       if (job.pubkey) await dropPhSession(job.pubkey);
       return NextResponse.json({
-        error: "Approve Phantom’s connect prompt, then try again.",
+        error: "Approve the wallet connect prompt, then try again.",
         reconnect: true,
         ...packLink(connectUrl(req, job), { mode: "connect", job: slimJob(job) }),
       });
@@ -131,18 +131,18 @@ async function completeJob(req: NextRequest, body: Record<string, unknown>) {
   const data = typeof body.data === "string" ? body.data : "";
   const phantomPk = (typeof body.phantom_encryption_public_key === "string" && body.phantom_encryption_public_key) || job.phantomPk || "";
   if (!nonce || !data || !phantomPk) {
-    return NextResponse.json({ error: "Phantom came back empty. Tap Launch again.", after: job.after }, { status: 400 });
+    return NextResponse.json({ error: "Wallet came back empty. Tap Launch again.", after: job.after }, { status: 400 });
   }
   const json = decryptBox(job.dappSk, phantomPk, nonce, data);
   if (!json) {
     job.session = undefined;
     job.phantomPk = undefined;
     await putPhJob(job);
-    return NextResponse.json({ error: "Could not read Phantom's reply.", ...packLink(connectUrl(req, job), { mode: "connect" }) });
+    return NextResponse.json({ error: "Could not read the wallet reply.", ...packLink(connectUrl(req, job), { mode: "connect" }) });
   }
   if (json.public_key && json.session) {
     if (!isSolanaAddress(json.public_key)) {
-      return NextResponse.json({ error: "Phantom returned a bad wallet." }, { status: 400 });
+      return NextResponse.json({ error: "Wallet returned a bad address." }, { status: 400 });
     }
     job.pubkey = json.public_key;
     job.session = json.session;
@@ -157,13 +157,13 @@ async function completeJob(req: NextRequest, body: Record<string, unknown>) {
     return NextResponse.json({ id: job.id, pubkey: json.public_key, mode: "connect", session: sess });
   }
   if (!json.transaction) {
-    return NextResponse.json({ error: "Phantom did not return a signed transaction.", after: job.after }, { status: 400 });
+    return NextResponse.json({ error: "Wallet did not return a signed transaction.", after: job.after }, { status: 400 });
   }
   let signed: Uint8Array;
   try {
     signed = b58dec(json.transaction);
   } catch {
-    return NextResponse.json({ error: "Phantom's signature was unreadable.", after: job.after }, { status: 400 });
+    return NextResponse.json({ error: "Wallet signature was unreadable.", after: job.after }, { status: 400 });
   }
   const extras = extrasFromSecrets(job.extraSecrets);
   let b64: string;

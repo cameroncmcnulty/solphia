@@ -61,7 +61,7 @@ export default function Home() {
           <Reveal delay={120}><Eco
             n="02"
             t="Launch"
-            d="1.00% forever — curve and after graduate. Creators take half. Invites keep a cut for life."
+            d="Launch on the Solphia curve. Creators keep a cut. Invites pay for life."
             href="/launch"
             c="Launch"
           /></Reveal>
@@ -135,8 +135,8 @@ export default function Home() {
         <p className="text-sm tracking-[0.2em] text-acid">HOW IT WORKS</p>
         <h2 className="mt-3 text-[32px] font-semibold tracking-tight text-white sm:text-5xl">Three steps.</h2>
         <div className="mt-12 grid gap-4 md:grid-cols-3">
-          <Reveal delay={40} from="left"><Chip t="01 · Connect" d="Connect Phantom. We never hold a key." /></Reveal>
-          <Reveal delay={120}><Chip t="02 · Launch" d="Mint on Meteora. 1% forever. Invites keep a cut for life." /></Reveal>
+          <Reveal delay={40} from="left"><Chip t="01 · Connect" d="Create or import a Solphia wallet. Phrase stays on this device." /></Reveal>
+          <Reveal delay={120}><Chip t="02 · Launch" d="Mint on the Solphia curve. Invites keep a cut for life." /></Reveal>
           <Reveal delay={200} from="right"><Chip t="03 · $SPHA" d="Swaps fund listings, buybacks, and burns." /></Reveal>
         </div>
         </Reveal>
@@ -152,7 +152,7 @@ export default function Home() {
             </p>
             <h2 className="mt-3 text-[32px] font-semibold tracking-tight text-white sm:text-5xl">Launch on Solphia.</h2>
             <p className="mt-4 max-w-lg text-[15px] text-white/45 sm:text-[17px]">
-              Phantom signs. Keys stay in your wallet. The bot is still in testing.
+              You sign in your Solphia wallet. The trading bot stays in testing.
             </p>
           </div>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row md:mt-0">

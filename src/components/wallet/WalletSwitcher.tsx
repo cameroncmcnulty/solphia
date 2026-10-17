@@ -117,7 +117,7 @@ export function WalletSwitcher({ onClose, onAdd }: { onClose: () => void; onAdd:
                     className="min-h-[40px] w-full rounded-2xl border border-white/10 bg-black/30 px-3 font-mono text-[12px] text-white"
                   />
                 ) : (
-                  <p className="text-[12px] text-white/45">Removes Phantom from this device list. On-chain funds stay in Phantom.</p>
+                  <p className="text-[12px] text-white/45">Removes this connected wallet from the list. On-chain funds stay on-chain.</p>
                 )}
                 <button
                   type="button"

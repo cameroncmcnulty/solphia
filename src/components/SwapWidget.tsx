@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ArrowDown, ArrowUpDown, ChevronDown, X } from "lucide-react";
 import { TokenArt } from "./TokenArt";
-import { PhantomMark } from "./PhantomMark";
 import { SphaMark } from "./SphaMark";
 import { SolanaMark } from "./SolanaMark";
 import { WalletConnect } from "./WalletConnect";
@@ -642,7 +641,7 @@ export function SwapWidget({
         setReview(false);
         showNotice({
           kind: "pending",
-          text: "Approve in Phantom. You'll come back here.",
+          text: "Approve in your wallet. You'll come back here.",
           at: Date.now(),
         });
         return;
@@ -885,7 +884,7 @@ export function SwapWidget({
               onClick={() => void go()}
               className="flex min-h-[52px] w-full items-center justify-center gap-2 rounded-full bg-[#14f195] text-[16px] font-semibold text-[#04000a] disabled:opacity-40"
             >
-              {embedded ? <SphaMark className="h-4 w-4" /> : <PhantomMark className="h-4 w-4" />}
+              <SphaMark className="h-4 w-4" />
               {cta}
             </button>
           )}
@@ -965,7 +964,7 @@ export function SwapWidget({
               ? "Sign with the project wallet."
               : embedded
                 ? "Sign in-app. Solphia never holds this key."
-                : "Phantom will pop up to sign."
+                : "Your wallet will ask you to sign."
           }
           onClose={() => !busy && setReview(false)}
         >
@@ -991,7 +990,7 @@ export function SwapWidget({
             onClick={() => void go()}
             className="btn-acid mt-4 min-h-[48px] w-full rounded-full disabled:opacity-40"
           >
-            {busy ? "Signing…" : signTx ? "Sign swap" : embedded ? "Sign in Solphia" : "Sign in Phantom"}
+            {busy ? "Signing…" : signTx ? "Sign swap" : embedded ? "Sign in Solphia" : "Sign in your wallet"}
           </button>
         </WalletSheet>
       ) : null}

@@ -78,7 +78,7 @@ export const FAQS: { q: string; a: string }[] = [
   },
   {
     q: "Do I sign every trade?",
-    a: "No. After you fund the trading wallet, Live signs with that key. When Live is on, the server signs with the encrypted copy you delegated. You sign again to withdraw, to pay the first seat in Phantom, or for pad and swap rails that still go through this wallet or Phantom.",
+    a: "No. After you fund the trading wallet, Live signs with that key. When Live is on, the server signs with the encrypted copy you delegated. You sign again to withdraw, to pay the first seat, or for pad and swap rails that still go through this wallet.",
   },
   {
     q: "Where is leverage?",

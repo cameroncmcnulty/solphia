@@ -145,7 +145,7 @@ function CircleInner() {
         {!owner ? (
           <Gate
             title="The founding class is wallet-in"
-            body="Connect Phantom and take your seat among the early BELIEVERS — the people who saw Solphia first and chose to stay."
+            body="Open a Solphia wallet and take your seat among the early BELIEVERS — the people who saw Solphia first and chose to stay."
           >
             <WalletConnect />
           </Gate>

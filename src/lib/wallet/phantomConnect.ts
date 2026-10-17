@@ -20,12 +20,12 @@ export function phantomSignError(e: unknown): Error {
   const msg = (typeof rec?.message === "string" ? rec.message : e instanceof Error ? e.message : String(e || "")).trim();
   const code = rec?.code;
   if (/not been authorized|has not been authorized/i.test(msg)) {
-    return new Error("Approve Phantom’s connect prompt, then try again.");
+    return new Error("Approve the wallet connect prompt, then try again.");
   }
   if (code === 4001 || /user rejected|User cancelled|User canceled/i.test(msg)) {
-    return new Error("Signature declined in Phantom.");
+    return new Error("Signature declined.");
   }
-  return e instanceof Error ? e : new Error(msg || "Phantom did not sign.");
+  return e instanceof Error ? e : new Error(msg || "Wallet did not sign.");
 }
 
 export function isPhantomUnauthorized(message: string, code?: string): boolean {
@@ -283,7 +283,7 @@ export async function openPhantomUl(opts?: {
   };
   if (j.job && isPhJob(j.job)) saveLocalJob(j.job);
   if (j.session && isPhSession(j.session)) saveLocalSession(j.session);
-  if (!r.ok || !j.url) throw new Error(typeof j.error === "string" ? j.error : "Could not open Phantom.");
+  if (!r.ok || !j.url) throw new Error(typeof j.error === "string" ? j.error : "Could not open your wallet.");
   markPhantomWaiting();
   openPhantomLink(j.url, j.app);
   throw new Error(PHANTOM_REDIRECT);
@@ -339,7 +339,7 @@ export async function completePhantomUl(): Promise<{
     if (j.job && isPhJob(j.job)) saveLocalJob(j.job);
     if (!r.ok) {
       completing = null;
-      return { error: typeof j.error === "string" ? j.error : "Phantom came back empty.", url: j.url, app: j.app };
+      return { error: typeof j.error === "string" ? j.error : "Wallet came back empty.", url: j.url, app: j.app };
     }
     window.history.replaceState({}, "", cleanPhantomUrl());
     clearPhantomWaiting();

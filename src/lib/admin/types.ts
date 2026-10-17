@@ -249,6 +249,7 @@ export type AdminDesk = {
   backtest?: import("../types").BacktestReport | null;
   backtestLev2?: import("../types").BacktestReport | null;
   backtestLev3?: import("../types").BacktestReport | null;
+  backtestPublishedAt?: number | null;
   shill?: { messages: number; pins: number; members: number };
   ranks?: { cards: number; top: { pubkey: string; username: string; rank: number; xp: number }[] };
   treasuryFeesSol: number;

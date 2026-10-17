@@ -120,7 +120,7 @@ export function buildProfitDesk(state: AppState): ProfitDesk {
       wallet: "creator",
       walletPk: "coin creator",
       accruedSol: padCreator,
-      settlement: "Creator 50% stays in the pool until that launcher claims with Phantom. One approval per unpaid token.",
+      settlement: "Creator 50% stays in the pool until that launcher claims. One approval per unpaid token.",
     },
     {
       id: "pad-ref",

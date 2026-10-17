@@ -79,7 +79,7 @@ export function AutoPilot({ owner }: { owner: string | null }) {
   }, [owner]);
 
   async function patch(partial: Record<string, unknown>) {
-    if (!owner) return setMsg("Connect Phantom first.");
+    if (!owner) return setMsg("Connect a wallet first.");
     const r = await fetch("/api/auto", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -101,11 +101,11 @@ export function AutoPilot({ owner }: { owner: string | null }) {
   async function deposit() {
     const provider = pickProvider();
     if (!owner) {
-      fundErr.fail({ wallet: "Connect Phantom first." });
+      fundErr.fail({ wallet: "Connect a wallet first." });
       return;
     }
     if (!provider) {
-      fundErr.fail({ wallet: "Open this page inside Phantom." });
+      fundErr.fail({ wallet: "Unlock your Solphia wallet to sign." });
       return;
     }
     if (!(solAmt > 0)) {
@@ -147,8 +147,8 @@ export function AutoPilot({ owner }: { owner: string | null }) {
         <div className="font-mono text-[10px] tracking-[0.28em] text-violet">AUTOMATE</div>
         <h2 className="mt-1 font-display text-2xl text-ghost">Turn her on. Close the phone.</h2>
         <p className="mt-2 text-sm leading-relaxed text-mute">
-          Scout finds a setup. Risk has to agree. Policy caps size and daily loss. Keys stay on this device — never in
-          the model. Backtest is the proof. Live spends the trading wallet.
+          Scout finds a setup. Risk has to agree. Policy caps size and daily loss. Paper signs on this device. Live
+          stores an encrypted trading key so she can sign while you are away. Backtest is the proof.
         </p>
         <button
           onClick={() => patch({ armed: !auto?.armed })}
@@ -244,7 +244,7 @@ export function AutoPilot({ owner }: { owner: string | null }) {
 
       <ConfigDesk value={cfgFrom(auto)} onChange={patchSoon} />
       {msg && <p className="font-mono text-xs text-acid">{msg}</p>}
-      {!owner && <p className="text-xs text-mute">On iPhone, open solphia.io inside the Phantom app, then tap Connect.</p>}
+      {!owner && <p className="text-xs text-mute">Create or import a Solphia wallet, then tap Connect.</p>}
     </div>
   );
 }

@@ -527,6 +527,8 @@ export interface AppState {
   backtest?: BacktestReport | null;
   backtestLev2?: BacktestReport | null;
   backtestLev3?: BacktestReport | null;
+  /** When the admin last pushed the public homepage curve. */
+  backtestPublishedAt?: number | null;
   launch?: import("./launch/engine").LaunchBook;
   ownerWallet?: string;
   /** Wallet that holds the team's $SPHA. Not treasury, not trading. */

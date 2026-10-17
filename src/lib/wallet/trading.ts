@@ -205,7 +205,7 @@ export async function signPhantomAndSend(
     return sendSignedB64(toB64(serializeTx(fromPhantom)), opts);
   }
   if (inPhantomWebView()) {
-    throw new Error("Phantom is open but isn't ready to sign. Pull down to refresh this tab, then tap Launch again.");
+    throw new Error("Your wallet isn't ready to sign. Refresh this tab, then tap Launch again.");
   }
   await openPhantomUl({
     packed,
@@ -224,7 +224,7 @@ export async function signPhantomTxB64(transactionB64: string): Promise<string> 
     return signWithKeypair(asTxB64(transactionB64), kp);
   }
   const provider = await waitForPhantomProvider();
-  if (!provider) throw new Error("Open Swap inside Phantom to sign.");
+  if (!provider) throw new Error("Open Swap in your wallet to sign.");
   await connectInjected();
   const raw = b64ToBytes(asTxB64(transactionB64));
   const tx = parseTx(raw);

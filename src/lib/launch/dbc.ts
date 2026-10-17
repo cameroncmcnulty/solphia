@@ -709,7 +709,7 @@ export async function buildDbcClaimCreatorBatch(opts: {
   }
   const ready = await readyTx(raw, creator);
   if (!(await simulateClaim(ready))) {
-    return { ok: false, error: "Claim would fail simulation. Phantom would block it." };
+    return { ok: false, error: "Claim would fail simulation. Your wallet would block it." };
   }
   const rest = unpaid.filter((p) => p.mint !== hit.mint);
   return {

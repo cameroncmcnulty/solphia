@@ -36,7 +36,7 @@ export async function subscribeWithPhantom(opts: {
   const sig = start.transaction
     ? await signAndSendPhantom(start.transaction)
     : await paySeatFromPhantom(opts.owner, start.treasury, Number(start.sol || (plan === "lev" ? 0.15 : 0.1)));
-  if (!sig) throw new Error("Phantom did not return a signature.");
+  if (!sig) throw new Error("Wallet did not return a signature.");
   const done = await confirmPayRetry({
     pubkey: opts.owner,
     email: opts.email,
