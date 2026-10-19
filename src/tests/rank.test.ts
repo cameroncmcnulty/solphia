@@ -132,6 +132,8 @@ describe("rank engine", () => {
     assert.match(profilePhotoUrl(book.accounts[A].banner, A, "banner"), /\/api\/media\?u=/);
     assert.equal(profilePhotoUrl(`data:image/jpeg;base64,aaa`, A, "pfp"), `/api/circle/avatar?pk=${encodeURIComponent(A)}&kind=pfp`);
     assert.equal(profilePhotoUrl("https://gateway.pinata.cloud/ipfs/bafypfp", A, "pfp"), `/api/circle/avatar?pk=${encodeURIComponent(A)}&kind=pfp`);
+    assert.equal(profilePhotoUrl("store:pfp", A, "pfp"), `/api/circle/avatar?pk=${encodeURIComponent(A)}&kind=pfp`);
+    assert.equal(profilePhotoUrl("store:pfp", A, "pfp", 99), `/api/circle/avatar?pk=${encodeURIComponent(A)}&kind=pfp&v=99`);
     assert.equal(setBanner(book, A, "javascript:alert(1)").ok, false);
   });
 

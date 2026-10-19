@@ -40,6 +40,7 @@ describe("scale store", () => {
     assert.equal(KEYS.backtestPublic, "solphia:backtest:public");
     assert.equal(KEYS.launchAccounts, "solphia:launch-accounts");
     assert.equal(KEYS.account("abc"), "solphia:account:abc");
+    assert.equal(KEYS.pfp("abc"), "solphia:pfp:abc");
   });
 
   it("keeps a SOL-PERP sleeve across hydrate and does not resize it away", () => {

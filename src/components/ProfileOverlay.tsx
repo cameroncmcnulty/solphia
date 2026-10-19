@@ -104,7 +104,7 @@ export function ProfileOverlay({
           Close
         </button>
         <div className="relative -mt-10 flex items-end gap-3 px-4">
-          <CartoonPfp seed={pubkey} src={pfp} className="h-20 w-20 rounded-2xl ring-4 ring-[#12081c]" />
+          <CartoonPfp seed={pubkey} src={pfp || `/api/circle/avatar?pk=${encodeURIComponent(pubkey)}&kind=pfp`} className="h-20 w-20 rounded-2xl ring-4 ring-[#12081c]" />
           <div className="min-w-0 flex-1 pb-1">
             <div className="truncate font-display text-2xl text-ghost">{name}</div>
             <div className="font-mono text-[11px] text-mute">

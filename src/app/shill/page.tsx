@@ -117,10 +117,8 @@ function nameOf(pk: string, profiles?: Pack["profiles"]) {
   return u ? `@${u}` : `${pk.slice(0, 4)}…${pk.slice(-4)}`;
 }
 
-function pfpSrc(pk: string, profiles?: Pack["profiles"]) {
-  const p = profiles?.[pk];
-  if (p?.hasPfp) return `/api/circle/avatar?pk=${encodeURIComponent(pk)}`;
-  return undefined;
+function pfpSrc(pk: string) {
+  return `/api/circle/avatar?pk=${encodeURIComponent(pk)}&kind=pfp`;
 }
 
 function rankOf(pk: string, profiles?: Pack["profiles"]) {
@@ -986,7 +984,7 @@ export default function ShillPage() {
             const prev = msgs[i - 1];
             const newDay = !prev || new Date(prev.at).toDateString() !== new Date(m.at).toDateString();
             const grouped = Boolean(prev && !newDay && prev.owner === m.owner && m.at - prev.at < 8 * 60_000);
-            const face = pfpSrc(m.owner, pack?.profiles);
+            const face = pfpSrc(m.owner);
             return (
               <div key={m.id}>
                 {newDay && (

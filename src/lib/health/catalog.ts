@@ -69,7 +69,7 @@ export const SERVICES: ServiceDef[] = [
         label: "Pay as you go (50-100k)",
         price: "usage",
         limits: { storageMb: 5120, commandsPerDay: 50_000_000 },
-        notes: "Raise storage and daily commands. Accounts dual-write on launch-accounts. Never store art in Redis. Pinata stays as-is.",
+        notes: "Raise storage and daily commands. Accounts dual-write on launch-accounts. PFP bytes live on solphia:pfp:{pk}. Never stuff art into launch-accounts. Pinata is backup only.",
       },
     ],
   },

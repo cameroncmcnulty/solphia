@@ -16,6 +16,8 @@ export const KEYS = {
   /** Google/email login rows. Dual-written so a warm instance cannot drop a session. */
   loginAccounts: "solphia:login-accounts",
   account: (owner: string) => `solphia:account:${owner}`,
+  /** JPEG data URL for one wallet. Lives off the fat launch-accounts blob. */
+  pfp: (pk: string) => `solphia:pfp:${pk}`,
   circle: "solphia:circle",
   shill: "solphia:shill",
   mail: "solphia:mail",

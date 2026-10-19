@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { CartoonPfp } from "@/components/CartoonPfp";
+import { circleAvatarUrl } from "@/lib/pfpUrl";
 import {
   activeWallet,
   hideWallet,
@@ -24,6 +25,7 @@ export function WalletSwitcher({ onClose, onAdd }: { onClose: () => void; onAdd:
   const [removeId, setRemoveId] = useState<string | null>(null);
   const [confirm, setConfirm] = useState("");
   const [err, setErr] = useState("");
+  const [tick, setTick] = useState(0);
 
   function refresh() {
     const all = listWallets({ hidden: true });
@@ -34,8 +36,13 @@ export function WalletSwitcher({ onClose, onAdd }: { onClose: () => void; onAdd:
   useEffect(() => {
     refresh();
     const onVault = () => refresh();
+    const onDesk = () => setTick(Date.now());
     window.addEventListener(VAULT_EVENT, onVault);
-    return () => window.removeEventListener(VAULT_EVENT, onVault);
+    window.addEventListener("solphia-desk", onDesk);
+    return () => {
+      window.removeEventListener(VAULT_EVENT, onVault);
+      window.removeEventListener("solphia-desk", onDesk);
+    };
   }, []);
 
   return (
@@ -52,7 +59,7 @@ export function WalletSwitcher({ onClose, onAdd }: { onClose: () => void; onAdd:
                 onClose();
               }}
             >
-              <CartoonPfp seed={w.pubkey} className="h-10 w-10" />
+              <CartoonPfp seed={w.pubkey} src={circleAvatarUrl(w.pubkey, "pfp", tick || undefined)} className="h-10 w-10" />
               <span className="min-w-0 flex-1">
                 <span className="flex items-center gap-1.5 text-[15px] font-semibold text-white">
                   {w.nickname}

@@ -1,5 +1,8 @@
 import { DEV_BUY_MAX_SOL } from "./curve";
 import { socialHref } from "./links";
+import { PFP_SENTINEL } from "../pfpUrl";
+
+export { PFP_SENTINEL };
 
 export function walletOk(s: string): boolean {
   return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(s);
@@ -65,10 +68,11 @@ export function housePfpPath(raw?: string): string {
   return HOUSE_PFP_RE.test(s) ? s : "";
 }
 
-/** PFP / banner: pinned https, avatar proxy, house NFT, or a small data URL that survives slimAccount. */
+/** PFP / banner: dedicated-store sentinel, pinned https, avatar proxy, house NFT, or a small data URL. */
 export function profileImageOk(raw?: string): string {
   const s = (raw || "").trim();
   if (!s) return "";
+  if (s === PFP_SENTINEL) return s;
   if (s.startsWith("data:image/") && s.length <= PROFILE_DATA_MAX) return s;
   if (/^https?:\/\//i.test(s) && s.length <= 2048) return s;
   if (s.startsWith("/api/media") || s.startsWith("/api/circle/avatar")) return s;

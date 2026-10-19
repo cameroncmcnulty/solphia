@@ -9,6 +9,7 @@ dist
 .env.*.local
 data/*.json
 data/*.lock
+data/pfp/
 data/promos/
 data/signers/
 coverage

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { CircleUser, Gift, Rocket, Users, Wallet } from "lucide-react";
 import { useOwner } from "@/lib/hooks";
 import { CartoonPfp } from "./CartoonPfp";
+import { circleAvatarUrl } from "@/lib/pfpUrl";
 import { WalletConnect } from "./WalletConnect";
 import { openWalletOnboard, openWalletSwitcher } from "./wallet/WalletHost";
 import { useActiveWallet } from "@/lib/wallet/useVault";
@@ -58,7 +59,7 @@ export function AccountMenu() {
       fetch(`/api/account?pubkey=${encodeURIComponent(owner)}`, { cache: "no-store" })
         .then((r) => r.json())
         .then((j) => {
-          const pfp = typeof j?.pfp === "string" && j.pfp ? `${j.pfp}${j.pfp.includes("?") ? "&" : "?"}t=${Date.now()}` : "";
+          const pfp = typeof j?.pfp === "string" ? j.pfp : "";
           setDesk({ ...j, pfp });
         })
         .catch(() => {});
@@ -107,6 +108,7 @@ export function AccountMenu() {
   if (!signedIn) return <WalletConnect />;
 
   const seed = owner || "account";
+  const pfpSrc = desk?.pfp || (owner ? circleAvatarUrl(owner) : undefined);
   const nickname = desk?.username
     ? `@${desk.username}`
     : vault?.nickname || (owner ? `${owner.slice(0, 4)}…${owner.slice(-4)}` : "Account");
@@ -119,7 +121,7 @@ export function AccountMenu() {
       className="fixed z-[90] w-64 overflow-hidden rounded-2xl border border-violet/30 bg-ink/95 shadow-[0_16px_48px_rgba(0,0,0,0.55)] backdrop-blur-xl"
     >
       <div className="flex items-center gap-3 border-b border-violet/20 px-3 py-3">
-        <CartoonPfp seed={seed} src={desk?.pfp} className="h-11 w-11" />
+        <CartoonPfp seed={seed} src={pfpSrc} className="h-11 w-11" />
         <div className="min-w-0">
           <div className="truncate font-mono text-xs text-ghost">{nickname}</div>
           <div className="truncate font-mono text-[10px] text-mute">
@@ -197,7 +199,7 @@ export function AccountMenu() {
         title="Account"
         className="inline-flex items-center gap-2 rounded-full border border-violet/30 bg-void/60 p-0.5 pr-2.5 hover:border-acid/40"
       >
-        <CartoonPfp seed={seed} src={desk?.pfp} className="h-9 w-9" />
+        <CartoonPfp seed={seed} src={pfpSrc} className="h-9 w-9" />
         <span className="hidden max-w-[7rem] truncate font-mono text-[11px] text-ghost sm:inline">{nickname}</span>
       </button>
       {menu}

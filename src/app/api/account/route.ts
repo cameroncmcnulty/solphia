@@ -13,7 +13,8 @@ import {
 } from "@/lib/launch/engine";
 import { setUsername } from "@/lib/launch/username";
 import { launchError } from "@/lib/launch/errors";
-import { IMAGE_DATA_MAX } from "@/lib/launch/validate";
+import { IMAGE_DATA_MAX, PFP_SENTINEL } from "@/lib/launch/validate";
+import { putPfp, delPfp } from "@/lib/pfpStore";
 import { lastPairPrices } from "@/lib/tick";
 import { airdropMultiplier, referralBoostPct } from "@/lib/circle/types";
 import { payReferralXp, profilePhotoUrl, publicRank } from "@/lib/rank/engine";
@@ -50,7 +51,7 @@ function pack(book: ReturnType<typeof emptyLaunchBook>, pubkey: string, solUsd: 
   return {
     pubkey,
     username: acc.username || "",
-    pfp: profilePhotoUrl(acc.pfp, pubkey, "pfp"),
+    pfp: profilePhotoUrl(acc.pfp, pubkey, "pfp", acc.pfpAt),
     referrer: acc.referrer || null,
     referredAt: acc.referredAt || null,
     referralRewardsSol: acc.referralRewardsSol || 0,
@@ -98,6 +99,15 @@ export async function POST(req: NextRequest) {
   const solUsd = lastPairPrices().solUsd || 0;
 
   let pfpUrl = (b.pfp || "").trim();
+  const rawPfp = pfpUrl;
+  if (b.action === "pfp") {
+    if (!rawPfp) {
+      await delPfp(b.pubkey);
+    } else if (rawPfp.startsWith("data:image/")) {
+      const stored = await putPfp(b.pubkey, rawPfp);
+      if (stored) pfpUrl = PFP_SENTINEL;
+    }
+  }
   const out = await withLaunch((s) => {
     const book = bookOf(s);
     if (b.action === "hello") {
@@ -170,14 +180,14 @@ export async function POST(req: NextRequest) {
     return fail((out as { error?: string })?.error || "failed");
   }
 
-  if (b.action === "pfp" && pfpUrl.startsWith("data:image/")) {
-    const data = pfpUrl;
+  if (b.action === "pfp" && rawPfp.startsWith("data:image/")) {
+    const data = rawPfp;
     const name = `pfp-${b.pubkey.slice(0, 8)}`;
     after(async () => {
       try {
         await pinDataUrl(data, name, { budgetMs: 8_000 });
       } catch {
-        /* data URL is the photo — Pinata is backup only, never overwrite it */
+        /* dedicated key is the photo — Pinata is backup only, never overwrite it */
       }
     });
   }

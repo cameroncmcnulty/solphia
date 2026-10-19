@@ -24,10 +24,6 @@ function bookOf(s: { launch?: ReturnType<typeof emptyLaunchBook> }) {
   return s.launch;
 }
 
-function photo(raw: string | undefined, pubkey: string) {
-  return profilePhotoUrl(raw, pubkey, "pfp") || displayMedia(raw);
-}
-
 export async function GET(req: NextRequest) {
   const pubkey = req.nextUrl.searchParams.get("pubkey") || "";
   const viewer = req.nextUrl.searchParams.get("viewer") || "";
@@ -47,7 +43,7 @@ export async function GET(req: NextRequest) {
     viewerRole,
     banned: Boolean(mem?.banned),
     mutedUntil: mem?.mutedUntil || 0,
-    pfp: photo(acc?.pfp, pubkey),
+    pfp: profilePhotoUrl(acc?.pfp, pubkey, "pfp", acc?.pfpAt) || displayMedia(acc?.pfp),
     intro: acc?.intro || "",
     fav: acc?.favMint
       ? {

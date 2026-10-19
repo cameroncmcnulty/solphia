@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { CartoonPfp } from "@/components/CartoonPfp";
+import { circleAvatarUrl } from "@/lib/pfpUrl";
 import { WalletConnect } from "@/components/WalletConnect";
 import { useOwner } from "@/lib/hooks";
 import { exportSecret, importSecret, tradingPubkey } from "@/lib/wallet/trading";
@@ -242,7 +243,7 @@ export default function AccountPage() {
       <div className="pump-wrap">
       <div className="flex items-center gap-3">
         <button type="button" onClick={() => setPeek(true)} className="relative">
-          <CartoonPfp seed={owner} src={desk?.pfp} className="h-14 w-14" />
+          <CartoonPfp seed={owner} src={desk?.pfp || circleAvatarUrl(owner)} className="h-14 w-14" />
         </button>
         <div className="min-w-0 flex-1">
           <p className="text-[13px] font-medium text-[#14f195]">Account</p>
@@ -341,7 +342,7 @@ export default function AccountPage() {
             <h2 className="text-[22px] font-semibold tracking-tight text-white">Profile picture</h2>
             <p className="mt-2 text-sm text-mute">Until you pick one, we draw a cartoon from your wallet.</p>
             <div data-field="pfp" className={`mt-4 flex items-center gap-4 ${fieldErr.errors.pfp ? "rounded-2xl p-1 ring-1 ring-blood/60" : ""}`}>
-              <CartoonPfp seed={owner} src={desk?.pfp} className="h-24 w-24" />
+              <CartoonPfp seed={owner} src={desk?.pfp || circleAvatarUrl(owner)} className="h-24 w-24" />
               <div className="flex flex-wrap gap-2">
                 <button type="button" disabled={busy} className="btn-acid rounded-full px-5 py-2 text-sm disabled:opacity-40" onClick={() => fileRef.current?.click()}>
                   {busy ? "Saving…" : "Upload"}

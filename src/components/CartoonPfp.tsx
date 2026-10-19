@@ -17,9 +17,11 @@ export function CartoonPfp({
   const uid = useId().replace(/:/g, "");
   const [dead, setDead] = useState(false);
   const [tries, setTries] = useState(0);
+  const [ready, setReady] = useState(false);
   useEffect(() => {
     setDead(false);
     setTries(0);
+    setReady(false);
   }, [src]);
   const imgSrc = src && tries > 0 ? `${src}${src.includes("?") ? "&" : "?"}r=${tries}` : src || "";
   const click = onClick
@@ -36,24 +38,28 @@ export function CartoonPfp({
         className: `shrink-0 cursor-pointer rounded-full object-cover ${className}`,
       }
     : { className: `shrink-0 rounded-full object-cover ${className}` };
-  if (src && !dead) {
-    return (
+  const photo =
+    src && !dead ? (
       // eslint-disable-next-line @next/next/no-img-element
       <img
         src={imgSrc}
         alt=""
         draggable={false}
+        onLoad={() => setReady(true)}
         onError={() => {
           const local = Boolean(src && (src.startsWith("data:") || src.startsWith("blob:")));
           if (local || tries >= 3) setDead(true);
           else setTimeout(() => setTries((n) => n + 1), 250 * (tries + 1));
         }}
         {...click}
+        className={`${click.className}${ready ? "" : " hidden"}`}
       />
-    );
-  }
+    ) : null;
+  if (src && !dead && ready && photo) return photo;
   const a = avatar(seed || "solphia", uid);
   return (
+    <>
+      {photo}
     <svg viewBox="0 0 64 64" {...click} className={`shrink-0 rounded-full ${className}`} aria-hidden={onClick ? undefined : true}>
       <defs>
         <radialGradient id={a.gid} cx="32%" cy="28%" r="80%">
@@ -78,6 +84,7 @@ export function CartoonPfp({
       )}
       {a.hat ? <path d={a.hat} fill={a.hatC} /> : null}
     </svg>
+    </>
   );
 }
 

@@ -172,7 +172,7 @@ function CircleInner() {
         ) : (
           <CircleHangout
             seed={owner}
-            pfpSrc={member.hasPfp ? `/api/circle/avatar?pk=${encodeURIComponent(owner)}` : undefined}
+            pfpSrc={`/api/circle/avatar?pk=${encodeURIComponent(owner)}&kind=pfp`}
             members={pack.members}
             refs={member.refs}
             boostPct={member.boostPct}

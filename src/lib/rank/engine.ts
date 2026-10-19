@@ -1,6 +1,7 @@
 import { isSolanaAddress, sanitizeText } from "../security";
 import { bindReferrer, ensureAccount, referredBy, type LaunchAccount, type LaunchBook } from "../launch/engine";
 import { profileImageOk } from "../launch/validate";
+import { PFP_SENTINEL, circleAvatarUrl } from "../pfpUrl";
 
 export const RANK_MAX = 100;
 export type RankKind = "launch" | "chat" | "circle" | "referral" | "swap";
@@ -256,12 +257,12 @@ export function publicRank(acc?: LaunchAccount | null) {
   };
 }
 
-/** Browser-safe PFP / banner URL. Data URLs go through the avatar route so Redis JSON stays small. */
-export function profilePhotoUrl(raw: string | undefined, pubkey: string, kind: "pfp" | "banner"): string {
+/** Browser-safe PFP / banner URL. Bytes live on KEYS.pfp; this returns the avatar route. */
+export function profilePhotoUrl(raw: string | undefined, pubkey: string, kind: "pfp" | "banner", bust?: number): string {
   const v = (raw || "").trim();
   if (!v) return "";
-  if (v.startsWith("data:") || (kind === "pfp" && /^https?:\/\//i.test(v))) {
-    return `/api/circle/avatar?pk=${encodeURIComponent(pubkey)}&kind=${kind}`;
+  if (v === PFP_SENTINEL || v.startsWith("data:") || (kind === "pfp" && /^https?:\/\//i.test(v))) {
+    return circleAvatarUrl(pubkey, kind, bust);
   }
   if (v.startsWith("/")) return v;
   if (/^https?:\/\//i.test(v)) return `/api/media?u=${encodeURIComponent(v)}`;

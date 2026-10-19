@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowDownLeft, ArrowUpRight, Plus, RefreshCw, Repeat } from "lucide-react";
 import { CartoonPfp } from "@/components/CartoonPfp";
+import { circleAvatarUrl } from "@/lib/pfpUrl";
 import { SolanaMark } from "@/components/SolanaMark";
 import { TokenArt } from "@/components/TokenArt";
 import { CopyButton } from "@/components/CopyButton";
@@ -98,6 +99,11 @@ export default function WalletPage() {
   useEffect(() => {
     setPfp("");
     load().catch(() => {});
+    const onDesk = () => {
+      load().catch(() => {});
+    };
+    window.addEventListener("solphia-desk", onDesk);
+    return () => window.removeEventListener("solphia-desk", onDesk);
   }, [load]);
 
   const rows = useMemo(() => {
@@ -230,7 +236,7 @@ export default function WalletPage() {
     <main className="pump-shell">
       <div className="pump-wrap pb-16">
         <div className="flex items-center gap-3">
-          <CartoonPfp seed={owner} src={pfp || undefined} className="h-12 w-12" />
+          <CartoonPfp seed={owner} src={pfp || circleAvatarUrl(owner)} className="h-12 w-12" />
           <div className="min-w-0 flex-1">
             <p className="text-[13px] font-medium text-[#14f195]">Wallet</p>
             <h1 className="truncate text-[24px] font-semibold tracking-tight text-white">{nickname}</h1>
