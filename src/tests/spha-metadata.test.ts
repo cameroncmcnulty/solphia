@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { PublicKey } from "@solana/web3.js";
 import { metadataPda, parseMetaplexData, TOKEN_METADATA_PROGRAM_ID, tokenMetadataJson } from "../lib/token/metadata";
+import { isTokenMetaUri } from "../lib/token/sphaMeta";
+import { SPHA_DEFAULT_IMAGE } from "../lib/token/omics";
 
 describe("spha metadata", () => {
   it("derives a stable metaplex PDA", () => {
@@ -72,5 +74,17 @@ describe("spha metadata", () => {
     assert.equal(got?.name, "Princess");
     assert.equal(got?.symbol, "PRINCESS");
     assert.equal(got?.uri.startsWith("https://ipfs.io"), true);
+  });
+
+  it("rejects homepage URLs as token metadata", () => {
+    assert.equal(isTokenMetaUri("https://solphia.io"), false);
+    assert.equal(isTokenMetaUri("https://solphia.io/"), false);
+    assert.equal(isTokenMetaUri("https://www.solphia.io"), false);
+    assert.equal(isTokenMetaUri("https://solphia.io/launch"), false);
+    assert.equal(isTokenMetaUri(SPHA_DEFAULT_IMAGE), false);
+    assert.equal(isTokenMetaUri("https://ipfs.io/ipfs/QmMetaJson?ext=json"), true);
+    assert.equal(isTokenMetaUri("https://gateway.pinata.cloud/ipfs/QmMetaJson"), true);
+    assert.equal(isTokenMetaUri("https://example.com/spha.json"), true);
+    assert.equal(isTokenMetaUri("not-a-url"), false);
   });
 });

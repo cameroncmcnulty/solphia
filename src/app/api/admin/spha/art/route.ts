@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/admin/auth";
-import { pinBytes, pinJson, pinataConfigured } from "@/lib/pinata";
+import { ipfsMetadataUrl, pinBytes, pinJson, pinataConfigured } from "@/lib/pinata";
 import { tokenMetadataJson } from "@/lib/token/metadata";
 import { SPHA_NAME, SPHA_SYMBOL } from "@/lib/token/omics";
 
@@ -31,11 +31,13 @@ export async function POST(req: NextRequest) {
   const buf = Buffer.from(await file.arrayBuffer());
   const mime = ((file.type || "image/jpeg").split(";")[0] || "image/jpeg").trim();
   const pinned = await pinBytes(buf, mime, "spha-art");
-  if (!pinned?.url) return NextResponse.json({ error: "pin_image", message: "Could not pin the token art." }, { status: 400 });
+  if (!pinned?.cid) return NextResponse.json({ error: "pin_image", message: "Could not pin the token art." }, { status: 400 });
+  const ext = mime.includes("png") ? "png" : mime.includes("webp") ? "webp" : mime.includes("gif") ? "gif" : "jpg";
+  const image = ipfsMetadataUrl(pinned.cid, ext);
   const meta = await pinJson(
-    tokenMetadataJson({ name, symbol, description: blurb || `${name} · ${symbol}`, image: pinned.url, website }),
+    tokenMetadataJson({ name, symbol, description: blurb || `${name} · ${symbol}`, image, website, mime }),
     "spha-meta",
   );
-  if (!meta?.url) return NextResponse.json({ error: "pin_meta", message: "Could not pin token metadata." }, { status: 400 });
-  return NextResponse.json({ ok: true, image: pinned.url, uri: meta.url });
+  if (!meta?.cid) return NextResponse.json({ error: "pin_meta", message: "Could not pin token metadata." }, { status: 400 });
+  return NextResponse.json({ ok: true, image, uri: ipfsMetadataUrl(meta.cid, "json") });
 }

@@ -2,12 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { Keypair } from "@solana/web3.js";
-import { SPHA_NAME, SPHA_SUPPLY, SPHA_SYMBOL, type SphaNetwork } from "@/lib/token/omics";
+import { SPHA_DEFAULT_IMAGE, SPHA_NAME, SPHA_SUPPLY, SPHA_SYMBOL, type SphaNetwork } from "@/lib/token/omics";
 import { useAdmin } from "./AdminProvider";
 import { Tokenomics } from "@/components/Tokenomics";
 import { shortPk } from "./ui";
 import { b64ToBytes } from "@/lib/solana/wire";
 import { canSignProject, projectWallet, signAndSendProjectTx } from "@/lib/wallet/projectVault";
+
+const FIRST_BUY_SOL = 0.05;
 
 type Prep = {
   network: SphaNetwork;
@@ -65,7 +67,7 @@ export function SphaLaunch() {
       setErr("Create the owner project wallet first. It signs the launch.");
       return;
     }
-    if (mode === "official" && prep?.missing?.length) {
+    if (prep?.missing?.length) {
       setErr(`Set project wallets first: ${prep.missing.join(", ")}`);
       return;
     }
@@ -80,7 +82,7 @@ export function SphaLaunch() {
     setRun(true);
     try {
       const mint = Keypair.generate();
-      setLog(`Mint ${mint.publicKey.toBase58().slice(0, 8)}… building ${mode} launch`);
+      setLog(`Mint ${mint.publicKey.toBase58().slice(0, 8)}… building 200M ${mode} launch`);
       const prepR = await fetch("/api/admin/spha", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -92,6 +94,9 @@ export function SphaLaunch() {
           name,
           symbol,
           uri: art?.uri,
+          image: art?.image || SPHA_DEFAULT_IMAGE,
+          blurb,
+          website,
         }),
       });
       const pj = await prepR.json();
@@ -102,6 +107,8 @@ export function SphaLaunch() {
       const sig = await signAndSendProjectTx("owner", pj.tx, extras);
       setLog("On-chain. Recording…");
       const ca = mint.publicKey.toBase58();
+      const metaUri = typeof pj.uri === "string" ? pj.uri : art?.uri;
+      const metaImage = typeof pj.image === "string" ? pj.image : art?.image || SPHA_DEFAULT_IMAGE;
       await fetch("/api/admin/spha", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -112,29 +119,45 @@ export function SphaLaunch() {
           network: net,
           name,
           symbol,
-          supply: mode === "official" ? SPHA_SUPPLY : 1_000_000_000,
+          supply: SPHA_SUPPLY,
           sigs: [sig],
           allocations: (prep?.allocations || []).map((a) => ({ id: a.id, wallet: a.wallet, tokens: a.tokens })),
-          image: art?.image,
+          image: metaImage,
           blurb,
-          uri: art?.uri,
+          uri: metaUri,
           website,
           config: pj.config,
           payer,
         }),
       });
-      if (mode === "official") {
-        setLog("Minting team allocations to owner, foundation, and treasury…");
-        try {
-          const notes = await mintTeamSlices(ca, payer);
-          setLog(`Official $SPHA live. CA ${ca}. ${notes.join(" · ")}`);
-        } catch (splitErr) {
-          setLog(`Official $SPHA live. CA ${ca}. Team mint still pending — use Mint team allocations.`);
-          setErr(splitErr instanceof Error ? splitErr.message : "team mint failed");
-        }
-      } else {
-        setLog(`Test token live. CA ${ca} — official $SPHA is unchanged.`);
+      const notes: string[] = [];
+      let fail = "";
+      setLog("Minting team allocations to owner, foundation, and treasury…");
+      try {
+        notes.push(...(await mintTeamSlices(ca, payer)));
+      } catch (splitErr) {
+        fail = splitErr instanceof Error ? splitErr.message : "team mint failed";
+        notes.push("team mint pending");
       }
+      try {
+        const metaNote = await writePoolMeta(ca, payer, metaImage);
+        if (metaNote) notes.push(metaNote);
+      } catch {
+        notes.push("pool metadata pending");
+      }
+      try {
+        const buyNote = await firstBuy(ca, payer);
+        if (buyNote) notes.push(buyNote);
+      } catch (buyErr) {
+        notes.push("first buy pending");
+        if (!fail) fail = buyErr instanceof Error ? buyErr.message : "first buy failed";
+      }
+      if (fail) setErr(fail);
+      setLog(
+        mode === "official"
+          ? `Official $SPHA live. CA ${ca}. ${notes.join(" · ")}`
+          : `Test token live. CA ${ca} — official $SPHA is unchanged. ${notes.join(" · ")}`,
+      );
       loadPrep().catch(() => {});
     } catch (e) {
       setErr(e instanceof Error ? e.message : "launch failed");
@@ -175,12 +198,73 @@ export function SphaLaunch() {
     throw new Error(lastErr);
   }
 
+  async function writePoolMeta(mint: string, payer: string, logo: string): Promise<string> {
+    let lastErr = "pool not on-chain yet";
+    for (let i = 0; i < 6; i++) {
+      if (i) await new Promise((r) => setTimeout(r, 1500));
+      try {
+        const r = await fetch("/api/admin/spha", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            action: "preparePoolMeta",
+            payer,
+            mint,
+            name,
+            website,
+            logo,
+          }),
+        });
+        const j = (await r.json().catch(() => ({}))) as { tx?: string; message?: string; error?: string };
+        if (!r.ok || !j.tx) {
+          lastErr = j.message || j.error || "pool metadata build failed";
+          continue;
+        }
+        const sig = await signAndSendProjectTx("owner", j.tx);
+        return `pool meta ${sig.slice(0, 8)}…`;
+      } catch (e) {
+        lastErr = e instanceof Error ? e.message : "pool metadata failed";
+      }
+    }
+    throw new Error(lastErr);
+  }
+
+  async function firstBuy(mint: string, payer: string): Promise<string> {
+    let lastErr = "pool not on-chain yet";
+    for (let i = 0; i < 6; i++) {
+      if (i) await new Promise((r) => setTimeout(r, 1500));
+      try {
+        const r = await fetch("/api/admin/spha", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ action: "prepareBuy", payer, mint, sol: FIRST_BUY_SOL }),
+        });
+        const j = (await r.json().catch(() => ({}))) as {
+          tx?: string;
+          tokensOut?: number;
+          message?: string;
+          error?: string;
+        };
+        if (!r.ok || !j.tx) {
+          lastErr = j.message || j.error || "first buy build failed";
+          continue;
+        }
+        const sig = await signAndSendProjectTx("owner", j.tx);
+        const out = j.tokensOut ? ` ${Math.round(j.tokensOut).toLocaleString("en-US")} tokens` : "";
+        return `first buy ${FIRST_BUY_SOL} SOL${out} ${sig.slice(0, 8)}…`;
+      } catch (e) {
+        lastErr = e instanceof Error ? e.message : "first buy failed";
+      }
+    }
+    throw new Error(lastErr);
+  }
+
   async function splitNow() {
     setErr("");
-    const ca = prep?.launch?.mint || "";
+    const ca = prep?.launch?.mint || prep?.testLaunch?.mint || "";
     const payer = projectWallet("owner")?.pubkey || data?.ownerWallet || "";
     if (!ca || !payer) {
-      setErr("Launch official $SPHA first.");
+      setErr("Launch a 200M token first.");
       return;
     }
     setSplitRun(true);
@@ -209,7 +293,8 @@ export function SphaLaunch() {
             <p className="mt-1 max-w-xl text-sm text-mute">
               Official $SPHA is 200,000,000. 8.6 / 9.7 / 4.6 mint into the owner, foundation, and treasury project
               wallets at launch. 77.1% on the same bonding curve as every other pad token so the 1% lasts after
-              graduate. Sign with the owner project wallet. Run a test ticker first.
+              graduate. Test uses that same 200M Token-2022 path, with metadata and a first buy, and does not set the
+              official CA. Sign with the owner project wallet.
             </p>
           </div>
           <div className="flex rounded-full border border-violet/30 p-0.5">
@@ -345,19 +430,20 @@ export function SphaLaunch() {
 
         <p className="mt-3 text-sm text-mute">
           Payer is the owner project wallet {ownerPk ? shortPk(ownerPk, 4) : "(create it above)"}. Fund it with a little
-          SOL for rent. Official 22.9% mints straight into owner / foundation / treasury at T0 — 17.2M / 19.4M / 9.2M.
-          77.1% (154.2M) is the curve. Test launches use the shared pad 1B config and do not set the official CA.
+          SOL for rent plus {FIRST_BUY_SOL} SOL for the opening buy. 22.9% mints straight into owner / foundation /
+          treasury at T0 — 17.2M / 19.4M / 9.2M. 77.1% (154.2M) is the curve and is tradeable from the first buy. Test
+          launches do not set the official CA.
         </p>
 
         <button
           type="button"
-          disabled={run || splitRun || (mode === "official" && Boolean(prep?.missing?.length))}
+          disabled={run || splitRun || Boolean(prep?.missing?.length)}
           onClick={() => void launch()}
           className="btn-acid mt-4 rounded-full px-6 py-2 text-sm disabled:opacity-40"
         >
           {run ? "Launching…" : mode === "test" ? `Launch test on ${network}` : `Launch official $SPHA on ${network}`}
         </button>
-        {prep?.launch?.mint ? (
+        {prep?.launch?.mint || prep?.testLaunch?.mint ? (
           <button
             type="button"
             disabled={run || splitRun}
@@ -369,7 +455,7 @@ export function SphaLaunch() {
         ) : null}
         {log && <p className="mt-2 font-mono text-[12px] text-acid">{log}</p>}
         {err && <p className="mt-2 text-sm text-blood">{err}</p>}
-        {mode === "official" && prep?.missing?.length ? (
+        {prep?.missing?.length ? (
           <p className="mt-2 text-sm text-mute">Need: {prep.missing.join(", ")}</p>
         ) : null}
       </div>

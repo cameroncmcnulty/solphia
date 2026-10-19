@@ -20,6 +20,7 @@ import { encodeTx, sphaRpc, buildSphaTeamMintTx } from "@/lib/token/mint";
 import { connection } from "@/lib/solana/connection";
 import { createCoin, emptyLaunchBook } from "@/lib/launch/engine";
 import { dbcEnabled, liveDbcConfig } from "@/lib/launch/dbcIds";
+import { isTokenMetaUri, pinSphaTokenMeta, SPHA_DEFAULT_IMAGE } from "@/lib/token/sphaMeta";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -75,12 +76,31 @@ const Prepare = z.object({
   name: z.string().max(32),
   symbol: z.string().max(12),
   uri: z.string().max(400).optional(),
+  image: z.string().max(400).optional(),
+  blurb: z.string().max(280).optional(),
+  website: z.string().max(160).optional(),
 });
 
 const Team = z.object({
   action: z.literal("prepareTeam"),
   payer: z.string(),
   mint: z.string(),
+});
+
+const PoolMeta = z.object({
+  action: z.literal("preparePoolMeta"),
+  payer: z.string(),
+  mint: z.string(),
+  name: z.string().max(32),
+  website: z.string().max(160).optional(),
+  logo: z.string().max(255).optional(),
+});
+
+const Buy = z.object({
+  action: z.literal("prepareBuy"),
+  payer: z.string(),
+  mint: z.string(),
+  sol: z.number().min(0.01).max(2).optional(),
 });
 
 const Recorded = z.object({
@@ -109,6 +129,10 @@ export async function POST(req: NextRequest) {
   if (asPrep.success) return prepare(req, asPrep.data);
   const asTeam = Team.safeParse(raw);
   if (asTeam.success) return prepareTeam(asTeam.data);
+  const asPoolMeta = PoolMeta.safeParse(raw);
+  if (asPoolMeta.success) return preparePoolMeta(asPoolMeta.data);
+  const asBuy = Buy.safeParse(raw);
+  if (asBuy.success) return prepareBuy(asBuy.data);
   const parsed = Recorded.safeParse(raw);
   if (!parsed.success) return NextResponse.json({ error: "bad_request" }, { status: 400 });
   return record(req, parsed.data);
@@ -123,40 +147,55 @@ async function prepare(req: NextRequest, b: z.infer<typeof Prepare>) {
   }
   const s = await readyState();
   const dest = destOf(s);
-  if (b.mode === "official") {
-    const missing = sphaMissingDest(dest);
-    if (missing.length) {
-      return NextResponse.json(
-        { error: "missing_wallets", message: `Set project wallets first: ${missing.join(", ")}` },
-        { status: 400 },
-      );
-    }
+  const missing = sphaMissingDest(dest);
+  if (missing.length) {
+    return NextResponse.json(
+      { error: "missing_wallets", message: `Set project wallets first: ${missing.join(", ")}` },
+      { status: 400 },
+    );
   }
   const dbc = await import("@/lib/launch/dbc");
   const name = b.name.trim() || SPHA_NAME;
   const symbol = b.symbol.trim().toUpperCase() || SPHA_SYMBOL;
-  const uri = (b.uri || "https://solphia.io").slice(0, 255);
+  const website = (b.website || "https://solphia.io").trim();
+  let uri = (b.uri || "").trim();
+  let image = (b.image || "").trim();
+  if (!isTokenMetaUri(uri)) {
+    const pinned = await pinSphaTokenMeta({
+      name,
+      symbol,
+      description: b.blurb,
+      image: image || SPHA_DEFAULT_IMAGE,
+      website,
+    });
+    if (!pinned?.uri || !isTokenMetaUri(pinned.uri)) {
+      return NextResponse.json(
+        { error: "meta_uri", message: "Pin token metadata first. Homepage URLs are not metadata." },
+        { status: 400 },
+      );
+    }
+    uri = pinned.uri;
+    image = pinned.image;
+  }
   try {
-    const built =
-      b.mode === "official"
-        ? await dbc.buildSphaDbcLaunchTx({ payer: b.payer, mint: b.mint, name, symbol, uri })
-        : await dbc.buildDbcLaunchTx({
-            payer: b.payer,
-            mint: b.mint,
-            name,
-            symbol,
-            uri,
-            config: liveDbcConfig(s.launch?.dbcConfig),
-          });
+    const built = await dbc.buildSphaDbcLaunchTx({
+      payer: b.payer,
+      mint: b.mint,
+      name,
+      symbol,
+      uri: uri.slice(0, 255),
+    });
     return NextResponse.json({
       ok: true,
       mode: b.mode,
       mint: built.mint,
       tx: built.transaction,
-      config: "config" in built ? built.config : undefined,
-      configSecret: "configSecret" in built ? built.configSecret : undefined,
-      supply: b.mode === "official" ? SPHA_SUPPLY : 1_000_000_000,
+      config: built.config,
+      configSecret: built.configSecret,
+      supply: SPHA_SUPPLY,
       firstBuyIncluded: Boolean(built.firstBuyIncluded),
+      uri,
+      image: image || SPHA_DEFAULT_IMAGE,
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Could not build the launch.";
@@ -191,6 +230,58 @@ async function prepareTeam(b: z.infer<typeof Team>) {
   }
 }
 
+async function preparePoolMeta(b: z.infer<typeof PoolMeta>) {
+  if (!isSolanaAddress(b.payer) || !isSolanaAddress(b.mint)) {
+    return NextResponse.json({ error: "bad_wallet", message: "Owner wallet and mint are required." }, { status: 400 });
+  }
+  try {
+    const dbc = await import("@/lib/launch/dbc");
+    const built = await dbc.buildDbcPoolMetadataTx({
+      payer: b.payer,
+      mint: b.mint,
+      name: b.name.trim() || SPHA_NAME,
+      website: b.website || "https://solphia.io",
+      logo: b.logo || SPHA_DEFAULT_IMAGE,
+    });
+    return NextResponse.json({ ok: true, mint: b.mint, tx: built.transaction, pool: built.pool });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Could not build pool metadata.";
+    return NextResponse.json({ error: "chain_failed", message }, { status: 400 });
+  }
+}
+
+async function prepareBuy(b: z.infer<typeof Buy>) {
+  if (!isSolanaAddress(b.payer) || !isSolanaAddress(b.mint)) {
+    return NextResponse.json({ error: "bad_wallet", message: "Buyer wallet and mint are required." }, { status: 400 });
+  }
+  try {
+    const dbc = await import("@/lib/launch/dbc");
+    const pool = await dbc.waitForDbcPool(b.mint, 16);
+    if (!pool) {
+      return NextResponse.json({ error: "curve_missing", message: "Pool not on-chain yet." }, { status: 400 });
+    }
+    const built = await dbc.buildDbcTradeTx({
+      mint: b.mint,
+      owner: b.payer,
+      side: "buy",
+      sol: b.sol || 0.05,
+    });
+    if (!built.ok) {
+      return NextResponse.json({ error: built.error, message: "Could not build the first buy." }, { status: 400 });
+    }
+    return NextResponse.json({
+      ok: true,
+      mint: b.mint,
+      tx: built.transaction,
+      tokensOut: built.tokensOut,
+      feeSol: built.feeSol,
+    });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Could not build the first buy.";
+    return NextResponse.json({ error: "chain_failed", message }, { status: 400 });
+  }
+}
+
 async function record(req: NextRequest, b: z.infer<typeof Recorded>) {
   if (!isSolanaAddress(b.mint)) return NextResponse.json({ error: "bad_mint" }, { status: 400 });
   const mode = b.mode || "official";
@@ -203,7 +294,7 @@ async function record(req: NextRequest, b: z.infer<typeof Recorded>) {
     network: b.network,
     name: b.name,
     symbol: b.symbol,
-    supply: b.supply,
+    supply: SPHA_SUPPLY,
     launchedAt: Date.now(),
     sigs: b.sigs,
     allocations,
@@ -227,9 +318,6 @@ async function record(req: NextRequest, b: z.infer<typeof Recorded>) {
   if (payer && isSolanaAddress(payer)) {
     await withLaunch((st) => {
       const book = bookOf(st);
-      if (!official && b.config && isSolanaAddress(b.config) && !book.dbcConfig) {
-        book.dbcConfig = b.config;
-      }
       createCoin(book, {
         creator: payer,
         name: b.name,

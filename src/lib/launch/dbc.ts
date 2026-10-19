@@ -426,6 +426,32 @@ export async function buildSphaDbcLaunchTx(opts: {
   };
 }
 
+/** Meteora VirtualPoolMetadata so the pair page has name / site / logo from block one. */
+export async function buildDbcPoolMetadataTx(opts: {
+  payer: string;
+  mint: string;
+  name: string;
+  website?: string;
+  logo?: string;
+}): Promise<{ transaction: string; pool: string }> {
+  const payer = new PublicKey(opts.payer);
+  const row = await waitForDbcPool(opts.mint, 16);
+  if (!row) throw new Error("DBC pool not on-chain yet.");
+  const virtualPool = (row as { publicKey: PublicKey }).publicKey;
+  if (!virtualPool) throw new Error("DBC pool not on-chain yet.");
+  const logoRaw = (opts.logo || "").trim();
+  const raw = await client().creator.createPoolMetadata({
+    virtualPool,
+    name: opts.name.slice(0, 32),
+    website: (opts.website || "https://solphia.io").slice(0, 64),
+    logo: logoRaw && logoRaw.length <= 128 ? logoRaw : "https://solphia.io/spha-mark.png",
+    creator: payer,
+    payer,
+  });
+  const tx = await readyTx(asTransaction(raw), payer);
+  return { transaction: encodeTx(tx), pool: virtualPool.toBase58() };
+}
+
 export type DbcFees = {
   creatorFeesSol: number;
   creatorUnclaimedSol: number;

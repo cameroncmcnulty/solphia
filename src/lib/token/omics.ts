@@ -4,6 +4,8 @@ export const SPHA_SUPPLY = 200_000_000;
 export const SPHA_DECIMALS = 6;
 export const SPHA_NAME = "Solphia";
 export const SPHA_SYMBOL = "SPHA";
+/** Public fallback art so a launch never points metadata at the homepage. */
+export const SPHA_DEFAULT_IMAGE = "https://solphia.io/spha-mark.png";
 
 export type SphaSliceId = "owner" | "foundation" | "treasury" | "lp";
 export type SphaNetwork = "devnet" | "mainnet-beta";
