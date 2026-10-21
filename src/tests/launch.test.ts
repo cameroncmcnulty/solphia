@@ -510,6 +510,7 @@ describe("launch create validation", () => {
     assert.match(avatar, /artCandidates/);
     assert.match(avatar, /no-store/);
     assert.match(avatar, /4_000/);
+    assert.match(avatar, /800, 60_000/);
     assert.equal(avatar.includes("readyState()"), false);
     assert.equal(avatar.includes("NextResponse.redirect(fast"), false);
     const pfpStore = readFileSync(path.join(process.cwd(), "src/lib/pfpStore.ts"), "utf8");
@@ -530,7 +531,8 @@ describe("launch create validation", () => {
     const accountPost = accountApi.slice(accountApi.indexOf("export async function POST"));
     assert.ok(accountPost.indexOf("putPfp") < accountPost.indexOf("setAccountPfp"));
     assert.ok(accountPost.indexOf("setAccountPfp") < accountPost.indexOf("pinDataUrl"));
-    assert.equal(accountApi.includes("pinDisplayUrl"), false);
+    assert.match(accountApi, /pinDisplayUrl/);
+    assert.match(accountApi, /KEYS\.pfp/);
     const accountPage = readFileSync(path.join(process.cwd(), "src/app/account/page.tsx"), "utf8");
     assert.match(accountPage, /accept="image\/\*/);
     assert.match(accountPage, /12_000_000/);
@@ -540,9 +542,17 @@ describe("launch create validation", () => {
     assert.match(accountPage, /startsWith\("data:"\)/);
     assert.match(accountPage, /loadGen/);
     const face = readFileSync(path.join(process.cwd(), "src/components/CartoonPfp.tsx"), "utf8");
-    assert.match(face, /tries >= 3/);
+    assert.match(face, /tries >= 1/);
     assert.match(face, /startsWith\("data:"\)/);
     assert.match(face, /onLoad/);
+    assert.match(face, /naturalWidth/);
+    assert.match(face, /opacity-0/);
+    assert.match(face, /complete/);
+    assert.equal(face.includes(" hidden"), false);
+    const shillPage = readFileSync(path.join(process.cwd(), "src/app/shill/page.tsx"), "utf8");
+    assert.match(shillPage, /circleAvatarUrl/);
+    assert.match(shillPage, /pfpAt/);
+    assert.match(shillPage, /src=\{face \|\| undefined\}/);
     const menu = readFileSync(path.join(process.cwd(), "src/components/AccountMenu.tsx"), "utf8");
     assert.match(menu, /circleAvatarUrl/);
     assert.match(menu, /src=\{pfpSrc\}/);

@@ -9,6 +9,7 @@ import { WalletConnect } from "@/components/WalletConnect";
 import { peekRef } from "@/components/ReferralCapture";
 import { useOwner } from "@/lib/hooks";
 import { copyText } from "@/lib/copyText";
+import { circleAvatarUrl } from "@/lib/pfpUrl";
 
 type Promo = { id: string; url: string; caption?: string };
 type Job = { id: string; title: string; blurb: string; href?: string };
@@ -172,7 +173,7 @@ function CircleInner() {
         ) : (
           <CircleHangout
             seed={owner}
-            pfpSrc={`/api/circle/avatar?pk=${encodeURIComponent(owner)}&kind=pfp`}
+            pfpSrc={circleAvatarUrl(owner)}
             members={pack.members}
             refs={member.refs}
             boostPct={member.boostPct}

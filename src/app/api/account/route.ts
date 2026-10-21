@@ -18,7 +18,7 @@ import { putPfp, delPfp } from "@/lib/pfpStore";
 import { lastPairPrices } from "@/lib/tick";
 import { airdropMultiplier, referralBoostPct } from "@/lib/circle/types";
 import { payReferralXp, profilePhotoUrl, publicRank } from "@/lib/rank/engine";
-import { pinDataUrl } from "@/lib/pinata";
+import { pinDataUrl, pinDisplayUrl } from "@/lib/pinata";
 import { acceptLegal, findAccount } from "@/lib/auth/accounts";
 import { readAccountId } from "@/lib/auth/session";
 
@@ -185,9 +185,17 @@ export async function POST(req: NextRequest) {
     const name = `pfp-${b.pubkey.slice(0, 8)}`;
     after(async () => {
       try {
-        await pinDataUrl(data, name, { budgetMs: 8_000 });
+        const pinned = await pinDataUrl(data, name, { budgetMs: 8_000 });
+        const url = pinned?.url ? pinDisplayUrl(pinned.url) : "";
+        if (!url || !/^https?:\/\//i.test(url)) return;
+        await withLaunch((s) => {
+          const book = bookOf(s);
+          const cur = (book.accounts?.[b.pubkey]?.pfp || "").trim();
+          if (cur && cur !== PFP_SENTINEL && !/^https?:\/\//i.test(cur)) return;
+          setAccountPfp(book, b.pubkey, url);
+        }, true);
       } catch {
-        /* dedicated key is the photo — Pinata is backup only, never overwrite it */
+        /* dedicated key is the photo — Pinata is backup only, never overwrite KEYS.pfp */
       }
     });
   }

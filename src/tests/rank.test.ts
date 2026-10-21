@@ -12,6 +12,7 @@ import {
   rankTier,
   resetRank,
   profilePhotoUrl,
+  publicCard,
   setBanner,
   setFavourite,
   setIntro,
@@ -134,6 +135,11 @@ describe("rank engine", () => {
     assert.equal(profilePhotoUrl("https://gateway.pinata.cloud/ipfs/bafypfp", A, "pfp"), `/api/circle/avatar?pk=${encodeURIComponent(A)}&kind=pfp`);
     assert.equal(profilePhotoUrl("store:pfp", A, "pfp"), `/api/circle/avatar?pk=${encodeURIComponent(A)}&kind=pfp`);
     assert.equal(profilePhotoUrl("store:pfp", A, "pfp", 99), `/api/circle/avatar?pk=${encodeURIComponent(A)}&kind=pfp&v=99`);
+    book.accounts[A].pfp = "store:pfp";
+    book.accounts[A].pfpAt = 42;
+    const card = publicCard(book.accounts[A], A);
+    assert.equal(card.hasPfp, true);
+    assert.equal(card.pfpAt, 42);
     assert.equal(setBanner(book, A, "javascript:alert(1)").ok, false);
   });
 

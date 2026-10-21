@@ -35,6 +35,7 @@ import { SHILL_PIN_MS, SHILL_PIN_SOL, SHILL_REACTS, SHILL_STICKERS, type ShillTo
 import { copyText } from "@/lib/copyText";
 import { flashNotice } from "@/lib/notice";
 import { displayTicker } from "@/lib/launch/labels";
+import { circleAvatarUrl } from "@/lib/pfpUrl";
 
 type Msg = {
   id: string;
@@ -74,6 +75,7 @@ type RankCard = {
   pubkey: string;
   username: string;
   hasPfp?: boolean;
+  pfpAt?: number;
   rank: number;
   title: string;
   xp: number;
@@ -118,8 +120,10 @@ function nameOf(pk: string, profiles?: Pack["profiles"]) {
   return u ? `@${u}` : `${pk.slice(0, 4)}…${pk.slice(-4)}`;
 }
 
-function pfpSrc(pk: string) {
-  return `/api/circle/avatar?pk=${encodeURIComponent(pk)}&kind=pfp`;
+function pfpSrc(pk: string, profiles?: Pack["profiles"]) {
+  const card = profiles?.[pk];
+  if (card && !card.hasPfp) return "";
+  return circleAvatarUrl(pk, "pfp", card?.pfpAt || undefined);
 }
 
 function rankOf(pk: string, profiles?: Pack["profiles"]) {
@@ -1014,7 +1018,7 @@ export default function ShillPage() {
             const prev = msgs[i - 1];
             const newDay = !prev || new Date(prev.at).toDateString() !== new Date(m.at).toDateString();
             const grouped = Boolean(prev && !newDay && prev.owner === m.owner && m.at - prev.at < 8 * 60_000);
-            const face = pfpSrc(m.owner);
+            const face = pfpSrc(m.owner, pack?.profiles);
             return (
               <div key={m.id}>
                 {newDay && (
@@ -1023,21 +1027,20 @@ export default function ShillPage() {
                   </div>
                 )}
                 <div className={`mb-1.5 flex items-end gap-1.5 ${mine ? "flex-row-reverse" : ""} ${grouped ? "mt-0" : "mt-2"}`}>
-                  {!mine &&
-                    (grouped ? (
-                      <div className="h-8 w-8 shrink-0" />
-                    ) : (
-                      <CartoonPfp
-                        seed={m.owner}
-                        src={face}
-                        className={
-                          face
-                            ? "h-8 w-8 shrink-0 ring-[1.5px] ring-[#e8c35a] shadow-[0_0_8px_rgba(232,195,90,0.45)]"
-                            : "h-8 w-8 shrink-0"
-                        }
-                        onClick={() => setPeek(m.owner)}
-                      />
-                    ))}
+                  {grouped ? (
+                    <div className="h-8 w-8 shrink-0" />
+                  ) : (
+                    <CartoonPfp
+                      seed={m.owner}
+                      src={face || undefined}
+                      className={
+                        face
+                          ? "h-8 w-8 shrink-0 ring-[1.5px] ring-[#e8c35a] shadow-[0_0_8px_rgba(232,195,90,0.45)]"
+                          : "h-8 w-8 shrink-0"
+                      }
+                      onClick={() => setPeek(m.owner)}
+                    />
+                  )}
                   <div className={`flex min-w-0 max-w-[min(78%,calc(100%-2.5rem))] flex-col ${mine ? "items-end" : "items-start"}`}>
                     {!mine && !grouped && (
                       <button type="button" className="mb-0.5 px-1 text-[13px] font-medium text-acid" onClick={() => setPeek(m.owner)}>

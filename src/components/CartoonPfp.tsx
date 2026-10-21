@@ -24,7 +24,7 @@ export function CartoonPfp({
     setReady(false);
   }, [src]);
   const imgSrc = src && tries > 0 ? `${src}${src.includes("?") ? "&" : "?"}r=${tries}` : src || "";
-  const click = onClick
+  const box = onClick
     ? {
         role: "button" as const,
         tabIndex: 0,
@@ -35,9 +35,14 @@ export function CartoonPfp({
             onClick();
           }
         },
-        className: `shrink-0 cursor-pointer rounded-full object-cover ${className}`,
+        className: `relative inline-block shrink-0 cursor-pointer overflow-hidden rounded-full ${className}`,
       }
-    : { className: `shrink-0 rounded-full object-cover ${className}` };
+    : { className: `relative inline-block shrink-0 overflow-hidden rounded-full ${className}` };
+
+  function markReady(el?: HTMLImageElement | null) {
+    if (el && el.naturalWidth > 1) setReady(true);
+  }
+
   const photo =
     src && !dead ? (
       // eslint-disable-next-line @next/next/no-img-element
@@ -45,46 +50,52 @@ export function CartoonPfp({
         src={imgSrc}
         alt=""
         draggable={false}
-        onLoad={() => setReady(true)}
+        decoding="async"
+        loading="eager"
+        ref={(el) => {
+          if (el && el.complete) markReady(el);
+        }}
+        onLoad={(e) => markReady(e.currentTarget)}
         onError={() => {
           const local = Boolean(src && (src.startsWith("data:") || src.startsWith("blob:")));
-          if (local || tries >= 3) setDead(true);
-          else setTimeout(() => setTries((n) => n + 1), 250 * (tries + 1));
+          if (local || tries >= 1) setDead(true);
+          else setTimeout(() => setTries((n) => n + 1), 400);
         }}
-        {...click}
-        className={`${click.className}${ready ? "" : " hidden"}`}
+        className={`absolute inset-0 h-full w-full object-cover ${ready ? "opacity-100" : "opacity-0"}`}
       />
     ) : null;
-  if (src && !dead && ready && photo) return photo;
   const a = avatar(seed || "solphia", uid);
+  const showPotato = !src || dead || !ready;
   return (
-    <>
+    <span {...box}>
+      {showPotato ? (
+        <svg viewBox="0 0 64 64" className="absolute inset-0 h-full w-full" aria-hidden>
+          <defs>
+            <radialGradient id={a.gid} cx="32%" cy="28%" r="80%">
+              <stop offset="0%" stopColor={a.bg2} />
+              <stop offset="100%" stopColor={a.bg} />
+            </radialGradient>
+          </defs>
+          <circle cx="32" cy="32" r="32" fill={`url(#${a.gid})`} />
+          <ellipse cx="32" cy="40" rx={a.bodyW} ry="18" fill={a.skin} />
+          <circle cx="32" cy="28" r={a.head} fill={a.skin} />
+          <path d={a.hair} fill={a.hairC} />
+          <circle cx={26 - a.eyeGap} cy="27" r={a.eye} fill="#14081c" />
+          <circle cx={38 + a.eyeGap} cy="27" r={a.eye} fill="#14081c" />
+          <circle cx={26 - a.eyeGap + 1.2} cy="26" r="1.1" fill="#fff" />
+          <circle cx={38 + a.eyeGap + 1.2} cy="26" r="1.1" fill="#fff" />
+          <path d={a.mouth} fill="none" stroke="#5a2040" strokeWidth="1.6" strokeLinecap="round" />
+          {a.blush && (
+            <>
+              <ellipse cx="20" cy="32" rx="4" ry="2.2" fill="#ff7aa2" opacity="0.45" />
+              <ellipse cx="44" cy="32" rx="4" ry="2.2" fill="#ff7aa2" opacity="0.45" />
+            </>
+          )}
+          {a.hat ? <path d={a.hat} fill={a.hatC} /> : null}
+        </svg>
+      ) : null}
       {photo}
-    <svg viewBox="0 0 64 64" {...click} className={`shrink-0 rounded-full ${className}`} aria-hidden={onClick ? undefined : true}>
-      <defs>
-        <radialGradient id={a.gid} cx="32%" cy="28%" r="80%">
-          <stop offset="0%" stopColor={a.bg2} />
-          <stop offset="100%" stopColor={a.bg} />
-        </radialGradient>
-      </defs>
-      <circle cx="32" cy="32" r="32" fill={`url(#${a.gid})`} />
-      <ellipse cx="32" cy="40" rx={a.bodyW} ry="18" fill={a.skin} />
-      <circle cx="32" cy="28" r={a.head} fill={a.skin} />
-      <path d={a.hair} fill={a.hairC} />
-      <circle cx={26 - a.eyeGap} cy="27" r={a.eye} fill="#14081c" />
-      <circle cx={38 + a.eyeGap} cy="27" r={a.eye} fill="#14081c" />
-      <circle cx={26 - a.eyeGap + 1.2} cy="26" r="1.1" fill="#fff" />
-      <circle cx={38 + a.eyeGap + 1.2} cy="26" r="1.1" fill="#fff" />
-      <path d={a.mouth} fill="none" stroke="#5a2040" strokeWidth="1.6" strokeLinecap="round" />
-      {a.blush && (
-        <>
-          <ellipse cx="20" cy="32" rx="4" ry="2.2" fill="#ff7aa2" opacity="0.45" />
-          <ellipse cx="44" cy="32" rx="4" ry="2.2" fill="#ff7aa2" opacity="0.45" />
-        </>
-      )}
-      {a.hat ? <path d={a.hat} fill={a.hatC} /> : null}
-    </svg>
-    </>
+    </span>
   );
 }
 

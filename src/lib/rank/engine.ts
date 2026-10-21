@@ -275,6 +275,7 @@ export function publicCard(acc?: LaunchAccount | null, pubkey = "") {
     pubkey: acc?.pubkey || pubkey,
     username: acc?.username || "",
     hasPfp: Boolean(acc?.pfp),
+    pfpAt: acc?.pfpAt || 0,
     hasBanner: Boolean(acc?.banner),
     intro: acc?.intro || "",
     favMint: acc?.favMint || "",

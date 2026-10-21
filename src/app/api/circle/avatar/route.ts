@@ -33,7 +33,7 @@ function serveData(pfp: string) {
 }
 
 export async function GET(req: NextRequest) {
-  if (!rateLimit(clientIp(req) + ":circpfp", 200, 60_000)) {
+  if (!rateLimit(clientIp(req) + ":circpfp", 800, 60_000)) {
     return miss(429);
   }
   const pk = req.nextUrl.searchParams.get("pk") || "";
