@@ -8,7 +8,7 @@ import * as DbcMod from "@meteora-ag/dynamic-bonding-curve-sdk";
 import BN from "bn.js";
 
 import { connection } from "../solana/connection";
-import { Keypair, PublicKey, Transaction, VersionedTransaction } from "@solana/web3.js";
+import { ComputeBudgetProgram, Keypair, PublicKey, Transaction, VersionedTransaction } from "@solana/web3.js";
 import { TOKEN_2022_PROGRAM_ID, getTransferHook, unpackMint } from "@solana/spl-token";
 import { encodeTx } from "../token/mint";
 import { bytesToB64 } from "../solana/wire";
@@ -199,10 +199,45 @@ export async function buildDbcCreateConfigTx(opts: { owner: string }): Promise<{
 
 async function readyTx(tx: Transaction, payer: PublicKey): Promise<Transaction> {
   const latest = await connection().getLatestBlockhash("confirmed");
-  tx.feePayer = payer;
-  tx.recentBlockhash = latest.blockhash;
-  if ("lastValidBlockHeight" in tx) (tx as Transaction).lastValidBlockHeight = latest.lastValidBlockHeight;
-  return tx;
+  const hasCu = tx.instructions.some((ix) => ix.programId.equals(ComputeBudgetProgram.programId));
+  const out = hasCu ? tx : new Transaction().add(
+    ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }),
+    ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 50_000 }),
+    ...tx.instructions,
+  );
+  out.feePayer = payer;
+  out.recentBlockhash = latest.blockhash;
+  if ("lastValidBlockHeight" in out) out.lastValidBlockHeight = latest.lastValidBlockHeight;
+  return out;
+}
+
+/** sigVerify false is required: mint/config keys are still unsigned at prepare. */
+async function simulatePadTx(tx: Transaction): Promise<void> {
+  try {
+    const vtx = new VersionedTransaction(tx.compileMessage());
+    const sim = await connection().simulateTransaction(vtx, {
+      sigVerify: false,
+      replaceRecentBlockhash: true,
+      commitment: "confirmed",
+    });
+    if (!sim.value.err) return;
+    const logs = (sim.value.logs || []).join("\n");
+    if (/insufficient lamports|Transfer: insufficient/i.test(logs)) {
+      throw new Error("Not enough SOL in this wallet to create the token. Add SOL and tap Launch again.");
+    }
+    if (/AccountDiscriminatorMismatch/i.test(logs)) {
+      throw new Error("The Solphia curve config cannot launch this token. Refresh and tap Launch again.");
+    }
+    const hint = (sim.value.logs || [])
+      .filter((l) => /Error|failed|custom program/i.test(l))
+      .slice(-2)
+      .join(" ");
+    throw new Error(hint || "Launch would fail on Solana. Wait a moment and tap Launch again.");
+  } catch (e) {
+    if (e instanceof Error && /Not enough SOL|cannot launch this token|would fail on Solana|AccountDiscriminator/i.test(e.message)) {
+      throw e;
+    }
+  }
 }
 
 function asTransaction(raw: unknown): Transaction {
@@ -293,7 +328,6 @@ export async function buildDbcLaunchTx(opts: {
   const mint = new PublicKey(opts.mint);
   const buySol = Math.max(0, Number(opts.buySol) || 0);
   const wantBuy = buySol >= MIN_TRADE_SOL;
-  const existing = await dbcConfigOnchain(opts.config);
   const name = opts.name.slice(0, 32);
   const symbol = opts.symbol.slice(0, 10);
   const uri = opts.uri.slice(0, 255);
@@ -305,6 +339,7 @@ export async function buildDbcLaunchTx(opts: {
     const tx = await readyTx(asTransaction(raw), payer);
     const encoded = encodeTx(tx);
     if (Buffer.from(encoded, "base64").length > LEGACY_MAX) return null;
+    await simulatePadTx(tx);
     return {
       transaction: encoded,
       mint: mint.toBase58(),
@@ -315,61 +350,35 @@ export async function buildDbcLaunchTx(opts: {
     };
   }
 
-  if (existing) {
-    const createPoolParam = {
-      name,
-      symbol,
-      uri,
-      payer,
-      poolCreator: payer,
-      config: new PublicKey(existing),
-      baseMint: mint,
-    };
-    if (firstBuy) {
-      try {
-        const raw = await client().creator.createPoolWithFirstBuy({ createPoolParam, firstBuyParam: firstBuy });
-        const hit = await pack(raw, true, { config: existing });
-        if (hit) return hit;
-      } catch {
-        /* first buy ix did not fit — pool still launches, client follows with a buy */
-      }
-    }
-    const raw = await client().creator.createPool(createPoolParam);
-    const launched = await pack(raw, false, { config: existing });
-    if (!launched) throw new Error("Could not build the launch.");
-    return launched;
+  const padConfig = liveDbcConfig(opts.config);
+  const existing = await dbcConfigOnchain(padConfig);
+  if (!existing) {
+    throw new Error("Solphia curve is not on Solana right now. Wait a few seconds and tap Launch again.");
   }
 
-  const configKp = Keypair.generate();
-  const treasury = new PublicKey(treasuryAddress());
-  const curve = await solphiaCurveConfig();
-  const extra = { config: configKp.publicKey.toBase58(), configSecret: bytesToB64(configKp.secretKey) };
-  const base = {
-    ...curve,
-    config: configKp.publicKey,
-    feeClaimer: treasury,
-    leftoverReceiver: treasury,
-    quoteMint: new PublicKey(WSOL),
+  const createPoolParam = {
+    name,
+    symbol,
+    uri,
     payer,
-    preCreatePoolParam: {
-      name,
-      symbol,
-      uri,
-      poolCreator: payer,
-      baseMint: mint,
-    },
+    poolCreator: payer,
+    config: new PublicKey(existing),
+    baseMint: mint,
   };
   if (firstBuy) {
     try {
-      const raw = await client().partner.createConfigAndPoolWithFirstBuy({ ...base, firstBuyParam: firstBuy });
-      const hit = await pack(raw, true, extra);
+      const raw = await client().creator.createPoolWithFirstBuy({ createPoolParam, firstBuyParam: firstBuy });
+      const hit = await pack(raw, true, { config: existing });
       if (hit) return hit;
-    } catch {
-      /* config+pool+buy too big — launch the pool, then buy */
+    } catch (e) {
+      if (e instanceof Error && /Not enough SOL|cannot launch this token|would fail on Solana/i.test(e.message)) {
+        throw e;
+      }
+      /* first buy ix did not fit — pool still launches, client follows with a buy */
     }
   }
-  const raw = await client().partner.createConfigAndPool(base);
-  const launched = await pack(raw, false, extra);
+  const raw = await client().creator.createPool(createPoolParam);
+  const launched = await pack(raw, false, { config: existing });
   if (!launched) throw new Error("Could not build the launch.");
   return launched;
 }

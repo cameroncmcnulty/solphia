@@ -40,7 +40,7 @@ describe("partner fee sweep", () => {
   it("packs a first buy into the launch tx", () => {
     const dbc = readFileSync(path.join(process.cwd(), "src/lib/launch/dbc.ts"), "utf8");
     assert.match(dbc, /createPoolWithFirstBuy/);
-    assert.match(dbc, /createConfigAndPoolWithFirstBuy/);
+    assert.equal(dbc.includes("createConfigAndPoolWithFirstBuy"), false);
     assert.match(dbc, /firstBuyIncluded/);
     assert.match(dbc, /LEGACY_MAX/);
     assert.equal(dbc.includes("simulateUnsignedB64"), false);

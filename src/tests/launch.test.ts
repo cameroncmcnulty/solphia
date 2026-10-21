@@ -30,6 +30,7 @@ import { launchError } from "../lib/launch/errors";
 import { yourLaunches } from "../lib/launch/yours";
 import { IMAGE_DATA_MAX, firstErrorKey, housePfpPath, profileImageOk, validateLaunchCreate } from "../lib/launch/validate";
 import { displayTicker, isPlaceholderLabel, looksLikeMintTicker, preferLiveLabel, realTicker } from "../lib/launch/labels";
+import { LEGACY_DBC_CONFIG, liveDbcConfig, PAD_DBC_CONFIG, SPHA_DBC_CONFIG } from "../lib/launch/dbcIds";
 import { pinDisplayUrl } from "../lib/pinata";
 import { pfpRowValue } from "../lib/pfpStore";
 import { circleAvatarUrl } from "../lib/pfpUrl";
@@ -643,6 +644,23 @@ describe("launch confirm wait", () => {
     assert.match(page, /i < 8 && !r\.ok && j\.error === "curve_missing"/);
     assert.match(page, /setTimeout\(res, 2500\)/);
     assert.match(page, /const routed = await waitForPhantomRoute/);
+  });
+
+  it("pins pad launches to the shared SPL curve and never the $SPHA Token-2022 config", () => {
+    assert.equal(liveDbcConfig(SPHA_DBC_CONFIG), PAD_DBC_CONFIG);
+    assert.equal(liveDbcConfig(LEGACY_DBC_CONFIG), PAD_DBC_CONFIG);
+    assert.equal(liveDbcConfig(""), PAD_DBC_CONFIG);
+    assert.equal(liveDbcConfig(PAD_DBC_CONFIG), PAD_DBC_CONFIG);
+    const ids = readFileSync(path.join(process.cwd(), "src/lib/launch/dbcIds.ts"), "utf8");
+    const dbc = readFileSync(path.join(process.cwd(), "src/lib/launch/dbc.ts"), "utf8");
+    const route = readFileSync(path.join(process.cwd(), "src/app/api/launch/route.ts"), "utf8");
+    assert.match(ids, /HqT26zWiJmoDfgjDNbKCh1bQRe8w7RhJetnNXMRSKH3h/);
+    assert.match(dbc, /createPoolWithFirstBuy/);
+    assert.equal(dbc.includes("createConfigAndPoolWithFirstBuy"), false);
+    assert.match(dbc, /simulatePadTx/);
+    assert.equal(route.includes("book.dbcConfig = cfg"), false);
+    assert.match(route, /book\.dbcConfig = padConfig/);
+    assert.match(route, /failedLaunchMessage/);
   });
 
   it("does not put a wallet button next to Launch when a wallet is already connected", () => {

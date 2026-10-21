@@ -39,7 +39,7 @@ import {
   quotePadTrade,
 } from "@/lib/launch/program";
 import { mintPda, nonceFromB64 } from "@/lib/launch/pda";
-import { dbcEnabled, LEGACY_DBC_CONFIG, liveDbcConfig } from "@/lib/launch/dbcIds";
+import { dbcEnabled, liveDbcConfig } from "@/lib/launch/dbcIds";
 import { connection, rpcBusyMessage, waitForSignature } from "@/lib/solana/connection";
 import { PublicKey } from "@solana/web3.js";
 
@@ -107,6 +107,26 @@ function bookOf(s: { launch?: ReturnType<typeof emptyLaunchBook>; ownerWallet?: 
 
 function fail(code: string, status = 400) {
   return NextResponse.json({ error: code, message: launchError(code) }, { status });
+}
+
+async function failedLaunchMessage(sig: string): Promise<string> {
+  try {
+    const tx = await connection().getTransaction(sig, {
+      maxSupportedTransactionVersion: 0,
+      commitment: "confirmed",
+    });
+    const logs = tx?.meta?.logMessages || [];
+    const joined = logs.join("\n");
+    if (/AccountDiscriminatorMismatch/i.test(joined)) {
+      return "The launch used the wrong Solphia curve. Refresh and tap Launch again.";
+    }
+    if (/insufficient lamports/i.test(joined)) {
+      return "Not enough SOL in this wallet to create the token. Add SOL and tap Launch again.";
+    }
+  } catch {
+    /* rpc blip */
+  }
+  return "The launch transaction failed on Solana.";
 }
 
 type LaunchBody = z.infer<typeof Body>;
@@ -190,16 +210,22 @@ async function prepareMint(b: LaunchBody) {
     const dbcMod = await dbcApi();
     let liveConfig = "";
     if (useDbc) {
-      const claimed = dbcMod.liveDbcConfig(book.dbcConfig || b.config);
+      const claimed = dbcMod.liveDbcConfig();
       liveConfig = claimed ? await dbcMod.dbcConfigOnchain(claimed) : "";
       if (!liveConfig && claimed) {
         await dbcMod.waitForDbcConfig(claimed, 8);
         liveConfig = await dbcMod.dbcConfigOnchain(claimed);
       }
-      if (!liveConfig && book.dbcConfig) {
+      if (!liveConfig) {
+        return NextResponse.json(
+          { error: "chain_failed", message: "Solana is busy reading the Solphia curve. Wait a few seconds and tap Launch again." },
+          { status: 400 },
+        );
+      }
+      if (book.dbcConfig !== liveConfig) {
         await withLaunch((st) => {
           const next = bookOf(st);
-          if (next.dbcConfig && next.dbcConfig === book.dbcConfig) next.dbcConfig = undefined;
+          if (next.dbcConfig !== liveConfig) next.dbcConfig = liveConfig;
         }, true);
       }
     }
@@ -266,7 +292,8 @@ async function confirmMint(b: LaunchBody, solUsd: number) {
     if (sig) {
       const landed = await waitForSignature(sig, 45);
       if (landed.err && landed.err !== "timeout" && landed.err !== "missing") {
-        return NextResponse.json({ error: "chain_failed", message: "The launch transaction failed on Solana." }, { status: 400 });
+        const message = await failedLaunchMessage(sig);
+        return NextResponse.json({ error: "chain_failed", message }, { status: 400 });
       }
     }
     const pool = await (await dbcApi()).waitForDbcPool(b.mint, 32);
@@ -288,10 +315,8 @@ async function confirmMint(b: LaunchBody, solUsd: number) {
   const out = await withLaunch((s) => {
     const book = bookOf(s);
     bookSnap = book;
-    const cfg = (b.config || "").trim();
-    if (cfg && isSolanaAddress(cfg) && cfg !== LEGACY_DBC_CONFIG) {
-      book.dbcConfig = cfg;
-    }
+    const padConfig = liveDbcConfig();
+    if (book.dbcConfig !== padConfig) book.dbcConfig = padConfig;
     const made = createCoin(book, {
       creator: b.pubkey,
       name,
@@ -645,20 +670,9 @@ async function postLaunch(req: NextRequest) {
   }
 
   if (b.action === "confirm_dbc_config") {
-    const cfg = (b.config || b.mint || "").trim();
-    if (!isSolanaAddress(cfg)) return fail("bad_mint");
-    const sig = (b.sig || b.sigs?.[0] || "").trim();
-    if (sig) {
-      const landed = await waitForSignature(sig, 45);
-      if (!landed.ok) {
-        return NextResponse.json(
-          { error: "curve_missing", message: landed.err === "failed" ? "The curve transaction failed on Solana. Tap Launch again." : "Solana has not confirmed the curve yet. Tap Launch again." },
-          { status: 400 },
-        );
-      }
-    }
+    const pinned = liveDbcConfig();
     const dbc = await dbcApi();
-    const onchain = await dbc.waitForDbcConfig(cfg, 24);
+    const onchain = await dbc.waitForDbcConfig(pinned, 24);
     if (!onchain) {
       return NextResponse.json(
         { error: "curve_missing", message: "The Solphia curve is not on Solana yet. Tap Launch again." },
@@ -667,10 +681,9 @@ async function postLaunch(req: NextRequest) {
     }
     await withLaunch((st) => {
       const book = bookOf(st);
-      if (book.ownerWallet && book.ownerWallet !== b.pubkey) return;
-      book.dbcConfig = cfg;
+      book.dbcConfig = pinned;
     }, true);
-    return NextResponse.json({ ok: true, dbcConfig: cfg });
+    return NextResponse.json({ ok: true, dbcConfig: pinned });
   }
 
   if (b.action === "recover") {
