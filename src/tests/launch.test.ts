@@ -631,17 +631,18 @@ describe("launch labels", () => {
 });
 
 describe("launch confirm wait", () => {
-  it("waits for the DBC pool and does not kill a live curve on a lagging signature", () => {
+  it("uses the previous signature-then-pool confirm path", () => {
     const route = readFileSync(path.join(process.cwd(), "src/app/api/launch/route.ts"), "utf8");
     const page = readFileSync(path.join(process.cwd(), "src/app/launch/page.tsx"), "utf8");
+    const dbc = readFileSync(path.join(process.cwd(), "src/lib/launch/dbc.ts"), "utf8");
     const conn = readFileSync(path.join(process.cwd(), "src/lib/solana/connection.ts"), "utf8");
-    assert.match(route, /waitForDbcPool\(b\.mint, 28, 400\)/);
-    assert.equal(route.includes("Promise.race"), false);
-    assert.match(route, /Pool is the gate/);
-    assert.match(conn, /landed && v\?\.err/);
+    assert.match(route, /waitForSignature\(sig, 45\)/);
+    assert.match(route, /waitForDbcPool\(b\.mint, 32\)/);
+    assert.match(dbc, /setTimeout\(r, 750\)/);
+    assert.match(conn, /if \(v\?\.err\) return \{ ok: false/);
     assert.match(page, /i < 8 && !r\.ok && j\.error === "curve_missing"/);
-    assert.match(page, /void waitForPhantomRoute/);
-    assert.equal(page.includes("await waitForPhantomRoute"), false);
+    assert.match(page, /setTimeout\(res, 2500\)/);
+    assert.match(page, /const routed = await waitForPhantomRoute/);
   });
 
   it("does not put a wallet button next to Launch when a wallet is already connected", () => {

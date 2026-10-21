@@ -263,16 +263,14 @@ async function confirmMint(b: LaunchBody, solUsd: number) {
   let liveCurve: import("@/lib/launch/curve").CurveState | undefined;
   if (dbcEnabled()) {
     const sig = b.sigs?.[0] || b.sig || "";
-    const dbc = await dbcApi();
-    const poolP = dbc.waitForDbcPool(b.mint, 28, 400);
-    const sigP = sig ? waitForSignature(sig, 40) : Promise.resolve({ ok: false as const, err: "missing" as const });
-    // Pool is the gate. A lagging signature status must not kill a live curve.
-    const pool = await poolP;
-    if (!pool) {
-      const landed = await sigP;
+    if (sig) {
+      const landed = await waitForSignature(sig, 45);
       if (landed.err && landed.err !== "timeout" && landed.err !== "missing") {
         return NextResponse.json({ error: "chain_failed", message: "The launch transaction failed on Solana." }, { status: 400 });
       }
+    }
+    const pool = await (await dbcApi()).waitForDbcPool(b.mint, 32);
+    if (!pool) {
       const info = await connection().getAccountInfo(new PublicKey(b.mint));
       if (!info) return fail("curve_missing");
     }

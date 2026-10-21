@@ -94,10 +94,8 @@ export async function waitForSignature(sig: string, tries = 40): Promise<{ ok: b
     try {
       const st = await connection().getSignatureStatuses([sig], { searchTransactionHistory: true });
       const v = st.value[0];
-      const status = v?.confirmationStatus;
-      const landed = status === "processed" || status === "confirmed" || status === "finalized";
-      if (landed && v?.err) return { ok: false, err: typeof v.err === "string" ? v.err : "failed" };
-      if (status === "confirmed" || status === "finalized") return { ok: true };
+      if (v?.err) return { ok: false, err: typeof v.err === "string" ? v.err : "failed" };
+      if (v?.confirmationStatus === "confirmed" || v?.confirmationStatus === "finalized") return { ok: true };
     } catch {
       /* rpc blip */
     }
