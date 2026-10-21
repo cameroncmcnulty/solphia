@@ -76,6 +76,16 @@ interface LaunchRow {
   platformInfo?: { name?: string };
 }
 
+interface JupSearch {
+  id?: string;
+  name?: string;
+  symbol?: string;
+  icon?: string;
+  usdPrice?: number;
+  mcap?: number;
+  fdv?: number;
+}
+
 const PUMP_GRADUATE_SOL_LAMPORTS = 85 * 1e9;
 
 function pumpProgress(coin: PumpCoin): number {
@@ -369,20 +379,48 @@ export async function ingestMarket(
   return { tokens, health, solUsd, copyBook: tape.book };
 }
 
-/** One mint, even if it would not pass the public tape gate. */
+function fromJup(row: JupSearch | undefined, mint: string): TokenSnapshot | null {
+  if (!row) return null;
+  const id = str(row.id);
+  if (id && id !== mint) return null;
+  const symbol = str(row.symbol);
+  const name = str(row.name) || symbol;
+  if (!symbol && !name) return null;
+  return blankSnapshot({
+    mint,
+    name,
+    symbol: symbol || "???",
+    image: str(row.icon) || undefined,
+    venue: "unknown",
+    priceUsd: num(row.usdPrice),
+    marketCapUsd: num(row.mcap) || num(row.fdv),
+  });
+}
+
+function jupHits(data: unknown): JupSearch[] {
+  if (Array.isArray(data)) return data as JupSearch[];
+  if (data && typeof data === "object" && Array.isArray((data as { data?: unknown }).data)) {
+    return (data as { data: JupSearch[] }).data;
+  }
+  return [];
+}
+
+/** One mint, even if it would not pass the public tape gate. Dex / Pump / Jupiter in parallel. */
 export async function lookupTokenMint(mint: string): Promise<TokenSnapshot | null> {
   const m = (mint || "").trim();
   if (m.length < 32) return null;
-  const dex = await getJson<{ pairs?: DexPair[] }>(`https://api.dexscreener.com/latest/dex/tokens/${encodeURIComponent(m)}`, 6000);
+  const [dex, pump, jup] = await Promise.all([
+    getJson<{ pairs?: DexPair[] }>(`https://api.dexscreener.com/latest/dex/tokens/${encodeURIComponent(m)}`, 3000),
+    getJson<PumpCoin>(`https://frontend-api-v3.pump.fun/coins/${encodeURIComponent(m)}`, 3000),
+    getJson<unknown>(`https://lite-api.jup.ag/tokens/v2/search?query=${encodeURIComponent(m)}`, 3000),
+  ]);
   const pairs = (dex.data?.pairs || []).filter((p) => p.chainId === "solana");
   pairs.sort((a, b) => num(b.liquidity?.usd) - num(a.liquidity?.usd));
-  if (pairs[0]) {
-    const snap = fromDex(pairs[0]);
-    if (snap) return snap;
-  }
-  const pump = await getJson<PumpCoin>(`https://frontend-api-v3.pump.fun/coins/${encodeURIComponent(m)}`, 6000);
+  const dexSnap = pairs[0] ? fromDex(pairs[0]) : null;
+  if (dexSnap) return dexSnap;
   if (pump.ok && pump.data?.mint) return fromPump(pump.data);
-  return null;
+  const hit = jupHits(jup.data).find((row) => str(row.id) === m) || jupHits(jup.data)[0];
+  return fromJup(hit, m);
 }
 
 /** Fast tape ingest. Short timeouts — the list must paint even if one feed is slow. */

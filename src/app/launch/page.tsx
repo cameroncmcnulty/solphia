@@ -1009,7 +1009,7 @@ export default function LaunchPage() {
       let j = await r.json();
       for (let i = 0; i < 8 && !r.ok && j.error === "curve_missing"; i++) {
         setMsg("Landing on Solana…");
-        await new Promise((res) => setTimeout(res, 2500));
+        await new Promise((res) => setTimeout(res, 1200));
         r = await fetch("/api/launch", {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -1082,12 +1082,9 @@ export default function LaunchPage() {
           ? `Live on the Solphia curve. CA ${mintPk}. First buy is in this wallet. If a wallet hides it: Manage Tokens, toggle on, Report as not spam.`
           : `Live on the Solphia curve. CA ${mintPk}. If a wallet hides it: Manage Tokens, toggle on, Report as not spam.`,
       );
-      const routed = await waitForPhantomRoute(mintPk);
-      setMsg(
-        routed.ok
-          ? `Live. CA ${mintPk}`
-          : `Live on the curve. CA ${mintPk}`,
-      );
+      void waitForPhantomRoute(mintPk).then((routed) => {
+        if (routed.ok) setMsg(`Live. CA ${mintPk}`);
+      });
     } catch (e) {
       if (isPhantomRedirect(e)) {
         setMsg("Approve in your wallet. You'll come back here.");
@@ -1207,7 +1204,7 @@ export default function LaunchPage() {
       let j = await r.json();
       for (let i = 0; i < 8 && !r.ok && j.error === "curve_missing"; i++) {
         setMsg("Landing on Solana…");
-        await new Promise((res) => setTimeout(res, 2500));
+        await new Promise((res) => setTimeout(res, 1200));
         r = await fetch("/api/launch", {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -1280,8 +1277,9 @@ export default function LaunchPage() {
           ? `Live on the Solphia curve. CA ${mintPk}. First buy is in this wallet. If a wallet hides it: Manage Tokens, toggle on, Report as not spam.`
           : `Live on the Solphia curve. CA ${mintPk}. If a wallet hides it: Manage Tokens, toggle on, Report as not spam.`,
       );
-      const routed = await waitForPhantomRoute(mintPk);
-      setMsg(routed.ok ? `Live. CA ${mintPk}` : `Live on the curve. CA ${mintPk}`);
+      void waitForPhantomRoute(mintPk).then((routed) => {
+        if (routed.ok) setMsg(`Live. CA ${mintPk}`);
+      });
       return;
     }
     if (after.kind === "claim") {
@@ -1367,8 +1365,8 @@ export default function LaunchPage() {
     setWork("swap");
     setMsg(`Live. Sign the ${sol} SOL first buy in your wallet…`);
     let last = "curve_missing";
-    for (let i = 0; i < 8; i++) {
-      if (i) await new Promise((r) => setTimeout(r, 2000));
+    for (let i = 0; i < 5; i++) {
+      if (i) await new Promise((r) => setTimeout(r, 800));
       const r = await fetch("/api/launch", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -2096,9 +2094,6 @@ export default function LaunchPage() {
                   </p>
                 </label>
                 <div className="mt-4 flex flex-wrap items-center gap-3">
-                  <div data-field="wallet" className={createErr.errors.wallet ? "rounded-full ring-1 ring-blood/70" : undefined}>
-                    <WalletConnect />
-                  </div>
                   <button
                     type="button"
                     disabled={busy}

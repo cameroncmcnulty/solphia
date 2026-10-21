@@ -262,10 +262,11 @@ async function mintUsesTransferHook(mint: string): Promise<boolean> {
   }
 }
 
-export async function waitForDbcPool(mint: string, tries = 24) {
+export async function waitForDbcPool(mint: string, tries = 24, gapMs = 280) {
   let pool = await dbcPoolByMint(mint);
+  const gap = Math.max(120, gapMs);
   for (let i = 0; i < tries && !pool; i++) {
-    await new Promise((r) => setTimeout(r, 750));
+    await new Promise((r) => setTimeout(r, gap));
     pool = await dbcPoolByMint(mint);
   }
   return pool;

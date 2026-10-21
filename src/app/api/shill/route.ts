@@ -9,6 +9,8 @@ import { houseFeeLegs } from "@/lib/fees/payout";
 import { unsignedHousePay } from "@/lib/fees/payTx";
 import { creditEvenIncome } from "@/lib/fees/income";
 import { lookupMarketMint } from "@/lib/launch/market";
+import { realName, realTicker } from "@/lib/launch/labels";
+import { readSplMetas } from "@/lib/token/onchainMeta";
 import {
   banShill,
   deleteShill,
@@ -88,26 +90,85 @@ const Body = z.object({
   id: z.string().optional(),
   emoji: z.string().max(8).optional(),
   mint: z.string().optional(),
+  symbol: z.string().max(16).optional(),
+  name: z.string().max(48).optional(),
+  image: z.string().max(400).optional(),
   signature: z.string().min(32).max(128).optional(),
   target: z.string().optional(),
   banned: z.boolean().optional(),
 });
 
+const TOKEN_CACHE = new Map<string, { at: number; token: ShillToken }>();
+const TOKEN_CACHE_MS = 60_000;
+
+function rememberToken(token: ShillToken): ShillToken {
+  TOKEN_CACHE.set(token.mint, { at: Date.now(), token });
+  if (TOKEN_CACHE.size > 300) {
+    const first = TOKEN_CACHE.keys().next().value;
+    if (first) TOKEN_CACHE.delete(first);
+  }
+  return token;
+}
+
+function paintedToken(mint: string, symbol?: string, name?: string, image?: string, extra?: Partial<ShillToken>): ShillToken {
+  const ticker = realTicker(symbol, mint);
+  const label = realName(name, mint) || ticker;
+  return { mint, symbol: ticker, name: label, image, ...extra };
+}
+
+async function tokenFromPadBook(mint: string): Promise<ShillToken | null> {
+  try {
+    const coin = await withLaunch((st) => (st.launch?.coins || []).find((c) => c.mint === mint || c.id === mint), false);
+    if (!coin) return null;
+    const token = paintedToken(mint, coin.symbol, coin.name, coin.image);
+    if (!token.symbol && !token.name && !token.image) return null;
+    return token;
+  } catch {
+    return null;
+  }
+}
+
+async function tokenHint(mint: string, extra?: { symbol?: string; name?: string; image?: string }): Promise<ShillToken> {
+  const hinted = paintedToken(mint, extra?.symbol, extra?.name, extra?.image);
+  if (hinted.symbol) return hinted;
+  const cached = TOKEN_CACHE.get(mint);
+  if (cached && Date.now() - cached.at < TOKEN_CACHE_MS) {
+    return {
+      ...cached.token,
+      image: extra?.image || cached.token.image,
+    };
+  }
+  return (await tokenFromPadBook(mint)) || hinted;
+}
+
 async function tokenOf(mint: string): Promise<ShillToken | null> {
   if (!isSolanaAddress(mint)) return null;
+  const hit = TOKEN_CACHE.get(mint);
+  if (hit && Date.now() - hit.at < TOKEN_CACHE_MS) return hit.token;
   try {
+    const fromBook = await tokenFromPadBook(mint);
+    if (fromBook?.symbol) return rememberToken(fromBook);
+
     const row = await lookupMarketMint(mint);
-    if (!row?.coin) return { mint, symbol: mint.slice(0, 4), name: mint.slice(0, 6) };
-    return {
-      mint: row.coin.mint || mint,
-      symbol: row.coin.symbol || "",
-      name: row.coin.name || row.coin.symbol || "",
-      image: row.coin.image,
-      priceUsd: row.coin.priceSol && row.solUsd ? row.coin.priceSol * row.solUsd : undefined,
-      mcUsd: row.coin.marketCapUsd,
-    };
+    if (row?.coin) {
+      const token = paintedToken(mint, row.coin.symbol, row.coin.name, row.coin.image, {
+        priceUsd: row.coin.priceSol && row.solUsd ? row.coin.priceSol * row.solUsd : undefined,
+        mcUsd: row.coin.marketCapUsd,
+      });
+      if (token.symbol || token.name || token.image) return rememberToken(token);
+    }
+
+    const onchain = await readSplMetas([mint]);
+    const meta = onchain[mint];
+    if (meta) {
+      const token = paintedToken(mint, meta.symbol, meta.name, meta.image);
+      if (token.symbol || token.name || token.image) return rememberToken(token);
+    }
+
+    if (fromBook) return rememberToken(fromBook);
+    return rememberToken(paintedToken(mint));
   } catch {
-    return { mint, symbol: mint.slice(0, 4), name: "token" };
+    return paintedToken(mint);
   }
 }
 
@@ -326,7 +387,7 @@ export async function POST(req: NextRequest) {
     if (blocked) return shillJson(req, { error: blocked.error, message: blocked.message }, blocked.status);
     const mint = (b.mint || "").trim();
     if (!isSolanaAddress(mint)) return NextResponse.json({ error: "bad_mint", message: "Pick a token to upvote." }, { status: 400 });
-    const token = (await tokenOf(mint)) || { mint, symbol: mint.slice(0, 4), name: "token" };
+    const token = await tokenHint(mint, { symbol: b.symbol, name: b.name, image: b.image });
     const out = await withShill((st) => {
       st.shill = ensureShill(st.shill);
       return voteShill(st.shill, { owner: b.pubkey, mint, token });
@@ -392,7 +453,7 @@ export async function POST(req: NextRequest) {
       legs,
     });
     if (!pay.ok) return NextResponse.json({ error: "pay", message: pay.error || "Payment not found yet." }, { status: 400 });
-    const token = (await tokenOf(mint)) || { mint, symbol: mint.slice(0, 4), name: "token" };
+    const token = (await tokenOf(mint)) || paintedToken(mint);
     const out = await withShill((st) => {
       st.shill = ensureShill(st.shill);
       const result = pinToken(st.shill, { owner: b.pubkey, token, sig: b.signature || "", paidSol: SHILL_PIN_SOL });

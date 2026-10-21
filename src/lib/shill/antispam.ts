@@ -80,14 +80,14 @@ export function issueShillOk(ip: string, now = Date.now()): string {
   return signToken(`shillok\t${ip}\t${now + SHILL_OK_MS}`, secret());
 }
 
-export function shillHumanOk(req: NextRequest, ip: string, now = Date.now()): boolean {
+export function shillHumanOk(req: NextRequest, _ip: string, now = Date.now()): boolean {
   const tok = (req.cookies.get(SHILL_OK_COOKIE)?.value || "").trim();
   if (!tok) return false;
   const raw = verifyToken(tok, secret());
   if (!raw) return false;
-  const [kind, boundIp, exp] = raw.split("\t");
+  const [kind, , exp] = raw.split("\t");
   if (kind !== "shillok") return false;
-  if (boundIp && boundIp !== "local" && ip && ip !== "local" && boundIp !== ip) return false;
+  // Signed cookie + expiry is enough. Binding IP breaks mobile IPv4/IPv6 flips.
   const until = Number(exp) || 0;
   return until > now;
 }

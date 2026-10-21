@@ -29,7 +29,7 @@ import { buyCoin, createCoin, emptyLaunchBook, mergeLaunch, publicCoin, sellCoin
 import { launchError } from "../lib/launch/errors";
 import { yourLaunches } from "../lib/launch/yours";
 import { IMAGE_DATA_MAX, firstErrorKey, housePfpPath, profileImageOk, validateLaunchCreate } from "../lib/launch/validate";
-import { isPlaceholderLabel, preferLiveLabel } from "../lib/launch/labels";
+import { displayTicker, isPlaceholderLabel, looksLikeMintTicker, preferLiveLabel, realTicker } from "../lib/launch/labels";
 import { pinDisplayUrl } from "../lib/pinata";
 import { pfpRowValue } from "../lib/pfpStore";
 import { circleAvatarUrl } from "../lib/pfpUrl";
@@ -616,5 +616,40 @@ describe("launch labels", () => {
     assert.equal(preferLiveLabel("Token", "Window"), "Window");
     assert.equal(preferLiveLabel("WINDOW", "Token"), "WINDOW");
     assert.equal(preferLiveLabel("Window", "Window"), "Window");
+  });
+
+  it("does not treat the first chars of a mint as a ticker", () => {
+    const mint = "FQz8NDVSueEku6Bf8mSQitRSpk5uhM9cMkLLV9N5k2Ui";
+    assert.equal(looksLikeMintTicker("FQz8", mint), true);
+    assert.equal(looksLikeMintTicker("SPHAREH", mint), false);
+    assert.equal(realTicker("FQz8", mint), "");
+    assert.equal(realTicker("SPHAREH", mint), "SPHAREH");
+    assert.equal(displayTicker("FQz8", mint), "FQz8…k2Ui");
+    assert.equal(displayTicker("SPHAREH", mint), "$SPHAREH");
+    assert.equal(displayTicker("", mint), "FQz8…k2Ui");
+  });
+});
+
+describe("launch confirm wait", () => {
+  it("waits for the DBC pool and does not kill a live curve on a lagging signature", () => {
+    const route = readFileSync(path.join(process.cwd(), "src/app/api/launch/route.ts"), "utf8");
+    const page = readFileSync(path.join(process.cwd(), "src/app/launch/page.tsx"), "utf8");
+    const conn = readFileSync(path.join(process.cwd(), "src/lib/solana/connection.ts"), "utf8");
+    assert.match(route, /waitForDbcPool\(b\.mint, 28, 400\)/);
+    assert.equal(route.includes("Promise.race"), false);
+    assert.match(route, /Pool is the gate/);
+    assert.match(conn, /landed && v\?\.err/);
+    assert.match(page, /i < 8 && !r\.ok && j\.error === "curve_missing"/);
+    assert.match(page, /void waitForPhantomRoute/);
+    assert.equal(page.includes("await waitForPhantomRoute"), false);
+  });
+
+  it("does not put a wallet button next to Launch when a wallet is already connected", () => {
+    const page = readFileSync(path.join(process.cwd(), "src/app/launch/page.tsx"), "utf8");
+    assert.match(page, /\{!owner \?/);
+    assert.match(page, /<WalletConnect \/>/);
+    const launchRow = page.slice(page.indexOf("Launch on Solana") - 400, page.indexOf("Launch on Solana") + 80);
+    assert.equal(launchRow.includes("<WalletConnect"), false);
+    assert.equal((page.match(/<WalletConnect/g) || []).length, 1);
   });
 });

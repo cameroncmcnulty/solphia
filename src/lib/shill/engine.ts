@@ -1,4 +1,5 @@
 import { isSolanaAddress } from "../security";
+import { realName, realTicker } from "../launch/labels";
 import {
   SHILL_CA_COOLDOWN_MS,
   SHILL_HOUSE_OWNER,
@@ -409,8 +410,8 @@ function plantHousePins(book: ShillBook, picks: HousePinCoin[], now: number) {
     book.pins.push({
       id: `hpin${now.toString(36)}${i}${Math.random().toString(36).slice(2, 5)}`,
       mint: c.mint,
-      symbol: c.symbol || c.mint.slice(0, 4),
-      name: c.name || c.symbol || "token",
+      symbol: realTicker(c.symbol, c.mint),
+      name: realName(c.name, c.mint) || realTicker(c.symbol, c.mint) || "token",
       image: c.image,
       priceUsd: c.priceUsd,
       mcUsd: c.mcUsd,
@@ -519,8 +520,8 @@ export function voteBoard(book: ShillBook, now = Date.now()): VoteBoardRow[] {
     }
     tally.set(v.mint, {
       mint: v.mint,
-      symbol: v.symbol || info?.symbol || v.mint.slice(0, 4),
-      name: v.name || info?.name || "token",
+      symbol: realTicker(v.symbol, v.mint) || realTicker(info?.symbol, v.mint),
+      name: realName(v.name, v.mint) || realName(info?.name, v.mint) || realTicker(v.symbol, v.mint) || "token",
       image: v.image || info?.image,
       votes: 1,
       lastAt: v.at,

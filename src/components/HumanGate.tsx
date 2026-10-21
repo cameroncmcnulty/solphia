@@ -21,7 +21,7 @@ export function HumanGate({
   subtitle = "Slide the piece into the hole. One pass gets you into this room.",
 }: {
   everyVisit?: boolean;
-  onPass?: () => void;
+  onPass?: () => void | Promise<void>;
   title?: string;
   subtitle?: string;
 }) {
@@ -114,9 +114,15 @@ export function HumanGate({
     setThanks(true);
     setFire(true);
     window.setTimeout(() => {
-      setOpen(false);
-      setFire(false);
-      onPass?.();
+      void (async () => {
+        try {
+          await onPass?.();
+        } catch {
+          /* cookie stamp can retry from the page */
+        }
+        setOpen(false);
+        setFire(false);
+      })();
     }, 900);
   }
 

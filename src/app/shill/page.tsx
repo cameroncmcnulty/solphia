@@ -34,6 +34,7 @@ import { paySeatFromPhantom, signAndSendPhantom } from "@/lib/wallet/trading";
 import { SHILL_PIN_MS, SHILL_PIN_SOL, SHILL_REACTS, SHILL_STICKERS, type ShillToken } from "@/lib/shill/types";
 import { copyText } from "@/lib/copyText";
 import { flashNotice } from "@/lib/notice";
+import { displayTicker } from "@/lib/launch/labels";
 
 type Msg = {
   id: string;
@@ -140,8 +141,8 @@ function fmtMc(n?: number) {
   return `$${n.toFixed(0)}`;
 }
 
-function tick(symbol?: string) {
-  return `$${(symbol || "").replace(/^\$/, "") || "TOKEN"}`;
+function tick(symbol?: string, mint?: string) {
+  return displayTicker(symbol, mint);
 }
 
 function stablePins(next?: PinRow[], prev?: PinRow[]) {
@@ -158,7 +159,7 @@ function TokenBubble({
   onCopy,
   votes,
   onVote,
-  canVote,
+  voteBusy,
   pinned,
   onOpen,
 }: {
@@ -166,7 +167,7 @@ function TokenBubble({
   onCopy: (mint: string) => void;
   votes?: number;
   onVote?: () => void;
-  canVote?: boolean;
+  voteBusy?: boolean;
   pinned?: boolean;
   onOpen?: () => void;
 }) {
@@ -187,7 +188,7 @@ function TokenBubble({
     >
       <TokenArt src={token.image} mint={token.mint} label={token.symbol} className="h-9 w-9 rounded-xl" />
       <div className="min-w-0 overflow-hidden">
-        <div className="truncate text-[14px] font-semibold text-white">{tick(token.symbol)}</div>
+        <div className="truncate text-[14px] font-semibold text-white">{tick(token.symbol, token.mint)}</div>
         <div className="truncate font-mono text-[10px] text-white/55">
           {token.name}
           {token.mcUsd ? ` · ${fmtMc(token.mcUsd)}` : ""}
@@ -195,7 +196,7 @@ function TokenBubble({
       </div>
       <button
         type="button"
-        disabled={!canVote}
+        disabled={voteBusy}
         onClick={(e) => {
           e.stopPropagation();
           onVote?.();
@@ -225,7 +226,7 @@ function TokenBubble({
 function PinSpotlight({
   pin,
   now,
-  canVote,
+  voteBusy,
   onClose,
   onVote,
   onCopy,
@@ -233,7 +234,7 @@ function PinSpotlight({
 }: {
   pin: PinRow;
   now: number;
-  canVote: boolean;
+  voteBusy: boolean;
   onClose: () => void;
   onVote: () => void;
   onCopy: () => void;
@@ -243,7 +244,7 @@ function PinSpotlight({
   const left = Math.max(0, (pin.endsAt || 0) - now);
   const pct = live ? Math.max(6, Math.min(100, (left / SHILL_PIN_MS) * 100)) : 0;
   const votes = pin.votes || 0;
-  const ticker = tick(pin.symbol);
+  const ticker = tick(pin.symbol, pin.mint);
   return (
     <div className="app-layer shill-overlay-dock z-[80] bg-black/70" onClick={onClose}>
       <div className="app-layer-card pin-spotlight relative overflow-hidden rounded-[1.75rem]" onClick={(e) => e.stopPropagation()}>
@@ -292,7 +293,7 @@ function PinSpotlight({
             Buy {ticker}
           </button>
           <div className="mt-2 grid grid-cols-2 gap-2">
-            <button type="button" disabled={!canVote} className="min-h-[44px] rounded-full border border-acid/40 text-[14px] text-acid disabled:opacity-40" onClick={onVote}>
+            <button type="button" disabled={voteBusy} className="min-h-[44px] rounded-full border border-acid/40 text-[14px] text-acid disabled:opacity-40" onClick={onVote}>
               Upvote
             </button>
             <button type="button" className="min-h-[44px] rounded-full border border-white/15 text-[14px] text-white" onClick={onCopy}>
@@ -380,7 +381,7 @@ function VoteBoard({
             return (
               <button key={row.mint} type="button" onClick={() => onOpen(row)} className={`rounded-2xl border px-2 ${tall} ${ring}`}>
                 <TokenArt src={row.image} mint={row.mint} label={row.symbol} className="mx-auto h-12 w-12 rounded-full" />
-                <div className="mt-2 truncate text-center font-display text-sm text-white">{tick(row.symbol)}</div>
+                <div className="mt-2 truncate text-center font-display text-sm text-white">{tick(row.symbol, row.mint)}</div>
                 <div className="stat-num text-center text-[13px] text-acid">{row.votes}</div>
                 <div className="text-center font-mono text-[9px] text-white/40">#{rank}</div>
               </button>
@@ -398,7 +399,7 @@ function VoteBoard({
           >
             <span className="w-6 font-mono text-[12px] text-white/40">{i + 4}</span>
             <TokenArt src={row.image} mint={row.mint} label={row.symbol} className="h-9 w-9 rounded-xl" />
-            <span className="min-w-0 flex-1 truncate text-[15px] text-white">{tick(row.symbol)}</span>
+            <span className="min-w-0 flex-1 truncate text-[15px] text-white">{tick(row.symbol, row.mint)}</span>
             <span className="inline-flex items-center gap-0.5 font-mono text-[12px] text-acid">
               <ChevronUp className="h-4 w-4" />
               {row.votes}
@@ -439,6 +440,7 @@ export default function ShillPage() {
   const stickToBottom = useRef(true);
   const [atBottom, setAtBottom] = useState(true);
   const [entered, setEntered] = useState(false);
+  const [voteBusy, setVoteBusy] = useState(false);
 
   const load = useCallback(async (full = false) => {
     const gen = full ? ++loadGen.current : loadGen.current;
@@ -755,7 +757,7 @@ export default function ShillPage() {
           const msg = e instanceof Error ? e.message : "pin failed";
           if (/already used/i.test(msg)) {
             lastPin.current = null;
-            applyPinBoard({ pin: { id: mint, mint, symbol: mint.slice(0, 4), name: "token" } });
+            applyPinBoard({ pin: { id: mint, mint, symbol: "", name: "token" } });
             await load(true);
             return;
           }
@@ -775,14 +777,31 @@ export default function ShillPage() {
     }
   }
 
-  async function upvote(mint: string) {
+  async function upvote(token: { mint: string; symbol?: string; name?: string; image?: string }) {
+    const mint = token.mint;
     if (!owner) {
       setErr("Connect a wallet to vote.");
       flashNotice("Connect a wallet to vote.", "err");
       return;
     }
+    if (voteBusy) return;
+    const wait = Math.max(0, (pack?.nextVoteAt || 0) - Date.now());
+    if (wait > 0) {
+      flashNotice(`One upvote per hour. Next in ${fmtPinLeft(wait)}.`);
+      return;
+    }
+    setVoteBusy(true);
     try {
-      const j = await act({ action: "vote", mint });
+      const body = { action: "vote", mint, symbol: token.symbol, name: token.name, image: token.image };
+      let j: { votes?: number; nextAt?: number };
+      try {
+        j = await act(body);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "vote failed";
+        if (!/Slide to enter|human/i.test(msg)) throw e;
+        await act({ action: "human" }).catch(() => undefined);
+        j = await act(body);
+      }
       const votes = Number(j.votes || 1);
       const nextAt = Number(j.nextAt || Date.now() + 3_600_000);
       setPack((prev) => {
@@ -793,9 +812,9 @@ export default function ShillPage() {
         const pinRow = (prev.pins || []).find((p) => p.mint === mint);
         const nextRow: VoteRow = {
           mint,
-          symbol: row?.symbol || pinRow?.symbol || mint.slice(0, 4),
-          name: row?.name || pinRow?.name || "token",
-          image: row?.image || pinRow?.image,
+          symbol: row?.symbol || pinRow?.symbol || token.symbol || "",
+          name: row?.name || pinRow?.name || token.name || "token",
+          image: row?.image || pinRow?.image || token.image,
           votes: Math.max(row?.votes || 0, votes),
         };
         if (i >= 0) voteBoard[i] = nextRow;
@@ -810,6 +829,8 @@ export default function ShillPage() {
       const msg = e instanceof Error ? e.message : "vote failed";
       if (/abort/i.test(msg)) return;
       flashNotice(msg, "err");
+    } finally {
+      setVoteBusy(false);
     }
   }
 
@@ -876,7 +897,16 @@ export default function ShillPage() {
       {!entered ? (
         <HumanGate
           everyVisit
-          onPass={() => setEntered(true)}
+          onPass={async () => {
+            if (owner) {
+              await fetch("/api/shill", {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ action: "human", pubkey: owner }),
+              }).catch(() => undefined);
+            }
+            setEntered(true);
+          }}
           title="Enter Shill Zone"
           subtitle="Slide the piece into the hole. This check is only for this room."
         />
@@ -939,7 +969,7 @@ export default function ShillPage() {
                   return (
                     <button key={p.id || p.mint} type="button" onClick={() => setOpenPin(p)} className="shill-pin-tile">
                       <TokenArt src={p.image} mint={p.mint} label={p.symbol} className="shill-pin-art" />
-                      <span className="block w-full truncate text-center text-[12px] font-semibold text-white">{tick(p.symbol)}</span>
+                      <span className="block w-full truncate text-center text-[12px] font-semibold text-white">{tick(p.symbol, p.mint)}</span>
                       <span className="shill-bar">
                         <i style={{ width: `${pct}%` }} />
                       </span>
@@ -1052,9 +1082,9 @@ export default function ShillPage() {
                             token={m.token}
                             onCopy={copyMint}
                             votes={voteByMint[m.token.mint] || 0}
-                            canVote={canVote}
+                            voteBusy={voteBusy}
                             pinned={pins.some((p) => p.mint === m.token!.mint)}
-                            onVote={() => upvote(m.token!.mint)}
+                            onVote={() => upvote(m.token!)}
                             onOpen={() => openTokenCard(m.token!)}
                           />
                         )}
@@ -1143,7 +1173,7 @@ export default function ShillPage() {
                 <button key={p.id} type="button" onClick={() => setOpenPin(p)} className="flex w-full items-center gap-3 py-3 text-left">
                   <TokenArt src={p.image} mint={p.mint} label={p.symbol} className="h-14 w-14 rounded-[18px]" />
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-[17px] font-semibold text-white">{tick(p.symbol)}</p>
+                    <p className="truncate text-[17px] font-semibold text-white">{tick(p.symbol, p.mint)}</p>
                     <p className="truncate text-[14px] text-white/45">
                       {p.name} · {fmtPinLeft((p.endsAt || 0) - now)} left
                     </p>
@@ -1162,7 +1192,7 @@ export default function ShillPage() {
                       <span className="w-6 font-mono text-[12px] text-white/40">{i + 1}</span>
                       <TokenArt src={p.image} mint={p.mint} label={p.symbol} className="h-12 w-12 rounded-[16px]" />
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-[16px] font-semibold text-white">{tick(p.symbol)}</p>
+                        <p className="truncate text-[16px] font-semibold text-white">{tick(p.symbol, p.mint)}</p>
                         <p className="truncate text-[13px] text-white/45">{p.name} · waiting</p>
                       </div>
                     </button>
@@ -1288,9 +1318,9 @@ export default function ShillPage() {
           <PinSpotlight
             pin={{ ...openPin, votes: openPin.votes || voteByMint[openPin.mint] || 0 }}
             now={now}
-            canVote={canVote}
+            voteBusy={voteBusy}
             onClose={() => setOpenPin(null)}
-            onVote={() => upvote(openPin.mint)}
+            onVote={() => upvote(openPin)}
             onCopy={() => copyMint(openPin.mint)}
             onBuy={() => openSwap(openPin.mint)}
           />

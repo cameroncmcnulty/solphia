@@ -11,6 +11,7 @@ import { withLaunch, withShill } from "../store";
 import { ensureShill, fillHousePins, housePubkeySet, postShill, touchMember, voteShill, type HousePinCoin } from "./engine";
 import { composeHouseChat } from "./phrases";
 import { SHILL_HOUSE_PIN_MIN, type HouseActor, type ShillBook, type ShillMessage } from "./types";
+import { realTicker } from "../launch/labels";
 
 export const HOUSE_ACTOR_N = 87;
 export const HOUSE_NAME_MIN = 0.6;
@@ -591,17 +592,19 @@ function bootHouseRoom(book: ShillBook, candidates: HousePinCoin[], now: number,
     if (share) {
       const coin = pickTop(pool, rng);
       if (coin?.mint) {
-        const sym = (coin.symbol || coin.mint.slice(0, 4)).replace(/^\$+/, "");
-        const line = LINES[Math.floor(rng() * LINES.length)] || LINES[0];
-        text = line!(sym, coin.mint);
-        token = {
-          mint: coin.mint,
-          symbol: coin.symbol || sym,
-          name: coin.name || coin.symbol || "token",
-          image: coin.image,
-          priceUsd: coin.priceUsd,
-          mcUsd: coin.mcUsd,
-        };
+        const sym = realTicker(coin.symbol, coin.mint);
+        if (sym) {
+          const line = LINES[Math.floor(rng() * LINES.length)] || LINES[0];
+          text = line!(sym, coin.mint);
+          token = {
+            mint: coin.mint,
+            symbol: sym,
+            name: coin.name || coin.symbol || "token",
+            image: coin.image,
+            priceUsd: coin.priceUsd,
+            mcUsd: coin.mcUsd,
+          };
+        }
       }
     }
     if (!text) {
@@ -728,7 +731,11 @@ export function tickHouseActions(
         actor.nextShareAt = now + jitterEvery(actor.shareEveryMs, rng);
         continue;
       }
-      const sym = (coin.symbol || coin.mint.slice(0, 4)).replace(/^\$+/, "");
+      const sym = realTicker(coin.symbol, coin.mint);
+      if (!sym) {
+        actor.nextShareAt = now + jitterEvery(actor.shareEveryMs, rng);
+        continue;
+      }
       const line = LINES[Math.floor(rng() * LINES.length)] || LINES[0];
       const text = line!(sym, coin.mint);
       const posted = postShill(book, {
@@ -736,7 +743,7 @@ export function tickHouseActions(
         text,
         token: {
           mint: coin.mint,
-          symbol: coin.symbol || sym,
+          symbol: sym,
           name: coin.name || coin.symbol || "token",
           image: coin.image,
           priceUsd: coin.priceUsd,
@@ -779,7 +786,7 @@ export function tickHouseActions(
       mint: coin.mint,
       token: {
         mint: coin.mint,
-        symbol: coin.symbol || coin.mint.slice(0, 4),
+        symbol: realTicker(coin.symbol, coin.mint),
         name: coin.name || coin.symbol || "token",
         image: coin.image,
       },

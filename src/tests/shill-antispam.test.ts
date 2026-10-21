@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { SHILL_IP_WALLET_MAX, shillWalletAllowed } from "../lib/shill/antispam";
+import { NextRequest } from "next/server";
+import { SHILL_IP_WALLET_MAX, issueShillOk, shillHumanOk, shillWalletAllowed } from "../lib/shill/antispam";
 import { houseActorPubkey } from "../lib/shill/house";
 
 const A = "CyaE1VxvBrahnPWkqm5VsdCvyS2QmNht2UFrKJHga54o";
@@ -33,5 +34,15 @@ describe("shill antispam", () => {
     assert.match(route, /guestBlock/);
     assert.match(route, /action === "human"/);
     assert.equal(houseActorPubkey(0).length > 30, true);
+  });
+
+  it("accepts a signed human cookie even when the IP family flips", () => {
+    const tok = issueShillOk("203.0.113.9");
+    const req = { cookies: { get: () => ({ value: tok }) } } as unknown as NextRequest;
+    assert.equal(shillHumanOk(req, "203.0.113.9"), true);
+    assert.equal(shillHumanOk(req, "2001:db8::1"), true);
+    assert.equal(shillHumanOk(req, "local"), true);
+    const expired = { cookies: { get: () => ({ value: issueShillOk("203.0.113.9", Date.now() - 8 * 3600_000) }) } } as unknown as NextRequest;
+    assert.equal(shillHumanOk(expired, "203.0.113.9"), false);
   });
 });

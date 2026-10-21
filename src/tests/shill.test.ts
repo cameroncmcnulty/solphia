@@ -316,6 +316,22 @@ describe("shill zone", () => {
     if (!cooled.ok) assert.equal(cooled.error, "cooldown");
   });
 
+  it("does not print a mint prefix as the board ticker", () => {
+    const book = emptyShill();
+    const mint = "FQz8NDVSueEku6Bf8mSQitRSpk5uhM9cMkLLV9N5k2Ui";
+    const voted = voteShill(book, {
+      owner: A,
+      mint,
+      token: { mint, symbol: mint.slice(0, 4), name: mint.slice(0, 6) },
+      now: 1_000,
+    });
+    assert.equal(voted.ok, true);
+    const board = voteBoard(book, 1_000);
+    assert.equal(board[0].mint, mint);
+    assert.equal(board[0].symbol, "");
+    assert.equal(board[0].votes, 1);
+  });
+
   it("caps stored chat and keeps the newest lines", () => {
     const book = emptyShill();
     const t0 = Date.now() - SHILL_MSG_MAX * 1000;
@@ -408,5 +424,31 @@ describe("shill zone", () => {
     assert.equal(api.includes("quiet ? {} : { pins:"), false);
     assert.match(api, /queued: Boolean\(result\.queued\)/);
     assert.match(api, /if \(!out\.result\.replay\)/);
+  });
+
+  it("resolves chat CAs from the pad book and never uses a mint prefix as a ticker", () => {
+    const api = readFileSync(join(process.cwd(), "src/app/api/shill/route.ts"), "utf8");
+    const page = readFileSync(join(process.cwd(), "src/app/shill/page.tsx"), "utf8");
+    const feeds = readFileSync(join(process.cwd(), "src/lib/feeds/index.ts"), "utf8");
+    const meta = readFileSync(join(process.cwd(), "src/lib/token/onchainMeta.ts"), "utf8");
+    assert.match(api, /tokenFromPadBook/);
+    assert.match(api, /paintedToken/);
+    assert.match(api, /tokenHint/);
+    assert.equal(api.includes("symbol: mint.slice(0, 4)"), false);
+    assert.match(page, /displayTicker/);
+    assert.match(feeds, /lite-api\.jup\.ag\/tokens\/v2\/search/);
+    assert.match(meta, /getTokenMetadata/);
+  });
+
+  it("stamps the human cookie before the room opens and keeps upvote clickable", () => {
+    const page = readFileSync(join(process.cwd(), "src/app/shill/page.tsx"), "utf8");
+    const gate = readFileSync(join(process.cwd(), "src/components/HumanGate.tsx"), "utf8");
+    const anti = readFileSync(join(process.cwd(), "src/lib/shill/antispam.ts"), "utf8");
+    assert.match(page, /onPass=\{async/);
+    assert.match(page, /action: "human"/);
+    assert.match(page, /Slide to enter\|human/);
+    assert.match(page, /voteBusy/);
+    assert.match(gate, /await onPass/);
+    assert.match(anti, /Binding IP breaks mobile/);
   });
 });
