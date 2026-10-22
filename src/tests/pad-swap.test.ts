@@ -111,6 +111,18 @@ describe("open market swap fees", () => {
     const lookup = readFileSync(path.join(process.cwd(), "src/app/api/launch/lookup/route.ts"), "utf8");
     assert.match(lookup, /isPlaceholderLabel/);
   });
+
+  it("idles Signing after a landed swap so the button is not left depressed", () => {
+    const widget = readFileSync(path.join(process.cwd(), "src/components/SwapWidget.tsx"), "utf8");
+    assert.match(widget, /function idleSigning/);
+    assert.match(widget, /if \(j\.signature\) \{[\s\S]*idleSigning\(\);[\s\S]*clearPayAmount\(\);/);
+    assert.match(widget, /if \(j\.error\) \{[\s\S]*idleSigning\(\);/);
+    assert.match(widget, /notice\.kind === "ok" \|\| notice\.kind === "error"[\s\S]*idleSigning\(\)/);
+    assert.match(widget, /if \(settledRef\.current\) return;/);
+    assert.match(widget, /inFlightRef\.current/);
+    assert.match(widget, /onClose=\{\(\) => setReview\(false\)\}/);
+    assert.equal(widget.includes("onClose={() => !busy && setReview(false)}"), false);
+  });
 });
 
 describe("in-house bot router", () => {

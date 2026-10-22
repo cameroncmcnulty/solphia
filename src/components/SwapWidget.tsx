@@ -248,8 +248,18 @@ export function SwapWidget({
   const noticeRef = useRef<(n: SwapNotice) => void>(() => undefined);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const liveRef = useRef(false);
+  const inFlightRef = useRef(false);
+  const settledRef = useRef(false);
   const lookedUpMint = useRef("");
   const loadBalsRef = useRef<() => void>(() => undefined);
+
+  function idleSigning() {
+    inFlightRef.current = false;
+    liveRef.current = false;
+    settledRef.current = true;
+    setBusy(false);
+    setReview(false);
+  }
 
   function clearPayAmount() {
     setAmount("");
@@ -380,13 +390,14 @@ export function SwapWidget({
       if (!j) return;
       const ours = j.after?.kind === "swap" || j.after?.kind === "jup_swap" || (!j.after && liveRef.current);
       if (!ours) return;
-      liveRef.current = false;
       stayOnCard();
       if (j.error) {
+        idleSigning();
         noticeRef.current(noticeFromSwapError(j.error));
         return;
       }
       if (j.signature) {
+        idleSigning();
         clearPayAmount();
         noticeRef.current({ kind: "ok", text: `Swap landed. ${j.signature}`, at: Date.now() });
         onDone?.();
@@ -446,6 +457,7 @@ export function SwapWidget({
   useEffect(() => {
     if (!notice) return;
     stayOnCard();
+    if (notice.kind === "ok" || notice.kind === "error") idleSigning();
     if (notice.kind !== "ok") return;
     const t1 = window.setTimeout(() => loadBalsRef.current(), 800);
     const t2 = window.setTimeout(() => loadBalsRef.current(), 2500);
@@ -560,7 +572,7 @@ export function SwapWidget({
   }
 
   async function go() {
-    if (busy) return;
+    if (busy || inFlightRef.current) return;
     if (!pk) {
       showNotice({ kind: "error", text: "Connect a wallet to swap.", at: Date.now() });
       return;
@@ -591,6 +603,8 @@ export function SwapWidget({
       setReview(true);
       return;
     }
+    inFlightRef.current = true;
+    settledRef.current = false;
     setBusy(true);
     liveRef.current = true;
     markActionSpot("swap-widget");
@@ -625,7 +639,8 @@ export function SwapWidget({
             },
             { skipPreflight: false },
           );
-      liveRef.current = false;
+      if (settledRef.current) return;
+      idleSigning();
       clearPayAmount();
       stayOnCard();
       showNotice({ kind: "ok", text: "Swap landed.", at: Date.now(), sig });
@@ -637,7 +652,10 @@ export function SwapWidget({
       }).catch(() => {});
       onDone?.();
     } catch (e) {
+      if (settledRef.current) return;
       if (!signTx && isPhantomRedirect(e)) {
+        inFlightRef.current = false;
+        setBusy(false);
         setReview(false);
         showNotice({
           kind: "pending",
@@ -646,10 +664,11 @@ export function SwapWidget({
         });
         return;
       }
-      liveRef.current = false;
+      idleSigning();
       stayOnCard();
       showNotice(noticeFromSwapError(e));
     } finally {
+      inFlightRef.current = false;
       setBusy(false);
     }
   }
@@ -966,7 +985,7 @@ export function SwapWidget({
                 ? "Sign in-app. Solphia never holds this key."
                 : "Your wallet will ask you to sign."
           }
-          onClose={() => !busy && setReview(false)}
+          onClose={() => setReview(false)}
         >
           <div className="space-y-1 font-mono text-[12px] text-white/70">
             <div className="flex justify-between text-white"><span>Pay</span><span>{fmtTok(payNum)} {tick(pay.symbol) || pay.symbol}</span></div>
