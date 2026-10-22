@@ -124,7 +124,7 @@ export function TosGate() {
         <p className="font-mono text-[10px] tracking-[0.22em] text-acid">FIRST CONNECT</p>
         <h2 className="mt-2 font-display text-2xl text-ghost">Before you enter</h2>
         <p className="mt-2 text-sm leading-relaxed text-mute">
-          Solphia is non-custodial. Trading activities carry heavy risk. Agree to the terms and privacy policy to continue.
+          Solphia is non-custodial. You use the Site at your own risk. Lost or missing funds from transactions are yours. Agree to the terms and privacy policy to continue.
         </p>
         <label className="mt-4 flex items-start gap-2 text-sm text-ghost">
           <input type="checkbox" checked={tos} onChange={(e) => setTos(e.target.checked)} className="mt-1" />

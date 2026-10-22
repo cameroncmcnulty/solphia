@@ -92,6 +92,11 @@ describe("auth flow", () => {
     assert.match(legal, /12-word recovery phrase/);
     assert.match(legal, /encrypted copy of the trading-wallet secret/);
     assert.match(legal, /admin@solphia\.io/);
+    assert.match(legal, /at your own risk/);
+    assert.match(legal, /not responsible for lost or missing funds/);
+    assert.match(legal, /Limitation of liability/);
+    assert.match(legal, /You will defend, indemnify/);
+    assert.match(legal, /On-chain transfers cannot be reversed/);
     assert.equal(legal.includes("never asks for a seed phrase"), false);
     assert.equal(legal.includes("We do not collect seed phrases or private keys"), false);
     assert.equal(legal.includes("Your trading key stays on your phone or computer"), false);
