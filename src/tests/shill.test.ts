@@ -372,6 +372,9 @@ describe("shill zone", () => {
     assert.match(css, /\.app-layer,\s*\n\.shill-overlay-dock \{[\s\S]*?align-items:\s*flex-start/);
     assert.match(css, /\.app-layer,\s*\n\.shill-overlay-dock \{[\s\S]*?bottom:\s*calc\(var\(--bottom-nav-h\)/);
     assert.match(nav, /min-h-\[var\(--bottom-nav-h\)\]/);
+    assert.equal(nav.includes("md:hidden"), false);
+    assert.match(css, /hover: hover\) and \(pointer: fine\)/);
+    assert.match(css, /\.has-tabbar \{/);
     assert.match(page, /className="shill-dock /);
     assert.equal(/pb-3 md:pb-6/.test(page), false);
     assert.match(page, /app-layer shill-overlay-dock/);

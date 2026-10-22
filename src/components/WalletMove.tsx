@@ -25,6 +25,12 @@ export function WalletMove({
   const err = useConfirmErrors<"amount" | "wallet">();
   const sol = custom.trim() ? Number(custom) : amt;
 
+  function resetAmount() {
+    setCustom("");
+    setAmt(0);
+    err.clear("amount");
+  }
+
   async function toTrading() {
     if (!(sol > 0)) {
       err.fail({ amount: "Pick how much SOL to move." });
@@ -36,6 +42,7 @@ export function WalletMove({
     try {
       const tx = await buildTransfer(owner, tradePk, sol);
       const sig = await signLegacyTx(tx);
+      resetAmount();
       setMsg(`Sent ${sol} SOL to the trading wallet · ${sig.slice(0, 16)}…`);
       setTimeout(() => onDone?.(), 2500);
     } catch (e) {
@@ -64,6 +71,7 @@ export function WalletMove({
     setMsg("");
     try {
       const sig = await withdrawToOwner(owner, send);
+      resetAmount();
       setMsg(`Sent ${send.toFixed(4)} SOL to your wallet · ${sig.slice(0, 16)}…`);
       setTimeout(() => onDone?.(), 2500);
     } catch (e) {

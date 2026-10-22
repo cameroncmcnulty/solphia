@@ -405,6 +405,18 @@ function pickPfp(remote: LaunchAccount, local: LaunchAccount): { pfp?: string; p
   return { pfp: localP || remoteP, pfpAt: localAt || undefined };
 }
 
+function pickUsername(remote: LaunchAccount, local: LaunchAccount): { username?: string; usernameAt?: number } {
+  const localAt = local.usernameAt || 0;
+  const remoteAt = remote.usernameAt || 0;
+  if (localAt > remoteAt) {
+    return { username: local.username, usernameAt: localAt };
+  }
+  if (remoteAt > localAt) {
+    return { username: remote.username, usernameAt: remoteAt };
+  }
+  return { username: local.username || remote.username, usernameAt: localAt || undefined };
+}
+
 export function mergeAccount(remote: LaunchAccount, local: LaunchAccount, key: string): LaunchAccount {
   const dayA = local.rankDay;
   const dayB = remote.rankDay;
@@ -424,8 +436,7 @@ export function mergeAccount(remote: LaunchAccount, local: LaunchAccount, key: s
     referrer: local.referrer || remote.referrer,
     referredAt: local.referredAt || remote.referredAt,
     ...pickPfp(remote, local),
-    username: local.username || remote.username,
-    usernameAt: local.usernameAt || remote.usernameAt,
+    ...pickUsername(remote, local),
     notes: local.notes || remote.notes,
     referralRewardsSol: Math.max(local.referralRewardsSol || 0, remote.referralRewardsSol || 0),
     intro: local.intro != null ? local.intro : remote.intro,

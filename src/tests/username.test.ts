@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { emptyLaunchBook } from "../lib/launch/engine";
+import { emptyLaunchBook, mergeLaunch } from "../lib/launch/engine";
 import { setUsername, usernameIssue, usernameOk } from "../lib/launch/username";
 
 const A = "CyaE1VxvBrahnPWkqm5VsdCvyS2QmNht2UFrKJHga54o";
@@ -25,5 +25,24 @@ describe("usernames", () => {
     if (!clash.ok) assert.equal(clash.error, "username_taken");
     const same = setUsername(book, A, "Cam");
     assert.equal(same.ok, true);
+  });
+
+  it("keeps the newer handle across merges and lets a clear win", () => {
+    const local = emptyLaunchBook();
+    local.accounts[A] = { pubkey: A, referralRewardsSol: 0, username: "NewName", usernameAt: 20 };
+    const remote = emptyLaunchBook();
+    remote.accounts[A] = { pubkey: A, referralRewardsSol: 0, username: "OldName", usernameAt: 10 };
+    assert.equal(mergeLaunch(local, remote).accounts[A].username, "NewName");
+    const cleared = setUsername(emptyLaunchBook(), A, "");
+    assert.equal(cleared.ok, true);
+    if (cleared.ok) {
+      assert.equal(cleared.username, "");
+      assert.ok((cleared.account.usernameAt || 0) > 0);
+    }
+    const wipe = emptyLaunchBook();
+    wipe.accounts[A] = { pubkey: A, referralRewardsSol: 0, usernameAt: 30 };
+    const still = emptyLaunchBook();
+    still.accounts[A] = { pubkey: A, referralRewardsSol: 0, username: "OldName", usernameAt: 10 };
+    assert.equal(mergeLaunch(wipe, still).accounts[A].username, undefined);
   });
 });

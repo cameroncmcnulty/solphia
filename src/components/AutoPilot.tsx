@@ -118,6 +118,7 @@ export function AutoPilot({ owner }: { owner: string | null }) {
       const tpk = tradingPubkey();
       const tx = await buildTransfer(owner, tpk, solAmt);
       const sig = await signLegacyTx(tx);
+      setSolAmt(0);
       setMsg(`Deposited ${solAmt} SOL · ${sig.slice(0, 16)}…`);
       setTimeout(() => refresh(owner), 2500);
     } catch (e) {
@@ -132,6 +133,7 @@ export function AutoPilot({ owner }: { owner: string | null }) {
     setBusy(true);
     try {
       const sig = await withdrawToOwner(owner, Math.max(0, bal - 0.003));
+      setSolAmt(0);
       setMsg(`Withdraw sent · ${sig.slice(0, 16)}…`);
       setTimeout(() => refresh(owner), 2500);
     } catch (e) {

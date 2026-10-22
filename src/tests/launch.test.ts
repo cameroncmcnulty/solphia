@@ -564,6 +564,14 @@ describe("launch create validation", () => {
     assert.match(wallet, /circleAvatarUrl\(owner\)/);
     const switcher = readFileSync(path.join(process.cwd(), "src/components/wallet/WalletSwitcher.tsx"), "utf8");
     assert.match(switcher, /circleAvatarUrl/);
+    const move = readFileSync(path.join(process.cwd(), "src/components/WalletMove.tsx"), "utf8");
+    assert.match(move, /function resetAmount/);
+    assert.match(move, /setCustom\(""\)/);
+    const widget = readFileSync(path.join(process.cwd(), "src/components/SwapWidget.tsx"), "utf8");
+    assert.match(widget, /function clearPayAmount/);
+    const goAt = widget.indexOf("async function go");
+    assert.ok(goAt > 0);
+    assert.ok(widget.indexOf("clearPayAmount()", goAt) > goAt);
     assert.match(wallet, /ArrowDownLeft/);
     assert.match(wallet, /pickedMint/);
     assert.match(wallet, /text-\[40px\]/);

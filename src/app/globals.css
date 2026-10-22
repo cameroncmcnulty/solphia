@@ -1125,6 +1125,10 @@ body.shill-kbd .bottom-nav {
   pointer-events: none;
 }
 
+.has-tabbar {
+  padding-bottom: calc(4.5rem + env(safe-area-inset-bottom, 0px));
+}
+
 /* Composer lives inside the dock. Reserve only the tab bar, not a second empty band. */
 .shill-dock {
   padding-bottom: calc(var(--bottom-nav-h) + env(safe-area-inset-bottom, 0px));
@@ -1163,7 +1167,17 @@ body.shill-kbd .app-layer,
 body.shill-kbd .shill-overlay-dock {
   bottom: 0;
 }
-@media (min-width: 768px) {
+/* Real mouse desktop: top links replace the tab bar. Phones in "desktop site" mode keep the tab bar. */
+@media (min-width: 1024px) and (hover: hover) and (pointer: fine) {
+  .bottom-nav {
+    display: none;
+  }
+  .has-tabbar {
+    padding-bottom: 2rem;
+  }
+  .pump-shell {
+    padding-bottom: 2rem;
+  }
   .shill-dock {
     padding-bottom: 0;
   }

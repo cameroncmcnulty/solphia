@@ -64,7 +64,7 @@ export function setUsername(
   if (!u) {
     const acc = ensureAccount(book, pubkey);
     acc.username = undefined;
-    acc.usernameAt = undefined;
+    acc.usernameAt = Date.now();
     return { ok: true, account: acc, username: "" };
   }
   const issue = usernameIssue(u);

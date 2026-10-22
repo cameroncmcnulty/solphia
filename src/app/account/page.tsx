@@ -198,7 +198,10 @@ export default function AccountPage() {
         setSaved((s) => ({ ...s, pfp: body.pfp ? "PFP saved." : "Cartoon is back." }));
         window.dispatchEvent(new Event("solphia-desk"));
       }
-      if (body.action === "username") setSaved((s) => ({ ...s, username: j.username ? `Saved @${j.username}` : "Username cleared." }));
+      if (body.action === "username") {
+        setSaved((s) => ({ ...s, username: j.username ? `Saved @${j.username}` : "Username cleared." }));
+        window.dispatchEvent(new Event("solphia-desk"));
+      }
     } finally {
       setBusy(false);
     }
@@ -291,7 +294,7 @@ export default function AccountPage() {
               className="mt-3"
               onSubmit={(e) => {
                 e.preventDefault();
-                post({ action: "username", username });
+                post({ action: "username", username: username.replace(/^@+/, "").trim() });
               }}
             >
               <div className="flex gap-2">

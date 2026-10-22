@@ -16,7 +16,7 @@ import { isSolanaAddress } from "@/lib/wallet/addr";
 import { SOL_MINT } from "@/lib/pair/mints";
 import { qrSvg } from "@/lib/wallet/qr";
 import { signPhantomAndSend } from "@/lib/wallet/trading";
-import { isPhantomRedirect } from "@/lib/wallet/phantomConnect";
+import { isPhantomRedirect, PHANTOM_EVENT } from "@/lib/wallet/phantomConnect";
 import { exportSecretB58, requestUnlock, unlockedMnemonic, vaultUnlocked } from "@/lib/wallet/vault";
 import { useActiveWallet, useVaultWallets } from "@/lib/wallet/useVault";
 import { phraseFile } from "@/lib/wallet/phrase";
@@ -103,7 +103,19 @@ export default function WalletPage() {
       load().catch(() => {});
     };
     window.addEventListener("solphia-desk", onDesk);
-    return () => window.removeEventListener("solphia-desk", onDesk);
+    const onPh = (e: Event) => {
+      const j = (e as CustomEvent<{ signature?: string; after?: { kind?: string }; error?: string }>).detail;
+      if (!j?.signature || j.error) return;
+      const kind = j.after?.kind || "";
+      if (kind && kind !== "generic") return;
+      setSendAmt("");
+      void load();
+    };
+    window.addEventListener(PHANTOM_EVENT, onPh as EventListener);
+    return () => {
+      window.removeEventListener("solphia-desk", onDesk);
+      window.removeEventListener(PHANTOM_EVENT, onPh as EventListener);
+    };
   }, [load]);
 
   const rows = useMemo(() => {
