@@ -5,7 +5,7 @@ import { Keypair, PublicKey, SystemProgram, Transaction, VersionedTransaction, L
 import { loadOwner as readOwner, persistOwner } from "./owner";
 import { asTxB64, b64ToBytes, bytesToB64 } from "../solana/wire";
 import { applyExtras, extraKeys, parseTx, serializeTx } from "../solana/extraSign";
-import { inPhantomWebView, injectedProvider, openPhantomUl, phantomSignError, waitForInjected, type PhAfter } from "./phantomConnect";
+import { injectedProvider, type PhAfter } from "./phantomConnect";
 import { activeIsEmbedded, ensureUnlockedSigner } from "./vault";
 
 const SECRET = "solphia_trading_secret";
@@ -133,35 +133,12 @@ export async function signAndSendPhantom(transactionB64: string): Promise<string
 }
 
 /**
- * Phantom docs: one signer, signTransaction (so Blowfish can simulate), then we send.
- * Extra signers (mint keypairs) must be attached AFTER Phantom signs — never before.
- * https://docs.phantom.com/developer-powertools/domain-and-transaction-warnings
+ * Solphia wallet signs, then we broadcast.
+ * Extra signers (mint keypairs) attach after the owner signs.
  */
 export async function signLegacyTx(tx: Transaction, extra?: Keypair, after?: PhAfter): Promise<string> {
   const unsigned = tx.serialize({ requireAllSignatures: false, verifySignatures: false });
   return signPhantomAndSend(toB64(unsigned), extra, after);
-}
-
-async function waitForPhantomProvider() {
-  let provider = phantomProvider();
-  if (provider) return provider;
-  const ua = typeof navigator !== "undefined" ? navigator.userAgent : "";
-  const mobile = /iPhone|iPad|iPod|Android/i.test(ua);
-  await waitForInjected(inPhantomWebView() ? 8000 : mobile ? 1200 : 200);
-  return phantomProvider();
-}
-
-/** Phantom in-app throws 4001 unless connect() ran this session — onlyIfTrusted is not enough. */
-async function connectInjected(): Promise<void> {
-  const inj = injectedProvider();
-  if (!inj?.connect) return;
-  try {
-    const res = await inj.connect();
-    const pk = res?.publicKey?.toString();
-    if (pk) persistOwner(pk);
-  } catch (e) {
-    throw phantomSignError(e);
-  }
 }
 
 function signWithKeypair(packed: string, kp: Keypair, extra?: Keypair | Keypair[]) {
@@ -180,40 +157,15 @@ function signWithKeypair(packed: string, kp: Keypair, extra?: Keypair | Keypair[
 export async function signPhantomAndSend(
   transactionB64: string,
   extra?: Keypair | Keypair[],
-  after?: PhAfter,
+  _after?: PhAfter,
   opts?: { skipPreflight?: boolean },
 ): Promise<string> {
   const packed = asTxB64(transactionB64);
   const extras = extraKeys(extra);
-  if (activeIsEmbedded()) {
-    const kp = await ensureUnlockedSigner();
-    if (!kp) throw new Error("Unlock your Solphia wallet to sign.");
-    return sendSignedB64(signWithKeypair(packed, kp, extras), opts);
-  }
-  const provider = await waitForPhantomProvider();
-  if (provider) {
-    await connectInjected();
-    const raw = b64ToBytes(packed);
-    const tx = parseTx(raw);
-    let fromPhantom: Transaction | VersionedTransaction;
-    try {
-      fromPhantom = (await provider.signTransaction(tx as Transaction)) as Transaction | VersionedTransaction;
-    } catch (e) {
-      throw phantomSignError(e);
-    }
-    applyExtras(fromPhantom, extras);
-    return sendSignedB64(toB64(serializeTx(fromPhantom)), opts);
-  }
-  if (inPhantomWebView()) {
-    throw new Error("Your wallet isn't ready to sign. Refresh this tab, then tap Launch again.");
-  }
-  await openPhantomUl({
-    packed,
-    extraSecrets: extras.map((k) => toB64(k.secretKey)),
-    after,
-    pubkey: readOwner(),
-  });
-  throw new Error("PHANTOM_REDIRECT");
+  if (!activeIsEmbedded()) throw new Error("Connect a Solphia wallet to sign.");
+  const kp = await ensureUnlockedSigner();
+  if (!kp) throw new Error("Unlock your Solphia wallet to sign.");
+  return sendSignedB64(signWithKeypair(packed, kp, extras), opts);
 }
 
 /** Sign with the active Solphia wallet and broadcast. */
@@ -221,26 +173,10 @@ export const signAndSend = signPhantomAndSend;
 
 /** Sign only — Jupiter /execute lands the tx. Do not broadcast yourself. */
 export async function signPhantomTxB64(transactionB64: string): Promise<string> {
-  if (activeIsEmbedded()) {
-    const kp = await ensureUnlockedSigner();
-    if (!kp) throw new Error("Unlock your Solphia wallet to sign.");
-    return signWithKeypair(asTxB64(transactionB64), kp);
-  }
-  const provider = await waitForPhantomProvider();
-  if (!provider) throw new Error("Open Swap in your wallet to sign.");
-  await connectInjected();
-  const raw = b64ToBytes(asTxB64(transactionB64));
-  const tx = parseTx(raw);
-  let signed: Transaction | VersionedTransaction;
-  try {
-    signed = (await provider.signTransaction(tx as Transaction)) as Transaction | VersionedTransaction;
-  } catch (e) {
-    throw phantomSignError(e);
-  }
-  if ("instructions" in signed && Array.isArray((signed as Transaction).instructions)) {
-    return toB64(Uint8Array.from((signed as Transaction).serialize({ requireAllSignatures: false, verifySignatures: false })));
-  }
-  return toB64((signed as VersionedTransaction).serialize());
+  if (!activeIsEmbedded()) throw new Error("Connect a Solphia wallet to sign.");
+  const kp = await ensureUnlockedSigner();
+  if (!kp) throw new Error("Unlock your Solphia wallet to sign.");
+  return signWithKeypair(asTxB64(transactionB64), kp);
 }
 
 async function sendViaApi(b64: string, opts?: { skipPreflight?: boolean }): Promise<string> {

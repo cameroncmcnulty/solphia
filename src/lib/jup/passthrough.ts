@@ -1,16 +1,7 @@
 import { PublicKey, Transaction, VersionedTransaction } from "@solana/web3.js";
-import { loadOwner, persistOwner } from "@/lib/wallet/owner";
-import {
-  inPhantomWebView,
-  injectedProvider,
-  openPhantomUl,
-  PHANTOM_REDIRECT,
-  phantomSignError,
-  waitForInjected,
-} from "@/lib/wallet/phantomConnect";
-import { phantomProvider, signPhantomAndSend } from "@/lib/wallet/trading";
-import { bytesToB64 } from "@/lib/solana/wire";
-import { markPhantomSwapPending } from "@/lib/jup/swapNotice";
+import { signAndSend, signPhantomTxB64 } from "@/lib/wallet/trading";
+import { parseTx } from "@/lib/solana/extraSign";
+import { b64ToBytes, bytesToB64 } from "@/lib/solana/wire";
 
 function txToB64(tx: Transaction | VersionedTransaction): string {
   if ("instructions" in tx && Array.isArray(tx.instructions)) {
@@ -23,60 +14,18 @@ function noopOn() {
   return undefined;
 }
 
-async function ensureConnect(): Promise<void> {
-  const found = injectedProvider();
-  if (!found?.connect) return;
-  try {
-    const res = await found.connect();
-    const pk = res?.publicKey?.toString();
-    if (pk) persistOwner(pk);
-  } catch (e) {
-    throw phantomSignError(e);
-  }
-}
-
 async function signOne(tx: unknown) {
-  await ensureConnect();
-  let provider = phantomProvider();
-  if (!provider) {
-    await waitForInjected(inPhantomWebView() ? 8000 : 600);
-    provider = phantomProvider();
-  }
-  if (provider) {
-    try {
-      return await provider.signTransaction(tx as Transaction | VersionedTransaction);
-    } catch (e) {
-      throw phantomSignError(e);
-    }
-  }
-  if (inPhantomWebView()) {
-    throw new Error("Pull down to refresh this tab, then swap again.");
-  }
-  markPhantomSwapPending();
-  try {
-    await openPhantomUl({
-      packed: txToB64(tx as Transaction | VersionedTransaction),
-      after: { kind: "jup_swap", owner: loadOwner() || undefined },
-      pubkey: loadOwner(),
-    });
-  } catch (e) {
-    if (e instanceof Error && e.message === PHANTOM_REDIRECT) {
-      // Jupiter treats a thrown sign as Swap Failed. Stay pending while Phantom opens.
-      await new Promise<never>(() => undefined);
-    }
-    throw phantomSignError(e);
-  }
-  await new Promise<never>(() => undefined);
+  const b64 = await signPhantomTxB64(txToB64(tx as Transaction | VersionedTransaction));
+  return parseTx(b64ToBytes(b64));
 }
 
 /**
  * Jupiter Plugin WalletContextState.
- * A Solphia pubkey is enough to show connected — signing waits for injected Phantom.
+ * The connected pubkey is the Solphia wallet. Signing is in-app.
  * Shape matches @jup-ag/wallet-adapter: publicKey.toString/toBase58, wallet.adapter.publicKey, top-level signTransaction.
  */
 export function jupWalletState(pubkey: string | null) {
-  const inj = injectedProvider();
-  const pkStr = inj?.publicKey?.toString() || pubkey || "";
+  const pkStr = pubkey || "";
   let publicKey: PublicKey | null = null;
   try {
     if (pkStr) publicKey = new PublicKey(pkStr);
@@ -91,15 +40,13 @@ export function jupWalletState(pubkey: string | null) {
     for (const tx of txs) out.push(await signOne(tx));
     return out;
   };
-  const sendTransaction = async (tx: unknown) => signPhantomAndSend(txToB64(tx as Transaction | VersionedTransaction));
-  const connect = async () => {
-    await ensureConnect();
-  };
+  const sendTransaction = async (tx: unknown) => signAndSend(txToB64(tx as Transaction | VersionedTransaction));
+  const connect = async () => undefined;
 
   const adapter = connected
     ? {
-        name: "Phantom",
-        url: "https://phantom.app",
+        name: "Solphia",
+        url: "https://solphia.io",
         icon: "https://solphia.io/favicon.png",
         readyState: "Installed" as const,
         publicKey,

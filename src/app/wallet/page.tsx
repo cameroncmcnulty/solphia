@@ -15,8 +15,7 @@ import { useOwner } from "@/lib/hooks";
 import { isSolanaAddress } from "@/lib/wallet/addr";
 import { SOL_MINT } from "@/lib/pair/mints";
 import { qrSvg } from "@/lib/wallet/qr";
-import { signPhantomAndSend } from "@/lib/wallet/trading";
-import { isPhantomRedirect, PHANTOM_EVENT } from "@/lib/wallet/phantomConnect";
+import { signAndSend } from "@/lib/wallet/trading";
 import { exportSecretB58, requestUnlock, unlockedMnemonic, vaultUnlocked } from "@/lib/wallet/vault";
 import { useActiveWallet, useVaultWallets } from "@/lib/wallet/useVault";
 import { phraseFile } from "@/lib/wallet/phrase";
@@ -103,18 +102,8 @@ export default function WalletPage() {
       load().catch(() => {});
     };
     window.addEventListener("solphia-desk", onDesk);
-    const onPh = (e: Event) => {
-      const j = (e as CustomEvent<{ signature?: string; after?: { kind?: string }; error?: string }>).detail;
-      if (!j?.signature || j.error) return;
-      const kind = j.after?.kind || "";
-      if (kind && kind !== "generic") return;
-      setSendAmt("");
-      void load();
-    };
-    window.addEventListener(PHANTOM_EVENT, onPh as EventListener);
     return () => {
       window.removeEventListener("solphia-desk", onDesk);
-      window.removeEventListener(PHANTOM_EVENT, onPh as EventListener);
     };
   }, [load]);
 
@@ -201,15 +190,11 @@ export default function WalletPage() {
       });
       const j = await r.json();
       if (!r.ok) throw new Error(typeof j.error === "string" ? j.error : "Could not build the transfer.");
-      const landed = await signPhantomAndSend(j.transaction, undefined, { kind: "generic" }, { skipPreflight: false });
+      const landed = await signAndSend(j.transaction, undefined, { kind: "generic" }, { skipPreflight: false });
       setSig(landed);
       setSendAmt("");
       void load();
     } catch (e) {
-      if (isPhantomRedirect(e)) {
-        setErr("Approve in your wallet. You'll come back here.");
-        return;
-      }
       setErr(e instanceof Error ? e.message : "Send failed.");
     } finally {
       setBusy(false);
@@ -253,8 +238,7 @@ export default function WalletPage() {
             <p className="text-[13px] font-medium text-[#14f195]">Wallet</p>
             <h1 className="truncate text-[24px] font-semibold tracking-tight text-white">{nickname}</h1>
             <p className="font-mono text-[11px] text-mute">
-              {owner.slice(0, 4)}…{owner.slice(-4)}
-              {active?.kind === "phantom" ? " · external" : " · Solphia"}
+              {owner.slice(0, 4)}…{owner.slice(-4)} · Solphia
             </p>
           </div>
           <button

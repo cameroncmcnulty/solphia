@@ -29,8 +29,8 @@ import {
   type LaunchField,
 } from "@/lib/launch/validate";
 import { FieldError, FormAlert, SafeField, fieldClass, useConfirmErrors } from "@/components/form/confirm";
-import { loadOwner, phantomProvider, signPhantomAndSend } from "@/lib/wallet/trading";
-import { clearPhantomWaiting, inPhantomWebView, isPhantomRedirect, PHANTOM_EVENT, phantomWaitingAt, readPhantomReturn, waitForInjected } from "@/lib/wallet/phantomConnect";
+import { loadOwner, signPhantomAndSend } from "@/lib/wallet/trading";
+import { clearPhantomWaiting, isPhantomRedirect, PHANTOM_EVENT, phantomWaitingAt, readPhantomReturn } from "@/lib/wallet/phantomConnect";
 import { markActionSpot, readActionSpot, restoreActionSpot, scrollToSpot } from "@/lib/wallet/actionSpot";
 import type { PhAfter } from "@/lib/wallet/phantomBox";
 import { asTxB64, b64ToBytes, bytesToB64 } from "@/lib/solana/wire";
@@ -908,11 +908,6 @@ export default function LaunchPage() {
       discord,
       launchBuySol: devBuy,
     }).catch(() => {});
-    if (!phantomProvider()) {
-      const inside = inPhantomWebView();
-      if (inside) setMsg("Waiting for your wallet…");
-      await waitForInjected(inside ? 8000 : /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ? 1200 : 200);
-    }
     setBusy(true);
     setWork("launch");
     setMsg("");
@@ -956,7 +951,7 @@ export default function LaunchPage() {
         throw new Error(message);
       }
       if (typeof pj.image === "string" && pj.image.startsWith("https://")) setPinnedUrl(pj.image);
-      setMsg("Sign in your wallet… CA " + mintPk);
+      setMsg("Sign in Solphia… CA " + mintPk);
       const extras: import("@solana/web3.js").Keypair[] = [];
       if (mintKp) extras.push(mintKp);
       if (typeof pj.configSecret === "string") extras.push(Keypair.fromSecretKey(b64ToBytes(pj.configSecret)));
@@ -1163,7 +1158,7 @@ export default function LaunchPage() {
         );
       }
       const mintKp = after.mintSecret ? Keypair.fromSecretKey(b64ToBytes(after.mintSecret)) : null;
-      setMsg("Sign in your wallet… CA " + (after.mint || ""));
+      setMsg("Sign in Solphia… CA " + (after.mint || ""));
       await signPhantomAndSend(packed, mintKp ? [mintKp] : undefined, {
         ...after,
         kind: "launch_pool",

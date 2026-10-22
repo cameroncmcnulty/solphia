@@ -3,9 +3,9 @@
 import { useEffect } from "react";
 import { SphaMark } from "./SphaMark";
 import { AUTH_EVENT, isSignedOutLocked, peekAccount, refreshAccount } from "@/lib/auth/client";
-import { forgetOwner, loadOwner, persistOwner } from "@/lib/wallet/owner";
-import { beginPhantomConnect, completePhantomConnect, completePhantomUl, injectedProvider, openPhantomLink, PHANTOM_EVENT, readPhantomReturn } from "@/lib/wallet/phantomConnect";
-import { dropPhantomWallets, ensurePhantomStub, phantomIsOwner } from "@/lib/wallet/vault";
+import { forgetOwner, loadOwner } from "@/lib/wallet/owner";
+import { injectedProvider } from "@/lib/wallet/phantomConnect";
+import { dropPhantomWallets, phantomIsOwner } from "@/lib/wallet/vault";
 import { ownerIsEmbedded, syncOwnerToSignedInAccount } from "@/lib/wallet/identity";
 import { openConnect } from "./wallet/WalletHost";
 
@@ -34,57 +34,10 @@ function blockedPhantomOwner(pubkey: string | null | undefined): boolean {
   return Boolean(pubkey && kickedPhantomPubkeys().includes(pubkey));
 }
 
-function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const t = setTimeout(() => reject(new Error(`${label} timed out`)), ms);
-    p.then(
-      (v) => {
-        clearTimeout(t);
-        resolve(v);
-      },
-      (e) => {
-        clearTimeout(t);
-        reject(e);
-      },
-    );
-  });
-}
-
-let switching = false;
-
-function openPhantomBrowse() {
-  beginPhantomConnect();
-}
-
-/** Disconnect then connect so Phantom opens the account picker. Saved wallet is never cleared. */
+/** Opens the Solphia wallet sheet. */
 export async function switchPhantom(): Promise<string | null> {
-  const found = phantom();
-  if (!found) {
-    openPhantomBrowse();
-    return loadOwner();
-  }
-  switching = true;
-  const previous = loadOwner();
-  try {
-    if (found.publicKey && found.disconnect) {
-      try {
-        await withTimeout(found.disconnect(), 4000, "disconnect");
-      } catch {
-        /* still open the picker */
-      }
-    }
-    const res = await withTimeout(found.connect(), 20000, "connect");
-    const pubkey = res.publicKey.toString();
-    persistOwner(pubkey);
-    ensurePhantomStub(pubkey);
-    return pubkey;
-  } catch {
-    const cur = found.publicKey?.toString() || previous;
-    if (cur) persistOwner(cur);
-    return cur;
-  } finally {
-    switching = false;
-  }
+  openConnect();
+  return loadOwner();
 }
 
 const PHANTOM_KICK = "solphia_kick_phantom";
@@ -155,28 +108,12 @@ export function WalletKeepalive() {
       if (saved && blockedPhantomOwner(saved)) forgetOwner();
     };
 
-    const ingestReturn = () => {
-      if (!readPhantomReturn()) return;
-      void completePhantomUl()
-        .then((j) => {
-          if (!j) return;
-          if (j.url) {
-            openPhantomLink(j.url, j.app);
-            return;
-          }
-          window.dispatchEvent(new CustomEvent(PHANTOM_EVENT, { detail: j }));
-        })
-        .catch(() => undefined);
-    };
-    completePhantomConnect();
-    ingestReturn();
     void align();
 
     poll = setInterval(() => void align(), 30_000);
 
     const onShow = () => {
       void align();
-      ingestReturn();
     };
     const onAuth = () => {
       if (!peekAccount()?.id) {

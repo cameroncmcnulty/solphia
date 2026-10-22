@@ -80,6 +80,7 @@ describe("auth flow", () => {
     const launch = readFileSync(new URL("../app/launch/page.tsx", import.meta.url), "utf8");
     assert.equal(/One Phantom prompt/.test(launch), false);
     assert.equal(/Connect a Solphia wallet or Phantom/.test(launch), false);
+    assert.equal(/Waiting for your wallet…/.test(launch), false);
   });
 
   it("terms and privacy match seed-wallet login and live key delegate", () => {

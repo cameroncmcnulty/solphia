@@ -51,7 +51,7 @@ describe("jupiter swap v2", () => {
     assert.equal(JUP_REFERRAL_PROGRAM.startsWith("REFER"), true);
   });
 
-  it("marks a Solphia owner as connected without injected Phantom", () => {
+  it("marks a Solphia owner as connected", () => {
     const s = jupWalletState(OWNER);
     assert.equal(s.connected, true);
     assert.equal(s.publicKey?.toBase58(), OWNER);
@@ -60,7 +60,8 @@ describe("jupiter swap v2", () => {
     assert.equal(s.wallet?.adapter?.connected, true);
     assert.equal(typeof s.signTransaction, "function");
     assert.equal(typeof s.wallet?.adapter?.signTransaction, "function");
-    assert.equal(s.wallet?.adapter?.name, "Phantom");
+    assert.equal(s.wallet?.adapter?.name, "Solphia");
+    assert.equal(s.wallet?.adapter?.url, "https://solphia.io");
   });
 
   it("stays disconnected without a pubkey", () => {

@@ -9,9 +9,7 @@ import { WalletConnect } from "./WalletConnect";
 import { useOwner } from "@/lib/hooks";
 import { loadOwner } from "@/lib/wallet/owner";
 import { signAndSend } from "@/lib/wallet/trading";
-import { isPhantomRedirect, PHANTOM_EVENT } from "@/lib/wallet/phantomConnect";
 import { markActionSpot } from "@/lib/wallet/actionSpot";
-import type { PhAfter } from "@/lib/wallet/phantomBox";
 import { isSolanaAddress } from "@/lib/wallet/addr";
 import { MIN_TRADE_SOL } from "@/lib/launch/curve";
 import { SOL_MINT, USDC_MINT } from "@/lib/pair/mints";
@@ -385,35 +383,15 @@ export function SwapWidget({
   }, [recv.mint, recv.symbol, recv.name]);
 
   useEffect(() => {
-    const onPh = (e: Event) => {
-      const j = (e as CustomEvent<{ signature?: string; after?: PhAfter; error?: string }>).detail;
-      if (!j) return;
-      const ours = j.after?.kind === "swap" || j.after?.kind === "jup_swap" || (!j.after && liveRef.current);
-      if (!ours) return;
-      stayOnCard();
-      if (j.error) {
-        idleSigning();
-        noticeRef.current(noticeFromSwapError(j.error));
-        return;
-      }
-      if (j.signature) {
-        idleSigning();
-        clearPayAmount();
-        noticeRef.current({ kind: "ok", text: `Swap landed. ${j.signature}`, at: Date.now() });
-        onDone?.();
-      }
-    };
     const onStored = (e: Event) => {
       const detail = (e as CustomEvent<SwapNotice | null>).detail;
       setNotice(detail ?? loadSwapNotice());
     };
-    window.addEventListener(PHANTOM_EVENT, onPh as EventListener);
     window.addEventListener(SWAP_NOTICE_EVENT, onStored as EventListener);
     return () => {
-      window.removeEventListener(PHANTOM_EVENT, onPh as EventListener);
       window.removeEventListener(SWAP_NOTICE_EVENT, onStored as EventListener);
     };
-  }, [onDone]);
+  }, []);
 
   useEffect(() => {
     if (!pk) {
@@ -661,17 +639,6 @@ export function SwapWidget({
       onDone?.();
     } catch (e) {
       if (settledRef.current) return;
-      if (!signTx && isPhantomRedirect(e)) {
-        inFlightRef.current = false;
-        setBusy(false);
-        setReview(false);
-        showNotice({
-          kind: "pending",
-          text: "Approve in your wallet. You'll come back here.",
-          at: Date.now(),
-        });
-        return;
-      }
       idleSigning();
       stayOnCard();
       showNotice(noticeFromSwapError(e));
@@ -993,9 +960,7 @@ export function SwapWidget({
           subtitle={
             signTx
               ? "Sign with the project wallet."
-              : embedded
-                ? "Sign in-app. Solphia never holds this key."
-                : "Your wallet will ask you to sign."
+              : "Sign in-app. Solphia never holds this key."
           }
           onClose={() => setReview(false)}
         >
@@ -1021,7 +986,7 @@ export function SwapWidget({
             onClick={() => void go()}
             className="btn-acid mt-4 min-h-[48px] w-full rounded-full disabled:opacity-40"
           >
-            {signing ? "Signing…" : signTx ? "Sign swap" : embedded ? "Sign in Solphia" : "Sign in your wallet"}
+            {signing ? "Signing…" : signTx ? "Sign swap" : "Sign in Solphia"}
           </button>
         </WalletSheet>
       ) : null}

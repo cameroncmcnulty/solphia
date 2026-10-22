@@ -123,7 +123,28 @@ describe("open market swap fees", () => {
     assert.match(widget, /from "@\/lib\/wallet\/trading"/);
     assert.match(widget, /signAndSend/);
     assert.equal(widget.includes("signPhantomAndSend"), false);
+    assert.equal(widget.includes("PHANTOM_EVENT"), false);
     assert.equal(widget.includes("onClose={() => !busy && setReview(false)}"), false);
+  });
+
+  it("signs swaps and launches with the Solphia wallet only", () => {
+    const trading = readFileSync(path.join(process.cwd(), "src/lib/wallet/trading.ts"), "utf8");
+    const start = trading.indexOf("export async function signPhantomAndSend");
+    const end = trading.indexOf("export const signAndSend");
+    const fn = trading.slice(start, end);
+    assert.match(fn, /Connect a Solphia wallet to sign/);
+    assert.equal(fn.includes("openPhantomUl"), false);
+    assert.equal(trading.includes("await openPhantomUl"), false);
+    const errors = readFileSync(path.join(process.cwd(), "src/lib/launch/errors.ts"), "utf8");
+    assert.equal(errors.includes("Phantom"), false);
+    assert.match(errors, /Sign the launch in your Solphia wallet/);
+    const pass = readFileSync(path.join(process.cwd(), "src/lib/jup/passthrough.ts"), "utf8");
+    assert.match(pass, /name: "Solphia"/);
+    assert.equal(pass.includes("phantom.app"), false);
+    const wc = readFileSync(path.join(process.cwd(), "src/components/WalletConnect.tsx"), "utf8");
+    assert.equal(wc.includes("completePhantomUl"), false);
+    assert.equal(wc.includes("beginPhantomConnect"), false);
+    assert.equal(wc.includes("openPhantomLink"), false);
   });
 });
 
