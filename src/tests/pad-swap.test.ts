@@ -115,12 +115,14 @@ describe("open market swap fees", () => {
   it("idles Signing after a landed swap so the button is not left depressed", () => {
     const widget = readFileSync(path.join(process.cwd(), "src/components/SwapWidget.tsx"), "utf8");
     assert.match(widget, /function idleSigning/);
-    assert.match(widget, /if \(j\.signature\) \{[\s\S]*idleSigning\(\);[\s\S]*clearPayAmount\(\);/);
-    assert.match(widget, /if \(j\.error\) \{[\s\S]*idleSigning\(\);/);
-    assert.match(widget, /notice\.kind === "ok" \|\| notice\.kind === "error"[\s\S]*idleSigning\(\)/);
-    assert.match(widget, /if \(settledRef\.current\) return;/);
-    assert.match(widget, /inFlightRef\.current/);
-    assert.match(widget, /onClose=\{\(\) => setReview\(false\)\}/);
+    assert.match(widget, /const landed = notice\?\.kind === "ok"/);
+    assert.match(widget, /const signing = Boolean\(busy && notice\?\.kind !== "ok"/);
+    assert.match(widget, /const reviewOpen = Boolean\(review && !landed\)/);
+    assert.match(widget, /\{reviewOpen \?/);
+    assert.match(widget, /\{signing \? "Signing…"/);
+    assert.match(widget, /from "@\/lib\/wallet\/trading"/);
+    assert.match(widget, /signAndSend/);
+    assert.equal(widget.includes("signPhantomAndSend"), false);
     assert.equal(widget.includes("onClose={() => !busy && setReview(false)}"), false);
   });
 });

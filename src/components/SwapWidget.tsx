@@ -8,7 +8,7 @@ import { SolanaMark } from "./SolanaMark";
 import { WalletConnect } from "./WalletConnect";
 import { useOwner } from "@/lib/hooks";
 import { loadOwner } from "@/lib/wallet/owner";
-import { signPhantomAndSend } from "@/lib/wallet/trading";
+import { signAndSend } from "@/lib/wallet/trading";
 import { isPhantomRedirect, PHANTOM_EVENT } from "@/lib/wallet/phantomConnect";
 import { markActionSpot } from "@/lib/wallet/actionSpot";
 import type { PhAfter } from "@/lib/wallet/phantomBox";
@@ -215,7 +215,7 @@ export function SwapWidget({
   tokens?: SwapToken[];
   onDone?: () => void;
   onMint?: (mint: string) => void;
-  /** Admin / project-wallet signer. When set, Phantom is not used. */
+  /** Admin / project-wallet signer. When set, that key signs instead of the active Solphia wallet. */
   signTx?: (transaction: string) => Promise<string>;
   note?: string;
   widgetId?: string;
@@ -600,11 +600,19 @@ export function SwapWidget({
       return;
     }
     if (!review) {
+      if (notice) {
+        clearSwapNotice();
+        setNotice(null);
+      }
       setReview(true);
       return;
     }
     inFlightRef.current = true;
     settledRef.current = false;
+    if (notice) {
+      clearSwapNotice();
+      setNotice(null);
+    }
     setBusy(true);
     liveRef.current = true;
     markActionSpot("swap-widget");
@@ -626,7 +634,7 @@ export function SwapWidget({
       if (!r.ok) throw new Error(typeof j.error === "string" ? j.error : "Could not build the swap.");
       const sig = signTx
         ? await signTx(j.transaction)
-        : await signPhantomAndSend(
+        : await signAndSend(
             j.transaction,
             undefined,
             {
@@ -673,9 +681,13 @@ export function SwapWidget({
     }
   }
 
+  const landed = notice?.kind === "ok";
+  const signing = Boolean(busy && notice?.kind !== "ok" && notice?.kind !== "error");
+  const reviewOpen = Boolean(review && !landed);
+
   const cta = !pk
     ? "Connect wallet"
-    : busy
+    : signing
       ? embedded
         ? "Signing…"
         : "Swapping…"
@@ -899,7 +911,7 @@ export function SwapWidget({
           ) : (
             <button
               type="button"
-              disabled={busy || pay.mint === recv.mint || short || !(payNum > 0)}
+              disabled={signing || pay.mint === recv.mint || short || !(payNum > 0)}
               onClick={() => void go()}
               className="flex min-h-[52px] w-full items-center justify-center gap-2 rounded-full bg-[#14f195] text-[16px] font-semibold text-[#04000a] disabled:opacity-40"
             >
@@ -975,7 +987,7 @@ export function SwapWidget({
         </div>
       ) : null}
 
-      {review ? (
+      {reviewOpen ? (
         <WalletSheet
           title="Review swap"
           subtitle={
@@ -1005,11 +1017,11 @@ export function SwapWidget({
           </div>
           <button
             type="button"
-            disabled={busy}
+            disabled={signing}
             onClick={() => void go()}
             className="btn-acid mt-4 min-h-[48px] w-full rounded-full disabled:opacity-40"
           >
-            {busy ? "Signing…" : signTx ? "Sign swap" : embedded ? "Sign in Solphia" : "Sign in your wallet"}
+            {signing ? "Signing…" : signTx ? "Sign swap" : embedded ? "Sign in Solphia" : "Sign in your wallet"}
           </button>
         </WalletSheet>
       ) : null}

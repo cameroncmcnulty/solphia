@@ -216,6 +216,9 @@ export async function signPhantomAndSend(
   throw new Error("PHANTOM_REDIRECT");
 }
 
+/** Sign with the active Solphia wallet and broadcast. */
+export const signAndSend = signPhantomAndSend;
+
 /** Sign only — Jupiter /execute lands the tx. Do not broadcast yourself. */
 export async function signPhantomTxB64(transactionB64: string): Promise<string> {
   if (activeIsEmbedded()) {
