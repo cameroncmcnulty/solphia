@@ -122,7 +122,6 @@ function nameOf(pk: string, profiles?: Pack["profiles"]) {
 
 function pfpSrc(pk: string, profiles?: Pack["profiles"]) {
   const card = profiles?.[pk];
-  if (card && !card.hasPfp) return "";
   return circleAvatarUrl(pk, "pfp", card?.pfpAt || undefined);
 }
 

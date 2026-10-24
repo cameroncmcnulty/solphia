@@ -21,7 +21,7 @@ import {
   type CurveState,
 } from "./curve";
 import { socialHref } from "./links";
-import { imageOk, PROFILE_DATA_MAX, profileImageOk, storedImage, validateLaunchCreate } from "./validate";
+import { imageOk, PFP_SENTINEL, PROFILE_DATA_MAX, profileImageOk, storedImage, validateLaunchCreate } from "./validate";
 import { isPlaceholderLabel } from "./labels";
 import { publicImage } from "../token/art";
 import type { LaunchBoost } from "./boost";
@@ -98,11 +98,16 @@ export type LaunchAccount = {
   notes?: string;
   referralRewardsSol: number;
   intro?: string;
+  /** Millis when intro last changed, including a clear. Newer stamp wins on merge. */
+  introAt?: number;
   banner?: string;
+  bannerAt?: number;
   favMint?: string;
   favSymbol?: string;
   favName?: string;
   favImage?: string;
+  /** Millis when favourite last changed, including a clear. */
+  favAt?: number;
   xp?: number;
   rankDay?: { ymd: string; chat: number; swapXp: number; launches: number };
   rankEvents?: { id: string; kind: string; xp: number; at: number }[];
@@ -295,7 +300,8 @@ export function slimAccount(a: LaunchAccount, key: string): LaunchAccount {
   return {
     ...a,
     pubkey: a.pubkey || key,
-    pfp: pfp.startsWith("data:") && pfp.length > PROFILE_DATA_MAX ? "" : pfp,
+    // Bytes live on KEYS.pfp. Keep the sentinel so merge cannot treat a slim as a clear.
+    pfp: pfp.startsWith("data:") && pfp.length > PROFILE_DATA_MAX ? PFP_SENTINEL : pfp,
     banner: banner.startsWith("data:") && banner.length > PROFILE_DATA_MAX ? "" : banner,
     rankEvents: events && events.length ? events : undefined,
   };
@@ -417,6 +423,45 @@ function pickUsername(remote: LaunchAccount, local: LaunchAccount): { username?:
   return { username: local.username || remote.username, usernameAt: localAt || undefined };
 }
 
+function pickIntro(remote: LaunchAccount, local: LaunchAccount): { intro?: string; introAt?: number } {
+  const localAt = local.introAt || 0;
+  const remoteAt = remote.introAt || 0;
+  if (localAt > remoteAt) {
+    return { intro: local.intro, introAt: localAt };
+  }
+  if (remoteAt > localAt) {
+    return { intro: remote.intro, introAt: remoteAt };
+  }
+  return { intro: local.intro || remote.intro, introAt: localAt || undefined };
+}
+
+function pickBanner(remote: LaunchAccount, local: LaunchAccount): { banner?: string; bannerAt?: number } {
+  const localAt = local.bannerAt || 0;
+  const remoteAt = remote.bannerAt || 0;
+  if (localAt > remoteAt) {
+    return { banner: local.banner, bannerAt: localAt };
+  }
+  if (remoteAt > localAt) {
+    return { banner: remote.banner, bannerAt: remoteAt };
+  }
+  return { banner: local.banner || remote.banner, bannerAt: localAt || undefined };
+}
+
+function pickFav(remote: LaunchAccount, local: LaunchAccount): Pick<LaunchAccount, "favMint" | "favSymbol" | "favName" | "favImage" | "favAt"> {
+  const localAt = local.favAt || 0;
+  const remoteAt = remote.favAt || 0;
+  const side =
+    localAt > remoteAt ? local : remoteAt > localAt ? remote : local.favMint || local.favSymbol ? local : remote;
+  const at = localAt > remoteAt ? localAt : remoteAt > localAt ? remoteAt : localAt || remoteAt || undefined;
+  return {
+    favMint: side.favMint,
+    favSymbol: side.favSymbol,
+    favName: side.favName,
+    favImage: side.favImage,
+    favAt: at,
+  };
+}
+
 export function mergeAccount(remote: LaunchAccount, local: LaunchAccount, key: string): LaunchAccount {
   const dayA = local.rankDay;
   const dayB = remote.rankDay;
@@ -439,12 +484,9 @@ export function mergeAccount(remote: LaunchAccount, local: LaunchAccount, key: s
     ...pickUsername(remote, local),
     notes: local.notes || remote.notes,
     referralRewardsSol: Math.max(local.referralRewardsSol || 0, remote.referralRewardsSol || 0),
-    intro: local.intro != null ? local.intro : remote.intro,
-    banner: local.banner != null ? local.banner : remote.banner,
-    favMint: local.favMint != null ? local.favMint : remote.favMint,
-    favSymbol: local.favSymbol || remote.favSymbol,
-    favName: local.favName || remote.favName,
-    favImage: local.favImage || remote.favImage,
+    ...pickIntro(remote, local),
+    ...pickBanner(remote, local),
+    ...pickFav(remote, local),
     xp: Math.max(local.xp || 0, remote.xp || 0),
     rankDay,
     rankEvents: eventsA.length >= eventsB.length ? eventsA : eventsB,

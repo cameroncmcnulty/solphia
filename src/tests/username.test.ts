@@ -45,4 +45,16 @@ describe("usernames", () => {
     still.accounts[A] = { pubkey: A, referralRewardsSol: 0, username: "OldName", usernameAt: 10 };
     assert.equal(mergeLaunch(wipe, still).accounts[A].username, undefined);
   });
+
+  it("does not let an XP stub wipe a saved handle", () => {
+    const stub = emptyLaunchBook();
+    stub.accounts[A] = { pubkey: A, referralRewardsSol: 0, xp: 12 };
+    const saved = emptyLaunchBook();
+    saved.accounts[A] = { pubkey: A, referralRewardsSol: 0, username: "Cam", usernameAt: 50 };
+    assert.equal(mergeLaunch(stub, saved).accounts[A].username, "Cam");
+    assert.equal(mergeLaunch(saved, stub).accounts[A].username, "Cam");
+    const emptyStr = emptyLaunchBook();
+    emptyStr.accounts[A] = { pubkey: A, referralRewardsSol: 0, username: "", xp: 3 };
+    assert.equal(mergeLaunch(emptyStr, saved).accounts[A].username, "Cam");
+  });
 });

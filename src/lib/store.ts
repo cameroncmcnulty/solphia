@@ -401,7 +401,8 @@ async function overlayLaunch(state: AppState) {
     const extra = await kvGetJson(KEYS.launchAccounts);
     if (extra && typeof extra === "object") {
       const book = state.launch || emptyLaunchBook();
-      book.accounts = mergeAccountMaps(extra as Record<string, LaunchAccount>, book.accounts);
+      // Dedicated accounts shard is local so a fat-tape stub cannot wipe pfp / intro / username.
+      book.accounts = mergeAccountMaps(book.accounts, extra as Record<string, LaunchAccount>);
       state.launch = book;
     }
   } catch {

@@ -4,6 +4,8 @@ import { clientIp, isSolanaAddress, rateLimit } from "@/lib/security";
 import { withLaunch, withShill } from "@/lib/store";
 import { emptyLaunchBook, referredBy } from "@/lib/launch/engine";
 import { INTRO_MAX, profilePhotoUrl, publicCard, setFavourite, setIntro } from "@/lib/rank/engine";
+import { getPfp } from "@/lib/pfpStore";
+import { PFP_SENTINEL } from "@/lib/launch/validate";
 import { displayMedia } from "@/lib/pinata";
 import { lookupMarketMint } from "@/lib/launch/market";
 import { staffRole } from "@/lib/access";
@@ -28,10 +30,12 @@ export async function GET(req: NextRequest) {
   const pubkey = req.nextUrl.searchParams.get("pubkey") || "";
   const viewer = req.nextUrl.searchParams.get("viewer") || "";
   if (!isSolanaAddress(pubkey)) return NextResponse.json({ error: "bad_wallet" }, { status: 400 });
+  const stored = await getPfp(pubkey);
   const s = await withLaunch((st) => st, false);
   const book = bookOf(s);
   const acc = book.accounts[pubkey];
-  const card = publicCard(acc, pubkey);
+  const pfpRaw = acc?.pfp || (stored ? PFP_SENTINEL : "");
+  const card = publicCard(acc ? { ...acc, pfp: pfpRaw } : acc, pubkey);
   const role = staffRole(s, pubkey);
   const viewerRole = isSolanaAddress(viewer) ? staffRole(s, viewer) : null;
   const sh = await withShill((st) => st, false);
@@ -43,7 +47,7 @@ export async function GET(req: NextRequest) {
     viewerRole,
     banned: Boolean(mem?.banned),
     mutedUntil: mem?.mutedUntil || 0,
-    pfp: profilePhotoUrl(acc?.pfp, pubkey, "pfp", acc?.pfpAt) || displayMedia(acc?.pfp),
+    pfp: profilePhotoUrl(pfpRaw, pubkey, "pfp", acc?.pfpAt) || displayMedia(pfpRaw),
     intro: acc?.intro || "",
     fav: acc?.favMint
       ? {
@@ -68,7 +72,10 @@ export async function POST(req: NextRequest) {
   }
   const b = parsed.data;
   if (b.action === "intro") {
-    const out = await withLaunch((s) => setIntro(bookOf(s), b.pubkey, b.intro || ""), true);
+    if (typeof b.intro !== "string") {
+      return NextResponse.json({ error: "bad_request", message: "Could not save intro." }, { status: 400 });
+    }
+    const out = await withLaunch((s) => setIntro(bookOf(s), b.pubkey, b.intro), true);
     if (!out.ok) return NextResponse.json({ error: out.error, message: "Could not save intro." }, { status: 400 });
     return NextResponse.json({ ok: true, intro: out.account.intro || "" });
   }

@@ -119,6 +119,7 @@ describe("rank engine", () => {
     const intro = setIntro(book, A, "  I launch bags  ");
     assert.equal(intro.ok, true);
     assert.equal(book.accounts[A].intro, "I launch bags");
+    assert.ok((book.accounts[A].introAt || 0) > 0);
     const fav = setFavourite(book, A, { mint: B, symbol: "BAG", name: "Bag" });
     assert.equal(fav.ok, true);
     assert.equal(book.accounts[A].favMint, B);
@@ -164,6 +165,37 @@ describe("rank engine", () => {
     assert.equal(acc.favSymbol, "BAG");
     assert.equal(acc.xp, 5000);
     assert.equal(acc.referralRewardsSol, 1);
+  });
+
+  it("does not let a stub or empty string wipe a saved intro, photo, or favourite", () => {
+    const saved = emptyLaunchBook();
+    saved.accounts[A] = {
+      pubkey: A,
+      referralRewardsSol: 0,
+      intro: "bags only",
+      introAt: 50,
+      pfp: "store:pfp",
+      pfpAt: 50,
+      username: "Cam",
+      usernameAt: 50,
+      favMint: B,
+      favSymbol: "BAG",
+      favAt: 50,
+    };
+    const stub = emptyLaunchBook();
+    stub.accounts[A] = { pubkey: A, referralRewardsSol: 0, intro: "", pfp: "", username: "", xp: 9 };
+    const fromStub = mergeLaunch(stub, saved).accounts[A];
+    assert.equal(fromStub.intro, "bags only");
+    assert.equal(fromStub.pfp, "store:pfp");
+    assert.equal(fromStub.username, "Cam");
+    assert.equal(fromStub.favMint, B);
+    const fromSaved = mergeLaunch(saved, stub).accounts[A];
+    assert.equal(fromSaved.intro, "bags only");
+    assert.equal(fromSaved.pfp, "store:pfp");
+    assert.equal(fromSaved.username, "Cam");
+    const cleared = emptyLaunchBook();
+    cleared.accounts[A] = { pubkey: A, referralRewardsSol: 0, intro: "", introAt: 80 };
+    assert.equal(mergeLaunch(cleared, saved).accounts[A].intro, "");
   });
 
   it("never drops wallets when slimming or merging an empty isolate", () => {

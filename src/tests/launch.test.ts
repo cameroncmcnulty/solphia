@@ -484,7 +484,7 @@ describe("launch create validation", () => {
     assert.equal(data.ok, true);
     book.accounts[A].pfp = `data:image/jpeg;base64,${"a".repeat(100_000)}`;
     const slim = slimAccount(book.accounts[A], A);
-    assert.equal(slim.pfp, "");
+    assert.equal(slim.pfp, "store:pfp");
     const jpeg = `data:image/jpeg;base64,${"a".repeat(70_000)}`;
     assert.equal(profileImageOk(jpeg), jpeg);
     const dataOk = setAccountPfp(emptyLaunchBook(), A, jpeg);
@@ -541,6 +541,14 @@ describe("launch create validation", () => {
     assert.match(accountPage, /solphia-desk/);
     assert.match(accountPage, /startsWith\("data:"\)/);
     assert.match(accountPage, /loadGen/);
+    assert.match(accountPage, /usernameDirty/);
+    assert.match(accountPage, /introDirty/);
+    assert.match(accountPage, /keepPhoto/);
+    assert.equal(accountPage.includes("load().catch"), false);
+    const storeSrc = readFileSync(path.join(process.cwd(), "src/lib/store.ts"), "utf8");
+    assert.match(storeSrc, /mergeAccountMaps\(book\.accounts, extra/);
+    assert.match(accountApi, /getPfp/);
+    assert.match(accountApi, /loginUsername/);
     const face = readFileSync(path.join(process.cwd(), "src/components/CartoonPfp.tsx"), "utf8");
     assert.match(face, /tries >= 1/);
     assert.match(face, /startsWith\("data:"\)/);
@@ -553,6 +561,7 @@ describe("launch create validation", () => {
     assert.match(shillPage, /circleAvatarUrl/);
     assert.match(shillPage, /pfpAt/);
     assert.match(shillPage, /src=\{face \|\| undefined\}/);
+    assert.equal(shillPage.includes("!card.hasPfp"), false);
     const menu = readFileSync(path.join(process.cwd(), "src/components/AccountMenu.tsx"), "utf8");
     assert.match(menu, /circleAvatarUrl/);
     assert.match(menu, /src=\{pfpSrc\}/);

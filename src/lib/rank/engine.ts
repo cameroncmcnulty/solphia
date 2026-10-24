@@ -201,6 +201,7 @@ export function setIntro(book: LaunchBook, pubkey: string, intro: string) {
   const acc = ensureAccount(book, pubkey);
   const text = sanitizeText(intro || "", INTRO_MAX);
   acc.intro = text;
+  acc.introAt = Date.now();
   return { ok: true as const, account: acc };
 }
 
@@ -208,13 +209,16 @@ export function setBanner(book: LaunchBook, pubkey: string, banner: string) {
   if (!isSolanaAddress(pubkey)) return { ok: false as const, error: "bad_wallet" };
   const acc = ensureAccount(book, pubkey);
   const raw = (banner || "").trim();
+  const now = Date.now();
   if (!raw) {
     acc.banner = "";
+    acc.bannerAt = now;
     return { ok: true as const, account: acc };
   }
   const img = profileImageOk(raw);
   if (!img) return { ok: false as const, error: "bad_image" };
   acc.banner = img;
+  acc.bannerAt = now;
   return { ok: true as const, account: acc };
 }
 
@@ -225,11 +229,13 @@ export function setFavourite(
 ) {
   if (!isSolanaAddress(pubkey)) return { ok: false as const, error: "bad_wallet" };
   const acc = ensureAccount(book, pubkey);
+  const now = Date.now();
   if (!fav || !fav.mint) {
     acc.favMint = "";
     acc.favSymbol = "";
     acc.favName = "";
     acc.favImage = "";
+    acc.favAt = now;
     return { ok: true as const, account: acc };
   }
   if (!isSolanaAddress(fav.mint)) return { ok: false as const, error: "bad_mint" };
@@ -237,6 +243,7 @@ export function setFavourite(
   acc.favSymbol = sanitizeText(fav.symbol || "", 16);
   acc.favName = sanitizeText(fav.name || "", 48);
   acc.favImage = (fav.image || "").startsWith("http") || (fav.image || "").startsWith("/") ? (fav.image || "").slice(0, 500) : "";
+  acc.favAt = now;
   return { ok: true as const, account: acc };
 }
 

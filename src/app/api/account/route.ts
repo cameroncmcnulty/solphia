@@ -14,7 +14,7 @@ import {
 import { setUsername } from "@/lib/launch/username";
 import { launchError } from "@/lib/launch/errors";
 import { IMAGE_DATA_MAX, PFP_SENTINEL } from "@/lib/launch/validate";
-import { putPfp, delPfp } from "@/lib/pfpStore";
+import { putPfp, delPfp, getPfp } from "@/lib/pfpStore";
 import { lastPairPrices } from "@/lib/tick";
 import { airdropMultiplier, referralBoostPct } from "@/lib/circle/types";
 import { payReferralXp, profilePhotoUrl, publicRank } from "@/lib/rank/engine";
@@ -44,14 +44,20 @@ function fail(code: string, status = 400) {
   return NextResponse.json({ error: code, message: launchError(code) }, { status });
 }
 
-function pack(book: ReturnType<typeof emptyLaunchBook>, pubkey: string, solUsd: number) {
+function pack(
+  book: ReturnType<typeof emptyLaunchBook>,
+  pubkey: string,
+  solUsd: number,
+  opts?: { storedPfp?: boolean; loginUsername?: string },
+) {
   const acc = book.accounts?.[pubkey] || emptyAccount(pubkey);
   const invited = referredBy(book, pubkey);
   const launched = book.coins.filter((c) => c.creator === pubkey).slice(0, 40);
+  const pfpRaw = acc.pfp || (opts?.storedPfp ? PFP_SENTINEL : "");
   return {
     pubkey,
-    username: acc.username || "",
-    pfp: profilePhotoUrl(acc.pfp, pubkey, "pfp", acc.pfpAt),
+    username: acc.username || opts?.loginUsername || "",
+    pfp: profilePhotoUrl(pfpRaw, pubkey, "pfp", acc.pfpAt),
     referrer: acc.referrer || null,
     referredAt: acc.referredAt || null,
     referralRewardsSol: acc.referralRewardsSol || 0,
@@ -77,10 +83,27 @@ export async function GET(req: NextRequest) {
   const pubkey = req.nextUrl.searchParams.get("pubkey") || "";
   if (!isSolanaAddress(pubkey)) return fail("bad_wallet");
   const solUsd = lastPairPrices().solUsd || 0;
+  const stored = await getPfp(pubkey);
   const s = await withLaunch((st) => st, false);
   const book = bookOf(s);
   const user = s.users.find((u) => u.pubkey === pubkey);
-  return NextResponse.json({ ...pack(book, pubkey, solUsd), tosAcceptedAt: user?.tosAcceptedAt || 0 });
+  const acc = book.accounts?.[pubkey];
+  const needPfp = Boolean(stored && acc && !(acc.pfp || "").trim());
+  const needName = Boolean(user?.username && acc && !(acc.username || "").trim());
+  if (needPfp || needName) {
+    await withLaunch((st) => {
+      const a = bookOf(st).accounts?.[pubkey];
+      if (!a) return;
+      if (needPfp && !(a.pfp || "").trim()) a.pfp = PFP_SENTINEL;
+      if (needName && !(a.username || "").trim() && user?.username) a.username = user.username;
+    }, true);
+  }
+  const fresh = needPfp || needName ? await withLaunch((st) => st, false) : s;
+  const freshUser = fresh.users.find((u) => u.pubkey === pubkey);
+  return NextResponse.json({
+    ...pack(bookOf(fresh), pubkey, solUsd, { storedPfp: Boolean(stored), loginUsername: freshUser?.username }),
+    tosAcceptedAt: freshUser?.tosAcceptedAt || 0,
+  });
 }
 
 export async function POST(req: NextRequest) {
@@ -112,14 +135,19 @@ export async function POST(req: NextRequest) {
     const book = bookOf(s);
     if (b.action === "hello") {
       const r = bindReferrer(book, b.pubkey, sanitizeText(b.referrer || "", 48));
-      if (r.ok) payReferralXp(book, b.pubkey);
+      if (r.ok) {
+        payReferralXp(book, b.pubkey);
+        const user = s.users.find((u) => u.pubkey === b.pubkey);
+        if (user?.username && !r.account.username) r.account.username = user.username;
+      }
       return r;
     }
     if (b.action === "pfp") {
       return setAccountPfp(book, b.pubkey, pfpUrl);
     }
     if (b.action === "username") {
-      const r = setUsername(book, b.pubkey, b.username || "");
+      if (typeof b.username !== "string") return { ok: false as const, error: "bad_request" };
+      const r = setUsername(book, b.pubkey, b.username);
       if (r.ok) {
         let user = s.users.find((u) => u.pubkey === b.pubkey);
         if (!user) {
@@ -202,7 +230,11 @@ export async function POST(req: NextRequest) {
 
   const s = await withLaunch((st) => st, false);
   const user = s.users.find((u) => u.pubkey === b.pubkey);
-  const desk = { ...pack(bookOf(s), b.pubkey, solUsd), tosAcceptedAt: user?.tosAcceptedAt || 0 };
+  const stored = b.action === "pfp" ? Boolean(rawPfp) || Boolean(await getPfp(b.pubkey)) : Boolean(await getPfp(b.pubkey));
+  const desk = {
+    ...pack(bookOf(s), b.pubkey, solUsd, { storedPfp: stored, loginUsername: user?.username }),
+    tosAcceptedAt: user?.tosAcceptedAt || 0,
+  };
   if ("sol" in out) return NextResponse.json({ ...desk, withdrawn: out.sol });
   return NextResponse.json({ ...desk, bound: "bound" in out ? out.bound : undefined });
 }

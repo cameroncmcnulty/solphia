@@ -93,6 +93,9 @@ export default function AccountPage() {
   const [tradeBal, setTradeBal] = useState(0);
   const fileRef = useRef<HTMLInputElement>(null);
   const loadGen = useRef(0);
+  const usernameDirty = useRef(false);
+  const introDirty = useRef(false);
+  const favDirty = useRef(false);
   const [loginAccount, setLoginAccount] = useState<PublicAccount | null>(() => peekAccount());
 
   const load = useCallback(async (gen?: number) => {
@@ -102,12 +105,19 @@ export default function AccountPage() {
     if (mine !== loadGen.current) return;
     setDesk((d) => {
       const incoming = typeof j.pfp === "string" ? j.pfp : "";
-      const keep = Boolean(d?.pfp && d.pfp.startsWith("data:") && !incoming.startsWith("data:"));
-      return keep ? { ...j, pfp: d!.pfp } : j;
+      const keepData = Boolean(d?.pfp && d.pfp.startsWith("data:") && !incoming.startsWith("data:"));
+      const keepPhoto = Boolean(d?.pfp && !incoming);
+      return keepData || keepPhoto ? { ...j, pfp: d!.pfp } : j;
     });
-    if (typeof j.username === "string") setUsername(j.username);
-    if (typeof j.intro === "string") setIntro(j.intro);
-    if (typeof j.favMint === "string") setFavMint(j.favMint);
+    if (typeof j.username === "string" && !usernameDirty.current) {
+      setUsername((cur) => j.username || cur);
+    }
+    if (typeof j.intro === "string" && !introDirty.current) {
+      setIntro((cur) => j.intro || cur);
+    }
+    if (typeof j.favMint === "string" && !favDirty.current) {
+      setFavMint((cur) => j.favMint || cur);
+    }
     const b = await fetch(`/api/launch/boost?pubkey=${encodeURIComponent(owner)}`).then((r) => r.json());
     if (mine !== loadGen.current) return;
     if (b.mine) setBoosts({ live: b.mine.live || [], queued: b.mine.queued || [] });
@@ -129,6 +139,12 @@ export default function AccountPage() {
   }, []);
 
   useEffect(() => {
+    usernameDirty.current = false;
+    introDirty.current = false;
+    favDirty.current = false;
+    setUsername("");
+    setIntro("");
+    setFavMint("");
     const gen = ++loadGen.current;
     load(gen).catch(() => {});
   }, [load]);
@@ -199,6 +215,7 @@ export default function AccountPage() {
         window.dispatchEvent(new Event("solphia-desk"));
       }
       if (body.action === "username") {
+        usernameDirty.current = false;
         setSaved((s) => ({ ...s, username: j.username ? `Saved @${j.username}` : "Username cleared." }));
         window.dispatchEvent(new Event("solphia-desk"));
       }
@@ -302,6 +319,7 @@ export default function AccountPage() {
                   data-field="username"
                   value={username}
                   onChange={(e) => {
+                    usernameDirty.current = true;
                     setUsername(e.target.value);
                     fieldErr.clear("username");
                   }}
@@ -404,15 +422,19 @@ export default function AccountPage() {
                   fieldErr.fail({ intro: j.message || "Could not save intro." });
                   return;
                 }
+                introDirty.current = false;
                 setSaved((s) => ({ ...s, intro: "Intro saved." }));
                 setDesk((d) => (d ? { ...d, intro: j.intro ?? intro } : d));
-                load().catch(() => {});
+                if (typeof j.intro === "string") setIntro(j.intro);
               }}
             >
               <textarea
                 value={intro}
                 maxLength={INTRO_MAX}
-                onChange={(e) => setIntro(e.target.value)}
+                onChange={(e) => {
+                  introDirty.current = true;
+                  setIntro(e.target.value);
+                }}
                 placeholder="Who you are. What you shill. Why they should care."
                 className={`min-h-[88px] w-full rounded-2xl border bg-void px-4 py-3 text-sm text-ghost ${fieldClass(fieldErr.errors.intro)}`}
               />
@@ -449,6 +471,7 @@ export default function AccountPage() {
                   fieldErr.fail({ fav: j.message || "Could not save that CA." });
                   return;
                 }
+                favDirty.current = false;
                 setSaved((s) => ({ ...s, fav: favMint ? "Favourite saved." : "Favourite cleared." }));
                 setDesk((d) =>
                   d
@@ -460,13 +483,14 @@ export default function AccountPage() {
                       }
                     : d,
                 );
-                load().catch(() => {});
+                setFavMint(j.fav?.mint || "");
               }}
             >
               <div className="flex gap-2">
                 <input
                   value={favMint}
                   onChange={(e) => {
+                    favDirty.current = true;
                     setFavMint(e.target.value.trim());
                     fieldErr.clear("fav");
                   }}
