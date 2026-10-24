@@ -72,10 +72,11 @@ export async function POST(req: NextRequest) {
   }
   const b = parsed.data;
   if (b.action === "intro") {
-    if (typeof b.intro !== "string") {
+    const intro = b.intro;
+    if (typeof intro !== "string") {
       return NextResponse.json({ error: "bad_request", message: "Could not save intro." }, { status: 400 });
     }
-    const out = await withLaunch((s) => setIntro(bookOf(s), b.pubkey, b.intro), true);
+    const out = await withLaunch((s) => setIntro(bookOf(s), b.pubkey, intro), true);
     if (!out.ok) return NextResponse.json({ error: out.error, message: "Could not save intro." }, { status: 400 });
     return NextResponse.json({ ok: true, intro: out.account.intro || "" });
   }

@@ -109,15 +109,12 @@ export default function AccountPage() {
       const keepPhoto = Boolean(d?.pfp && !incoming);
       return keepData || keepPhoto ? { ...j, pfp: d!.pfp } : j;
     });
-    if (typeof j.username === "string" && !usernameDirty.current) {
-      setUsername((cur) => j.username || cur);
-    }
-    if (typeof j.intro === "string" && !introDirty.current) {
-      setIntro((cur) => j.intro || cur);
-    }
-    if (typeof j.favMint === "string" && !favDirty.current) {
-      setFavMint((cur) => j.favMint || cur);
-    }
+    const nextName = typeof j.username === "string" ? j.username : "";
+    const nextIntro = typeof j.intro === "string" ? j.intro : "";
+    const nextFav = typeof j.favMint === "string" ? j.favMint : "";
+    if (!usernameDirty.current) setUsername((cur) => nextName || cur);
+    if (!introDirty.current) setIntro((cur) => nextIntro || cur);
+    if (!favDirty.current) setFavMint((cur) => nextFav || cur);
     const b = await fetch(`/api/launch/boost?pubkey=${encodeURIComponent(owner)}`).then((r) => r.json());
     if (mine !== loadGen.current) return;
     if (b.mine) setBoosts({ live: b.mine.live || [], queued: b.mine.queued || [] });

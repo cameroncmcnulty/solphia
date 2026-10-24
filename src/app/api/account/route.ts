@@ -146,8 +146,9 @@ export async function POST(req: NextRequest) {
       return setAccountPfp(book, b.pubkey, pfpUrl);
     }
     if (b.action === "username") {
-      if (typeof b.username !== "string") return { ok: false as const, error: "bad_request" };
-      const r = setUsername(book, b.pubkey, b.username);
+      const handle = b.username;
+      if (typeof handle !== "string") return { ok: false as const, error: "bad_request" };
+      const r = setUsername(book, b.pubkey, handle);
       if (r.ok) {
         let user = s.users.find((u) => u.pubkey === b.pubkey);
         if (!user) {
