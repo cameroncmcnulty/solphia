@@ -166,7 +166,12 @@ describe("spha social links", () => {
     const socials = readFileSync(join(process.cwd(), "src/components/SphaSocials.tsx"), "utf8");
     assert.match(socials, /socialHref\("x"/);
     assert.match(socials, /if \(!links\.length\) return null/);
+    assert.match(socials, /SocialMarks/);
     assert.equal(socials.includes("coming soon"), false);
+    const marks = readFileSync(join(process.cwd(), "src/components/SocialMarks.tsx"), "utf8");
+    assert.match(marks, /fillRule="evenodd"/);
+    assert.match(marks, /M14\.234 10\.162/);
+    assert.match(marks, /M20\.317 4\.3698/);
     const admin = readFileSync(join(process.cwd(), "src/components/admin/sections/Spha.tsx"), "utf8");
     assert.match(admin, /SphaSocials/);
     assert.match(admin, /PREVIEW/);

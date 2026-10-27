@@ -1,33 +1,10 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { DiscordMark, TelegramMark, XMark } from "@/components/SocialMarks";
 import { socialHref } from "@/lib/launch/links";
 
 const TEAL = "#14F195";
-
-function XLogo() {
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5 sm:h-6 sm:w-6" aria-hidden>
-      <path d="M18.9 2.4h3.2l-7 8.1 8.3 11.1h-6.5l-5.1-6.7-5.8 6.7H2.8l7.5-8.7L2.2 2.4h6.7l4.6 6.1 5.4-6.1zm-1.1 17.3h1.8L6.4 4.2H4.5l13.3 15.5z" />
-    </svg>
-  );
-}
-
-function Telegram() {
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5 sm:h-6 sm:w-6" aria-hidden>
-      <path d="M21.7 4.3 18.4 20c-.2 1-1.2 1.4-2 .9l-5.5-4.2-2.7 2.6c-.3.3-.7.4-1.1.2l.4-6.1 10.9-9.8c.5-.4 1 .2.7.7L8.6 13.4 4 11.9c-1-.3-1-1.3.1-1.7l16.4-6.3c.9-.3 1.6.5 1.2 1.4z" />
-    </svg>
-  );
-}
-
-function Discord() {
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5 sm:h-6 sm:w-6" aria-hidden>
-      <path d="M19.3 4.8A17 17 0 0 0 14.9 3.6l-.5 1c-1.5-.2-3-.2-4.5 0l-.5-1A17 17 0 0 0 4.7 4.8C2.3 8.4 1.7 11.9 2 15.4a17.4 17.4 0 0 0 5.3 2.7l.8-1.3a11 11 0 0 1-1.6-.8l.4-.3c3.1 1.5 6.5 1.5 9.6 0l.4.3c-.5.3-1 .6-1.6.8l.8 1.3a17.4 17.4 0 0 0 5.3-2.7c.4-4 .1-7.4-1.1-10.6zM9.2 13.8c-.8 0-1.5-.8-1.5-1.7s.7-1.7 1.5-1.7 1.5.8 1.5 1.7-.6 1.7-1.5 1.7zm5.6 0c-.8 0-1.5-.8-1.5-1.7s.7-1.7 1.5-1.7 1.5.8 1.5 1.7-.7 1.7-1.5 1.7z" />
-    </svg>
-  );
-}
 
 function TealIcon({
   href,
@@ -45,9 +22,17 @@ function TealIcon({
       rel="noreferrer"
       aria-label={label}
       title={label}
-      className="inline-flex h-12 w-12 items-center justify-center rounded-full border border-[#14F195]/50 bg-[#14F195]/12 text-[#14F195] shadow-[0_0_18px_rgba(20,241,149,0.18)] transition hover:bg-[#14F195] hover:text-[#04000a] sm:h-14 sm:w-14"
+      className="group relative inline-flex h-12 w-12 items-center justify-center rounded-full text-[#14F195] transition duration-200 hover:text-[#04000a] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#14F195] sm:h-14 sm:w-14"
     >
-      {children}
+      <span
+        aria-hidden
+        className="absolute inset-0 rounded-full border border-[#14F195]/65 bg-[linear-gradient(180deg,rgba(20,241,149,0.22),rgba(20,241,149,0.08))] shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_0_22px_rgba(20,241,149,0.22)] transition duration-200 group-hover:border-[#14F195] group-hover:bg-[#14F195] group-hover:shadow-[0_0_28px_rgba(20,241,149,0.55)]"
+      />
+      <span
+        aria-hidden
+        className="pointer-events-none absolute inset-px rounded-full bg-[radial-gradient(circle_at_32%_22%,rgba(255,255,255,0.32),transparent_46%)]"
+      />
+      <span className="relative flex items-center justify-center">{children}</span>
     </a>
   );
 }
@@ -62,9 +47,9 @@ export function SphaSocials({
   discord?: string;
 }) {
   const links = [
-    { href: socialHref("x", x), label: "X", node: <XLogo /> },
-    { href: socialHref("telegram", telegram), label: "Telegram", node: <Telegram /> },
-    { href: socialHref("discord", discord), label: "Discord", node: <Discord /> },
+    { href: socialHref("x", x), label: "X", node: <XMark className="h-[17px] w-[17px] sm:h-[19px] sm:w-[19px]" /> },
+    { href: socialHref("telegram", telegram), label: "Telegram", node: <TelegramMark className="h-[22px] w-[22px] sm:h-[26px] sm:w-[26px]" /> },
+    { href: socialHref("discord", discord), label: "Discord", node: <DiscordMark className="h-[22px] w-[22px] sm:h-[26px] sm:w-[26px]" /> },
   ].filter((l) => l.href);
   if (!links.length) return null;
   return (
