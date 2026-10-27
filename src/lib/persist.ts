@@ -18,6 +18,8 @@ export const KEYS = {
   account: (owner: string) => `solphia:account:${owner}`,
   /** JPEG data URL for one wallet. Lives off the fat launch-accounts blob. */
   pfp: (pk: string) => `solphia:pfp:${pk}`,
+  /** $SPHA social links. Dual-written so a stale ops save cannot wipe them. */
+  sphaSocials: "solphia:spha-socials",
   circle: "solphia:circle",
   shill: "solphia:shill",
   mail: "solphia:mail",

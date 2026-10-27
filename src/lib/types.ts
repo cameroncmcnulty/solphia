@@ -558,6 +558,8 @@ export interface AppState {
   /** Dedicated $SPHA DBC config. Never overwrite the shared pad config with this. */
   sphaDbcConfig?: string;
   sphaSocials?: { x?: string; telegram?: string; discord?: string; website?: string };
+  /** Last admin save of $SPHA socials. Empty remote socials cannot clobber filled ones without a newer stamp. */
+  sphaSocialsAt?: number;
   /** Last admin-ops write. Serverless instances overlay KEYS.ops when this is newer. */
   opsUpdatedAt?: number;
   /** Publish the live founder book on the public site instead of paper-only copy. */

@@ -51,26 +51,98 @@ function touchMutate(state?: AppState) {
   if (state) state.opsUpdatedAt = lastMutateAt;
 }
 
+export type SphaSocialsBlob = {
+  x: string;
+  telegram: string;
+  discord: string;
+  website: string;
+  at: number;
+};
+
+function strField(v: unknown): string {
+  return typeof v === "string" ? v : "";
+}
+
+/** Read $SPHA socials from an ops blob or the dedicated shard. Empty unstamped rows cannot clobber filled ones. */
+export function parseSphaSocials(raw: unknown): SphaSocialsBlob | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  const nested =
+    o.sphaSocials && typeof o.sphaSocials === "object"
+      ? (o.sphaSocials as Record<string, unknown>)
+      : "x" in o || "telegram" in o || "discord" in o || "website" in o
+        ? o
+        : null;
+  if (!nested) return null;
+  const x = strField(nested.x);
+  const telegram = strField(nested.telegram);
+  const discord = strField(nested.discord);
+  const website = strField(nested.website);
+  const stamped = Number(o.at ?? o.sphaSocialsAt) || 0;
+  const filled = Boolean(x || telegram || discord || website);
+  const at = stamped > 0 ? stamped : filled ? Number(o.opsUpdatedAt) || 1 : 0;
+  return { x, telegram, discord, website, at };
+}
+
+/** Newer stamp wins, including an explicit empty clear. Equal/missing stamps keep any filled field. */
+export function mergeSphaSocials(local: SphaSocialsBlob, remote: SphaSocialsBlob): SphaSocialsBlob {
+  const localAt = Number(local.at) || 0;
+  const remoteAt = Number(remote.at) || 0;
+  const L: SphaSocialsBlob = {
+    x: local.x || "",
+    telegram: local.telegram || "",
+    discord: local.discord || "",
+    website: local.website || "",
+    at: localAt,
+  };
+  const R: SphaSocialsBlob = {
+    x: remote.x || "",
+    telegram: remote.telegram || "",
+    discord: remote.discord || "",
+    website: remote.website || "",
+    at: remoteAt,
+  };
+  if (remoteAt > localAt) return R;
+  if (localAt > remoteAt) return L;
+  return {
+    x: L.x || R.x,
+    telegram: L.telegram || R.telegram,
+    discord: L.discord || R.discord,
+    website: L.website || R.website,
+    at: Math.max(localAt, remoteAt),
+  };
+}
+
+function putSphaSocials(state: AppState, blob: SphaSocialsBlob): boolean {
+  const cur = state.sphaSocials || { x: "", telegram: "", discord: "", website: "" };
+  const valuesSame =
+    (cur.x || "") === blob.x &&
+    (cur.telegram || "") === blob.telegram &&
+    (cur.discord || "") === blob.discord &&
+    (cur.website || "") === blob.website;
+  const curAt = Number(state.sphaSocialsAt) || 0;
+  if (valuesSame) {
+    if (blob.at > curAt) state.sphaSocialsAt = blob.at;
+    return false;
+  }
+  state.sphaSocials = { x: blob.x, telegram: blob.telegram, discord: blob.discord, website: blob.website };
+  state.sphaSocialsAt = blob.at;
+  return true;
+}
+
+function overlaySphaSocialsFrom(local: AppState, remote: unknown): boolean {
+  const remoteBlob = parseSphaSocials(remote);
+  if (!remoteBlob) return false;
+  const localBlob = parseSphaSocials(local) || { x: "", telegram: "", discord: "", website: "", at: 0 };
+  return putSphaSocials(local, mergeSphaSocials(localBlob, remoteBlob));
+}
+
 /** Copy admin-editable public fields from durable ops onto a live instance. */
 export function applyOpsConfig(local: AppState, remote: Partial<AppState>): boolean {
+  let dirty = overlaySphaSocialsFrom(local, remote);
   const remoteAt = Number(remote.opsUpdatedAt) || 0;
   const localAt = Number(local.opsUpdatedAt) || 0;
-  if (remoteAt && localAt && remoteAt < localAt) return false;
-  let dirty = false;
-  const socials = remote.sphaSocials;
-  if (socials && typeof socials === "object") {
-    const next = {
-      x: socials.x || "",
-      telegram: socials.telegram || "",
-      discord: socials.discord || "",
-      website: socials.website || "",
-    };
-    const cur = local.sphaSocials || { x: "", telegram: "", discord: "", website: "" };
-    if (next.x !== (cur.x || "") || next.telegram !== (cur.telegram || "") || next.discord !== (cur.discord || "") || next.website !== (cur.website || "")) {
-      local.sphaSocials = next;
-      dirty = true;
-    }
-  }
+  if (remoteAt && localAt && remoteAt < localAt) return dirty;
   const copyStr = (
     key: "sphaMint" | "treasuryWallet" | "ownerWallet" | "devWallet" | "foundationWallet" | "airdropWallet" | "lpWallet" | "adminOtpEmail" | "sphaDbcConfig",
   ) => {
@@ -130,6 +202,7 @@ async function maybeOverlayOps(state: AppState) {
   try {
     const raw = await kvGetJson(KEYS.ops);
     if (raw && typeof raw === "object") applyOpsConfig(state, raw as AppState);
+    await overlaySphaSocials(state);
   } catch {
     /* keep mem */
   }
@@ -190,6 +263,7 @@ export function emptyState(): AppState {
     shill: emptyShill(),
     mail: emptyMail(),
     sphaSocials: { x: "", telegram: "", discord: "", website: "" },
+    sphaSocialsAt: 0,
     opsUpdatedAt: 0,
     publishLiveWallet: false,
     buybacks: [],
@@ -269,6 +343,7 @@ function hydrateFromRaw(raw: AppState): AppState {
       discord: raw.sphaSocials?.discord || "",
       website: raw.sphaSocials?.website || "",
     },
+    sphaSocialsAt: Number(raw.sphaSocialsAt) || 0,
     opsUpdatedAt: Number(raw.opsUpdatedAt) || 0,
     publishLiveWallet: Boolean(raw.publishLiveWallet),
     buybacks: Array.isArray(raw.buybacks) ? raw.buybacks.slice(-40) : [],
@@ -416,6 +491,37 @@ async function persistLaunch(state: AppState) {
   // Accounts first so a fat tape write cannot be the only copy of rank / usernames.
   await kvSetJson(KEYS.launchAccounts, slim.accounts || {});
   await kvSetJson(KEYS.launch, slim);
+}
+
+async function overlaySphaSocials(state: AppState) {
+  if (!durableConfigured()) return;
+  try {
+    const raw = await kvGetJson(KEYS.sphaSocials);
+    overlaySphaSocialsFrom(state, raw);
+  } catch {
+    /* keep mem */
+  }
+}
+
+async function persistSphaSocials(state: AppState) {
+  if (!durableConfigured()) return;
+  const local = parseSphaSocials(state) || { x: "", telegram: "", discord: "", website: "", at: 0 };
+  let remote: SphaSocialsBlob = { x: "", telegram: "", discord: "", website: "", at: 0 };
+  try {
+    const parsed = parseSphaSocials(await kvGetJson(KEYS.sphaSocials));
+    if (parsed) remote = parsed;
+  } catch {
+    /* treat as empty remote */
+  }
+  const merged = mergeSphaSocials(local, remote);
+  putSphaSocials(state, merged);
+  if (!merged.at && !merged.x && !merged.telegram && !merged.discord && !merged.website) return;
+  await kvSetJson(KEYS.sphaSocials, merged);
+}
+
+async function persistOpsBlob(state: AppState) {
+  await persistSphaSocials(state);
+  await kvSetJson(KEYS.ops, opsView(state));
 }
 
 async function overlayCircle(state: AppState) {
@@ -584,7 +690,7 @@ async function persistShards(next: AppState, owners: string[]) {
   await persistCircle(next);
   await persistShill(next);
   await persistMail(next);
-  await kvSetJson(KEYS.ops, opsView(next));
+  await persistOpsBlob(next);
   const uniq = [...new Set(owners.filter(Boolean))];
   await Promise.all(
     uniq.map(async (owner) => {
@@ -630,7 +736,7 @@ export async function saveOps(next: AppState): Promise<void> {
         await persistCircle(next);
         await persistShill(next);
         await persistMail(next);
-        await kvSetJson(KEYS.ops, opsView(next));
+        await persistOpsBlob(next);
       } catch {
         /* ignore */
       }
@@ -697,7 +803,7 @@ export async function mutateTrader<T>(owner: string, fn: (t: TraderAccount, stat
   const result = await fn(t, state);
   t.updatedAt = Date.now();
   await saveTrader(t);
-  if (durableConfigured()) await kvSetJson(KEYS.ops, opsView(state));
+  if (durableConfigured()) await persistOpsBlob(state);
   else writeFs(state);
   return result;
 }
@@ -762,6 +868,7 @@ async function hydrate(): Promise<AppState> {
         await overlayMail(mem);
         await overlayAuthOtps(mem);
         await overlayLoginAccounts(mem, true);
+        await overlaySphaSocials(mem);
         knownTraderOwners = await kvSmembers(KEYS.traders);
         memMtime = Date.now();
         hydrated = true;
@@ -779,6 +886,7 @@ async function hydrate(): Promise<AppState> {
         await overlayMail(mem);
         await overlayAuthOtps(mem);
         await overlayLoginAccounts(mem, true);
+        await overlaySphaSocials(mem);
         await persistShards(mem, owners);
         memMtime = Date.now();
         hydrated = true;
@@ -799,6 +907,7 @@ async function hydrate(): Promise<AppState> {
       await overlayMail(local);
       await overlayAuthOtps(local);
       await overlayLoginAccounts(local, true);
+      await overlaySphaSocials(local);
     } catch {
       /* disk still usable */
     }

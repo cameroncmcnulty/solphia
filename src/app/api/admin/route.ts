@@ -182,6 +182,7 @@ export async function POST(req: NextRequest) {
             ? socialHref("website", body.sphaSocials.website)
             : s.sphaSocials?.website || "",
       };
+      s.sphaSocialsAt = Date.now();
       pushBounded(s.audit, audit("admin", "spha_socials", "updated", ip), 400);
     });
     return NextResponse.json({

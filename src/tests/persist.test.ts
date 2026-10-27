@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 import { DEFAULT_FUND, DEFAULT_OWNER, DEFAULT_TREASURY, LIVE_TRADING, TREASURY } from "../lib/config";
 import { durableKind } from "../lib/persist";
 import { treasuryAddress } from "../lib/treasury";
-import { applyOpsConfig, emptyState } from "../lib/store";
+import { applyOpsConfig, emptyState, mergeSphaSocials } from "../lib/store";
 import { socialHref } from "../lib/launch/links";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -97,6 +97,56 @@ describe("ops overlay", () => {
     });
     assert.equal(dirty, false);
     assert.equal(local.sphaSocials?.x, "https://x.com/fresh");
+  });
+
+  it("does not let empty remote socials wipe filled local when ops is newer", () => {
+    const local = emptyState();
+    local.opsUpdatedAt = 5;
+    local.sphaSocials = { x: "https://x.com/solphia", telegram: "https://t.me/solphia", discord: "", website: "" };
+    const dirty = applyOpsConfig(local, {
+      opsUpdatedAt: 9,
+      sphaSocials: { x: "", telegram: "", discord: "", website: "" },
+    });
+    assert.equal(local.sphaSocials?.x, "https://x.com/solphia");
+    assert.equal(local.sphaSocials?.telegram, "https://t.me/solphia");
+    assert.equal(dirty, false);
+  });
+
+  it("lets a newer stamped empty save clear socials", () => {
+    const local = emptyState();
+    local.opsUpdatedAt = 5;
+    local.sphaSocialsAt = 5;
+    local.sphaSocials = { x: "https://x.com/solphia", telegram: "https://t.me/solphia", discord: "", website: "" };
+    const dirty = applyOpsConfig(local, {
+      opsUpdatedAt: 9,
+      sphaSocialsAt: 10,
+      sphaSocials: { x: "", telegram: "", discord: "", website: "" },
+    });
+    assert.equal(dirty, true);
+    assert.equal(local.sphaSocials?.x, "");
+    assert.equal(local.sphaSocials?.telegram, "");
+    assert.equal(local.sphaSocialsAt, 10);
+  });
+
+  it("merges filled fields when social stamps are equal", () => {
+    const merged = mergeSphaSocials(
+      { x: "https://x.com/solphia", telegram: "", discord: "", website: "", at: 3 },
+      { x: "", telegram: "https://t.me/solphia", discord: "", website: "", at: 3 },
+    );
+    assert.equal(merged.x, "https://x.com/solphia");
+    assert.equal(merged.telegram, "https://t.me/solphia");
+    assert.equal(merged.at, 3);
+  });
+
+  it("dual-writes $SPHA socials onto their own durable key", () => {
+    const persist = readFileSync(new URL("../lib/persist.ts", import.meta.url), "utf8");
+    assert.match(persist, /sphaSocials: "solphia:spha-socials"/);
+    const store = readFileSync(new URL("../lib/store.ts", import.meta.url), "utf8");
+    assert.match(store, /persistSphaSocials/);
+    assert.match(store, /overlaySphaSocials/);
+    assert.match(store, /persistOpsBlob/);
+    const admin = readFileSync(new URL("../app/api/admin/route.ts", import.meta.url), "utf8");
+    assert.match(admin, /sphaSocialsAt = Date\.now\(\)/);
   });
 });
 
