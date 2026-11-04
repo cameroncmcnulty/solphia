@@ -40,6 +40,7 @@ import {
 } from "@/lib/launch/program";
 import { mintPda, nonceFromB64 } from "@/lib/launch/pda";
 import { dbcEnabled, liveDbcConfig } from "@/lib/launch/dbcIds";
+import { sphaLaunchMints } from "@/lib/token/omics";
 import { connection, rpcBusyMessage, waitForSignature } from "@/lib/solana/connection";
 import { PublicKey } from "@solana/web3.js";
 
@@ -429,6 +430,13 @@ async function getLaunch(req: NextRequest) {
   const s = await withLaunch((st) => st, false);
   const book = bookOf(s);
   if (!dbcEnabled()) await hydratePadCoins(book.coins);
+  if (sync && dbcEnabled()) {
+    try {
+      (await dbcApi()).clearDbcFeeCache();
+    } catch {
+      /* refresh still reads chain */
+    }
+  }
   const solUsd = lastPairPrices().solUsd || 0;
   if (id) {
     const coin = book.coins.find((c) => c.id === id || c.mint === id);
@@ -504,12 +512,10 @@ async function getLaunch(req: NextRequest) {
     const dbc = await dbcApi();
     const cfg = liveDbcConfig(fresh.dbcConfig);
     try {
-      const tot = cfg ? await dbc.chainPartnerTotals(cfg) : { unclaimedSol: 0, totalSol: 0, byMint: {} };
-      if (sync) {
-        for (const row of rows) {
-          const f = row.mint ? tot.byMint[row.mint] : undefined;
-          if (f) Object.assign(row, f);
-        }
+      const tot = await dbc.partnerTotalsWithMints(cfg || "", sphaLaunchMints(s));
+      for (const row of rows) {
+        const f = row.mint ? tot.byMint[row.mint] : undefined;
+        if (f) Object.assign(row, f);
       }
       protocol = { treasury: treas, owner: ownerPk, partnerUnclaimedSol: tot.unclaimedSol, partnerFeesSol: tot.totalSol };
     } catch {
@@ -776,7 +782,9 @@ async function postLaunch(req: NextRequest) {
       book.coins.find((c) => isSolanaAddress(c.mint))?.mint ||
       "";
     if (!dbcEnabled()) return fail("not_found", 404);
-    const mints = [mint, ...(b.mints || []), ...book.coins.map((c) => c.mint || "")].filter((m) => isSolanaAddress(m));
+    const mints = [mint, ...(b.mints || []), ...book.coins.map((c) => c.mint || ""), ...sphaLaunchMints(snap)].filter(
+      (m) => isSolanaAddress(m),
+    );
     const { buildProtocolPartnerClaim } = await import("@/lib/launch/partnerSweep");
     const built = await buildProtocolPartnerClaim({ pubkey: b.pubkey, mints });
     if (!built.ok) return fail(built.error);

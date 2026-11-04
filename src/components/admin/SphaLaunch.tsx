@@ -19,7 +19,23 @@ type LaunchRow = {
   launchedAt: number;
   name: string;
   symbol: string;
+  config?: string;
+  bals?: { owner: number; foundation: number; treasury: number };
+  fees?: { creatorFeesSol: number; creatorUnclaimedSol: number; partnerFeesSol: number; partnerUnclaimedSol: number };
 };
+
+function fmtTok(n: number) {
+  if (!(n > 0)) return "0";
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(2)}K`;
+  return n.toFixed(n >= 100 ? 0 : 2);
+}
+
+function fmtFee(n: number) {
+  if (!(n > 0)) return "0";
+  if (n >= 1) return n.toFixed(4).replace(/0+$/, "").replace(/\.$/, "");
+  return n.toFixed(6).replace(/0+$/, "").replace(/\.$/, "");
+}
 
 type Prep = {
   network: SphaNetwork;
@@ -58,6 +74,11 @@ function LaunchCaCard({
       <div className="mt-3">
         <CopyCa ca={row.mint} full />
       </div>
+      {row.bals || row.fees ? (
+        <p className="mt-2 font-mono text-[11px] text-mute">
+          Owner {fmtTok(row.bals?.owner || 0)} · partner {fmtFee(row.fees?.partnerUnclaimedSol || 0)} SOL unclaimed
+        </p>
+      ) : null}
       <div className="mt-3 flex flex-wrap gap-2 font-mono text-[11px]">
         <a
           href={`https://solscan.io/token/${row.mint}`}
@@ -84,7 +105,7 @@ function LaunchCaCard({
 }
 
 export function SphaLaunch() {
-  const { data, patch, busy } = useAdmin();
+  const { data, patch, busy, reloadAt } = useAdmin();
   const [prep, setPrep] = useState<Prep | null>(null);
   const [mode, setMode] = useState<"test" | "official">("test");
   const [name, setName] = useState("Solphia Test");
@@ -95,6 +116,7 @@ export function SphaLaunch() {
   const [run, setRun] = useState(false);
   const [splitRun, setSplitRun] = useState(false);
   const [tradeRun, setTradeRun] = useState(false);
+  const [claimRun, setClaimRun] = useState(false);
   const [tradeMint, setTradeMint] = useState("");
   const [tradeSol, setTradeSol] = useState(String(FIRST_BUY_SOL));
   const [log, setLog] = useState("");
@@ -108,7 +130,7 @@ export function SphaLaunch() {
 
   useEffect(() => {
     loadPrep().catch(() => {});
-  }, [data?.ownerWallet, data?.foundationWallet, data?.treasury, data?.sphaNetwork, data?.sphaMint]);
+  }, [data?.ownerWallet, data?.foundationWallet, data?.treasury, data?.sphaNetwork, data?.sphaMint, reloadAt]);
 
   useEffect(() => {
     if (mode === "official") {
@@ -410,10 +432,62 @@ export function SphaLaunch() {
           : `Sold${j.solOut ? ` ${j.solOut.toFixed(4)} SOL` : ""} ${sig.slice(0, 8)}…${fee}`,
       );
       setTradeSol("");
+      void fetch("/api/launch", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "sweep_partner", pubkey: payer, mint: ca }),
+      }).catch(() => {});
+      loadPrep().catch(() => {});
     } catch (e) {
       setErr(e instanceof Error ? e.message : "swap failed");
     } finally {
       setTradeRun(false);
+    }
+  }
+
+  async function deskClaim(kind: "creator" | "partner") {
+    setErr("");
+    const ca = selected?.mint || tradeMint;
+    const role = kind === "creator" ? "owner" : "treasury";
+    const payer =
+      projectWallet(role)?.pubkey || (kind === "creator" ? data?.ownerWallet : data?.treasury) || "";
+    if (!ca || !payer) {
+      setErr(kind === "creator" ? "Owner project wallet signs creator claims." : "Treasury project wallet signs partner claims.");
+      return;
+    }
+    if (!(await canSignProject(role))) {
+      setErr(kind === "creator" ? "Owner project wallet cannot sign yet." : "Treasury project wallet cannot sign yet.");
+      return;
+    }
+    setClaimRun(true);
+    try {
+      setLog(kind === "creator" ? `Claiming creator fees for ${ca}…` : `Claiming partner fees for ${ca}…`);
+      const r = await fetch("/api/admin/spha", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "prepareClaim", kind, payer, mint: ca }),
+      });
+      const j = (await r.json().catch(() => ({}))) as { tx?: string; message?: string; error?: string };
+      if (!r.ok || !j.tx) throw new Error(j.message || j.error || "claim build failed");
+      const sig = await signAndSendProjectTx(role, j.tx);
+      if (kind === "partner") {
+        await fetch("/api/admin/claim", {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ wallet: "treasury", signature: sig }),
+        }).catch(() => {});
+        void fetch("/api/launch", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ action: "sweep_partner", pubkey: payer, mint: ca }),
+        }).catch(() => {});
+      }
+      setLog(`${kind === "creator" ? "Creator" : "Partner"} claim ${sig.slice(0, 8)}… Fees leave the pool on claim.`);
+      loadPrep().catch(() => {});
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "claim failed");
+    } finally {
+      setClaimRun(false);
     }
   }
 
@@ -488,11 +562,52 @@ export function SphaLaunch() {
 
         {selected ? (
           <div className="mt-4 rounded-2xl border border-acid/25 bg-acid/[0.04] p-4">
-            <div className="font-mono text-[10px] tracking-[0.22em] text-acid">TRADE FROM THIS DESK</div>
-            <p className="mt-1 text-sm text-mute">
-              Buy or sell ${selected.symbol} with the owner project wallet. Curve swap fee splits creator / owner /
-              treasury. Amount clears after a fill.
-            </p>
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <div className="font-mono text-[10px] tracking-[0.22em] text-acid">MANAGE ${selected.symbol}</div>
+                <p className="mt-1 text-sm text-mute">
+                  Buy or sell with the owner project wallet. Swap fees sit in the pool until you claim. Creator half
+                  pays the launch wallet. Partner half pays treasury, then owner on harvest.
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={run || splitRun || tradeRun || claimRun}
+                onClick={() => {
+                  setLog("Refreshing launched tokens…");
+                  loadPrep()
+                    .then(() => setLog("Live bals and unclaimed fees loaded."))
+                    .catch(() => setErr("Refresh failed."));
+                }}
+                className="btn-ghost rounded-full px-4 py-1.5 text-sm disabled:opacity-40"
+              >
+                Refresh
+              </button>
+            </div>
+            <div className="mt-3 grid gap-2 sm:grid-cols-3">
+              <div className="rounded-2xl border border-violet/20 bg-void/40 px-3 py-2">
+                <div className="font-mono text-[10px] text-mute">OWNER BAG</div>
+                <div className="font-mono text-sm text-ghost">{fmtTok(selected.bals?.owner || 0)}</div>
+              </div>
+              <div className="rounded-2xl border border-violet/20 bg-void/40 px-3 py-2">
+                <div className="font-mono text-[10px] text-mute">FOUNDATION</div>
+                <div className="font-mono text-sm text-ghost">{fmtTok(selected.bals?.foundation || 0)}</div>
+              </div>
+              <div className="rounded-2xl border border-violet/20 bg-void/40 px-3 py-2">
+                <div className="font-mono text-[10px] text-mute">TREASURY BAG</div>
+                <div className="font-mono text-sm text-ghost">{fmtTok(selected.bals?.treasury || 0)}</div>
+              </div>
+            </div>
+            <div className="mt-2 grid gap-2 sm:grid-cols-2">
+              <div className="rounded-2xl border border-violet/20 bg-void/40 px-3 py-2">
+                <div className="font-mono text-[10px] text-mute">CREATOR UNCLAIMED</div>
+                <div className="font-mono text-sm text-acid">{fmtFee(selected.fees?.creatorUnclaimedSol || 0)} SOL</div>
+              </div>
+              <div className="rounded-2xl border border-violet/20 bg-void/40 px-3 py-2">
+                <div className="font-mono text-[10px] text-mute">PARTNER UNCLAIMED</div>
+                <div className="font-mono text-sm text-acid">{fmtFee(selected.fees?.partnerUnclaimedSol || 0)} SOL</div>
+              </div>
+            </div>
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <input
                 value={tradeSol}
@@ -503,7 +618,7 @@ export function SphaLaunch() {
               />
               <button
                 type="button"
-                disabled={run || splitRun || tradeRun}
+                disabled={run || splitRun || tradeRun || claimRun}
                 onClick={() => void deskTrade("buy")}
                 className="btn-acid rounded-full px-5 py-2 text-sm disabled:opacity-40"
               >
@@ -511,11 +626,27 @@ export function SphaLaunch() {
               </button>
               <button
                 type="button"
-                disabled={run || splitRun || tradeRun}
+                disabled={run || splitRun || tradeRun || claimRun}
                 onClick={() => void deskTrade("sell")}
                 className="btn-ghost rounded-full px-5 py-2 text-sm disabled:opacity-40"
               >
                 Sell bag
+              </button>
+              <button
+                type="button"
+                disabled={run || splitRun || tradeRun || claimRun || !((selected.fees?.creatorUnclaimedSol || 0) > 1e-9)}
+                onClick={() => void deskClaim("creator")}
+                className="btn-ghost rounded-full px-5 py-2 text-sm disabled:opacity-40"
+              >
+                {claimRun ? "Claiming…" : "Claim creator"}
+              </button>
+              <button
+                type="button"
+                disabled={run || splitRun || tradeRun || claimRun || !((selected.fees?.partnerUnclaimedSol || 0) > 1e-9)}
+                onClick={() => void deskClaim("partner")}
+                className="btn-ghost rounded-full px-5 py-2 text-sm disabled:opacity-40"
+              >
+                Claim partner
               </button>
             </div>
           </div>
@@ -634,7 +765,7 @@ export function SphaLaunch() {
 
         <button
           type="button"
-          disabled={run || splitRun || tradeRun || Boolean(prep?.missing?.length)}
+          disabled={run || splitRun || tradeRun || claimRun || Boolean(prep?.missing?.length)}
           onClick={() => void launch()}
           className="btn-acid mt-4 rounded-full px-6 py-2 text-sm disabled:opacity-40"
         >
@@ -643,7 +774,7 @@ export function SphaLaunch() {
         {prep?.launch?.mint || prep?.testLaunch?.mint || tests.length ? (
           <button
             type="button"
-            disabled={run || splitRun || tradeRun}
+            disabled={run || splitRun || tradeRun || claimRun}
             onClick={() => void splitNow()}
             className="btn-ghost mt-2 rounded-full px-6 py-2 text-sm disabled:opacity-40"
           >

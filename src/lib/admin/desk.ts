@@ -13,6 +13,7 @@ import { lastPairDesk, lastPairPrices, publicBook } from "../tick";
 import { treasuryAddress } from "../treasury";
 import { treasuryHot } from "../treasury/withdraw";
 import { sphaMintOf } from "../token/solphia";
+import { mergeSphaTestLaunches } from "../token/omics";
 import { activeMembers, ensureCircle, spotsLeft } from "../circle/engine";
 import { seatSol } from "../seat";
 import { promoDataUrl, promoViewToken } from "./promoFile";
@@ -136,6 +137,7 @@ export function buildAdminDesk(opts?: { light?: boolean; profits?: ProfitDesk; o
     sphaNetwork: s.sphaNetwork === "mainnet-beta" ? "mainnet-beta" : "devnet",
     sphaLaunch: s.sphaLaunch || null,
     sphaTestLaunch: s.sphaTestLaunch || null,
+    sphaTestLaunches: mergeSphaTestLaunches(s.sphaTestLaunches, [], s.sphaTestLaunch || null),
     sphaDbcConfig: s.sphaDbcConfig || "",
     adminOtpEmail: adminOtpEmailOf(s),
     mailReady: mailConfigured(),

@@ -105,6 +105,8 @@ describe("open market swap fees", () => {
     assert.equal(widget.includes('defaultSymbol || "TOKEN"'), false);
     assert.equal(widget.includes("symbol: liveLabel(next.symbol"), false);
     assert.match(widget, /isPlaceholderLabel/);
+    assert.match(widget, /\/api\/sol\/holdings/);
+    assert.match(widget, /bag\?\.launched/);
     const launch = readFileSync(path.join(process.cwd(), "src/app/launch/page.tsx"), "utf8");
     assert.equal(launch.includes("function MarketSwap"), false);
     assert.match(launch, /<SwapWidget/);

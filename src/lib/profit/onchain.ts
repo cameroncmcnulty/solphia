@@ -1,6 +1,7 @@
 import { dbcEnabled, liveDbcConfig } from "../launch/dbcIds";
-import { chainPartnerTotals } from "../launch/dbc";
+import { partnerTotalsWithMints } from "../launch/dbc";
 import { jupReferralBalances } from "../jup/referral";
+import { sphaLaunchMints } from "../token/omics";
 import type { AppState } from "../types";
 import type { ProfitDesk } from "./catalog";
 
@@ -10,10 +11,8 @@ export async function enrichProfitDesk(desk: ProfitDesk, state: AppState): Promi
   try {
     if (dbcEnabled()) {
       const cfg = liveDbcConfig(state.launch?.dbcConfig);
-      if (cfg) {
-        const tot = await chainPartnerTotals(cfg);
-        dbcPartnerSol = Number(tot.unclaimedSol) || 0;
-      }
+      const tot = await partnerTotalsWithMints(cfg || "", sphaLaunchMints(state));
+      dbcPartnerSol = Number(tot.unclaimedSol) || 0;
     }
   } catch {
     /* desk still loads */

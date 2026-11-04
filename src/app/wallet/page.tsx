@@ -110,7 +110,7 @@ export default function WalletPage() {
   const rows = useMemo(() => {
     const needle = q.trim().toLowerCase();
     const vis = holdings.filter((h) => {
-      if (hideDust && !h.sol && (h.usd == null ? h.amount < 0.000001 : h.usd < 0.01)) return false;
+      if (hideDust && !h.sol && !h.born && (h.usd == null ? h.amount < 0.000001 : h.usd < 0.01)) return false;
       if (!needle) return true;
       return (
         h.symbol.toLowerCase().includes(needle) ||

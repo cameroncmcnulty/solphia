@@ -9,6 +9,10 @@ import { ROCKET_PACKS } from "../lib/launch/boost";
 import { seatSol } from "../lib/seat";
 import { emptyState } from "../lib/store";
 import { PROTOCOL_FEE_BPS } from "../lib/config";
+import { mergePartnerFeeMaps } from "../lib/launch/dbc";
+import { sphaLaunchMints } from "../lib/token/omics";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 
 describe("profit catalog", () => {
   it("pins live and pad skims at 1%, not the 10 bps paper pair model", () => {
@@ -108,5 +112,42 @@ describe("profit catalog", () => {
     const p = buildProfitDesk(s);
     assert.equal(p.accrued.treasurySol, 0.005);
     assert.equal(p.streams.find((row) => row.id === "swap")?.accruedSol, 0.01);
+  });
+
+  it("adds dedicated 200M partner fees on top of pad-config totals", () => {
+    const pad = {
+      unclaimedSol: 2,
+      totalSol: 4,
+      byMint: {
+        Pad111111111111111111111111111111111111111: {
+          creatorFeesSol: 2,
+          creatorUnclaimedSol: 1,
+          partnerFeesSol: 4,
+          partnerUnclaimedSol: 2,
+        },
+      },
+    };
+    const extra = {
+      DC3c2a3H1mDggE5fVPVkPs6p4sSibLghQxTsMrfpZJDJ: {
+        creatorFeesSol: 1,
+        creatorUnclaimedSol: 1,
+        partnerFeesSol: 2,
+        partnerUnclaimedSol: 1,
+      },
+    };
+    const merged = mergePartnerFeeMaps(pad, extra);
+    assert.equal(merged.unclaimedSol, 3);
+    assert.equal(merged.totalSol, 6);
+    assert.equal(merged.byMint.DC3c2a3H1mDggE5fVPVkPs6p4sSibLghQxTsMrfpZJDJ?.partnerUnclaimedSol, 1);
+    const again = mergePartnerFeeMaps(merged, extra);
+    assert.equal(again.unclaimedSol, 3);
+    const onchain = readFileSync(path.join(process.cwd(), "src/lib/profit/onchain.ts"), "utf8");
+    assert.match(onchain, /partnerTotalsWithMints/);
+    assert.match(onchain, /sphaLaunchMints/);
+    const claim = readFileSync(path.join(process.cwd(), "src/app/api/admin/claim/route.ts"), "utf8");
+    assert.match(claim, /sphaLaunchMints\(state\)/);
+    assert.deepEqual(sphaLaunchMints({ sphaTestLaunch: { mint: "DC3c2a3H1mDggE5fVPVkPs6p4sSibLghQxTsMrfpZJDJ" } }), [
+      "DC3c2a3H1mDggE5fVPVkPs6p4sSibLghQxTsMrfpZJDJ",
+    ]);
   });
 });

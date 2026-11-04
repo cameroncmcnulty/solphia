@@ -52,10 +52,11 @@ export async function tokenUiAmount(
   const ownerPk = new PublicKey(owner);
   const mintPk = new PublicKey(mint);
   const t22 = new PublicKey(TOKEN_2022_PROGRAM);
-  const [legacy, extra] = await Promise.all([
+  const [legacy, t22mint, extra] = await Promise.all([
     conn.getParsedTokenAccountsByOwner(ownerPk, { mint: mintPk }),
+    conn.getParsedTokenAccountsByOwner(ownerPk, { mint: mintPk, programId: t22 }),
     conn.getParsedTokenAccountsByOwner(ownerPk, { programId: t22 }),
   ]);
-  const rows = [...parsedRows(legacy.value), ...parsedRows(extra.value)];
+  const rows = [...parsedRows(legacy.value), ...parsedRows(t22mint.value), ...parsedRows(extra.value)];
   return sumTokenUiAmount(rows, mint);
 }

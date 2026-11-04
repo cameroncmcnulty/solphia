@@ -237,6 +237,7 @@ export function SwapWidget({
   const [review, setReview] = useState(false);
   const [bonded, setBonded] = useState(false);
   const [spha, setSpha] = useState<SwapToken | null>(null);
+  const [held, setHeld] = useState<SwapToken[]>([]);
   const [picker, setPicker] = useState<"pay" | "recv" | null>(null);
   const [ca, setCa] = useState("");
   const [caBusy, setCaBusy] = useState(false);
@@ -396,6 +397,7 @@ export function SwapWidget({
   useEffect(() => {
     if (!pk) {
       setBals({});
+      setHeld([]);
       loadBalsRef.current = () => undefined;
       return;
     }
@@ -407,13 +409,28 @@ export function SwapWidget({
       const mints = [...new Set([pay.mint, recv.mint, SOL_MINT])];
       void (async () => {
         const next: Record<string, number> = {};
-        const sol = await fetch(`/api/sol/balance?pubkey=${encodeURIComponent(pk)}`, { signal, cache: "no-store" })
+        const bag = await fetch(`/api/sol/holdings?pubkey=${encodeURIComponent(pk)}`, { signal, cache: "no-store" })
           .then((r) => r.json())
           .catch(() => null);
-        next[SOL_MINT] = Number(sol?.sol) || 0;
+        const holdings = Array.isArray(bag?.holdings) ? bag.holdings : [];
+        const launched = Array.isArray(bag?.launched) ? bag.launched : [];
+        const nextHeld: SwapToken[] = [];
+        const seenHeld = new Set<string>();
+        for (const row of [...holdings, ...launched]) {
+          const mint = typeof row?.mint === "string" ? row.mint : "";
+          if (!mint || seenHeld.has(mint)) continue;
+          seenHeld.add(mint);
+          if (typeof row.amount === "number") next[mint] = Number(row.amount) || 0;
+          nextHeld.push({
+            mint,
+            symbol: typeof row.symbol === "string" ? row.symbol : "",
+            name: typeof row.name === "string" ? row.name : "",
+            image: typeof row.image === "string" ? row.image : "",
+          });
+        }
         await Promise.all(
           mints
-            .filter((m) => m !== SOL_MINT)
+            .filter((m) => m !== SOL_MINT && next[m] == null)
             .map(async (m) => {
               const j = await fetch(`/api/sol/token?owner=${encodeURIComponent(pk)}&mint=${encodeURIComponent(m)}`, {
                 signal,
@@ -424,7 +441,16 @@ export function SwapWidget({
               next[m] = Number(j?.amount) || 0;
             }),
         );
-        if (!signal.aborted) setBals(next);
+        if (next[SOL_MINT] == null) {
+          const sol = await fetch(`/api/sol/balance?pubkey=${encodeURIComponent(pk)}`, { signal, cache: "no-store" })
+            .then((r) => r.json())
+            .catch(() => null);
+          next[SOL_MINT] = Number(sol?.sol) || 0;
+        }
+        if (!signal.aborted) {
+          setBals(next);
+          setHeld(nextHeld);
+        }
       })();
     };
     loadBalsRef.current = load;
@@ -497,9 +523,13 @@ export function SwapWidget({
     push(spha);
     push(pay);
     push(recv);
+    const withBal = held.filter((row) => (bals[row.mint] || 0) > 0);
+    const restHeld = held.filter((row) => !((bals[row.mint] || 0) > 0));
+    for (const row of withBal) push(row);
+    for (const row of restHeld) push(row);
     for (const row of tokens || []) push(row);
     return rows;
-  }, [pay, recv, tokens, spha]);
+  }, [pay, recv, tokens, spha, held, bals]);
 
   function applyPick(next: SwapToken) {
     const slot = picker;
@@ -947,6 +977,11 @@ export function SwapWidget({
                     <p className="truncate text-[15px] font-medium text-white">{liveLabel(row.symbol, row.name, row.mint)}</p>
                     <p className="truncate font-mono text-[11px] text-white/35">{row.name || row.mint.slice(0, 8) + "…"}</p>
                   </div>
+                  {Object.prototype.hasOwnProperty.call(bals, row.mint) ? (
+                    <span className="shrink-0 font-mono text-[12px] text-white/45">
+                      {row.mint === SOL_MINT ? fmtSol(bals[row.mint] || 0, 4) : fmtTok(bals[row.mint] || 0)}
+                    </span>
+                  ) : null}
                 </button>
               ))}
             </div>

@@ -33,6 +33,7 @@ type AdminContextValue = {
   login: () => Promise<void>;
   logout: () => Promise<void>;
   reload: () => Promise<void>;
+  reloadAt: number;
   patch: (body: Record<string, unknown>) => Promise<{ ok: boolean; error?: string; message?: string }>;
   adminPk: string;
   setAdminPk: (v: string) => void;
@@ -102,6 +103,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
   const [pnlWin, setPnlWin] = useState<"h24" | "d7" | "d30">("h24");
   const [btLev, setBtLev] = useState<1 | 2 | 3>(1);
   const [section, setSection] = useState<AdminSectionId>("overview");
+  const [reloadAt, setReloadAt] = useState(0);
   const owner = useOwner();
 
   const applyHash = useCallback(() => {
@@ -145,6 +147,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     }
     const next = (await dash.json()) as AdminDesk;
     hydrate(next, fields);
+    setReloadAt(Date.now());
   }, [hydrate]);
 
   const login = useCallback(async () => {
@@ -349,6 +352,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
       login,
       logout,
       reload,
+      reloadAt,
       patch,
       adminPk,
       setAdminPk,
@@ -403,6 +407,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
       login,
       logout,
       reload,
+      reloadAt,
       patch,
       adminPk,
       treasuryPk,

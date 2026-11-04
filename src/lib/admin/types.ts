@@ -196,8 +196,11 @@ export type AdminDesk = {
     launchedAt: number;
     sigs: string[];
     allocations: { id: string; wallet: string; tokens: number }[];
+    image?: string;
+    config?: string;
   } | null;
   sphaTestLaunch: AdminDesk["sphaLaunch"];
+  sphaTestLaunches: NonNullable<AdminDesk["sphaLaunch"]>[];
   sphaDbcConfig: string;
   adminOtpEmail: string;
   mailReady: boolean;

@@ -14,6 +14,7 @@ import {
   sphaCurveTokens,
   sphaMissingDest,
   mergeSphaTestLaunches,
+  sphaLaunchMints,
   sphaReservedTokens,
   type SphaNetwork,
 } from "@/lib/token/omics";
@@ -43,12 +44,66 @@ function bookOf(s: { launch?: ReturnType<typeof emptyLaunchBook>; ownerWallet?: 
   return s.launch;
 }
 
+type LaunchDeskRow = NonNullable<Awaited<ReturnType<typeof readyState>>["sphaLaunch"]> & {
+  bals?: { owner: number; foundation: number; treasury: number };
+  fees?: { creatorFeesSol: number; creatorUnclaimedSol: number; partnerFeesSol: number; partnerUnclaimedSol: number };
+};
+
+async function enrichLaunchRow(
+  row: NonNullable<Awaited<ReturnType<typeof readyState>>["sphaLaunch"]>,
+  dest: ReturnType<typeof destOf>,
+  dbc: typeof import("@/lib/launch/dbc") | null,
+): Promise<LaunchDeskRow> {
+  const conn = connection();
+  const fnd = dest.airdrop || dest.foundation;
+  const [ownerBal, fndBal, treasBal, fees] = await Promise.all([
+    dest.owner && isSolanaAddress(dest.owner) ? tokenUiAmount(conn, dest.owner, row.mint) : Promise.resolve({ amount: 0 }),
+    fnd && isSolanaAddress(fnd) ? tokenUiAmount(conn, fnd, row.mint) : Promise.resolve({ amount: 0 }),
+    dest.treasury && isSolanaAddress(dest.treasury)
+      ? tokenUiAmount(conn, dest.treasury, row.mint)
+      : Promise.resolve({ amount: 0 }),
+    dbc ? dbc.dbcFeeBreakdown(row.mint).catch(() => null) : Promise.resolve(null),
+  ]);
+  return {
+    ...row,
+    bals: {
+      owner: Number(ownerBal.amount) || 0,
+      foundation: Number(fndBal.amount) || 0,
+      treasury: Number(treasBal.amount) || 0,
+    },
+    fees: fees || { creatorFeesSol: 0, creatorUnclaimedSol: 0, partnerFeesSol: 0, partnerUnclaimedSol: 0 },
+  };
+}
+
+async function enrichLaunchRows(
+  rows: NonNullable<Awaited<ReturnType<typeof readyState>>["sphaLaunch"]>[],
+  dest: ReturnType<typeof destOf>,
+  dbc: typeof import("@/lib/launch/dbc") | null,
+): Promise<LaunchDeskRow[]> {
+  return Promise.all(
+    rows.map(async (row) => {
+      try {
+        return await enrichLaunchRow(row, dest, dbc);
+      } catch {
+        return row;
+      }
+    }),
+  );
+}
+
 export async function GET(req: NextRequest) {
   const denied = requireAdmin(req);
   if (denied) return denied;
   const s = await readyState();
   const dest = destOf(s);
   const network: SphaNetwork = s.sphaNetwork === "mainnet-beta" ? "mainnet-beta" : "devnet";
+  const tests = mergeSphaTestLaunches(s.sphaTestLaunches, [], s.sphaTestLaunch || null);
+  const dbc = await import("@/lib/launch/dbc").catch(() => null);
+  const [launch, testLaunches] = await Promise.all([
+    s.sphaLaunch ? enrichLaunchRow(s.sphaLaunch, dest, dbc).catch(() => s.sphaLaunch) : Promise.resolve(null),
+    enrichLaunchRows(tests, dest, dbc),
+  ]);
+  const testLaunch = testLaunches.find((r) => r.mint === s.sphaTestLaunch?.mint) || testLaunches[0] || null;
   return NextResponse.json({
     ok: true,
     network,
@@ -62,12 +117,13 @@ export async function GET(req: NextRequest) {
     dest,
     missing: sphaMissingDest(dest),
     allocations: sphaAllocations(dest),
-    launch: s.sphaLaunch || null,
-    testLaunch: s.sphaTestLaunch || null,
-    testLaunches: mergeSphaTestLaunches(s.sphaTestLaunches, [], s.sphaTestLaunch || null),
+    launch,
+    testLaunch,
+    testLaunches,
     sphaDbcConfig: s.sphaDbcConfig || "",
     padConfig: liveDbcConfig(s.launch?.dbcConfig),
     dbc: dbcEnabled(),
+    mints: sphaLaunchMints(s),
   });
 }
 
@@ -108,6 +164,13 @@ const Buy = z.object({
   tokens: z.number().min(0).optional(),
 });
 
+const Claim = z.object({
+  action: z.literal("prepareClaim"),
+  kind: z.enum(["creator", "partner"]),
+  payer: z.string(),
+  mint: z.string(),
+});
+
 const Recorded = z.object({
   action: z.literal("record").optional(),
   mode: z.enum(["test", "official"]).optional(),
@@ -138,6 +201,8 @@ export async function POST(req: NextRequest) {
   if (asPoolMeta.success) return preparePoolMeta(asPoolMeta.data);
   const asBuy = Buy.safeParse(raw);
   if (asBuy.success) return prepareBuy(asBuy.data);
+  const asClaim = Claim.safeParse(raw);
+  if (asClaim.success) return prepareClaim(asClaim.data);
   const parsed = Recorded.safeParse(raw);
   if (!parsed.success) return NextResponse.json({ error: "bad_request" }, { status: 400 });
   return record(req, parsed.data);
@@ -320,6 +385,7 @@ async function record(req: NextRequest, b: z.infer<typeof Recorded>) {
     blurb: b.blurb,
     uri: b.uri,
     website: b.website,
+    config: b.config && isSolanaAddress(b.config) ? b.config : undefined,
   };
   const payer = (b.payer || dest.owner || "").trim();
   await mutateState((s) => {
@@ -351,4 +417,54 @@ async function record(req: NextRequest, b: z.infer<typeof Recorded>) {
     }, true);
   }
   return NextResponse.json({ ok: true, mint: b.mint, official });
+}
+
+async function prepareClaim(b: z.infer<typeof Claim>) {
+  if (!isSolanaAddress(b.payer) || !isSolanaAddress(b.mint)) {
+    return NextResponse.json({ error: "bad_wallet", message: "Wallet and mint are required." }, { status: 400 });
+  }
+  if (!dbcEnabled()) {
+    return NextResponse.json({ error: "dbc_off", message: "The bonding curve is not enabled." }, { status: 400 });
+  }
+  try {
+    const dbc = await import("@/lib/launch/dbc");
+    if (b.kind === "creator") {
+      const built = await dbc.buildDbcClaimCreatorTx({ mint: b.mint, owner: b.payer });
+      if (!built.ok) {
+        return NextResponse.json(
+          {
+            error: built.error || "empty",
+            message:
+              built.error === "empty"
+                ? "No unclaimed creator fees on this pool. Creator fees pay the wallet that launched the curve."
+                : "Could not build the creator claim.",
+          },
+          { status: 400 },
+        );
+      }
+      return NextResponse.json({ ok: true, kind: "creator", mint: b.mint, tx: built.transaction });
+    }
+    const s = await readyState();
+    const treas = destOf(s).treasury;
+    if (!isSolanaAddress(treas)) {
+      return NextResponse.json({ error: "need_wallets", message: "Set the treasury project wallet first." }, { status: 400 });
+    }
+    const built = await dbc.buildDbcClaimPartnerTx({ mint: b.mint, owner: treas, receiver: treas });
+    if (!built.ok) {
+      return NextResponse.json(
+        {
+          error: built.error || "empty",
+          message:
+            built.error === "empty"
+              ? "No unclaimed partner fees on this pool. Fees sit in the curve until you claim."
+              : "Could not build the partner claim.",
+        },
+        { status: 400 },
+      );
+    }
+    return NextResponse.json({ ok: true, kind: "partner", mint: b.mint, tx: built.transaction, from: treas });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Could not build the claim.";
+    return NextResponse.json({ error: "chain_failed", message }, { status: 400 });
+  }
 }

@@ -14,6 +14,7 @@ import { FEE_DUST_LAMPORTS } from "@/lib/fees/payout";
 import { dbcEnabled } from "@/lib/launch/dbcIds";
 import { enrichProfitDesk } from "@/lib/profit/onchain";
 import { buildProfitDesk } from "@/lib/profit/catalog";
+import { sphaLaunchMints } from "@/lib/token/omics";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -70,9 +71,10 @@ async function claimTreasury(
     );
   }
   const { buildDbcClaimPartnerBatch } = await import("@/lib/launch/dbc");
+  const state = await readyState();
   const extra = (body.mints || []).filter((m) => isSolanaAddress(m));
   const mint = body.mint && isSolanaAddress(body.mint) ? body.mint : extra[0] || "";
-  const mints = [mint, ...extra].filter((m) => isSolanaAddress(m));
+  const mints = [...new Set([mint, ...extra, ...sphaLaunchMints(state)].filter((m) => isSolanaAddress(m)))];
   const built = await buildDbcClaimPartnerBatch({ mints, owner: treasury });
   if (!built.ok) {
     return NextResponse.json(

@@ -137,6 +137,29 @@ export function mergeSphaTestLaunches<T extends { mint: string; launchedAt?: num
   return [...map.values()].sort((a, b) => (Number(b.launchedAt) || 0) - (Number(a.launchedAt) || 0)).slice(0, 8);
 }
 
+/** Official $SPHA plus dashboard test CAs. Dedicated 200M configs are not the shared pad config. */
+export function sphaLaunchMints(state: {
+  sphaMint?: string | null;
+  sphaLaunch?: { mint?: string } | null;
+  sphaTestLaunch?: { mint?: string } | null;
+  sphaTestLaunches?: { mint?: string }[] | null;
+} | null | undefined): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const push = (m?: string | null) => {
+    const v = (m || "").trim();
+    if (!v || seen.has(v)) return;
+    seen.add(v);
+    out.push(v);
+  };
+  if (!state) return out;
+  push(state.sphaMint);
+  push(state.sphaLaunch?.mint);
+  push(state.sphaTestLaunch?.mint);
+  for (const row of state.sphaTestLaunches || []) push(row?.mint);
+  return out;
+}
+
 export function sphaTeamLegs(dest: SphaDestinations, supply = SPHA_SUPPLY): { id: SphaSliceId; to: string; tokens: number }[] {
   const owner = (dest.owner || "").trim();
   const foundation = (dest.airdrop || dest.foundation || "").trim();

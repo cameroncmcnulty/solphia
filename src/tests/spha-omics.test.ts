@@ -6,6 +6,7 @@ import {
   SPHA_SLICES,
   SPHA_SUPPLY,
   mergeSphaTestLaunches,
+  sphaLaunchMints,
   sphaAllocations,
   sphaBpsTotal,
   sphaCurveTokens,
@@ -107,6 +108,28 @@ describe("spha tokenomics", () => {
     assert.match(route, /s\.sphaTestLaunch = row/);
     assert.match(route, /mergeSphaTestLaunches\(s\.sphaTestLaunches, \[\], s\.sphaTestLaunch \|\| null\)/);
     assert.match(route, /s\.sphaDbcConfig = b\.config/);
+    assert.match(route, /config: b\.config && isSolanaAddress\(b\.config\) \? b\.config : undefined/);
+    assert.match(route, /prepareClaim/);
+    assert.match(route, /dbcFeeBreakdown/);
+    assert.match(route, /sphaLaunchMints/);
+  });
+
+  it("collects official and test 200M mints without touching the pad config", () => {
+    const mints = sphaLaunchMints({
+      sphaMint: "Off111111111111111111111111111111111111111",
+      sphaLaunch: { mint: "Off111111111111111111111111111111111111111" },
+      sphaTestLaunch: { mint: "Tst111111111111111111111111111111111111111" },
+      sphaTestLaunches: [
+        { mint: "Tst111111111111111111111111111111111111111" },
+        { mint: "Abc111111111111111111111111111111111111111" },
+      ],
+    });
+    assert.deepEqual(mints, [
+      "Off111111111111111111111111111111111111111",
+      "Tst111111111111111111111111111111111111111",
+      "Abc111111111111111111111111111111111111111",
+    ]);
+    assert.deepEqual(sphaLaunchMints(null), []);
   });
 
   it("mints 17.2M / 19.4M / 9.2M into owner, foundation, and treasury and leaves 154.2M on the curve", () => {
@@ -200,6 +223,11 @@ describe("spha tokenomics", () => {
     assert.equal(src.toLowerCase().includes("phantom"), false);
     assert.match(src, /17\.2M \/ 19\.4M \/ 9\.2M/);
     assert.match(src, /setTradeSol\(""\)/);
+    assert.match(src, /prepareClaim/);
+    assert.match(src, /deskClaim\("creator"\)/);
+    assert.match(src, /deskClaim\("partner"\)/);
+    assert.match(src, /reloadAt/);
+    assert.match(src, /Refreshing launched tokens/);
     const copy = readFileSync(path.join(process.cwd(), "src/components/CopyCa.tsx"), "utf8");
     assert.match(copy, /full = false/);
     assert.match(copy, /full \? "break-all" : "truncate"/);

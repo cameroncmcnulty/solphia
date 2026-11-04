@@ -9,6 +9,8 @@ import { lastPairPrices } from "@/lib/tick";
 import { emptyLaunchBook } from "@/lib/launch/engine";
 import { withLaunch } from "@/lib/store";
 import { sphaMintOf } from "@/lib/token/solphia";
+import { sphaLaunchMints } from "@/lib/token/omics";
+import { tokenUiAmount } from "@/lib/solana/tokenBalance";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 20;
@@ -85,14 +87,35 @@ export async function GET(req: NextRequest) {
       withLaunch((s) => s, false).catch(() => null),
     ]);
     const launch = state?.launch || emptyLaunchBook();
-    const born = new Set((launch.coins || []).map((c) => c.mint).filter(Boolean) as string[]);
     const spha = sphaMintOf(state?.sphaMint);
+    const known = [
+      ...sphaLaunchMints(state),
+      ...((launch.coins || []).map((c) => c.mint).filter(Boolean) as string[]),
+    ];
+    const born = new Set(known.filter(Boolean));
+    if (spha) born.add(spha);
     const tokens = parsedTokenRows([...legacy.value, ...t22.value]);
     const merged = new Map<string, { amount: number; decimals: number }>();
     for (const row of tokens) {
       const prev = merged.get(row.mint);
       if (!prev) merged.set(row.mint, { amount: row.amount, decimals: row.decimals });
       else prev.amount += row.amount;
+    }
+    const missingKnown = [...born].filter((m) => m && m !== SOL_MINT && !merged.has(m)).slice(0, 12);
+    if (missingKnown.length) {
+      const extra = await Promise.all(
+        missingKnown.map(async (mint) => {
+          try {
+            const bag = await tokenUiAmount(conn, pubkey, mint);
+            return { mint, amount: bag.amount, decimals: bag.decimals };
+          } catch {
+            return { mint, amount: 0, decimals: 6 };
+          }
+        }),
+      );
+      for (const row of extra) {
+        if (row.amount > 0) merged.set(row.mint, { amount: row.amount, decimals: row.decimals });
+      }
     }
     const mints = [...merged.keys()];
     const metaChunks: string[][] = [];
@@ -135,11 +158,43 @@ export async function GET(req: NextRequest) {
         sol: false,
       });
     }
+    const launched: Holding[] = [];
+    const seenLaunch = new Set<string>();
+    const pushLaunch = (mint?: string, name?: string, symbol?: string, image?: string) => {
+      const m = (mint || "").trim();
+      if (!m || m === SOL_MINT || seenLaunch.has(m)) return;
+      seenLaunch.add(m);
+      const held = merged.get(m);
+      const coin = (launch.coins || []).find((c) => c.mint === m);
+      const info = meta[m];
+      launched.push({
+        mint: m,
+        amount: held?.amount || 0,
+        decimals: held?.decimals || 6,
+        name: info?.name || coin?.name || name || "",
+        symbol: info?.symbol || coin?.symbol || symbol || "",
+        image: info?.image || coin?.image || image || "",
+        usd: null,
+        change24h: null,
+        born: true,
+        sol: false,
+      });
+    };
+    pushLaunch(spha, "Solphia", "SPHA");
+    if (state?.sphaLaunch) pushLaunch(state.sphaLaunch.mint, state.sphaLaunch.name, state.sphaLaunch.symbol, state.sphaLaunch.image);
+    if (state?.sphaTestLaunch) {
+      pushLaunch(state.sphaTestLaunch.mint, state.sphaTestLaunch.name, state.sphaTestLaunch.symbol, state.sphaTestLaunch.image);
+    }
+    for (const row of state?.sphaTestLaunches || []) {
+      pushLaunch(row.mint, row.name, row.symbol, row.image);
+    }
+    for (const coin of launch.coins || []) pushLaunch(coin.mint, coin.name, coin.symbol, coin.image);
     return NextResponse.json({
       pubkey,
       sol: lamports / LAMPORTS_PER_SOL,
       solUsd,
       holdings: rows,
+      launched: launched.slice(0, 24),
     });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "rpc" }, { status: 502 });

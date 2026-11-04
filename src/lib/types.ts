@@ -552,6 +552,8 @@ export interface AppState {
     blurb?: string;
     uri?: string;
     website?: string;
+    /** Dedicated DBC config for this 200M mint. Never copy onto the shared pad dbcConfig. */
+    config?: string;
   } | null;
   /** Dry-run pad launch. Does not set sphaMint. */
   sphaTestLaunch?: AppState["sphaLaunch"];

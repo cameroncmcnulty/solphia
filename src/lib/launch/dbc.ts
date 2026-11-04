@@ -513,6 +513,22 @@ export async function dbcFeesForMints(mints: string[]): Promise<Record<string, D
   });
 }
 
+export function mergePartnerFeeMaps(
+  base: { unclaimedSol: number; totalSol: number; byMint: Record<string, DbcFees> },
+  extra: Record<string, DbcFees>,
+): { unclaimedSol: number; totalSol: number; byMint: Record<string, DbcFees> } {
+  const byMint = { ...base.byMint };
+  let unclaimedSol = Number(base.unclaimedSol) || 0;
+  let totalSol = Number(base.totalSol) || 0;
+  for (const [mint, fees] of Object.entries(extra || {})) {
+    if (!mint || byMint[mint]) continue;
+    byMint[mint] = fees;
+    unclaimedSol += Number(fees.partnerUnclaimedSol) || 0;
+    totalSol += Number(fees.partnerFeesSol) || 0;
+  }
+  return { unclaimedSol, totalSol, byMint };
+}
+
 export type ChainPadCoin = {
   mint: string;
   pool: string;
@@ -546,11 +562,15 @@ function quoteSolOf(inner: Record<string, unknown>): number {
   return 0;
 }
 
+export function clearDbcFeeCache() {
+  for (const k of [...memo.keys()]) {
+    if (k.startsWith("fees:") || k.startsWith("partner:") || k.startsWith("pools:")) memo.delete(k);
+  }
+}
+
 export function clearDbcCreatorCache(creator?: string) {
   if (creator) memo.delete("pools:" + creator);
-  for (const k of [...memo.keys()]) {
-    if (k.startsWith("fees:")) memo.delete(k);
-  }
+  clearDbcFeeCache();
 }
 
 const memo = new Map<string, { at: number; data: unknown }>();
@@ -629,6 +649,19 @@ export async function chainPartnerTotals(config: string): Promise<{
     }
     return { unclaimedSol, totalSol, byMint };
   });
+}
+
+/** Pad config pools plus dedicated 200M mints that live on their own DBC config. */
+export async function partnerTotalsWithMints(
+  config: string,
+  extraMints: string[] = [],
+): Promise<{ unclaimedSol: number; totalSol: number; byMint: Record<string, DbcFees> }> {
+  const empty = { unclaimedSol: 0, totalSol: 0, byMint: {} as Record<string, DbcFees> };
+  const pad = config ? await chainPartnerTotals(config) : empty;
+  const missing = extraMints.filter((m) => m && !pad.byMint[m]).slice(0, 16);
+  if (!missing.length) return pad;
+  const extra = await dbcFeesForMints(missing);
+  return mergePartnerFeeMaps(pad, extra);
 }
 
 export type DbcClaimBatch = {

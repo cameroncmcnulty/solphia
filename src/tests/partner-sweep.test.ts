@@ -24,6 +24,9 @@ describe("partner fee sweep", () => {
     assert.match(cron, /sweepPartnerFees/);
     const route = readFileSync(path.join(process.cwd(), "src/app/api/launch/route.ts"), "utf8");
     assert.match(route, /buildProtocolPartnerClaim/);
+    assert.match(route, /partnerTotalsWithMints/);
+    assert.match(route, /sphaLaunchMints/);
+    assert.match(route, /clearDbcFeeCache/);
     assert.equal(route.includes("if (b.pubkey !== treas) return fail(\"not_owner\")"), false);
   });
 

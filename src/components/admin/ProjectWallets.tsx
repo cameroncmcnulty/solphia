@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { CopyButton } from "@/components/CopyButton";
 import { FieldError, useConfirmErrors } from "@/components/form/confirm";
 import { SwapWidget } from "@/components/SwapWidget";
@@ -208,6 +208,20 @@ function ProjectWalletCard({
   const savedPk =
     role === "treasury" ? data?.treasury || "" : role === "owner" ? data?.ownerWallet || "" : data?.foundationWallet || "";
   const pk = local?.pubkey || savedPk;
+  const launchedTokens = useMemo(() => {
+    const rows: { mint: string; symbol: string; name?: string; image?: string }[] = [];
+    const seen = new Set<string>();
+    const push = (row?: { mint?: string; symbol?: string; name?: string; image?: string } | null) => {
+      const mint = (row?.mint || "").trim();
+      if (!mint || seen.has(mint)) return;
+      seen.add(mint);
+      rows.push({ mint, symbol: row?.symbol || "", name: row?.name, image: row?.image });
+    };
+    push(data?.sphaLaunch);
+    push(data?.sphaTestLaunch);
+    for (const row of data?.sphaTestLaunches || []) push(row);
+    return rows;
+  }, [data?.sphaLaunch, data?.sphaTestLaunch, data?.sphaTestLaunches]);
   const [tab, setTab] = useState<"swap" | "create" | "receive" | "send" | "backup">("swap");
   const [pin, setPin] = useState(PROJECT_PIN);
   const [phrase, setPhrase] = useState("");
@@ -354,6 +368,7 @@ function ProjectWalletCard({
           <SwapWidget
             owner={pk}
             widgetId={`project-swap-${role}`}
+            tokens={launchedTokens}
             note="Project wallets skip the house 1% so you do not skim yourself. User swaps still pay 1% live 50/50 into treasury and owner."
             signTx={async (transaction) => {
               const sig = await signAndSendProjectTx(role, transaction);
