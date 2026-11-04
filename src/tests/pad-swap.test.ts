@@ -86,6 +86,13 @@ describe("in-house pad venue", () => {
     assert.match(jup, /restrictIntermediate: false/);
     const vault = readFileSync(path.join(process.cwd(), "src/lib/wallet/projectVault.ts"), "utf8");
     assert.match(vault, /READY_TTL_MS/);
+    const dbc = readFileSync(path.join(process.cwd(), "src/lib/launch/dbc.ts"), "utf8");
+    assert.match(dbc, /insufficient liquidity/i);
+    assert.match(dbc, /clipped: true/);
+    assert.match(dbc, /On-chain creator is/);
+    assert.match(open, /pad.error !== "curve_missing"/);
+    assert.match(open, /clipped: pad.clipped/);
+    assert.match(quote, /message: q\.reason/);
   });
 });
 
@@ -118,6 +125,9 @@ describe("open market swap fees", () => {
     assert.match(pair, /assembleSwapTx/);
     assert.equal(/assemblePhantomSwapTx/.test(pair), false);
     const widget = readFileSync(path.join(process.cwd(), "src/components/SwapWidget.tsx"), "utf8");
+    assert.match(widget, /pairTokens\(next, defaultSide\)/);
+    assert.match(widget, /Curve liquidity covers/);
+    assert.match(widget, /quote\?\.clipped/);
     assert.equal(widget.includes('useState("0.25")'), false);
     assert.match(widget, /id=\{widgetId\}/);
     assert.match(widget, /function clearPayAmount/);

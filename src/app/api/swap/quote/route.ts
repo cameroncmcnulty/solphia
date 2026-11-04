@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
     slippageBps: b.slippageBps,
     skipHouse,
   });
-  if (!q.ok) return NextResponse.json({ error: q.reason }, { status: 400 });
+  if (!q.ok) return NextResponse.json({ error: q.reason, message: q.reason }, { status: 400 });
   return NextResponse.json({
     ok: true,
     via: q.via,
@@ -53,5 +53,7 @@ export async function POST(req: NextRequest) {
     inMint: q.inMint,
     outMint: q.outMint,
     hopSol: q.hopSol,
+    clipped: q.clipped,
+    inAmount: q.inAmount,
   });
 }

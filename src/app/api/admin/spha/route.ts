@@ -45,7 +45,7 @@ function bookOf(s: { launch?: ReturnType<typeof emptyLaunchBook>; ownerWallet?: 
 }
 
 type LaunchDeskRow = NonNullable<Awaited<ReturnType<typeof readyState>>["sphaLaunch"]> & {
-  bals?: { owner: number; foundation: number; treasury: number };
+  bals?: { owner: number; foundation: number; treasury: number; ownerSol?: number; curveSol?: number };
   fees?: { creatorFeesSol: number; creatorUnclaimedSol: number; partnerFeesSol: number; partnerUnclaimedSol: number };
 };
 
@@ -56,20 +56,33 @@ async function enrichLaunchRow(
 ): Promise<LaunchDeskRow> {
   const conn = connection();
   const fnd = dest.airdrop || dest.foundation;
-  const [ownerBal, fndBal, treasBal, fees] = await Promise.all([
+  const [ownerBal, fndBal, treasBal, fees, curveSol] = await Promise.all([
     dest.owner && isSolanaAddress(dest.owner) ? tokenUiAmount(conn, dest.owner, row.mint) : Promise.resolve({ amount: 0 }),
     fnd && isSolanaAddress(fnd) ? tokenUiAmount(conn, fnd, row.mint) : Promise.resolve({ amount: 0 }),
     dest.treasury && isSolanaAddress(dest.treasury)
       ? tokenUiAmount(conn, dest.treasury, row.mint)
       : Promise.resolve({ amount: 0 }),
     dbc ? dbc.dbcFeeBreakdown(row.mint).catch(() => null) : Promise.resolve(null),
+    dbc ? dbc.dbcPoolQuoteSol(row.mint).catch(() => 0) : Promise.resolve(0),
   ]);
+  const ownerTokens = Number(ownerBal.amount) || 0;
+  let ownerSol = 0;
+  if (dbc && ownerTokens > 0) {
+    try {
+      const q = await dbc.quoteDbcTrade({ mint: row.mint, side: "sell", tokens: ownerTokens });
+      if (q.ok) ownerSol = Number(q.solOut) || 0;
+    } catch {
+      ownerSol = 0;
+    }
+  }
   return {
     ...row,
     bals: {
-      owner: Number(ownerBal.amount) || 0,
+      owner: ownerTokens,
       foundation: Number(fndBal.amount) || 0,
       treasury: Number(treasBal.amount) || 0,
+      ownerSol,
+      curveSol: Number(curveSol) || 0,
     },
     fees: fees || { creatorFeesSol: 0, creatorUnclaimedSol: 0, partnerFeesSol: 0, partnerUnclaimedSol: 0 },
   };
@@ -437,7 +450,7 @@ async function prepareClaim(b: z.infer<typeof Claim>) {
             message:
               built.error === "empty"
                 ? "No unclaimed creator fees on this pool. Creator fees pay the wallet that launched the curve."
-                : "Could not build the creator claim.",
+                : built.error || "Could not build the creator claim.",
           },
           { status: 400 },
         );

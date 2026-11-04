@@ -241,7 +241,17 @@ export function SwapWidget({
   const [slipBps, setSlipBps] = useState(100);
   const [slipOpen, setSlipOpen] = useState(false);
   const [priority, setPriority] = useState<"auto" | "low" | "medium" | "high">("auto");
-  const [quote, setQuote] = useState<{ outAmount: number; via: string; impactPct: number; feeSol: number; hopSol?: number } | null>(null);
+  const [quote, setQuote] = useState<{
+    outAmount: number;
+    via: string;
+    impactPct: number;
+    feeSol: number;
+    hopSol?: number;
+    clipped?: boolean;
+    inAmount?: number;
+  } | null>(null);
+  const [quoteErr, setQuoteErr] = useState("");
+  const filledSell = useRef(false);
   const [review, setReview] = useState(false);
   const [bonded, setBonded] = useState(false);
   const [spha, setSpha] = useState<SwapToken | null>(null);
@@ -309,10 +319,10 @@ export function SwapWidget({
   useEffect(() => {
     if (!defaultMint || defaultMint.length < 32) return;
     const next = tokenFromMint(defaultMint, defaultSymbol, defaultName, defaultImage);
-    const pair = pairTokens(next, "buy");
+    const pair = pairTokens(next, defaultSide);
     setPay(pair.pay);
     setRecv(pair.recv);
-  }, [defaultMint, defaultSymbol, defaultName, defaultImage]);
+  }, [defaultMint, defaultSymbol, defaultName, defaultImage, defaultSide]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -480,8 +490,17 @@ export function SwapWidget({
   }, [notice?.kind, notice?.at]);
 
   useEffect(() => {
-    if (!(payNum > 0) || !pay.mint || !recv.mint || pay.mint === recv.mint || short) {
+    if (filledSell.current) return;
+    if (defaultSide !== "sell") return;
+    if (!(spendable > 0) || pay.mint === SOL_MINT) return;
+    filledSell.current = true;
+    setAmount(maxPayString(spendable, pay.mint));
+  }, [defaultSide, spendable, pay.mint]);
+
+  useEffect(() => {
+    if (!(payNum > 0) || !pay.mint || !recv.mint || pay.mint === recv.mint) {
       setQuote(null);
+      setQuoteErr("");
       return;
     }
     const ctrl = new AbortController();
@@ -501,22 +520,31 @@ export function SwapWidget({
         .then((r) => r.json())
         .then((j) => {
           if (j.ok) {
+            setQuoteErr("");
             setQuote({
               outAmount: Number(j.outAmount) || 0,
               via: typeof j.via === "string" ? j.via : "",
               impactPct: Number(j.impactPct) || 0,
               feeSol: Number(j.feeSol) || 0,
               hopSol: Number(j.hopSol) || undefined,
+              clipped: Boolean(j.clipped),
+              inAmount: Number(j.inAmount) || undefined,
             });
-          } else setQuote(null);
+          } else {
+            setQuote(null);
+            setQuoteErr(typeof j.message === "string" ? j.message : typeof j.error === "string" ? j.error : "");
+          }
         })
-        .catch(() => setQuote(null));
+        .catch(() => {
+          setQuote(null);
+          setQuoteErr("");
+        });
     }, 280);
     return () => {
       window.clearTimeout(t);
       ctrl.abort();
     };
-  }, [pay.mint, recv.mint, payNum, short, slipBps]);
+  }, [pay.mint, recv.mint, payNum, slipBps]);
 
   const catalog = useMemo(() => {
     const rows: SwapToken[] = [];
@@ -676,12 +704,13 @@ export function SwapWidget({
         throw new Error(last);
       };
       const hopSol = quote?.via === "hop" ? Number(quote.hopSol) || 0 : 0;
+      const payAmt = quote?.clipped && quote.inAmount && quote.inAmount > 0 ? quote.inAmount : payNum;
       let sig: string;
       if (quote?.via === "hop" && hopSol > 0 && pay.mint !== SOL_MINT && recv.mint !== SOL_MINT) {
-        sig = await sendLeg(pay.mint, SOL_MINT, payNum);
+        sig = await sendLeg(pay.mint, SOL_MINT, payAmt);
         sig = await sendLeg(SOL_MINT, recv.mint, hopSol * 0.995, 6);
       } else {
-        sig = await sendLeg(pay.mint, recv.mint, payNum);
+        sig = await sendLeg(pay.mint, recv.mint, payAmt);
       }
       if (settledRef.current) return;
       idleSigning();
@@ -820,6 +849,12 @@ export function SwapWidget({
               </p>
               <TokenChip token={recv} onClick={() => setPicker("recv")} />
             </div>
+            {quote?.clipped && quote.inAmount ? (
+              <p className="mt-2 font-mono text-[11px] text-acid/80">
+                Curve liquidity covers {fmtTok(quote.inAmount)} of {fmtTok(payNum)} {tick(pay.symbol) || pay.symbol}
+              </p>
+            ) : null}
+            {quoteErr && !quote ? <p className="mt-2 text-[13px] text-blood">{quoteErr}</p> : null}
           </div>
 
           <div className="mt-3 flex flex-wrap justify-center gap-1.5">

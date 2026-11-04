@@ -480,6 +480,17 @@ function poolInner(row: { publicKey: PublicKey; account: any }) {
   return row.account?.poolState || row.account || {};
 }
 
+export async function dbcPoolQuoteSol(mint: string): Promise<number> {
+  if (!dbcEnabled() || !mint) return 0;
+  try {
+    const row = await dbcPoolByMint(mint);
+    if (!row) return 0;
+    return quoteSolOf(poolInner(row));
+  } catch {
+    return 0;
+  }
+}
+
 export async function dbcFeeBreakdown(mint: string): Promise<DbcFees | null> {
   if (!dbcEnabled() || !mint) return null;
   try {
@@ -676,8 +687,8 @@ export type DbcClaimBatch = {
   remainingMints: string[];
 };
 
-/** Phantom Blowfish flags restitched / multi-pool claims as malicious. One SDK claim, unchanged. */
-async function simulateClaim(tx: Transaction): Promise<boolean> {
+/** One SDK claim per tx. Sim logs go back to the desk when it would fail. */
+async function simulateClaim(tx: Transaction): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
     const vtx = new VersionedTransaction(tx.compileMessage());
     const sim = await connection().simulateTransaction(vtx, {
@@ -685,9 +696,11 @@ async function simulateClaim(tx: Transaction): Promise<boolean> {
       replaceRecentBlockhash: true,
       commitment: "confirmed",
     });
-    return !sim.value.err;
-  } catch {
-    return false;
+    if (!sim.value.err) return { ok: true };
+    const logs = (sim.value.logs || []).filter(Boolean).slice(-4).join(" ");
+    return { ok: false, error: logs || "Claim would fail simulation." };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Claim would fail simulation." };
   }
 }
 
@@ -705,7 +718,6 @@ export async function buildDbcClaimCreatorBatch(opts: {
   owner: string;
 }): Promise<DbcClaimBatch | { ok: false; error: string }> {
   const dbc = client();
-  const creator = new PublicKey(opts.owner);
   const max = new BN("1000000000000000");
   const target = (opts.mints || []).map((m) => String(m || "").trim()).find(Boolean) || "";
   clearDbcCreatorCache(opts.owner);
@@ -753,31 +765,46 @@ export async function buildDbcClaimCreatorBatch(opts: {
   }
   if (!hit) hit = unpaid[0];
   if (!hit) return { ok: false, error: "empty" };
+  let poolCreator = opts.owner;
+  try {
+    const row = await dbc.state.getPoolByBaseMint(hit.mint);
+    if (row) poolCreator = pkStr(poolInner(row).creator) || opts.owner;
+  } catch {
+    /* keep owner */
+  }
+  if (poolCreator && poolCreator !== opts.owner) {
+    return {
+      ok: false,
+      error: `On-chain creator is ${poolCreator}. Owner cannot claim until that wallet transfers creator to the owner project wallet.`,
+    };
+  }
+  const creatorPk = new PublicKey(poolCreator || opts.owner);
   let raw: Transaction;
   try {
     const hook = await mintUsesTransferHook(hit.mint);
     raw = (hook
       ? await dbc.creator.claimCreatorTradingFee2({
-          creator,
-          payer: creator,
+          creator: creatorPk,
+          payer: creatorPk,
           pool: hit.pool,
           maxBaseAmount: max,
           maxQuoteAmount: max,
-          receiver: creator,
+          receiver: creatorPk,
         })
       : await dbc.creator.claimCreatorTradingFee({
-          creator,
-          payer: creator,
+          creator: creatorPk,
+          payer: creatorPk,
           pool: hit.pool,
           maxBaseAmount: max,
           maxQuoteAmount: max,
         })) as Transaction;
-  } catch {
-    return { ok: false, error: "empty" };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "empty" };
   }
-  const ready = await readyTx(raw, creator);
-  if (!(await simulateClaim(ready))) {
-    return { ok: false, error: "Claim would fail simulation. Your wallet would block it." };
+  const ready = await readyTx(raw, creatorPk);
+  const sim = await simulateClaim(ready);
+  if (!sim.ok) {
+    return { ok: false, error: sim.error || "Claim would fail simulation." };
   }
   const rest = unpaid.filter((p) => p.mint !== hit.mint);
   return {
@@ -886,7 +913,8 @@ export async function buildDbcClaimPartnerBatch(opts: {
             receiver,
           });
       const tx = await readyTx(raw as Transaction, payer);
-      if (!(await simulateClaim(tx))) continue;
+      const sim = await simulateClaim(tx);
+      if (!sim.ok) continue;
       const rest = unpaid.filter((p) => p.mint !== hit.mint);
       return {
         ok: true,
@@ -912,12 +940,34 @@ function asPool(row: { publicKey: PublicKey; account: any }) {
   return { poolState: a };
 }
 
+async function mintTokenDecimals(mint: string): Promise<number> {
+  try {
+    const supply = await connection().getTokenSupply(new PublicKey(mint), "confirmed");
+    const d = Number(supply.value?.decimals);
+    if (Number.isFinite(d) && d >= 0 && d <= 18) return d;
+  } catch {
+    /* 200M and pad mints are 6 */
+  }
+  return 6;
+}
+
+function uiToBn(amount: number, decimals: number): BN {
+  if (!(amount > 0) || !Number.isFinite(amount)) return new BN(0);
+  const scaled = amount * 10 ** decimals;
+  if (!Number.isFinite(scaled) || scaled <= 0) return new BN(0);
+  return new BN(Math.round(scaled).toString());
+}
+
+export type DbcTradeQuote =
+  | { ok: true; tokensOut?: number; solOut?: number; feeSol: number; inAmount: number; clipped?: boolean }
+  | { ok: false; error: string };
+
 export async function quoteDbcTrade(opts: {
   mint: string;
   side: "buy" | "sell";
   sol?: number;
   tokens?: number;
-}): Promise<{ ok: true; tokensOut?: number; solOut?: number; feeSol: number } | { ok: false; error: string }> {
+}): Promise<DbcTradeQuote> {
   const { SwapMode } = sdk();
   const dbc = client();
   const row = await dbc.state.getPoolByBaseMint(opts.mint);
@@ -928,24 +978,53 @@ export async function quoteDbcTrade(opts: {
   if (!cfg) return { ok: false, error: "curve_missing" };
   const currentPoint = new BN(Math.floor(Date.now() / 1000));
   const buy = opts.side === "buy";
-  const amountIn = buy
-    ? new BN(Math.round((Number(opts.sol) || 0) * 1e9))
-    : new BN(Math.round((Number(opts.tokens) || 0) * 1e6));
-  if (amountIn.toString() === "0") return { ok: false, error: "too_small" };
-  const q = dbc.pool.swapQuote2({
-    virtualPool: vp,
-    config: cfg,
-    swapBaseForQuote: !buy,
-    swapMode: SwapMode.ExactIn,
-    amountIn,
-    slippageBps: 100,
-    hasReferral: false,
-    eligibleForFirstSwapWithMinFee: false,
-    currentPoint,
-  });
-  const out = Number(q.outputAmount.toString());
-  if (buy) return { ok: true, tokensOut: out / 1e6, feeSol: (Number(opts.sol) || 0) * 0.01 };
-  return { ok: true, solOut: out / 1e9, feeSol: (out / 1e9) * 0.01 };
+  const tokenDec = await mintTokenDecimals(opts.mint);
+  const wanted = buy ? Number(opts.sol) || 0 : Number(opts.tokens) || 0;
+  if (!(wanted > 0)) return { ok: false, error: "too_small" };
+
+  const run = (ui: number): DbcTradeQuote => {
+    const amountIn = buy ? new BN(Math.round(ui * 1e9)) : uiToBn(ui, tokenDec);
+    if (amountIn.toString() === "0") return { ok: false, error: "too_small" };
+    try {
+      const q = dbc.pool.swapQuote2({
+        virtualPool: vp,
+        config: cfg,
+        swapBaseForQuote: !buy,
+        swapMode: SwapMode.ExactIn,
+        amountIn,
+        slippageBps: 100,
+        hasReferral: false,
+        eligibleForFirstSwapWithMinFee: false,
+        currentPoint,
+      });
+      const out = Number(q.outputAmount.toString());
+      if (!(out > 0)) return { ok: false, error: "zero_out" };
+      if (buy) return { ok: true, tokensOut: out / 10 ** tokenDec, feeSol: ui * 0.01, inAmount: ui };
+      return { ok: true, solOut: out / 1e9, feeSol: (out / 1e9) * 0.01, inAmount: ui };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e || "quote_failed");
+      return { ok: false, error: msg || "quote_failed" };
+    }
+  };
+
+  const direct = run(wanted);
+  if (direct.ok) return direct;
+  if (buy || !/insufficient liquidity/i.test(direct.error || "")) return direct;
+  let lo = 0;
+  let hi = wanted;
+  let best: DbcTradeQuote | null = null;
+  for (let i = 0; i < 24; i++) {
+    const mid = (lo + hi) / 2;
+    const q = run(mid);
+    if (q.ok) {
+      best = q;
+      lo = mid;
+    } else {
+      hi = mid;
+    }
+  }
+  if (best?.ok && (best.solOut || 0) > 0) return { ...best, clipped: true };
+  return { ok: false, error: "The curve does not have enough SOL for that sell yet." };
 }
 
 export async function buildDbcTradeTx(opts: {
@@ -963,11 +1042,11 @@ export async function buildDbcTradeTx(opts: {
   if (!quoted.ok) return quoted;
   const owner = new PublicKey(opts.owner);
   const buy = opts.side === "buy";
-  const amountIn = buy
-    ? new BN(Math.round((Number(opts.sol) || 0) * 1e9))
-    : new BN(Math.round((Number(opts.tokens) || 0) * 1e6));
+  const tokenDec = await mintTokenDecimals(opts.mint);
+  const inUi = quoted.inAmount || (buy ? Number(opts.sol) || 0 : Number(opts.tokens) || 0);
+  const amountIn = buy ? new BN(Math.round(inUi * 1e9)) : uiToBn(inUi, tokenDec);
   const minOut = buy
-    ? new BN(Math.floor((quoted.tokensOut || 0) * 1e6 * 0.99))
+    ? new BN(Math.floor((quoted.tokensOut || 0) * 10 ** tokenDec * 0.99))
     : new BN(Math.floor((quoted.solOut || 0) * 1e9 * 0.99));
   const swapArg = {
     owner,

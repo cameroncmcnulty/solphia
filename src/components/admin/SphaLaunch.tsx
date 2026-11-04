@@ -21,7 +21,7 @@ type LaunchRow = {
   name: string;
   symbol: string;
   config?: string;
-  bals?: { owner: number; foundation: number; treasury: number };
+  bals?: { owner: number; foundation: number; treasury: number; ownerSol?: number; curveSol?: number };
   fees?: { creatorFeesSol: number; creatorUnclaimedSol: number; partnerFeesSol: number; partnerUnclaimedSol: number };
 };
 
@@ -531,6 +531,9 @@ export function SphaLaunch() {
               <div className="rounded-2xl border border-violet/20 bg-void/40 px-3 py-2">
                 <div className="font-mono text-[10px] text-mute">OWNER BAG</div>
                 <div className="font-mono text-sm text-ghost">{fmtTok(selected.bals?.owner || 0)}</div>
+                {(selected.bals?.ownerSol || 0) > 0 ? (
+                  <div className="font-mono text-[11px] text-acid">≈ {fmtFee(selected.bals?.ownerSol || 0)} SOL</div>
+                ) : null}
               </div>
               <div className="rounded-2xl border border-violet/20 bg-void/40 px-3 py-2">
                 <div className="font-mono text-[10px] text-mute">FOUNDATION</div>
@@ -541,7 +544,7 @@ export function SphaLaunch() {
                 <div className="font-mono text-sm text-ghost">{fmtTok(selected.bals?.treasury || 0)}</div>
               </div>
             </div>
-            <div className="mt-2 grid gap-2 sm:grid-cols-2">
+            <div className="mt-2 grid gap-2 sm:grid-cols-3">
               <div className="rounded-2xl border border-violet/20 bg-void/40 px-3 py-2">
                 <div className="font-mono text-[10px] text-mute">OWNER UNCLAIMED · 50%</div>
                 <div className="font-mono text-sm text-acid">{fmtFee(selected.fees?.creatorUnclaimedSol || 0)} SOL</div>
@@ -549,6 +552,10 @@ export function SphaLaunch() {
               <div className="rounded-2xl border border-violet/20 bg-void/40 px-3 py-2">
                 <div className="font-mono text-[10px] text-mute">TREASURY UNCLAIMED · 50%</div>
                 <div className="font-mono text-sm text-acid">{fmtFee(selected.fees?.partnerUnclaimedSol || 0)} SOL</div>
+              </div>
+              <div className="rounded-2xl border border-violet/20 bg-void/40 px-3 py-2">
+                <div className="font-mono text-[10px] text-mute">SOL IN CURVE</div>
+                <div className="font-mono text-sm text-acid">{fmtFee(selected.bals?.curveSol || 0)} SOL</div>
               </div>
             </div>
             <div className="mt-3 flex flex-wrap items-center gap-2">

@@ -29,6 +29,8 @@ export type PadQuote =
       inMint: string;
       outMint: string;
       creator: string;
+      clipped?: boolean;
+      inAmount?: number;
     }
   | { ok: false; reason: string; error?: string };
 
@@ -53,10 +55,21 @@ export async function quotePadSwap(opts: {
         impactPct: 0,
         outAmount: opts.side === "buy" ? dbc.tokensOut || 0 : dbc.solOut || 0,
         feeSol: dbc.feeSol,
-        spendSol: opts.amount,
+        spendSol: dbc.inAmount || opts.amount,
         inMint: opts.side === "buy" ? SOL_MINT : opts.mint,
         outMint: opts.side === "buy" ? opts.mint : SOL_MINT,
         creator: "",
+        clipped: dbc.clipped,
+        inAmount: dbc.inAmount,
+      };
+    }
+    if (dbc.error && dbc.error !== "curve_missing") {
+      return {
+        ok: false,
+        reason: /insufficient liquidity/i.test(dbc.error)
+          ? "The curve does not have enough SOL for that sell yet."
+          : dbc.error,
+        error: dbc.error,
       };
     }
   }

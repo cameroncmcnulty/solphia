@@ -23,6 +23,8 @@ export type AnyQuote =
       inDecimals: number;
       outDecimals: number;
       hopSol?: number;
+      clipped?: boolean;
+      inAmount?: number;
     }
   | { ok: false; reason: string };
 
@@ -97,7 +99,12 @@ export async function quoteAnySwap(opts: {
           outMint: opts.outputMint,
           inDecimals,
           outDecimals,
+          clipped: pad.clipped,
+          inAmount: pad.inAmount,
         };
+      }
+      if (pad.error && pad.error !== "curve_missing" && pad.error !== "not_on_curve") {
+        return { ok: false, reason: pad.reason };
       }
     } catch {
       /* not on our curve — Jupiter next */
@@ -157,6 +164,8 @@ async function quoteViaHop(opts: {
   if (!hop) return null;
   let hopSol = 0;
   let feeSol = 0;
+  let clipped: boolean | undefined;
+  let inAmount: number | undefined;
   if (hop.kind === "sell") {
     let pad: Awaited<ReturnType<typeof quotePadSwap>>;
     try {
@@ -167,6 +176,8 @@ async function quoteViaHop(opts: {
     if (!pad.ok || !(pad.outAmount > 0)) return null;
     hopSol = pad.outAmount;
     feeSol = pad.feeSol;
+    clipped = pad.clipped;
+    inAmount = pad.inAmount;
   } else {
     let first: Awaited<ReturnType<typeof quoteOpenSwap>>;
     try {
@@ -205,6 +216,8 @@ async function quoteViaHop(opts: {
       inDecimals: opts.inDecimals,
       outDecimals: opts.outDecimals,
       hopSol,
+      clipped,
+      inAmount,
     };
   }
   let jup: Awaited<ReturnType<typeof quoteOpenSwap>>;
@@ -233,6 +246,8 @@ async function quoteViaHop(opts: {
     inDecimals: opts.inDecimals,
     outDecimals: opts.outDecimals,
     hopSol,
+    clipped,
+    inAmount,
   };
 }
 

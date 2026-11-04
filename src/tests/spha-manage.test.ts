@@ -41,6 +41,9 @@ describe("launched token manage + swap picker", () => {
     assert.match(spha, /Claim owner/);
     assert.match(spha, /Claim treasury/);
     assert.match(spha, /<SwapWidget/);
+    assert.match(spha, /ownerSol/);
+    assert.match(spha, /curveSol/);
+    assert.match(spha, /SOL IN CURVE/);
     assert.equal(spha.includes("Sell bag"), false);
     assert.equal(spha.includes("canSignProject"), false);
     assert.equal(spha.toLowerCase().includes("phantom"), false);
@@ -48,6 +51,8 @@ describe("launched token manage + swap picker", () => {
     assert.match(route, /action: z\.literal\("prepareClaim"\)/);
     assert.match(route, /buildDbcClaimCreatorTx/);
     assert.match(route, /buildDbcClaimPartnerTx/);
+    assert.match(route, /dbcPoolQuoteSol/);
+    assert.match(route, /quoteDbcTrade/);
     assert.equal(route.includes("book.dbcConfig"), false);
   });
 });
