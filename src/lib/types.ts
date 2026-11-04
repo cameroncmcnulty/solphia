@@ -555,6 +555,8 @@ export interface AppState {
   } | null;
   /** Dry-run pad launch. Does not set sphaMint. */
   sphaTestLaunch?: AppState["sphaLaunch"];
+  /** Recent admin test launches so CAs stay on the dashboard after the next test. */
+  sphaTestLaunches?: NonNullable<AppState["sphaLaunch"]>[];
   /** Dedicated $SPHA DBC config. Never overwrite the shared pad config with this. */
   sphaDbcConfig?: string;
   sphaSocials?: { x?: string; telegram?: string; discord?: string; website?: string };

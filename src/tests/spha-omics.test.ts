@@ -5,6 +5,7 @@ import path from "node:path";
 import {
   SPHA_SLICES,
   SPHA_SUPPLY,
+  mergeSphaTestLaunches,
   sphaAllocations,
   sphaBpsTotal,
   sphaCurveTokens,
@@ -14,6 +15,9 @@ import {
   sphaTeamLegs,
   sphaTokensFor,
 } from "../lib/token/omics";
+import { applyOpsConfig, emptyState } from "../lib/store";
+import { DEFAULT_FUND, DEFAULT_OWNER, DEFAULT_TREASURY } from "../lib/protocolWallets";
+import { splitFee } from "../lib/launch/curve";
 
 describe("spha tokenomics", () => {
   it("sums to 100 percent and 200 million tokens", () => {
@@ -92,5 +96,127 @@ describe("spha tokenomics", () => {
     assert.equal(route.includes("buildDbcLaunchTx"), false);
     assert.equal(route.includes('uri = (b.uri || "https://solphia.io")'), false);
     assert.equal(/supply:\s*b\.mode === "official" \? SPHA_SUPPLY : 1_000_000_000/.test(route), false);
+    assert.match(route, /prepareTrade/);
+    assert.match(route, /tokenUiAmount/);
+    assert.match(route, /testLaunches/);
+    assert.match(route, /mergeSphaTestLaunches/);
+    assert.match(route, /const side = b\.side === "sell" \? "sell" : "buy"/);
+    assert.equal(route.includes("book.dbcConfig"), false);
+    assert.match(route, /if \(official\)/);
+    assert.match(route, /s\.sphaMint = b\.mint/);
+    assert.match(route, /s\.sphaTestLaunch = row/);
+    assert.match(route, /mergeSphaTestLaunches\(s\.sphaTestLaunches, \[\], s\.sphaTestLaunch \|\| null\)/);
+    assert.match(route, /s\.sphaDbcConfig = b\.config/);
+  });
+
+  it("mints 17.2M / 19.4M / 9.2M into owner, foundation, and treasury and leaves 154.2M on the curve", () => {
+    const dest = {
+      owner: DEFAULT_OWNER,
+      foundation: DEFAULT_FUND,
+      airdrop: "",
+      treasury: DEFAULT_TREASURY,
+      lp: "",
+    };
+    const legs = sphaTeamLegs(dest);
+    assert.deepEqual(
+      legs.map((l) => [l.id, l.to, l.tokens]),
+      [
+        ["owner", DEFAULT_OWNER, 17_200_000],
+        ["foundation", DEFAULT_FUND, 19_400_000],
+        ["treasury", DEFAULT_TREASURY, 9_200_000],
+      ],
+    );
+    assert.equal(sphaCurveTokens(), 154_200_000);
+    assert.equal(17_200_000 + 19_400_000 + 9_200_000 + 154_200_000, SPHA_SUPPLY);
+    const dbc = readFileSync(path.join(process.cwd(), "src/lib/launch/dbc.ts"), "utf8");
+    assert.match(dbc, /totalTokenSupply: sphaCurveTokens\(\)/);
+    assert.match(dbc, /leftover: 0/);
+    assert.match(dbc, /leftoverReceiver: treasury/);
+    assert.match(dbc, /feeClaimer: treasury/);
+    assert.match(dbc, /Never write this config onto the shared pad dbcConfig/);
+    assert.match(dbc, /createConfigAndPoolWithTransferHook/);
+    assert.equal(dbc.includes("book.dbcConfig"), false);
+    const mint = readFileSync(path.join(process.cwd(), "src/lib/token/mint.ts"), "utf8");
+    assert.match(mint, /sphaTeamLegs/);
+    assert.match(mint, /createMintToCheckedInstruction/);
+    assert.match(mint, /AuthorityType.MintTokens, null/);
+  });
+
+  it("keeps the last eight admin test launches, newer stamp wins, local overwrites equal stamps", () => {
+    const row = (mint: string, at: number, symbol = mint) => ({ mint, launchedAt: at, symbol });
+    const remote = [row("mintA", 10), row("mintB", 20), row("mintC", 5)];
+    const local = [row("mintA", 10, "LOCAL"), row("mintD", 30)];
+    const extra = row("mintE", 40);
+    const merged = mergeSphaTestLaunches(local, remote, extra);
+    assert.deepEqual(
+      merged.map((r) => r.mint),
+      ["mintE", "mintD", "mintB", "mintA", "mintC"],
+    );
+    assert.equal(merged.find((r) => r.mint === "mintA")?.symbol, "LOCAL");
+    const many = Array.from({ length: 12 }, (_, i) => row(`m${i}`, i + 1));
+    assert.equal(mergeSphaTestLaunches(many, [], null).length, 8);
+    assert.equal(mergeSphaTestLaunches(many, [], null)[0]?.mint, "m11");
+    const olderExtra = mergeSphaTestLaunches([row("mintA", 50, "NEW")], [row("mintA", 10, "OLD")], row("mintA", 20, "MID"));
+    assert.equal(olderExtra[0]?.symbol, "NEW");
+  });
+
+  it("does not let empty remote ops wipe dashboard test CAs", () => {
+    const local = emptyState();
+    local.opsUpdatedAt = 5;
+    local.sphaTestLaunch = {
+      mint: "Test111111111111111111111111111111111111111",
+      network: "mainnet-beta",
+      name: "Solphia Test",
+      symbol: "TESTTOKEN",
+      supply: SPHA_SUPPLY,
+      launchedAt: 50,
+      sigs: ["sig"],
+      allocations: [],
+    };
+    local.sphaTestLaunches = [local.sphaTestLaunch];
+    const dirty = applyOpsConfig(local, {
+      opsUpdatedAt: 9,
+      sphaTestLaunch: null,
+      sphaTestLaunches: [],
+    });
+    assert.equal(local.sphaTestLaunch?.symbol, "TESTTOKEN");
+    assert.equal(local.sphaTestLaunches?.[0]?.mint, "Test111111111111111111111111111111111111111");
+    assert.equal(dirty, false);
+  });
+
+  it("shows full copyable CAs and desk buy/sell on the 200M launcher, defaulting to TESTTOKEN", () => {
+    const src = readFileSync(path.join(process.cwd(), "src/components/admin/SphaLaunch.tsx"), "utf8");
+    assert.match(src, /useState\("TESTTOKEN"\)/);
+    assert.match(src, /Launch \$\{symbol \|\| "TESTTOKEN"\}/);
+    assert.match(src, /<CopyCa ca=\{row\.mint\} full \/>/);
+    assert.match(src, /prepareTrade/);
+    assert.match(src, /deskTrade\("buy"\)/);
+    assert.match(src, /deskTrade\("sell"\)/);
+    assert.match(src, /copyText\(ca, "CA copied"\)/);
+    assert.match(src, /solscan\.io\/token\/\$\{row\.mint\}/);
+    assert.match(src, /dexscreener\.com\/solana\/\$\{row\.mint\}/);
+    assert.match(src, /MAINNET \$SPHA\. 200,000,000 supply\. 77\.1% on the curve\. Continue\?/);
+    assert.match(src, /useState<"test" \| "official">\("test"\)/);
+    assert.equal(src.toLowerCase().includes("phantom"), false);
+    assert.match(src, /17\.2M \/ 19\.4M \/ 9\.2M/);
+    assert.match(src, /setTradeSol\(""\)/);
+    const copy = readFileSync(path.join(process.cwd(), "src/components/CopyCa.tsx"), "utf8");
+    assert.match(copy, /full = false/);
+    assert.match(copy, /full \? "break-all" : "truncate"/);
+    const launch = readFileSync(path.join(process.cwd(), "src/app/api/launch/route.ts"), "utf8");
+    assert.match(launch, /liveDbcConfig/);
+    assert.equal(launch.includes("sphaDbcConfig"), false);
+  });
+
+  it("splits the 1% curve fee 50/25/25 creator / owner / treasury", () => {
+    const fee = splitFee(1, false);
+    assert.equal(fee.dev, 0.5);
+    assert.equal(fee.owner, 0.25);
+    assert.equal(fee.treasury, 0.25);
+    assert.equal(fee.referral, 0);
+    const dbc = readFileSync(path.join(process.cwd(), "src/lib/launch/dbc.ts"), "utf8");
+    assert.match(dbc, /startingFeeBps: 100/);
+    assert.match(dbc, /creatorTradingFeePercentage: 50/);
+    assert.match(dbc, /MigrationFeeOption.FixedBps100/);
   });
 });

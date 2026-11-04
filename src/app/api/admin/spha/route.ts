@@ -13,11 +13,13 @@ import {
   sphaAllocations,
   sphaCurveTokens,
   sphaMissingDest,
+  mergeSphaTestLaunches,
   sphaReservedTokens,
   type SphaNetwork,
 } from "@/lib/token/omics";
 import { encodeTx, sphaRpc, buildSphaTeamMintTx } from "@/lib/token/mint";
 import { connection } from "@/lib/solana/connection";
+import { tokenUiAmount } from "@/lib/solana/tokenBalance";
 import { createCoin, emptyLaunchBook } from "@/lib/launch/engine";
 import { dbcEnabled, liveDbcConfig } from "@/lib/launch/dbcIds";
 import { isTokenMetaUri, pinSphaTokenMeta, SPHA_DEFAULT_IMAGE } from "@/lib/token/sphaMeta";
@@ -62,6 +64,7 @@ export async function GET(req: NextRequest) {
     allocations: sphaAllocations(dest),
     launch: s.sphaLaunch || null,
     testLaunch: s.sphaTestLaunch || null,
+    testLaunches: mergeSphaTestLaunches(s.sphaTestLaunches, [], s.sphaTestLaunch || null),
     sphaDbcConfig: s.sphaDbcConfig || "",
     padConfig: liveDbcConfig(s.launch?.dbcConfig),
     dbc: dbcEnabled(),
@@ -97,10 +100,12 @@ const PoolMeta = z.object({
 });
 
 const Buy = z.object({
-  action: z.literal("prepareBuy"),
+  action: z.enum(["prepareBuy", "prepareTrade"]),
   payer: z.string(),
   mint: z.string(),
+  side: z.enum(["buy", "sell"]).optional(),
   sol: z.number().min(0.01).max(2).optional(),
+  tokens: z.number().min(0).optional(),
 });
 
 const Recorded = z.object({
@@ -254,30 +259,43 @@ async function prepareBuy(b: z.infer<typeof Buy>) {
   if (!isSolanaAddress(b.payer) || !isSolanaAddress(b.mint)) {
     return NextResponse.json({ error: "bad_wallet", message: "Buyer wallet and mint are required." }, { status: 400 });
   }
+  const side = b.side === "sell" ? "sell" : "buy";
   try {
     const dbc = await import("@/lib/launch/dbc");
     const pool = await dbc.waitForDbcPool(b.mint, 16);
     if (!pool) {
       return NextResponse.json({ error: "curve_missing", message: "Pool not on-chain yet." }, { status: 400 });
     }
+    let tokens = b.tokens;
+    if (side === "sell") {
+      const bag = await tokenUiAmount(connection(), b.payer, b.mint);
+      const have = bag.amount;
+      if (!(have > 0)) {
+        return NextResponse.json({ error: "empty_bag", message: "This wallet has none of that token to sell." }, { status: 400 });
+      }
+      tokens = tokens && tokens > 0 ? Math.min(tokens, have) : have;
+    }
     const built = await dbc.buildDbcTradeTx({
       mint: b.mint,
       owner: b.payer,
-      side: "buy",
-      sol: b.sol || 0.05,
+      side,
+      sol: side === "buy" ? b.sol || 0.05 : undefined,
+      tokens: side === "sell" ? tokens : undefined,
     });
     if (!built.ok) {
-      return NextResponse.json({ error: built.error, message: "Could not build the first buy." }, { status: 400 });
+      return NextResponse.json({ error: built.error, message: side === "sell" ? "Could not build the sell." : "Could not build the first buy." }, { status: 400 });
     }
     return NextResponse.json({
       ok: true,
       mint: b.mint,
+      side,
       tx: built.transaction,
       tokensOut: built.tokensOut,
+      solOut: built.solOut,
       feeSol: built.feeSol,
     });
   } catch (e) {
-    const message = e instanceof Error ? e.message : "Could not build the first buy.";
+    const message = e instanceof Error ? e.message : "Could not build the swap.";
     return NextResponse.json({ error: "chain_failed", message }, { status: 400 });
   }
 }
@@ -311,6 +329,8 @@ async function record(req: NextRequest, b: z.infer<typeof Recorded>) {
       s.sphaLaunch = row;
       if (b.config && isSolanaAddress(b.config)) s.sphaDbcConfig = b.config;
     } else {
+      s.sphaTestLaunches = mergeSphaTestLaunches(s.sphaTestLaunches, [], s.sphaTestLaunch || null);
+      s.sphaTestLaunches = mergeSphaTestLaunches(s.sphaTestLaunches, [], row);
       s.sphaTestLaunch = row;
     }
     pushBounded(s.audit, audit("admin", official ? "spha_launch" : "spha_test", `${b.network} ${b.mint}`, clientIp(req)), 400);

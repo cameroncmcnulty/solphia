@@ -11,9 +11,11 @@ function shortCa(ca: string) {
 export function CopyCa({
   ca,
   compact = false,
+  full = false,
 }: {
   ca?: string;
   compact?: boolean;
+  full?: boolean;
 }) {
   const [ok, setOk] = useState(false);
   if (!ca) {
@@ -69,7 +71,7 @@ export function CopyCa({
     >
       <span className="min-w-0">
         <span className="block text-[10px] tracking-[0.2em] text-mute">CA</span>
-        <span className="block truncate">{address}</span>
+        <span className={`block ${full ? "break-all" : "truncate"}`}>{address}</span>
       </span>
       <span className="shrink-0 rounded-full bg-acid px-3 py-1 text-[11px] font-semibold tracking-wide text-void">
         {ok ? "COPIED" : "COPY"}

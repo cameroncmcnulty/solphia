@@ -119,6 +119,24 @@ export function sphaMissingDest(dest: Partial<SphaDestinations>): SphaSliceId[] 
 }
 
 /** Team slices minted to project wallets at launch. Curve supply is separate (DBC totalTokenSupply). */
+/** Keep the last eight admin test launches by mint. Newer launchedAt wins; local overwrites equal stamps. */
+export function mergeSphaTestLaunches<T extends { mint: string; launchedAt?: number }>(
+  local: T[] | undefined,
+  remote: T[] | undefined,
+  extra?: T | null,
+): T[] {
+  const map = new Map<string, T>();
+  const add = (row?: T | null) => {
+    if (!row?.mint) return;
+    const prev = map.get(row.mint);
+    if (!prev || (Number(row.launchedAt) || 0) >= (Number(prev.launchedAt) || 0)) map.set(row.mint, row);
+  };
+  for (const row of remote || []) add(row);
+  for (const row of local || []) add(row);
+  add(extra || null);
+  return [...map.values()].sort((a, b) => (Number(b.launchedAt) || 0) - (Number(a.launchedAt) || 0)).slice(0, 8);
+}
+
 export function sphaTeamLegs(dest: SphaDestinations, supply = SPHA_SUPPLY): { id: SphaSliceId; to: string; tokens: number }[] {
   const owner = (dest.owner || "").trim();
   const foundation = (dest.airdrop || dest.foundation || "").trim();

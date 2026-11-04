@@ -138,6 +138,28 @@ describe("ops overlay", () => {
     assert.equal(merged.at, 3);
   });
 
+  it("does not let empty remote ops wipe admin test-launch CAs", () => {
+    const local = emptyState();
+    local.opsUpdatedAt = 4;
+    local.sphaTestLaunch = {
+      mint: "Ca11111111111111111111111111111111111111111",
+      network: "mainnet-beta",
+      name: "Solphia Test",
+      symbol: "TESTTOKEN",
+      supply: 200_000_000,
+      launchedAt: 20,
+      sigs: ["sig"],
+      allocations: [],
+    };
+    local.sphaTestLaunches = [local.sphaTestLaunch];
+    applyOpsConfig(local, { opsUpdatedAt: 8, sphaTestLaunch: null, sphaTestLaunches: [] });
+    assert.equal(local.sphaTestLaunch?.symbol, "TESTTOKEN");
+    assert.equal(local.sphaTestLaunches?.length, 1);
+    const store = readFileSync(new URL("../lib/store.ts", import.meta.url), "utf8");
+    assert.match(store, /mergeSphaTestLaunches/);
+    assert.match(store, /sphaTestLaunches: \[\]/);
+  });
+
   it("dual-writes $SPHA socials onto their own durable key", () => {
     const persist = readFileSync(new URL("../lib/persist.ts", import.meta.url), "utf8");
     assert.match(persist, /sphaSocials: "solphia:spha-socials"/);

@@ -1,15 +1,25 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Keypair } from "@solana/web3.js";
 import { SPHA_DEFAULT_IMAGE, SPHA_NAME, SPHA_SUPPLY, SPHA_SYMBOL, type SphaNetwork } from "@/lib/token/omics";
 import { useAdmin } from "./AdminProvider";
 import { Tokenomics } from "@/components/Tokenomics";
+import { CopyCa } from "@/components/CopyCa";
 import { shortPk } from "./ui";
 import { b64ToBytes } from "@/lib/solana/wire";
+import { copyText } from "@/lib/copyText";
 import { canSignProject, projectWallet, signAndSendProjectTx } from "@/lib/wallet/projectVault";
 
 const FIRST_BUY_SOL = 0.05;
+
+type LaunchRow = {
+  mint: string;
+  network: string;
+  launchedAt: number;
+  name: string;
+  symbol: string;
+};
 
 type Prep = {
   network: SphaNetwork;
@@ -17,24 +27,76 @@ type Prep = {
   dest: { owner: string; foundation: string; airdrop: string; treasury: string; lp: string };
   missing: string[];
   allocations: { id: string; label: string; pct: string; tokens: number; wallet: string }[];
-  launch: { mint: string; network: string; launchedAt: number; name: string; symbol: string } | null;
-  testLaunch?: { mint: string; network: string; launchedAt: number; name: string; symbol: string } | null;
+  launch: LaunchRow | null;
+  testLaunch?: LaunchRow | null;
+  testLaunches?: LaunchRow[];
   reserved?: number;
   curve?: number;
   dbc?: boolean;
 };
+
+function LaunchCaCard({
+  kicker,
+  row,
+  selected,
+  onSelect,
+}: {
+  kicker: string;
+  row: LaunchRow;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <div className={`rounded-2xl border p-4 ${selected ? "border-acid/60 bg-acid/5" : "border-violet/20 bg-void/30"}`}>
+      <button type="button" onClick={onSelect} className="w-full text-left">
+        <div className="font-mono text-[10px] tracking-[0.22em] text-acid">{kicker}</div>
+        <div className="mt-1 text-lg text-ghost">
+          ${row.symbol} · {row.name}
+        </div>
+        <div className="mt-1 font-mono text-[11px] text-mute">{row.network}</div>
+      </button>
+      <div className="mt-3">
+        <CopyCa ca={row.mint} full />
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2 font-mono text-[11px]">
+        <a
+          href={`https://solscan.io/token/${row.mint}`}
+          target="_blank"
+          rel="noreferrer"
+          className="rounded-full border border-violet/30 px-3 py-1 text-mute hover:border-acid hover:text-acid"
+        >
+          Solscan
+        </a>
+        <a
+          href={`https://dexscreener.com/solana/${row.mint}`}
+          target="_blank"
+          rel="noreferrer"
+          className="rounded-full border border-violet/30 px-3 py-1 text-mute hover:border-acid hover:text-acid"
+        >
+          Dexscreener
+        </a>
+        <a href="/launch" className="rounded-full border border-violet/30 px-3 py-1 text-mute hover:border-acid hover:text-acid">
+          Pad
+        </a>
+      </div>
+    </div>
+  );
+}
 
 export function SphaLaunch() {
   const { data, patch, busy } = useAdmin();
   const [prep, setPrep] = useState<Prep | null>(null);
   const [mode, setMode] = useState<"test" | "official">("test");
   const [name, setName] = useState("Solphia Test");
-  const [symbol, setSymbol] = useState("SPT");
+  const [symbol, setSymbol] = useState("TESTTOKEN");
   const [blurb, setBlurb] = useState("");
   const [website, setWebsite] = useState("https://solphia.io");
   const [art, setArt] = useState<{ image: string; uri: string } | null>(null);
   const [run, setRun] = useState(false);
   const [splitRun, setSplitRun] = useState(false);
+  const [tradeRun, setTradeRun] = useState(false);
+  const [tradeMint, setTradeMint] = useState("");
+  const [tradeSol, setTradeSol] = useState(String(FIRST_BUY_SOL));
   const [log, setLog] = useState("");
   const [err, setErr] = useState("");
 
@@ -54,9 +116,28 @@ export function SphaLaunch() {
       setSymbol(SPHA_SYMBOL);
     } else {
       setName("Solphia Test");
-      setSymbol("SPT");
+      setSymbol("TESTTOKEN");
     }
   }, [mode]);
+
+  const tests = useMemo(() => {
+    const rows = [...(prep?.testLaunches || [])];
+    if (prep?.testLaunch?.mint && !rows.some((r) => r.mint === prep.testLaunch?.mint)) rows.unshift(prep.testLaunch);
+    return rows;
+  }, [prep]);
+
+  useEffect(() => {
+    if (tradeMint) return;
+    const next = prep?.testLaunch?.mint || tests[0]?.mint || prep?.launch?.mint || "";
+    if (next) setTradeMint(next);
+  }, [prep, tests, tradeMint]);
+
+  const selected =
+    tests.find((r) => r.mint === tradeMint) ||
+    (prep?.launch?.mint === tradeMint ? prep.launch : null) ||
+    tests[0] ||
+    prep?.launch ||
+    null;
 
   async function launch() {
     setErr("");
@@ -82,7 +163,7 @@ export function SphaLaunch() {
     setRun(true);
     try {
       const mint = Keypair.generate();
-      setLog(`Mint ${mint.publicKey.toBase58().slice(0, 8)}… building 200M ${mode} launch`);
+      setLog(`Mint ${mint.publicKey.toBase58()} building 200M ${mode} launch`);
       const prepR = await fetch("/api/admin/spha", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -130,6 +211,8 @@ export function SphaLaunch() {
           payer,
         }),
       });
+      setTradeMint(ca);
+      copyText(ca, "CA copied");
       const notes: string[] = [];
       let fail = "";
       setLog("Minting team allocations to owner, foundation, and treasury…");
@@ -261,7 +344,7 @@ export function SphaLaunch() {
 
   async function splitNow() {
     setErr("");
-    const ca = prep?.launch?.mint || prep?.testLaunch?.mint || "";
+    const ca = selected?.mint || prep?.launch?.mint || prep?.testLaunch?.mint || "";
     const payer = projectWallet("owner")?.pubkey || data?.ownerWallet || "";
     if (!ca || !payer) {
       setErr("Launch a 200M token first.");
@@ -276,6 +359,61 @@ export function SphaLaunch() {
       setErr(e instanceof Error ? e.message : "team mint failed");
     } finally {
       setSplitRun(false);
+    }
+  }
+
+  async function deskTrade(side: "buy" | "sell") {
+    setErr("");
+    const ca = selected?.mint || tradeMint;
+    const payer = projectWallet("owner")?.pubkey || data?.ownerWallet || "";
+    if (!ca || !payer) {
+      setErr("Pick a launched CA first.");
+      return;
+    }
+    if (!(await canSignProject("owner"))) {
+      setErr("Owner project wallet cannot sign yet.");
+      return;
+    }
+    const sol = Number(tradeSol);
+    if (side === "buy" && !(sol >= 0.01 && sol <= 2)) {
+      setErr("Buy between 0.01 and 2 SOL.");
+      return;
+    }
+    setTradeRun(true);
+    try {
+      setLog(side === "buy" ? `Buying ${sol} SOL of ${ca}…` : `Selling the owner bag of ${ca}…`);
+      const r = await fetch("/api/admin/spha", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          action: "prepareTrade",
+          payer,
+          mint: ca,
+          side,
+          sol: side === "buy" ? sol : undefined,
+        }),
+      });
+      const j = (await r.json().catch(() => ({}))) as {
+        tx?: string;
+        tokensOut?: number;
+        solOut?: number;
+        feeSol?: number;
+        message?: string;
+        error?: string;
+      };
+      if (!r.ok || !j.tx) throw new Error(j.message || j.error || "swap build failed");
+      const sig = await signAndSendProjectTx("owner", j.tx);
+      const fee = typeof j.feeSol === "number" ? ` fee ${j.feeSol.toFixed(4)} SOL → creator / owner / treasury` : "";
+      setLog(
+        side === "buy"
+          ? `Bought${j.tokensOut ? ` ${Math.round(j.tokensOut).toLocaleString("en-US")} tokens` : ""} ${sig.slice(0, 8)}…${fee}`
+          : `Sold${j.solOut ? ` ${j.solOut.toFixed(4)} SOL` : ""} ${sig.slice(0, 8)}…${fee}`,
+      );
+      setTradeSol("");
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "swap failed");
+    } finally {
+      setTradeRun(false);
     }
   }
 
@@ -294,7 +432,7 @@ export function SphaLaunch() {
               Official $SPHA is 200,000,000. 8.6 / 9.7 / 4.6 mint into the owner, foundation, and treasury project
               wallets at launch. 77.1% on the same bonding curve as every other pad token so the 1% lasts after
               graduate. Test uses that same 200M Token-2022 path, with metadata and a first buy, and does not set the
-              official CA. Sign with the owner project wallet.
+              official CA. Sign with the owner project wallet. Copy the full CA from the cards below for other venues.
             </p>
           </div>
           <div className="flex rounded-full border border-violet/30 p-0.5">
@@ -326,16 +464,62 @@ export function SphaLaunch() {
           ))}
         </div>
 
-        {prep?.launch && (
-          <p className="mt-3 font-mono text-[12px] text-acid">
-            Official CA {shortPk(prep.launch.mint, 6)} on {prep.launch.network}
-          </p>
+        {(prep?.launch || tests.length > 0) && (
+          <div className="mt-4 grid gap-3 lg:grid-cols-2">
+            {prep?.launch ? (
+              <LaunchCaCard
+                kicker="OFFICIAL $SPHA · TAP TO TRADE"
+                row={prep.launch}
+                selected={tradeMint === prep.launch.mint}
+                onSelect={() => setTradeMint(prep.launch!.mint)}
+              />
+            ) : null}
+            {tests.map((row, i) => (
+              <LaunchCaCard
+                key={row.mint}
+                kicker={i === 0 ? "LAST TEST · TAP TO TRADE" : `TEST · ${row.symbol}`}
+                row={row}
+                selected={tradeMint === row.mint}
+                onSelect={() => setTradeMint(row.mint)}
+              />
+            ))}
+          </div>
         )}
-        {prep?.testLaunch && (
-          <p className="mt-1 font-mono text-[12px] text-mute">
-            Last test {shortPk(prep.testLaunch.mint, 6)} on {prep.testLaunch.network}
-          </p>
-        )}
+
+        {selected ? (
+          <div className="mt-4 rounded-2xl border border-acid/25 bg-acid/[0.04] p-4">
+            <div className="font-mono text-[10px] tracking-[0.22em] text-acid">TRADE FROM THIS DESK</div>
+            <p className="mt-1 text-sm text-mute">
+              Buy or sell ${selected.symbol} with the owner project wallet. Curve swap fee splits creator / owner /
+              treasury. Amount clears after a fill.
+            </p>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <input
+                value={tradeSol}
+                onChange={(e) => setTradeSol(e.target.value)}
+                inputMode="decimal"
+                placeholder={`${FIRST_BUY_SOL} SOL`}
+                className="w-32 rounded-full border border-violet/30 bg-void px-4 py-2 font-mono text-sm text-ghost outline-none"
+              />
+              <button
+                type="button"
+                disabled={run || splitRun || tradeRun}
+                onClick={() => void deskTrade("buy")}
+                className="btn-acid rounded-full px-5 py-2 text-sm disabled:opacity-40"
+              >
+                {tradeRun ? "Trading…" : `Buy ${selected.symbol}`}
+              </button>
+              <button
+                type="button"
+                disabled={run || splitRun || tradeRun}
+                onClick={() => void deskTrade("sell")}
+                className="btn-ghost rounded-full px-5 py-2 text-sm disabled:opacity-40"
+              >
+                Sell bag
+              </button>
+            </div>
+          </div>
+        ) : null}
 
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           <input
@@ -419,8 +603,21 @@ export function SphaLaunch() {
                     {a.label} <span className="font-mono text-[11px] text-acid">{a.pct}</span>
                   </td>
                   <td className="py-2 pr-3 font-mono text-[12px]">{a.tokens.toLocaleString("en-US")}</td>
-                  <td className="py-2 font-mono text-[11px] text-mute">
-                    {a.wallet === "curve" ? "bonding curve" : a.wallet ? shortPk(a.wallet, 6) : "missing"}
+                  <td className="py-2">
+                    {a.wallet === "curve" ? (
+                      <span className="font-mono text-[11px] text-mute">bonding curve · tradeable</span>
+                    ) : a.wallet ? (
+                      <button
+                        type="button"
+                        title="Copy wallet"
+                        onClick={() => copyText(a.wallet, "Wallet copied")}
+                        className="break-all text-left font-mono text-[11px] text-ghost hover:text-acid"
+                      >
+                        {a.wallet}
+                      </button>
+                    ) : (
+                      <span className="font-mono text-[11px] text-blood">missing</span>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -437,23 +634,23 @@ export function SphaLaunch() {
 
         <button
           type="button"
-          disabled={run || splitRun || Boolean(prep?.missing?.length)}
+          disabled={run || splitRun || tradeRun || Boolean(prep?.missing?.length)}
           onClick={() => void launch()}
           className="btn-acid mt-4 rounded-full px-6 py-2 text-sm disabled:opacity-40"
         >
-          {run ? "Launching…" : mode === "test" ? `Launch test on ${network}` : `Launch official $SPHA on ${network}`}
+          {run ? "Launching…" : mode === "test" ? `Launch ${symbol || "TESTTOKEN"} on ${network}` : `Launch official $SPHA on ${network}`}
         </button>
-        {prep?.launch?.mint || prep?.testLaunch?.mint ? (
+        {prep?.launch?.mint || prep?.testLaunch?.mint || tests.length ? (
           <button
             type="button"
-            disabled={run || splitRun}
+            disabled={run || splitRun || tradeRun}
             onClick={() => void splitNow()}
             className="btn-ghost mt-2 rounded-full px-6 py-2 text-sm disabled:opacity-40"
           >
             {splitRun ? "Minting team…" : "Mint team allocations"}
           </button>
         ) : null}
-        {log && <p className="mt-2 font-mono text-[12px] text-acid">{log}</p>}
+        {log && <p className="mt-2 break-all font-mono text-[12px] text-acid">{log}</p>}
         {err && <p className="mt-2 text-sm text-blood">{err}</p>}
         {prep?.missing?.length ? (
           <p className="mt-2 text-sm text-mute">Need: {prep.missing.join(", ")}</p>

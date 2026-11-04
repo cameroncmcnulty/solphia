@@ -30,6 +30,7 @@ import { emptyMail, ensureMail } from "./email/desk";
 import type { CircleBook } from "./circle/types";
 import type { ShillBook } from "./shill/types";
 import type { MailBook } from "./email/desk";
+import { mergeSphaTestLaunches } from "./token/omics";
 
 export const DATA_DIR = process.env.DATA_DIR || (process.env.VERCEL ? "/tmp/solphia" : path.join(process.cwd(), "data"));
 const FILE = path.join(DATA_DIR, "state.json");
@@ -166,13 +167,32 @@ export function applyOpsConfig(local: AppState, remote: Partial<AppState>): bool
       dirty = true;
     }
   }
-  if (remote.sphaLaunch !== undefined && JSON.stringify(local.sphaLaunch) !== JSON.stringify(remote.sphaLaunch)) {
-    local.sphaLaunch = remote.sphaLaunch || null;
-    dirty = true;
+  if (remote.sphaLaunch) {
+    if (JSON.stringify(local.sphaLaunch) !== JSON.stringify(remote.sphaLaunch)) {
+      local.sphaLaunch = remote.sphaLaunch;
+      dirty = true;
+    }
   }
-  if (remote.sphaTestLaunch !== undefined && JSON.stringify(local.sphaTestLaunch) !== JSON.stringify(remote.sphaTestLaunch)) {
-    local.sphaTestLaunch = remote.sphaTestLaunch || null;
-    dirty = true;
+  if (
+    Array.isArray(remote.sphaTestLaunches) ||
+    remote.sphaTestLaunch ||
+    local.sphaTestLaunch ||
+    (local.sphaTestLaunches && local.sphaTestLaunches.length)
+  ) {
+    const tests = mergeSphaTestLaunches(
+      local.sphaTestLaunches,
+      remote.sphaTestLaunches,
+      remote.sphaTestLaunch || local.sphaTestLaunch || null,
+    );
+    if (JSON.stringify(tests) !== JSON.stringify(local.sphaTestLaunches || [])) {
+      local.sphaTestLaunches = tests;
+      dirty = true;
+    }
+    const last = tests[0] || null;
+    if (JSON.stringify(last) !== JSON.stringify(local.sphaTestLaunch || null)) {
+      local.sphaTestLaunch = last;
+      dirty = true;
+    }
   }
   if (typeof remote.liveTrading === "boolean" && local.liveTrading !== remote.liveTrading) {
     local.liveTrading = remote.liveTrading;
@@ -255,6 +275,7 @@ export function emptyState(): AppState {
     sphaNetwork: "devnet",
     sphaLaunch: null,
     sphaTestLaunch: null,
+    sphaTestLaunches: [],
     sphaDbcConfig: "",
     adminOtpEmail: DEFAULT_ADMIN_OTP_EMAIL,
     adminOtpPending: null,
@@ -330,6 +351,11 @@ function hydrateFromRaw(raw: AppState): AppState {
     sphaNetwork: raw.sphaNetwork === "mainnet-beta" ? "mainnet-beta" : "devnet",
     sphaLaunch: raw.sphaLaunch || null,
     sphaTestLaunch: raw.sphaTestLaunch || null,
+    sphaTestLaunches: mergeSphaTestLaunches(
+      Array.isArray(raw.sphaTestLaunches) ? raw.sphaTestLaunches : [],
+      [],
+      raw.sphaTestLaunch || null,
+    ),
     sphaDbcConfig: raw.sphaDbcConfig || "",
     adminOtpEmail: raw.adminOtpEmail || DEFAULT_ADMIN_OTP_EMAIL,
     adminOtpPending: raw.adminOtpPending || null,
