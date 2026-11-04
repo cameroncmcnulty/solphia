@@ -9,7 +9,8 @@ import { CopyCa } from "@/components/CopyCa";
 import { shortPk } from "./ui";
 import { b64ToBytes } from "@/lib/solana/wire";
 import { copyText } from "@/lib/copyText";
-import { canSignProject, projectWallet, signAndSendProjectTx } from "@/lib/wallet/projectVault";
+import { projectWallet, signAndSendProjectTx } from "@/lib/wallet/projectVault";
+import { SwapWidget } from "@/components/SwapWidget";
 
 const FIRST_BUY_SOL = 0.05;
 
@@ -76,7 +77,7 @@ function LaunchCaCard({
       </div>
       {row.bals || row.fees ? (
         <p className="mt-2 font-mono text-[11px] text-mute">
-          Owner {fmtTok(row.bals?.owner || 0)} · partner {fmtFee(row.fees?.partnerUnclaimedSol || 0)} SOL unclaimed
+          Owner {fmtTok(row.bals?.owner || 0)} · unclaimed owner {fmtFee(row.fees?.creatorUnclaimedSol || 0)} / treasury {fmtFee(row.fees?.partnerUnclaimedSol || 0)} SOL
         </p>
       ) : null}
       <div className="mt-3 flex flex-wrap gap-2 font-mono text-[11px]">
@@ -115,10 +116,8 @@ export function SphaLaunch() {
   const [art, setArt] = useState<{ image: string; uri: string } | null>(null);
   const [run, setRun] = useState(false);
   const [splitRun, setSplitRun] = useState(false);
-  const [tradeRun, setTradeRun] = useState(false);
   const [claimRun, setClaimRun] = useState(false);
   const [tradeMint, setTradeMint] = useState("");
-  const [tradeSol, setTradeSol] = useState(String(FIRST_BUY_SOL));
   const [log, setLog] = useState("");
   const [err, setErr] = useState("");
 
@@ -161,6 +160,20 @@ export function SphaLaunch() {
     prep?.launch ||
     null;
 
+  const launchedTokens = useMemo(() => {
+    const rows: { mint: string; symbol: string; name?: string }[] = [];
+    const seen = new Set<string>();
+    const push = (row?: LaunchRow | null) => {
+      const mint = (row?.mint || "").trim();
+      if (!mint || seen.has(mint)) return;
+      seen.add(mint);
+      rows.push({ mint, symbol: row?.symbol || "", name: row?.name });
+    };
+    push(prep?.launch);
+    for (const row of tests) push(row);
+    return rows;
+  }, [prep, tests]);
+
   async function launch() {
     setErr("");
     setLog("");
@@ -176,10 +189,6 @@ export function SphaLaunch() {
     }
     const net = data?.sphaNetwork === "mainnet-beta" ? "mainnet-beta" : "devnet";
     if (mode === "official" && net === "mainnet-beta" && !confirm("MAINNET $SPHA. 200,000,000 supply. 77.1% on the curve. Continue?")) {
-      return;
-    }
-    if (!(await canSignProject("owner"))) {
-      setErr("Owner project wallet cannot sign yet.");
       return;
     }
     setRun(true);
@@ -272,7 +281,6 @@ export function SphaLaunch() {
   }
 
   async function mintTeamSlices(mint: string, payer: string): Promise<string[]> {
-    if (!(await canSignProject("owner"))) throw new Error("Owner project wallet cannot sign yet.");
     let lastErr = "mint not on-chain yet";
     for (let i = 0; i < 6; i++) {
       if (i) await new Promise((r) => setTimeout(r, 1500));
@@ -384,67 +392,6 @@ export function SphaLaunch() {
     }
   }
 
-  async function deskTrade(side: "buy" | "sell") {
-    setErr("");
-    const ca = selected?.mint || tradeMint;
-    const payer = projectWallet("owner")?.pubkey || data?.ownerWallet || "";
-    if (!ca || !payer) {
-      setErr("Pick a launched CA first.");
-      return;
-    }
-    if (!(await canSignProject("owner"))) {
-      setErr("Owner project wallet cannot sign yet.");
-      return;
-    }
-    const sol = Number(tradeSol);
-    if (side === "buy" && !(sol >= 0.01 && sol <= 2)) {
-      setErr("Buy between 0.01 and 2 SOL.");
-      return;
-    }
-    setTradeRun(true);
-    try {
-      setLog(side === "buy" ? `Buying ${sol} SOL of ${ca}…` : `Selling the owner bag of ${ca}…`);
-      const r = await fetch("/api/admin/spha", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          action: "prepareTrade",
-          payer,
-          mint: ca,
-          side,
-          sol: side === "buy" ? sol : undefined,
-        }),
-      });
-      const j = (await r.json().catch(() => ({}))) as {
-        tx?: string;
-        tokensOut?: number;
-        solOut?: number;
-        feeSol?: number;
-        message?: string;
-        error?: string;
-      };
-      if (!r.ok || !j.tx) throw new Error(j.message || j.error || "swap build failed");
-      const sig = await signAndSendProjectTx("owner", j.tx);
-      const fee = typeof j.feeSol === "number" ? ` fee ${j.feeSol.toFixed(4)} SOL → creator / owner / treasury` : "";
-      setLog(
-        side === "buy"
-          ? `Bought${j.tokensOut ? ` ${Math.round(j.tokensOut).toLocaleString("en-US")} tokens` : ""} ${sig.slice(0, 8)}…${fee}`
-          : `Sold${j.solOut ? ` ${j.solOut.toFixed(4)} SOL` : ""} ${sig.slice(0, 8)}…${fee}`,
-      );
-      setTradeSol("");
-      void fetch("/api/launch", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action: "sweep_partner", pubkey: payer, mint: ca }),
-      }).catch(() => {});
-      loadPrep().catch(() => {});
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "swap failed");
-    } finally {
-      setTradeRun(false);
-    }
-  }
-
   async function deskClaim(kind: "creator" | "partner") {
     setErr("");
     const ca = selected?.mint || tradeMint;
@@ -452,16 +399,12 @@ export function SphaLaunch() {
     const payer =
       projectWallet(role)?.pubkey || (kind === "creator" ? data?.ownerWallet : data?.treasury) || "";
     if (!ca || !payer) {
-      setErr(kind === "creator" ? "Owner project wallet signs creator claims." : "Treasury project wallet signs partner claims.");
-      return;
-    }
-    if (!(await canSignProject(role))) {
-      setErr(kind === "creator" ? "Owner project wallet cannot sign yet." : "Treasury project wallet cannot sign yet.");
+      setErr(kind === "creator" ? "Owner project wallet signs owner claims." : "Treasury project wallet signs treasury claims.");
       return;
     }
     setClaimRun(true);
     try {
-      setLog(kind === "creator" ? `Claiming creator fees for ${ca}…` : `Claiming partner fees for ${ca}…`);
+      setLog(kind === "creator" ? `Claiming owner (creator) fees for ${ca}…` : `Claiming treasury fees for ${ca}…`);
       const r = await fetch("/api/admin/spha", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -482,7 +425,7 @@ export function SphaLaunch() {
           body: JSON.stringify({ action: "sweep_partner", pubkey: payer, mint: ca }),
         }).catch(() => {});
       }
-      setLog(`${kind === "creator" ? "Creator" : "Partner"} claim ${sig.slice(0, 8)}… Fees leave the pool on claim.`);
+      setLog(`${kind === "creator" ? "Owner" : "Treasury"} claim ${sig.slice(0, 8)}… Fees leave the pool on claim.`);
       loadPrep().catch(() => {});
     } catch (e) {
       setErr(e instanceof Error ? e.message : "claim failed");
@@ -542,7 +485,7 @@ export function SphaLaunch() {
           <div className="mt-4 grid gap-3 lg:grid-cols-2">
             {prep?.launch ? (
               <LaunchCaCard
-                kicker="OFFICIAL $SPHA · TAP TO TRADE"
+                kicker="OFFICIAL $SPHA · TAP TO MANAGE"
                 row={prep.launch}
                 selected={tradeMint === prep.launch.mint}
                 onSelect={() => setTradeMint(prep.launch!.mint)}
@@ -551,7 +494,7 @@ export function SphaLaunch() {
             {tests.map((row, i) => (
               <LaunchCaCard
                 key={row.mint}
-                kicker={i === 0 ? "LAST TEST · TAP TO TRADE" : `TEST · ${row.symbol}`}
+                kicker={i === 0 ? "LAST TEST · TAP TO MANAGE" : `TEST · ${row.symbol}`}
                 row={row}
                 selected={tradeMint === row.mint}
                 onSelect={() => setTradeMint(row.mint)}
@@ -566,13 +509,13 @@ export function SphaLaunch() {
               <div>
                 <div className="font-mono text-[10px] tracking-[0.22em] text-acid">MANAGE ${selected.symbol}</div>
                 <p className="mt-1 text-sm text-mute">
-                  Buy or sell with the owner project wallet. Swap fees sit in the pool until you claim. Creator half
-                  pays the launch wallet. Partner half pays treasury, then owner on harvest.
+                  Owner is the curve creator. Swap fees sit in the pool until claimed — half to owner, half to
+                  treasury. Use the swap widget to trade.
                 </p>
               </div>
               <button
                 type="button"
-                disabled={run || splitRun || tradeRun || claimRun}
+                disabled={run || splitRun || claimRun}
                 onClick={() => {
                   setLog("Refreshing launched tokens…");
                   loadPrep()
@@ -600,55 +543,55 @@ export function SphaLaunch() {
             </div>
             <div className="mt-2 grid gap-2 sm:grid-cols-2">
               <div className="rounded-2xl border border-violet/20 bg-void/40 px-3 py-2">
-                <div className="font-mono text-[10px] text-mute">CREATOR UNCLAIMED</div>
+                <div className="font-mono text-[10px] text-mute">OWNER UNCLAIMED · 50%</div>
                 <div className="font-mono text-sm text-acid">{fmtFee(selected.fees?.creatorUnclaimedSol || 0)} SOL</div>
               </div>
               <div className="rounded-2xl border border-violet/20 bg-void/40 px-3 py-2">
-                <div className="font-mono text-[10px] text-mute">PARTNER UNCLAIMED</div>
+                <div className="font-mono text-[10px] text-mute">TREASURY UNCLAIMED · 50%</div>
                 <div className="font-mono text-sm text-acid">{fmtFee(selected.fees?.partnerUnclaimedSol || 0)} SOL</div>
               </div>
             </div>
             <div className="mt-3 flex flex-wrap items-center gap-2">
-              <input
-                value={tradeSol}
-                onChange={(e) => setTradeSol(e.target.value)}
-                inputMode="decimal"
-                placeholder={`${FIRST_BUY_SOL} SOL`}
-                className="w-32 rounded-full border border-violet/30 bg-void px-4 py-2 font-mono text-sm text-ghost outline-none"
-              />
               <button
                 type="button"
-                disabled={run || splitRun || tradeRun || claimRun}
-                onClick={() => void deskTrade("buy")}
-                className="btn-acid rounded-full px-5 py-2 text-sm disabled:opacity-40"
-              >
-                {tradeRun ? "Trading…" : `Buy ${selected.symbol}`}
-              </button>
-              <button
-                type="button"
-                disabled={run || splitRun || tradeRun || claimRun}
-                onClick={() => void deskTrade("sell")}
-                className="btn-ghost rounded-full px-5 py-2 text-sm disabled:opacity-40"
-              >
-                Sell bag
-              </button>
-              <button
-                type="button"
-                disabled={run || splitRun || tradeRun || claimRun || !((selected.fees?.creatorUnclaimedSol || 0) > 1e-9)}
+                disabled={run || splitRun || claimRun || !((selected.fees?.creatorUnclaimedSol || 0) > 1e-9)}
                 onClick={() => void deskClaim("creator")}
                 className="btn-ghost rounded-full px-5 py-2 text-sm disabled:opacity-40"
               >
-                {claimRun ? "Claiming…" : "Claim creator"}
+                {claimRun ? "Claiming…" : "Claim owner"}
               </button>
               <button
                 type="button"
-                disabled={run || splitRun || tradeRun || claimRun || !((selected.fees?.partnerUnclaimedSol || 0) > 1e-9)}
+                disabled={run || splitRun || claimRun || !((selected.fees?.partnerUnclaimedSol || 0) > 1e-9)}
                 onClick={() => void deskClaim("partner")}
                 className="btn-ghost rounded-full px-5 py-2 text-sm disabled:opacity-40"
               >
-                Claim partner
+                Claim treasury
               </button>
             </div>
+            {ownerPk ? (
+              <div className="mt-4">
+                <SwapWidget
+                  key={selected.mint}
+                  owner={ownerPk}
+                  defaultMint={selected.mint}
+                  defaultSymbol={selected.symbol}
+                  defaultName={selected.name}
+                  defaultSide="sell"
+                  widgetId={`spha-swap-${selected.mint}`}
+                  tokens={launchedTokens}
+                  note="Owner project wallet. Curve fees stay on-chain until you claim."
+                  signTx={async (transaction) => {
+                    const sig = await signAndSendProjectTx("owner", transaction);
+                    loadPrep().catch(() => {});
+                    return sig;
+                  }}
+                  onDone={() => loadPrep().catch(() => {})}
+                />
+              </div>
+            ) : (
+              <p className="mt-3 text-sm text-mute">Create the owner project wallet to swap this token.</p>
+            )}
           </div>
         ) : null}
 
@@ -765,7 +708,7 @@ export function SphaLaunch() {
 
         <button
           type="button"
-          disabled={run || splitRun || tradeRun || claimRun || Boolean(prep?.missing?.length)}
+          disabled={run || splitRun || claimRun || Boolean(prep?.missing?.length)}
           onClick={() => void launch()}
           className="btn-acid mt-4 rounded-full px-6 py-2 text-sm disabled:opacity-40"
         >
@@ -774,7 +717,7 @@ export function SphaLaunch() {
         {prep?.launch?.mint || prep?.testLaunch?.mint || tests.length ? (
           <button
             type="button"
-            disabled={run || splitRun || tradeRun || claimRun}
+            disabled={run || splitRun || claimRun}
             onClick={() => void splitNow()}
             className="btn-ghost mt-2 rounded-full px-6 py-2 text-sm disabled:opacity-40"
           >

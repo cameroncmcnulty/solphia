@@ -52,5 +52,6 @@ export async function POST(req: NextRequest) {
     impactPct: q.impactPct,
     inMint: q.inMint,
     outMint: q.outMint,
+    hopSol: q.hopSol,
   });
 }

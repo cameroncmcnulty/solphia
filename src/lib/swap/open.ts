@@ -13,7 +13,7 @@ import { simulateUnsignedB64 } from "../solana/simulate";
 export type AnyQuote =
   | {
       ok: true;
-      via: "curve" | "jupiter";
+      via: "curve" | "jupiter" | "hop";
       outAmount: number;
       feeSol: number;
       spendSol: number;
@@ -22,6 +22,7 @@ export type AnyQuote =
       outMint: string;
       inDecimals: number;
       outDecimals: number;
+      hopSol?: number;
     }
   | { ok: false; reason: string };
 
@@ -31,6 +32,15 @@ export function padPair(inputMint: string, outputMint: string): { mint: string; 
   if (!isSolanaAddress(inputMint) || !isSolanaAddress(outputMint) || inputMint === outputMint) return null;
   if (inputMint === SOL_MINT && outputMint !== SOL_MINT) return { mint: outputMint, side: "buy" };
   if (outputMint === SOL_MINT && inputMint !== SOL_MINT) return { mint: inputMint, side: "sell" };
+  return null;
+}
+
+/** Pad token ↔ USDC (or another desk mint) is not a direct curve pair. Route through SOL. */
+export function padHop(inputMint: string, outputMint: string): { kind: "sell" | "buy"; padMint: string } | null {
+  if (!isSolanaAddress(inputMint) || !isSolanaAddress(outputMint) || inputMint === outputMint) return null;
+  if (inputMint === SOL_MINT || outputMint === SOL_MINT) return null;
+  if (!isDeskMint(inputMint)) return { kind: "sell", padMint: inputMint };
+  if (!isDeskMint(outputMint)) return { kind: "buy", padMint: outputMint };
   return null;
 }
 
@@ -44,6 +54,11 @@ export async function mintDecimals(mint: string): Promise<number> {
     const info = await connection().getParsedAccountInfo(new PublicKey(mint), "confirmed");
     const d = Number((info.value?.data as { parsed?: { info?: { decimals?: number } } } | undefined)?.parsed?.info?.decimals);
     if (Number.isFinite(d) && d >= 0 && d <= 18) n = d;
+    else {
+      const supply = await connection().getTokenSupply(new PublicKey(mint), "confirmed");
+      const sd = Number(supply.value?.decimals);
+      if (Number.isFinite(sd) && sd >= 0 && sd <= 18) n = sd;
+    }
   } catch {
     n = 6;
   }
@@ -102,27 +117,122 @@ export async function quoteAnySwap(opts: {
       outDecimals,
     });
   } catch (e) {
-    return { ok: false, reason: e instanceof Error ? e.message : "No swap route." };
+    q = { ok: false, reason: e instanceof Error ? e.message : "No swap route." };
   }
-  if (!q.ok) return { ok: false, reason: q.reason };
-  const feeSol = skipHouse
-    ? 0
-    : opts.inputMint === SOL_MINT
-      ? liveSwapFeeSol(opts.amount)
-      : opts.outputMint === SOL_MINT
-        ? liveSwapFeeSol(q.outAmount)
-        : 0;
+  if (q.ok) {
+    const feeSol = skipHouse
+      ? 0
+      : opts.inputMint === SOL_MINT
+        ? liveSwapFeeSol(opts.amount)
+        : opts.outputMint === SOL_MINT
+          ? liveSwapFeeSol(q.outAmount)
+          : 0;
+    return {
+      ok: true,
+      via: "jupiter",
+      outAmount: opts.outputMint === SOL_MINT && feeSol > 0 ? Math.max(0, q.outAmount - feeSol) : q.outAmount,
+      feeSol,
+      spendSol: opts.amount,
+      impactPct: q.impactPct,
+      inMint: opts.inputMint,
+      outMint: opts.outputMint,
+      inDecimals,
+      outDecimals,
+    };
+  }
+  const hop = await quoteViaHop({ ...opts, slippageBps: slip, inDecimals, outDecimals });
+  if (hop) return hop;
+  return { ok: false, reason: q.reason };
+}
+
+async function quoteViaHop(opts: {
+  inputMint: string;
+  outputMint: string;
+  amount: number;
+  slippageBps: number;
+  inDecimals: number;
+  outDecimals: number;
+}): Promise<AnyQuote | null> {
+  const hop = padHop(opts.inputMint, opts.outputMint);
+  if (!hop) return null;
+  let hopSol = 0;
+  let feeSol = 0;
+  if (hop.kind === "sell") {
+    let pad: Awaited<ReturnType<typeof quotePadSwap>>;
+    try {
+      pad = await quotePadSwap({ mint: hop.padMint, side: "sell", amount: opts.amount, slippageBps: opts.slippageBps });
+    } catch {
+      return null;
+    }
+    if (!pad.ok || !(pad.outAmount > 0)) return null;
+    hopSol = pad.outAmount;
+    feeSol = pad.feeSol;
+  } else {
+    let first: Awaited<ReturnType<typeof quoteOpenSwap>>;
+    try {
+      first = await quoteOpenSwap({
+        inputMint: opts.inputMint,
+        outputMint: SOL_MINT,
+        amount: opts.amount,
+        slippageBps: opts.slippageBps,
+        inDecimals: opts.inDecimals,
+        outDecimals: SOL_DECIMALS,
+      });
+    } catch {
+      return null;
+    }
+    if (!first.ok || !(first.outAmount > 0)) return null;
+    hopSol = first.outAmount;
+  }
+  const secondPair = padPair(SOL_MINT, opts.outputMint);
+  if (secondPair && !isDeskMint(secondPair.mint)) {
+    let buy: Awaited<ReturnType<typeof quotePadSwap>>;
+    try {
+      buy = await quotePadSwap({ mint: secondPair.mint, side: "buy", amount: hopSol, slippageBps: opts.slippageBps });
+    } catch {
+      return null;
+    }
+    if (!buy.ok || !(buy.outAmount > 0)) return null;
+    return {
+      ok: true,
+      via: "hop",
+      outAmount: buy.outAmount,
+      feeSol: feeSol + buy.feeSol,
+      spendSol: hopSol,
+      impactPct: 0,
+      inMint: opts.inputMint,
+      outMint: opts.outputMint,
+      inDecimals: opts.inDecimals,
+      outDecimals: opts.outDecimals,
+      hopSol,
+    };
+  }
+  let jup: Awaited<ReturnType<typeof quoteOpenSwap>>;
+  try {
+    jup = await quoteOpenSwap({
+      inputMint: SOL_MINT,
+      outputMint: opts.outputMint,
+      amount: hopSol,
+      slippageBps: opts.slippageBps,
+      inDecimals: SOL_DECIMALS,
+      outDecimals: opts.outDecimals,
+    });
+  } catch {
+    return null;
+  }
+  if (!jup.ok || !(jup.outAmount > 0)) return null;
   return {
     ok: true,
-    via: "jupiter",
-    outAmount: opts.outputMint === SOL_MINT && feeSol > 0 ? Math.max(0, q.outAmount - feeSol) : q.outAmount,
+    via: "hop",
+    outAmount: jup.outAmount,
     feeSol,
-    spendSol: opts.amount,
-    impactPct: q.impactPct,
+    spendSol: hopSol,
+    impactPct: jup.impactPct,
     inMint: opts.inputMint,
     outMint: opts.outputMint,
-    inDecimals,
-    outDecimals,
+    inDecimals: opts.inDecimals,
+    outDecimals: opts.outDecimals,
+    hopSol,
   };
 }
 
@@ -173,6 +283,9 @@ export async function buildAnySwapTx(opts: {
     const sim = await simulateUnsignedB64(tx.transaction);
     if (!sim.ok) return sim;
     return { ok: true, transaction: tx.transaction, via: "curve", outAmount: q.outAmount, feeSol: q.feeSol };
+  }
+  if (q.via === "hop") {
+    return { ok: false, reason: "This pair routes through SOL in two steps." };
   }
   const buyFee = skipHouse || opts.inputMint !== SOL_MINT ? 0 : liveSwapFeeSol(opts.amount);
   const quoteAmount = buyFee > 0 ? Math.max(0, opts.amount - buyFee) : opts.amount;

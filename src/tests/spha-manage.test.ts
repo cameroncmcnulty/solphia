@@ -38,8 +38,11 @@ describe("launched token manage + swap picker", () => {
     assert.match(spha, /reloadAt/);
     assert.match(spha, /deskClaim\("creator"\)/);
     assert.match(spha, /deskClaim\("partner"\)/);
-    assert.match(spha, /Claim creator/);
-    assert.match(spha, /Claim partner/);
+    assert.match(spha, /Claim owner/);
+    assert.match(spha, /Claim treasury/);
+    assert.match(spha, /<SwapWidget/);
+    assert.equal(spha.includes("Sell bag"), false);
+    assert.equal(spha.includes("canSignProject"), false);
     assert.equal(spha.toLowerCase().includes("phantom"), false);
     const route = read("src/app/api/admin/spha/route.ts");
     assert.match(route, /action: z\.literal\("prepareClaim"\)/);

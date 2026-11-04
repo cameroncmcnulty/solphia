@@ -122,6 +122,7 @@ export async function quoteOnce(opts: {
   open?: boolean;
   inDecimals?: number;
   outDecimals?: number;
+  restrictIntermediate?: boolean;
 }): Promise<QuoteResult> {
   if (!opts.open) {
     if (!isAllowedMint(opts.inputMint) || !isAllowedMint(opts.outputMint)) {
@@ -137,7 +138,7 @@ export async function quoteOnce(opts: {
   const amount = toUnits(opts.amount, dec);
   const qs =
     `inputMint=${opts.inputMint}&outputMint=${opts.outputMint}&amount=${amount}` +
-    `&slippageBps=${opts.slippageBps}&restrictIntermediateTokens=true` +
+    `&slippageBps=${opts.slippageBps}&restrictIntermediateTokens=${opts.restrictIntermediate === false ? "false" : "true"}` +
     (opts.extra ? `&${opts.extra}` : "");
   let last = "Swap quote failed.";
   for (const base of QUOTE_URLS) {
@@ -184,7 +185,9 @@ export async function quoteOpenSwap(opts: {
   outDecimals?: number;
 }): Promise<QuoteResult> {
   /** Jupiter v0 quotes reject asLegacyTransaction on /swap, so house 1% cannot attach. */
-  return quoteOnce({ ...opts, open: true, extra: "asLegacyTransaction=true" });
+  const first = await quoteOnce({ ...opts, open: true, extra: "asLegacyTransaction=true" });
+  if (first.ok) return first;
+  return quoteOnce({ ...opts, open: true, extra: "asLegacyTransaction=true", restrictIntermediate: false });
 }
 
 export function pickBestQuote(rows: QuoteResult[]): QuoteResult {

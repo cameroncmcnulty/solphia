@@ -191,12 +191,19 @@ function TokenChip({ token, onClick }: { token?: SwapToken | null; onClick?: () 
   );
 }
 
+function routeLabel(via?: string) {
+  if (via === "curve") return "Solphia curve";
+  if (via === "hop") return "Curve + Jupiter";
+  return "Jupiter";
+}
+
 export function SwapWidget({
   owner,
   defaultMint = "",
   defaultSymbol = "",
   defaultName = "",
   defaultImage = "",
+  defaultSide = "buy",
   tokens,
   onDone,
   onMint,
@@ -210,6 +217,7 @@ export function SwapWidget({
   defaultSymbol?: string;
   defaultName?: string;
   defaultImage?: string;
+  defaultSide?: "buy" | "sell";
   tokens?: SwapToken[];
   onDone?: () => void;
   onMint?: (mint: string) => void;
@@ -225,7 +233,7 @@ export function SwapWidget({
     defaultMint && defaultMint.length > 30
       ? tokenFromMint(defaultMint, defaultSymbol, defaultName, defaultImage)
       : null,
-    "buy",
+    defaultSide,
   );
   const [pay, setPay] = useState<SwapToken>(seeded.pay);
   const [recv, setRecv] = useState<SwapToken>(seeded.recv);
@@ -233,7 +241,7 @@ export function SwapWidget({
   const [slipBps, setSlipBps] = useState(100);
   const [slipOpen, setSlipOpen] = useState(false);
   const [priority, setPriority] = useState<"auto" | "low" | "medium" | "high">("auto");
-  const [quote, setQuote] = useState<{ outAmount: number; via: string; impactPct: number; feeSol: number } | null>(null);
+  const [quote, setQuote] = useState<{ outAmount: number; via: string; impactPct: number; feeSol: number; hopSol?: number } | null>(null);
   const [review, setReview] = useState(false);
   const [bonded, setBonded] = useState(false);
   const [spha, setSpha] = useState<SwapToken | null>(null);
@@ -498,6 +506,7 @@ export function SwapWidget({
               via: typeof j.via === "string" ? j.via : "",
               impactPct: Number(j.impactPct) || 0,
               feeSol: Number(j.feeSol) || 0,
+              hopSol: Number(j.hopSol) || undefined,
             });
           } else setQuote(null);
         })
@@ -626,35 +635,54 @@ export function SwapWidget({
     markActionSpot("swap-widget");
     stayOnCard();
     try {
-      const r = await fetch("/api/swap/build", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          owner: pk,
-          inputMint: pay.mint,
-          outputMint: recv.mint,
-          amount: payNum,
-          slippageBps: slipBps,
-          priority,
-        }),
-      });
-      const j = await r.json();
-      if (!r.ok) throw new Error(typeof j.error === "string" ? j.error : "Could not build the swap.");
-      const sig = signTx
-        ? await signTx(j.transaction)
-        : await signAndSend(
-            j.transaction,
-            undefined,
-            {
-              kind: "swap",
+      const sendLeg = async (inputMint: string, outputMint: string, amount: number, retries = 0) => {
+        let last = "Could not build the swap.";
+        for (let i = 0; i <= retries; i++) {
+          if (i) await new Promise((r) => window.setTimeout(r, 900));
+          const r = await fetch("/api/swap/build", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
               owner: pk,
-              mint: recv.mint,
-              side: pay.mint === SOL_MINT ? "buy" : "sell",
-              sol: pay.mint === SOL_MINT ? payNum : undefined,
-              tokens: pay.mint === SOL_MINT ? undefined : payNum,
-            },
-            { skipPreflight: false },
-          );
+              inputMint,
+              outputMint,
+              amount,
+              slippageBps: slipBps,
+              priority,
+            }),
+          });
+          const j = await r.json();
+          if (r.ok && typeof j.transaction === "string") {
+            return signTx
+              ? await signTx(j.transaction)
+              : await signAndSend(
+                  j.transaction,
+                  undefined,
+                  {
+                    kind: "swap",
+                    owner: pk,
+                    mint: outputMint,
+                    side: inputMint === SOL_MINT ? "buy" : "sell",
+                    sol: inputMint === SOL_MINT ? amount : undefined,
+                    tokens: inputMint === SOL_MINT ? undefined : amount,
+                  },
+                  { skipPreflight: false },
+                );
+          }
+          last = typeof j.error === "string" ? j.error : last;
+          if (i < retries && /Not enough SOL/i.test(last)) continue;
+          throw new Error(last);
+        }
+        throw new Error(last);
+      };
+      const hopSol = quote?.via === "hop" ? Number(quote.hopSol) || 0 : 0;
+      let sig: string;
+      if (quote?.via === "hop" && hopSol > 0 && pay.mint !== SOL_MINT && recv.mint !== SOL_MINT) {
+        sig = await sendLeg(pay.mint, SOL_MINT, payNum);
+        sig = await sendLeg(SOL_MINT, recv.mint, hopSol * 0.995, 6);
+      } else {
+        sig = await sendLeg(pay.mint, recv.mint, payNum);
+      }
       if (settledRef.current) return;
       idleSigning();
       clearPayAmount();
@@ -842,7 +870,7 @@ export function SwapWidget({
 
           {quote && out != null && !short ? (
             <div className="mt-3 space-y-1 rounded-2xl bg-black/25 px-3 py-2 font-mono text-[11px] text-white/55">
-              <div className="flex justify-between"><span>Route</span><span>{quote.via === "curve" ? "Solphia curve" : "Jupiter"}</span></div>
+              <div className="flex justify-between"><span>Route</span><span>{routeLabel(quote.via)}</span></div>
               <div className="flex justify-between"><span>Price impact</span><span>{(quote.impactPct * 100).toFixed(2)}%</span></div>
               <div className="flex justify-between"><span>Min received</span><span>{recvIsSol ? fmtSol(minOut, 4) : fmtTok(minOut)}</span></div>
               {fees.totalSol > 0 ? (
@@ -1002,7 +1030,7 @@ export function SwapWidget({
           <div className="space-y-1 font-mono text-[12px] text-white/70">
             <div className="flex justify-between text-white"><span>Pay</span><span>{fmtTok(payNum)} {tick(pay.symbol) || pay.symbol}</span></div>
             <div className="flex justify-between text-white"><span>Receive</span><span>{out == null ? "—" : recvIsSol ? fmtSol(out, 4) : fmtTok(out)} {tick(recv.symbol) || recv.symbol}</span></div>
-            <div className="flex justify-between"><span>Route</span><span>{quote?.via === "curve" ? "Solphia curve" : "Jupiter"}</span></div>
+            <div className="flex justify-between"><span>Route</span><span>{routeLabel(quote?.via)}</span></div>
             <div className="flex justify-between"><span>Min received</span><span>{recvIsSol ? fmtSol(minOut, 4) : fmtTok(minOut)}</span></div>
             <div className="flex justify-between"><span>Slippage</span><span>{slipBps / 100}%</span></div>
             <div className="flex justify-between"><span>Priority</span><span>{priority}</span></div>

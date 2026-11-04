@@ -207,14 +207,16 @@ describe("spha tokenomics", () => {
     assert.equal(dirty, false);
   });
 
-  it("shows full copyable CAs and desk buy/sell on the 200M launcher, defaulting to TESTTOKEN", () => {
+  it("shows full copyable CAs and a swap widget on the 200M launcher, defaulting to TESTTOKEN", () => {
     const src = readFileSync(path.join(process.cwd(), "src/components/admin/SphaLaunch.tsx"), "utf8");
     assert.match(src, /useState\("TESTTOKEN"\)/);
     assert.match(src, /Launch \$\{symbol \|\| "TESTTOKEN"\}/);
     assert.match(src, /<CopyCa ca=\{row\.mint\} full \/>/);
-    assert.match(src, /prepareTrade/);
-    assert.match(src, /deskTrade\("buy"\)/);
-    assert.match(src, /deskTrade\("sell"\)/);
+    assert.match(src, /<SwapWidget/);
+    assert.match(src, /defaultSide="sell"/);
+    assert.match(src, /signAndSendProjectTx\("owner", transaction\)/);
+    assert.equal(src.includes("deskTrade"), false);
+    assert.equal(src.includes("Sell bag"), false);
     assert.match(src, /copyText\(ca, "CA copied"\)/);
     assert.match(src, /solscan\.io\/token\/\$\{row\.mint\}/);
     assert.match(src, /dexscreener\.com\/solana\/\$\{row\.mint\}/);
@@ -222,10 +224,12 @@ describe("spha tokenomics", () => {
     assert.match(src, /useState<"test" \| "official">\("test"\)/);
     assert.equal(src.toLowerCase().includes("phantom"), false);
     assert.match(src, /17\.2M \/ 19\.4M \/ 9\.2M/);
-    assert.match(src, /setTradeSol\(""\)/);
     assert.match(src, /prepareClaim/);
     assert.match(src, /deskClaim\("creator"\)/);
     assert.match(src, /deskClaim\("partner"\)/);
+    assert.match(src, /Claim owner/);
+    assert.match(src, /Claim treasury/);
+    assert.equal(src.includes("Owner project wallet cannot sign yet."), false);
     assert.match(src, /reloadAt/);
     assert.match(src, /Refreshing launched tokens/);
     const copy = readFileSync(path.join(process.cwd(), "src/components/CopyCa.tsx"), "utf8");

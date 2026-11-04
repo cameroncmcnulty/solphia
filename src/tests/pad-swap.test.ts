@@ -7,7 +7,7 @@ import { liveClipFeeSol, liveSwapFeeSol, protocolFeeSol } from "../lib/swap/rout
 import { clipHoldingUsd, HOLDING_CLIP_MAX } from "../lib/pair/engine";
 import { isDeskMint } from "../lib/tx/venue";
 import { SOL_MINT, USDC_MINT } from "../lib/pair/mints";
-import { padPair } from "../lib/swap/open";
+import { padHop, padPair } from "../lib/swap/open";
 import { launchError } from "../lib/launch/errors";
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -64,6 +64,28 @@ describe("in-house pad venue", () => {
     assert.equal(padPair(padMint, USDC_MINT), null);
     assert.equal(padPair(SOL_MINT, SOL_MINT), null);
     assert.equal(padPair("nope", SOL_MINT), null);
+  });
+
+  it("hops a pad mint through SOL to reach USDC", () => {
+    const padMint = "So1phiaFakeMint111111111111111111111111111";
+    assert.deepEqual(padHop(padMint, USDC_MINT), { kind: "sell", padMint });
+    assert.deepEqual(padHop(USDC_MINT, padMint), { kind: "buy", padMint });
+    assert.equal(padHop(padMint, SOL_MINT), null);
+    assert.equal(padHop(SOL_MINT, padMint), null);
+    assert.equal(padHop(USDC_MINT, SOL_MINT), null);
+    const open = readFileSync(path.join(process.cwd(), "src/lib/swap/open.ts"), "utf8");
+    assert.match(open, /quoteViaHop/);
+    assert.match(open, /via: "hop"/);
+    assert.match(open, /hopSol/);
+    const quote = readFileSync(path.join(process.cwd(), "src/app/api/swap/quote/route.ts"), "utf8");
+    assert.match(quote, /hopSol: q\.hopSol/);
+    const widget = readFileSync(path.join(process.cwd(), "src/components/SwapWidget.tsx"), "utf8");
+    assert.match(widget, /quote\?\.via === "hop"/);
+    assert.match(widget, /Curve \+ Jupiter/);
+    const jup = readFileSync(path.join(process.cwd(), "src/lib/pair/jupiter.ts"), "utf8");
+    assert.match(jup, /restrictIntermediate: false/);
+    const vault = readFileSync(path.join(process.cwd(), "src/lib/wallet/projectVault.ts"), "utf8");
+    assert.match(vault, /READY_TTL_MS/);
   });
 });
 

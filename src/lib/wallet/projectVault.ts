@@ -352,10 +352,19 @@ export function finishProjectUnlock(ok: boolean) {
 
 let serverReady: Partial<Record<ProjectRole, boolean>> | null = null;
 let serverPub: Partial<Record<ProjectRole, string>> = {};
+let serverReadyAt = 0;
+const READY_TTL_MS = 15_000;
 
 export async function projectServerReady(): Promise<Record<ProjectRole, boolean>> {
-  if (serverReady?.treasury != null && serverReady.owner != null && serverReady.foundation != null) {
-    return { treasury: Boolean(serverReady.treasury), owner: Boolean(serverReady.owner), foundation: Boolean(serverReady.foundation) };
+  const hit = serverReady;
+  if (
+    hit &&
+    Date.now() - serverReadyAt < READY_TTL_MS &&
+    hit.treasury != null &&
+    hit.owner != null &&
+    hit.foundation != null
+  ) {
+    return { treasury: Boolean(hit.treasury), owner: Boolean(hit.owner), foundation: Boolean(hit.foundation) };
   }
   try {
     const r = await fetch("/api/admin/project-sign", { cache: "no-store" });
@@ -372,6 +381,7 @@ export async function projectServerReady(): Promise<Record<ProjectRole, boolean>
   } catch {
     serverReady = { treasury: false, owner: false, foundation: false };
   }
+  serverReadyAt = Date.now();
   return {
     treasury: Boolean(serverReady.treasury),
     owner: Boolean(serverReady.owner),
