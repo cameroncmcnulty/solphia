@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse, after } from "next/server";
 import { z } from "zod";
 import { clientIp, isSolanaAddress, rateLimit, sanitizeText } from "@/lib/security";
-import { mutateState, withLaunch } from "@/lib/store";
+import { mutateState, overlayAccountIdentity, persistAccountIdentity, withLaunch } from "@/lib/store";
 import { emptyLaunchBook } from "@/lib/launch/engine";
 import {
   bindReferrer,
@@ -84,14 +84,18 @@ export async function GET(req: NextRequest) {
   if (!isSolanaAddress(pubkey)) return fail("bad_wallet");
   const solUsd = lastPairPrices().solUsd || 0;
   const stored = await getPfp(pubkey);
-  const s = await withLaunch((st) => st, false);
+  const s = await withLaunch(async (st) => {
+    await overlayAccountIdentity(bookOf(st), pubkey);
+    return st;
+  }, false);
   const book = bookOf(s);
   const user = s.users.find((u) => u.pubkey === pubkey);
   const acc = book.accounts?.[pubkey];
   const needPfp = Boolean(stored && acc && !(acc.pfp || "").trim());
   const needName = Boolean(user?.username && acc && !(acc.username || "").trim());
   if (needPfp || needName) {
-    await withLaunch((st) => {
+    await withLaunch(async (st) => {
+      await overlayAccountIdentity(bookOf(st), pubkey);
       const a = bookOf(st).accounts?.[pubkey];
       if (!a) return;
       if (needPfp && !(a.pfp || "").trim()) a.pfp = PFP_SENTINEL;
@@ -131,14 +135,16 @@ export async function POST(req: NextRequest) {
       if (stored) pfpUrl = PFP_SENTINEL;
     }
   }
-  const out = await withLaunch((s) => {
+  const out = await withLaunch(async (s) => {
     const book = bookOf(s);
+    await overlayAccountIdentity(book, b.pubkey);
     if (b.action === "hello") {
       const r = bindReferrer(book, b.pubkey, sanitizeText(b.referrer || "", 48));
       if (r.ok) {
         payReferralXp(book, b.pubkey);
         const user = s.users.find((u) => u.pubkey === b.pubkey);
         if (user?.username && !r.account.username) r.account.username = user.username;
+        await persistAccountIdentity(r.account);
       }
       return r;
     }
@@ -162,6 +168,7 @@ export async function POST(req: NextRequest) {
         }
         user.username = r.username || undefined;
         user.lastSeen = Date.now();
+        await persistAccountIdentity(r.account);
       }
       return r;
     }

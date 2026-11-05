@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 import { DEFAULT_FUND, DEFAULT_OWNER, DEFAULT_TREASURY, LIVE_TRADING, TREASURY } from "../lib/config";
 import { durableKind } from "../lib/persist";
 import { treasuryAddress } from "../lib/treasury";
-import { applyOpsConfig, emptyState, mergeSphaSocials } from "../lib/store";
+import { applyOpsConfig, emptyState, mergeSphaSocials, mergeUsers } from "../lib/store";
 import { socialHref } from "../lib/launch/links";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -169,6 +169,26 @@ describe("ops overlay", () => {
     assert.match(store, /persistOpsBlob/);
     const admin = readFileSync(new URL("../app/api/admin/route.ts", import.meta.url), "utf8");
     assert.match(admin, /sphaSocialsAt = Date\.now\(\)/);
+  });
+
+  it("merges launch accounts and desk users on persist so a thin instance cannot wipe them", () => {
+    const store = readFileSync(new URL("../lib/store.ts", import.meta.url), "utf8");
+    assert.match(store, /slim.accounts = mergeAccountMaps/);
+    assert.match(store, /export function mergeUsers/);
+    assert.match(store, /state.users = mergeUsers/);
+    assert.match(store, /persistAccountIdentity/);
+    assert.match(store, /overlayAccountIdentity/);
+    const account = readFileSync(new URL("../app/api/account/route.ts", import.meta.url), "utf8");
+    assert.match(account, /overlayAccountIdentity/);
+    assert.match(account, /persistAccountIdentity/);
+    const A = "CyaE1VxvBrahnPWkqm5VsdCvyS2QmNht2UFrKJHga54o";
+    const merged = mergeUsers(
+      [{ pubkey: A, createdAt: 2, lastSeen: 4, alertsEnabled: true, username: "Cam" }],
+      [{ pubkey: A, createdAt: 1, lastSeen: 1, alertsEnabled: false }],
+    );
+    assert.equal(merged[0].username, "Cam");
+    assert.equal(merged[0].createdAt, 1);
+    assert.equal(merged[0].lastSeen, 4);
   });
 });
 

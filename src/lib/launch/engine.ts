@@ -292,6 +292,47 @@ function pxAt(fills: LaunchFill[], before: number, fallback: number): number {
   return fills[0]?.priceSol || fallback;
 }
 
+/** Username / referral fields dual-written off the fat tape. */
+export type AccountIdentity = {
+  pubkey: string;
+  username?: string;
+  usernameAt?: number;
+  referrer?: string;
+  referredAt?: number;
+  referralRewardsSol: number;
+  intro?: string;
+  introAt?: number;
+  xp?: number;
+};
+
+export function accountIdentity(a: LaunchAccount, key = a.pubkey): AccountIdentity {
+  return {
+    pubkey: a.pubkey || key,
+    username: a.username,
+    usernameAt: a.usernameAt,
+    referrer: a.referrer,
+    referredAt: a.referredAt,
+    referralRewardsSol: Number(a.referralRewardsSol) || 0,
+    intro: a.intro,
+    introAt: a.introAt,
+    xp: a.xp,
+  };
+}
+
+export function identityAsAccount(id: AccountIdentity): LaunchAccount {
+  return {
+    pubkey: id.pubkey,
+    username: id.username,
+    usernameAt: id.usernameAt,
+    referrer: id.referrer,
+    referredAt: id.referredAt,
+    referralRewardsSol: Number(id.referralRewardsSol) || 0,
+    intro: id.intro,
+    introAt: id.introAt,
+    xp: id.xp,
+  };
+}
+
 /** Compact one account for Redis. Never drops xp, username, referrer, or rewards. */
 export function slimAccount(a: LaunchAccount, key: string): LaunchAccount {
   const pfp = a.pfp || "";
@@ -414,13 +455,17 @@ function pickPfp(remote: LaunchAccount, local: LaunchAccount): { pfp?: string; p
 function pickUsername(remote: LaunchAccount, local: LaunchAccount): { username?: string; usernameAt?: number } {
   const localAt = local.usernameAt || 0;
   const remoteAt = remote.usernameAt || 0;
+  const localName = typeof local.username === "string" ? local.username : undefined;
+  const remoteName = typeof remote.username === "string" ? remote.username : undefined;
   if (localAt > remoteAt) {
-    return { username: local.username, usernameAt: localAt };
+    if (localName === undefined && remoteName) return { username: remoteName, usernameAt: remoteAt };
+    return { username: localName, usernameAt: localAt };
   }
   if (remoteAt > localAt) {
-    return { username: remote.username, usernameAt: remoteAt };
+    if (remoteName === undefined && localName) return { username: localName, usernameAt: localAt };
+    return { username: remoteName, usernameAt: remoteAt };
   }
-  return { username: local.username || remote.username, usernameAt: localAt || undefined };
+  return { username: localName || remoteName, usernameAt: localAt || remoteAt || undefined };
 }
 
 function pickIntro(remote: LaunchAccount, local: LaunchAccount): { intro?: string; introAt?: number } {

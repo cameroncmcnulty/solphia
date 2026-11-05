@@ -6,7 +6,18 @@ import { DEFAULT_ADMIN_OTP_EMAIL, type AdminOtpPending } from "./admin/otp";
 import { findAccount, mergeLoginAccounts, type LoginAccount } from "./auth/accounts";
 import type { SignupPending } from "./auth/otp";
 import { emptyBook, emptyTrader, lockedAuto } from "./auto";
-import { emptyLaunchBook, mergeAccountMaps, mergeLaunch, slimLaunch, type LaunchAccount, type LaunchBook } from "./launch/engine";
+import {
+  accountIdentity,
+  emptyLaunchBook,
+  ensureAccount,
+  identityAsAccount,
+  mergeAccount,
+  mergeAccountMaps,
+  mergeLaunch,
+  slimLaunch,
+  type LaunchAccount,
+  type LaunchBook,
+} from "./launch/engine";
 import { emptyLab, mergeLab } from "./desk/shadow";
 import { emptyMind, mergeMind } from "./mind/engine";
 import {
@@ -21,7 +32,7 @@ import {
   pullRemoteState,
   KEYS,
 } from "./persist";
-import type { AppState, AuditEvent, BacktestReport, PairHoldings, TraderAccount } from "./types";
+import type { AppState, AppUser, AuditEvent, BacktestReport, PairHoldings, TraderAccount } from "./types";
 import { pruneBookLogs } from "./pair/bookLog";
 import { latestBacktest } from "./pair/backtest";
 import { emptyCircle, ensureCircle, mergeCircle } from "./circle/engine";
@@ -511,12 +522,77 @@ async function overlayLaunch(state: AppState) {
   }
 }
 
+/** Union desk users by pubkey. Empty username / TOS on one side cannot wipe the other. */
+export function mergeUsers(local: AppUser[] = [], remote: AppUser[] = []): AppUser[] {
+  const map = new Map<string, AppUser>();
+  for (const u of remote) {
+    if (u?.pubkey) map.set(u.pubkey, u);
+  }
+  for (const u of local) {
+    if (!u?.pubkey) continue;
+    const r = map.get(u.pubkey);
+    if (!r) {
+      map.set(u.pubkey, u);
+      continue;
+    }
+    map.set(u.pubkey, {
+      ...r,
+      ...u,
+      username: u.username || r.username,
+      notes: u.notes || r.notes,
+      email: u.email || r.email,
+      plan: u.plan || r.plan,
+      accountId: u.accountId || r.accountId,
+      createdAt: Math.min(u.createdAt || r.createdAt || 0, r.createdAt || u.createdAt || 0) || u.createdAt || r.createdAt,
+      lastSeen: Math.max(u.lastSeen || 0, r.lastSeen || 0),
+      tosAcceptedAt: Math.max(u.tosAcceptedAt || 0, r.tosAcceptedAt || 0) || undefined,
+      privacyAcceptedAt: Math.max(u.privacyAcceptedAt || 0, r.privacyAcceptedAt || 0) || undefined,
+      subscribedUntil: Math.max(u.subscribedUntil || 0, r.subscribedUntil || 0) || undefined,
+      lastPaidAt: Math.max(u.lastPaidAt || 0, r.lastPaidAt || 0) || undefined,
+      lastPaySig: u.lastPaySig || r.lastPaySig,
+      unsubscribedAt: Math.max(u.unsubscribedAt || 0, r.unsubscribedAt || 0) || undefined,
+      comped: Boolean(u.comped || r.comped),
+      alertsEnabled: Boolean(u.alertsEnabled || r.alertsEnabled),
+      autoRenew: Boolean(u.autoRenew || r.autoRenew),
+    });
+  }
+  return [...map.values()];
+}
+
 async function persistLaunch(state: AppState) {
   if (!durableConfigured()) return;
   const slim = slimLaunch(state.launch || emptyLaunchBook());
+  try {
+    const extra = await kvGetJson(KEYS.launchAccounts);
+    if (extra && typeof extra === "object") {
+      slim.accounts = mergeAccountMaps(extra as Record<string, LaunchAccount>, slim.accounts || {});
+    }
+  } catch {
+    /* write what we have */
+  }
+  if (state.launch) state.launch.accounts = slim.accounts;
   // Accounts first so a fat tape write cannot be the only copy of rank / usernames.
   await kvSetJson(KEYS.launchAccounts, slim.accounts || {});
   await kvSetJson(KEYS.launch, slim);
+}
+
+export async function persistAccountIdentity(acc: LaunchAccount | null | undefined) {
+  if (!durableConfigured() || !acc?.pubkey) return;
+  if (!(acc.username || acc.referrer || acc.referralRewardsSol || acc.intro || acc.xp)) return;
+  await kvSetJson(KEYS.account(acc.pubkey), accountIdentity(acc));
+}
+
+export async function overlayAccountIdentity(book: LaunchBook, pubkey: string) {
+  if (!durableConfigured() || !pubkey) return;
+  try {
+    const raw = await kvGetJson(KEYS.account(pubkey));
+    if (!raw || typeof raw !== "object") return;
+    const ident = identityAsAccount(raw as ReturnType<typeof accountIdentity>);
+    const cur = ensureAccount(book, pubkey);
+    book.accounts[pubkey] = mergeAccount(ident, cur, pubkey);
+  } catch {
+    /* keep mem */
+  }
 }
 
 async function overlaySphaSocials(state: AppState) {
@@ -547,6 +623,15 @@ async function persistSphaSocials(state: AppState) {
 
 async function persistOpsBlob(state: AppState) {
   await persistSphaSocials(state);
+  try {
+    const raw = await kvGetJson(KEYS.ops);
+    if (raw && typeof raw === "object") {
+      const remote = raw as AppState;
+      state.users = mergeUsers(state.users || [], remote.users || []);
+    }
+  } catch {
+    /* write local users */
+  }
   await kvSetJson(KEYS.ops, opsView(state));
 }
 

@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { DEV_FEE_BPS, OWNER_FEE_BPS, REF_FEE_BPS, REFERRED_OWNER_BPS, REFERRED_TREAS_BPS, SWAP_FEE_BPS, TREAS_FEE_BPS, feeOn, splitFee } from "../lib/launch/curve";
-import { bindReferrer, buyCoin, createCoin, emptyLaunchBook, recordOnchainFill, withdrawReferral } from "../lib/launch/engine";
+import { bindReferrer, buyCoin, createCoin, emptyLaunchBook, mergeLaunch, recordOnchainFill, withdrawReferral } from "../lib/launch/engine";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 
 const A = "CyaE1VxvBrahnPWkqm5VsdCvyS2QmNht2UFrKJHga54o";
 const B = "D4uCNcBKAbG9NAkmhQg7pBiztuejNzbWrZDcZmFGut81";
@@ -43,6 +45,17 @@ describe("referral book", () => {
     const self = bindReferrer(book, B, B);
     assert.equal(self.ok, true);
     if (self.ok) assert.equal(self.bound, false);
+  });
+
+  it("keeps a bound referrer when an XP stub without referrer merges in", () => {
+    const saved = emptyLaunchBook();
+    bindReferrer(saved, A, OWN);
+    const stub = emptyLaunchBook();
+    stub.accounts[A] = { pubkey: A, referralRewardsSol: 0, xp: 9 };
+    const merged = mergeLaunch(stub, saved);
+    assert.equal(merged.accounts[A].referrer, OWN);
+    const store = readFileSync(path.join(process.cwd(), "src/lib/store.ts"), "utf8");
+    assert.match(store, /mergeAccountMaps\(extra as Record/);
   });
 
   it("binds a username invite the same as a wallet invite", () => {

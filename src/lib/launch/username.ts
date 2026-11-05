@@ -63,7 +63,7 @@ export function setUsername(
   const u = normalizeUsername(raw);
   if (!u) {
     const acc = ensureAccount(book, pubkey);
-    acc.username = undefined;
+    acc.username = "";
     acc.usernameAt = Date.now();
     return { ok: true, account: acc, username: "" };
   }
