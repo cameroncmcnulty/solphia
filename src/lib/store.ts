@@ -42,6 +42,12 @@ import type { CircleBook } from "./circle/types";
 import type { ShillBook } from "./shill/types";
 import type { MailBook } from "./email/desk";
 import { mergeSphaTestLaunches } from "./token/omics";
+import {
+  emptySphaCountdown,
+  mergeSphaCountdown,
+  parseSphaCountdown,
+  type SphaCountdown,
+} from "./token/countdown";
 
 export const DATA_DIR = process.env.DATA_DIR || (process.env.VERCEL ? "/tmp/solphia" : path.join(process.cwd(), "data"));
 const FILE = path.join(DATA_DIR, "state.json");
@@ -149,9 +155,25 @@ function overlaySphaSocialsFrom(local: AppState, remote: unknown): boolean {
   return putSphaSocials(local, mergeSphaSocials(localBlob, remoteBlob));
 }
 
+function putSphaCountdown(state: AppState, blob: SphaCountdown): boolean {
+  const cur = mergeSphaCountdown(emptySphaCountdown(), state.sphaCountdown || emptySphaCountdown());
+  const next = mergeSphaCountdown(cur, blob);
+  if (JSON.stringify(cur) === JSON.stringify(next)) return false;
+  state.sphaCountdown = next;
+  return true;
+}
+
+function overlaySphaCountdownFrom(local: AppState, remote: unknown): boolean {
+  const remoteBlob = parseSphaCountdown(remote);
+  if (!remoteBlob) return false;
+  const localBlob = parseSphaCountdown(local) || emptySphaCountdown();
+  return putSphaCountdown(local, mergeSphaCountdown(localBlob, remoteBlob));
+}
+
 /** Copy admin-editable public fields from durable ops onto a live instance. */
 export function applyOpsConfig(local: AppState, remote: Partial<AppState>): boolean {
   let dirty = overlaySphaSocialsFrom(local, remote);
+  if (overlaySphaCountdownFrom(local, remote)) dirty = true;
   const remoteAt = Number(remote.opsUpdatedAt) || 0;
   const localAt = Number(local.opsUpdatedAt) || 0;
   if (remoteAt && localAt && remoteAt < localAt) return dirty;
@@ -234,6 +256,7 @@ async function maybeOverlayOps(state: AppState) {
     const raw = await kvGetJson(KEYS.ops);
     if (raw && typeof raw === "object") applyOpsConfig(state, raw as AppState);
     await overlaySphaSocials(state);
+    await overlaySphaCountdown(state);
   } catch {
     /* keep mem */
   }
@@ -296,6 +319,7 @@ export function emptyState(): AppState {
     mail: emptyMail(),
     sphaSocials: { x: "", telegram: "", discord: "", website: "" },
     sphaSocialsAt: 0,
+    sphaCountdown: emptySphaCountdown(),
     opsUpdatedAt: 0,
     publishLiveWallet: false,
     buybacks: [],
@@ -368,6 +392,7 @@ function hydrateFromRaw(raw: AppState): AppState {
       raw.sphaTestLaunch || null,
     ),
     sphaDbcConfig: raw.sphaDbcConfig || "",
+    sphaCountdown: parseSphaCountdown(raw.sphaCountdown) || emptySphaCountdown(),
     adminOtpEmail: raw.adminOtpEmail || DEFAULT_ADMIN_OTP_EMAIL,
     adminOtpPending: raw.adminOtpPending || null,
     adminTotp: raw.adminTotp && typeof raw.adminTotp === "object" ? raw.adminTotp : null,
@@ -621,8 +646,35 @@ async function persistSphaSocials(state: AppState) {
   await kvSetJson(KEYS.sphaSocials, merged);
 }
 
+async function overlaySphaCountdown(state: AppState) {
+  if (!durableConfigured()) return;
+  try {
+    const raw = await kvGetJson(KEYS.sphaCountdown);
+    overlaySphaCountdownFrom(state, raw);
+  } catch {
+    /* keep mem */
+  }
+}
+
+async function persistSphaCountdown(state: AppState) {
+  if (!durableConfigured()) return;
+  const local = parseSphaCountdown(state) || emptySphaCountdown();
+  let remote = emptySphaCountdown();
+  try {
+    const parsed = parseSphaCountdown(await kvGetJson(KEYS.sphaCountdown));
+    if (parsed) remote = parsed;
+  } catch {
+    /* treat as empty remote */
+  }
+  const merged = mergeSphaCountdown(local, remote);
+  putSphaCountdown(state, merged);
+  if (!merged.at && !merged.launchAt && !merged.pendingMint) return;
+  await kvSetJson(KEYS.sphaCountdown, merged);
+}
+
 async function persistOpsBlob(state: AppState) {
   await persistSphaSocials(state);
+  await persistSphaCountdown(state);
   try {
     const raw = await kvGetJson(KEYS.ops);
     if (raw && typeof raw === "object") {

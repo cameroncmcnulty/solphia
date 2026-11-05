@@ -202,6 +202,13 @@ export type AdminDesk = {
   sphaTestLaunch: AdminDesk["sphaLaunch"];
   sphaTestLaunches: NonNullable<AdminDesk["sphaLaunch"]>[];
   sphaDbcConfig: string;
+  sphaCountdown: import("../token/countdown").SphaCountdown & {
+    publicMint: string;
+    mintAt: number;
+    remainingMs: number;
+    inMintWindow: boolean;
+    timedOut: boolean;
+  };
   adminOtpEmail: string;
   mailReady: boolean;
   mailFrom: string;

@@ -20,6 +20,10 @@ export const KEYS = {
   pfp: (pk: string) => `solphia:pfp:${pk}`,
   /** $SPHA social links. Dual-written so a stale ops save cannot wipe them. */
   sphaSocials: "solphia:spha-socials",
+  /** Official $SPHA countdown. Dual-written so a stale ops save cannot wipe the clock. */
+  sphaCountdown: "solphia:spha-countdown",
+  /** NX lock while the T-10 official mint is in flight. */
+  sphaMintLock: "solphia:spha-mint-lock",
   circle: "solphia:circle",
   shill: "solphia:shill",
   mail: "solphia:mail",
@@ -112,6 +116,11 @@ export async function kvSetJson(key: string, value: unknown): Promise<boolean> {
 export async function kvSetEx(key: string, value: unknown, seconds: number): Promise<boolean> {
   const r = await kvCommand(["SET", key, JSON.stringify(value), "EX", Math.max(30, Math.floor(seconds))]);
   return r.ok;
+}
+
+export async function kvSetNxEx(key: string, value: unknown, seconds: number): Promise<boolean> {
+  const r = await kvCommand(["SET", key, JSON.stringify(value), "NX", "EX", Math.max(30, Math.floor(seconds))]);
+  return r.ok && (r.result === "OK" || r.result === true);
 }
 
 export async function kvMGetJson(keys: string[]): Promise<(unknown | null)[]> {

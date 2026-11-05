@@ -57,6 +57,12 @@ export async function GET(req: NextRequest) {
   } catch {
     /* tick still counts */
   }
+  let sphaCountdown = null;
+  try {
+    sphaCountdown = await (await import("@/lib/token/sphaAutoLaunch")).tickSphaCountdown();
+  } catch {
+    /* tick still counts */
+  }
   return NextResponse.json({
     ok: true,
     entries: tick.entries,
@@ -67,6 +73,7 @@ export async function GET(req: NextRequest) {
     houseVotes,
     partnerClaims,
     partnerSol,
+    sphaCountdown,
     lastTickAt: Date.now(),
     liveTrading: tick.liveTrading,
     liveFills: tick.liveFills,

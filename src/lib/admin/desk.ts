@@ -14,6 +14,7 @@ import { treasuryAddress } from "../treasury";
 import { treasuryHot } from "../treasury/withdraw";
 import { sphaMintOf } from "../token/solphia";
 import { mergeSphaTestLaunches } from "../token/omics";
+import { countdownForAdmin } from "../token/sphaAutoLaunch";
 import { activeMembers, ensureCircle, spotsLeft } from "../circle/engine";
 import { seatSol } from "../seat";
 import { promoDataUrl, promoViewToken } from "./promoFile";
@@ -139,6 +140,7 @@ export function buildAdminDesk(opts?: { light?: boolean; profits?: ProfitDesk; o
     sphaTestLaunch: s.sphaTestLaunch || null,
     sphaTestLaunches: mergeSphaTestLaunches(s.sphaTestLaunches, [], s.sphaTestLaunch || null),
     sphaDbcConfig: s.sphaDbcConfig || "",
+    sphaCountdown: countdownForAdmin(s.sphaCountdown, sphaMintOf(s.sphaMint)),
     adminOtpEmail: adminOtpEmailOf(s),
     mailReady: mailConfigured(),
     mailFrom: mailFromAddress(),

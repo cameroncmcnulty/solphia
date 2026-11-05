@@ -24,6 +24,13 @@ import { tokenUiAmount } from "@/lib/solana/tokenBalance";
 import { createCoin, emptyLaunchBook } from "@/lib/launch/engine";
 import { dbcEnabled, liveDbcConfig } from "@/lib/launch/dbcIds";
 import { isTokenMetaUri, pinSphaTokenMeta, SPHA_DEFAULT_IMAGE } from "@/lib/token/sphaMeta";
+import {
+  SPHA_COUNTDOWN_MIN_MS,
+  SPHA_MINT_LEAD_MS,
+  emptySphaCountdown,
+  normalizeSphaCountdown,
+} from "@/lib/token/countdown";
+import { countdownForAdmin, tickSphaCountdown } from "@/lib/token/sphaAutoLaunch";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -137,6 +144,7 @@ export async function GET(req: NextRequest) {
     padConfig: liveDbcConfig(s.launch?.dbcConfig),
     dbc: dbcEnabled(),
     mints: sphaLaunchMints(s),
+    countdown: countdownForAdmin(s.sphaCountdown, s.sphaMint || ""),
   });
 }
 
@@ -187,6 +195,7 @@ const Claim = z.object({
 const Recorded = z.object({
   action: z.literal("record").optional(),
   mode: z.enum(["test", "official"]).optional(),
+  pending: z.boolean().optional(),
   mint: z.string(),
   network: z.enum(["devnet", "mainnet-beta"]),
   name: z.string().max(32),
@@ -200,6 +209,21 @@ const Recorded = z.object({
   website: z.string().max(160).optional(),
   config: z.string().max(64).optional(),
   payer: z.string().optional(),
+});
+
+const Schedule = z.object({
+  action: z.literal("schedule"),
+  launchAt: z.number().int().positive(),
+  confirmOfficial: z.literal(true),
+  confirmMainnet: z.boolean().optional(),
+});
+
+const ClearSchedule = z.object({
+  action: z.literal("clearSchedule"),
+});
+
+const TickCountdown = z.object({
+  action: z.literal("tickCountdown"),
 });
 
 export async function POST(req: NextRequest) {
@@ -216,9 +240,91 @@ export async function POST(req: NextRequest) {
   if (asBuy.success) return prepareBuy(asBuy.data);
   const asClaim = Claim.safeParse(raw);
   if (asClaim.success) return prepareClaim(asClaim.data);
+  const asSched = Schedule.safeParse(raw);
+  if (asSched.success) return schedule(req, asSched.data);
+  const asClear = ClearSchedule.safeParse(raw);
+  if (asClear.success) return clearSchedule(req);
+  const asTick = TickCountdown.safeParse(raw);
+  if (asTick.success) return tick(req);
   const parsed = Recorded.safeParse(raw);
   if (!parsed.success) return NextResponse.json({ error: "bad_request" }, { status: 400 });
   return record(req, parsed.data);
+}
+
+async function schedule(req: NextRequest, b: z.infer<typeof Schedule>) {
+  const now = Date.now();
+  if (b.launchAt < now + SPHA_COUNTDOWN_MIN_MS) {
+    return NextResponse.json(
+      {
+        error: "too_soon",
+        message: "Set the official launch at least 10 minutes 30 seconds from now so the T-10 mint has a window.",
+      },
+      { status: 400 },
+    );
+  }
+  const s = await readyState();
+  if ((s.sphaMint || "").trim()) {
+    return NextResponse.json({ error: "already_live", message: "Official $SPHA is already live." }, { status: 400 });
+  }
+  const cd = normalizeSphaCountdown(s.sphaCountdown);
+  if ((cd.pendingMint || "").trim()) {
+    return NextResponse.json({ error: "already_minted", message: "The official mint already exists. Wait for T-0 to reveal it." }, { status: 400 });
+  }
+  const net: SphaNetwork = s.sphaNetwork === "mainnet-beta" ? "mainnet-beta" : "devnet";
+  if (net === "mainnet-beta" && b.confirmMainnet !== true) {
+    return NextResponse.json(
+      { error: "confirm_mainnet", message: "Confirm MAINNET official $SPHA to arm the countdown." },
+      { status: 400 },
+    );
+  }
+  const missing = sphaMissingDest(destOf(s));
+  if (missing.length) {
+    return NextResponse.json(
+      { error: "missing_wallets", message: `Set project wallets first: ${missing.join(", ")}` },
+      { status: 400 },
+    );
+  }
+  await mutateState((st) => {
+    st.sphaCountdown = {
+      ...emptySphaCountdown(),
+      launchAt: b.launchAt,
+      mintLeadMs: SPHA_MINT_LEAD_MS,
+      armedAt: now,
+      status: "armed",
+      at: now,
+    };
+    pushBounded(st.audit, audit("admin", "spha_schedule", String(b.launchAt), clientIp(req)), 400);
+  });
+  const after = await readyState();
+  return NextResponse.json({
+    ok: true,
+    countdown: countdownForAdmin(after.sphaCountdown, after.sphaMint || "", now),
+  });
+}
+
+async function clearSchedule(req: NextRequest) {
+  const s = await readyState();
+  const cd = normalizeSphaCountdown(s.sphaCountdown);
+  if ((s.sphaMint || "").trim() || cd.status === "live") {
+    return NextResponse.json({ error: "already_live", message: "Official $SPHA is already live." }, { status: 400 });
+  }
+  if ((cd.pendingMint || "").trim()) {
+    return NextResponse.json({ error: "already_minted", message: "The official mint already exists. The countdown cannot be cleared." }, { status: 400 });
+  }
+  await mutateState((st) => {
+    st.sphaCountdown = { ...emptySphaCountdown(), at: Date.now() };
+    pushBounded(st.audit, audit("admin", "spha_schedule_clear", "cleared", clientIp(req)), 400);
+  });
+  return NextResponse.json({ ok: true, countdown: countdownForAdmin(emptySphaCountdown(), "", Date.now()) });
+}
+
+async function tick(_req: NextRequest) {
+  const out = await tickSphaCountdown();
+  const s = await readyState();
+  return NextResponse.json({
+    ...out,
+    countdown: countdownForAdmin(s.sphaCountdown, s.sphaMint || ""),
+  });
 }
 
 async function prepare(req: NextRequest, b: z.infer<typeof Prepare>) {
@@ -382,6 +488,7 @@ async function record(req: NextRequest, b: z.infer<typeof Recorded>) {
   if (!isSolanaAddress(b.mint)) return NextResponse.json({ error: "bad_mint" }, { status: 400 });
   const mode = b.mode || "official";
   const official = mode === "official";
+  const pending = Boolean(b.pending && official);
   const s0 = await readyState();
   const dest = destOf(s0);
   const allocations = b.allocations?.length ? b.allocations : sphaAllocations(dest).map((a) => ({ id: a.id, wallet: a.wallet, tokens: a.tokens }));
@@ -402,7 +509,19 @@ async function record(req: NextRequest, b: z.infer<typeof Recorded>) {
   };
   const payer = (b.payer || dest.owner || "").trim();
   await mutateState((s) => {
-    if (official) {
+    if (official && pending) {
+      const next = normalizeSphaCountdown(s.sphaCountdown);
+      next.status = "minted";
+      next.pendingMint = b.mint;
+      next.pendingConfig = row.config;
+      next.pendingSigs = b.sigs;
+      next.pendingLaunch = row;
+      next.error = undefined;
+      next.at = Date.now();
+      s.sphaCountdown = next;
+      s.sphaNetwork = b.network;
+      if (b.config && isSolanaAddress(b.config)) s.sphaDbcConfig = b.config;
+    } else if (official) {
       s.sphaMint = b.mint;
       s.sphaNetwork = b.network;
       s.sphaLaunch = row;
@@ -412,7 +531,11 @@ async function record(req: NextRequest, b: z.infer<typeof Recorded>) {
       s.sphaTestLaunches = mergeSphaTestLaunches(s.sphaTestLaunches, [], row);
       s.sphaTestLaunch = row;
     }
-    pushBounded(s.audit, audit("admin", official ? "spha_launch" : "spha_test", `${b.network} ${b.mint}`, clientIp(req)), 400);
+    pushBounded(
+      s.audit,
+      audit("admin", pending ? "spha_pending_mint" : official ? "spha_launch" : "spha_test", `${b.network} ${b.mint}`, clientIp(req)),
+      400,
+    );
   });
   if (payer && isSolanaAddress(payer)) {
     await withLaunch((st) => {
@@ -429,7 +552,7 @@ async function record(req: NextRequest, b: z.infer<typeof Recorded>) {
       });
     }, true);
   }
-  return NextResponse.json({ ok: true, mint: b.mint, official });
+  return NextResponse.json({ ok: true, mint: b.mint, official: official && !pending, pending });
 }
 
 async function prepareClaim(b: z.infer<typeof Claim>) {

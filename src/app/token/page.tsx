@@ -1,54 +1,98 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { CopyCa } from "@/components/CopyCa";
 import { SphaMark } from "@/components/SphaMark";
 import { SphaSocials } from "@/components/SphaSocials";
 import { SolphiaConstellation } from "@/components/SolphiaConstellation";
-import { solphiaTokenDesk } from "@/lib/token/solphia";
+import { solphiaTokenDesk, type TokenStat } from "@/lib/token/solphia";
 import { Reveal } from "@/components/Reveal";
 import { Tokenomics } from "@/components/Tokenomics";
 import { SphaRoadmap } from "@/components/SphaRoadmap";
 import { JoinFoundersButton } from "@/components/JoinFoundersButton";
+import { SphaCountdown } from "@/components/SphaCountdown";
+import { SPHA_MINT_LEAD_MS, type SphaPublicCountdown, type SphaPublicPhase } from "@/lib/token/countdown";
 
 function tick(symbol: string) {
   const s = symbol.replace(/^\$+/, "").replace(/\*+$/, "").trim();
   return s ? `$${s}` : "";
 }
 
+type SphaPack = {
+  mint: string;
+  phase: SphaPublicPhase;
+  countdown: SphaPublicCountdown;
+  stats: TokenStat[];
+  extra: TokenStat[];
+  image: string;
+  blurb: string;
+  socials: { x: string; telegram: string; discord: string };
+};
+
+function emptyPack(): SphaPack {
+  const desk = solphiaTokenDesk();
+  return {
+    mint: "",
+    phase: "soon",
+    countdown: { phase: "soon", launchAt: 0, remainingMs: 0, mintLeadMs: SPHA_MINT_LEAD_MS, serverNow: Date.now() },
+    stats: desk.stats,
+    extra: desk.extra,
+    image: "",
+    blurb: "",
+    socials: { x: "", telegram: "", discord: "" },
+  };
+}
+
 export default function TokenPage() {
-  const [t, setT] = useState(() => solphiaTokenDesk());
-  const [socials, setSocials] = useState({ x: "", telegram: "", discord: "" });
-  const [art, setArt] = useState("");
-  const [blurb, setBlurb] = useState("");
+  const [pack, setPack] = useState<SphaPack>(emptyPack);
+  const t = solphiaTokenDesk(pack.mint);
+  const live = pack.phase === "live" && Boolean(pack.mint);
+  const stats = live && pack.stats?.length ? pack.stats : t.stats;
+  const extra = live && pack.extra?.length ? pack.extra : t.extra;
+
+  const load = useCallback(() => {
+    fetch("/api/spha", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => {
+        const desk = solphiaTokenDesk(typeof j?.mint === "string" ? j.mint : "");
+        const phase: SphaPublicPhase = j?.phase === "live" || j?.phase === "counting" ? j.phase : "soon";
+        setPack({
+          mint: desk.mint,
+          phase,
+          countdown: {
+            phase: j?.countdown?.phase === "live" || j?.countdown?.phase === "counting" ? j.countdown.phase : phase,
+            launchAt: Number(j?.countdown?.launchAt) || 0,
+            remainingMs: Number(j?.countdown?.remainingMs) || 0,
+            mintLeadMs: Number(j?.countdown?.mintLeadMs) || SPHA_MINT_LEAD_MS,
+            serverNow: Number(j?.countdown?.serverNow) || Date.now(),
+          },
+          stats: Array.isArray(j?.stats) ? j.stats : desk.stats,
+          extra: Array.isArray(j?.extra) ? j.extra : desk.extra,
+          image: j?.image || "",
+          blurb: j?.blurb || "",
+          socials: {
+            x: j?.socials?.x || "",
+            telegram: j?.socials?.telegram || "",
+            discord: j?.socials?.discord || "",
+          },
+        });
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
-    let live = true;
-    const load = () => {
-      fetch("/api/spha", { cache: "no-store" })
-        .then((r) => r.json())
-        .then((j) => {
-          if (!live) return;
-          if (j?.socials) setSocials({ x: j.socials.x || "", telegram: j.socials.telegram || "", discord: j.socials.discord || "" });
-          if (typeof j?.mint === "string") setT(solphiaTokenDesk(j.mint));
-          if (j?.image) setArt(j.image);
-          if (j?.blurb) setBlurb(j.blurb);
-        })
-        .catch(() => {});
-    };
     load();
     const onFocus = () => load();
     window.addEventListener("focus", onFocus);
-    const tick = window.setInterval(() => {
+    const id = window.setInterval(() => {
       if (document.hidden) return;
       load();
-    }, 20_000);
+    }, pack.phase === "counting" ? 4_000 : 20_000);
     return () => {
-      live = false;
       window.removeEventListener("focus", onFocus);
-      window.clearInterval(tick);
+      window.clearInterval(id);
     };
-  }, []);
+  }, [load, pack.phase]);
 
   return (
     <main className="relative min-h-screen overflow-x-hidden pb-24">
@@ -56,22 +100,35 @@ export default function TokenPage() {
       <div className="relative z-10 mx-auto max-w-6xl px-4 pt-8 md:px-8 md:pt-14">
         <p className="font-mono text-[11px] tracking-[0.28em] text-acid">PROTOCOL TOKEN</p>
         <div className="mt-3 flex items-center gap-4">
-          {art ? (
+          {pack.image ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={art} alt="" className="h-14 w-14 rounded-2xl object-cover sm:h-16 sm:w-16" />
+            <img src={pack.image} alt="" className="h-14 w-14 rounded-2xl object-cover sm:h-16 sm:w-16" />
           ) : (
             <SphaMark className="h-14 w-14 sm:h-16 sm:w-16" />
           )}
           <h1 className="font-display text-5xl text-ghost sm:text-7xl">{tick(t.symbol)}</h1>
         </div>
         <p className="mt-5 max-w-2xl text-lg text-mute sm:text-xl">
-          {blurb || `Swaps fund listings, buybacks, and ${tick(t.symbol)} burns.`}
+          {pack.blurb || `Swaps fund listings, buybacks, and ${tick(t.symbol)} burns.`}
         </p>
 
         <div className="mt-8 flex flex-wrap items-center gap-5">
-          <SphaSocials x={socials.x} telegram={socials.telegram} discord={socials.discord} />
-          <CopyCa ca={t.mint || undefined} />
+          <SphaSocials x={pack.socials.x} telegram={pack.socials.telegram} discord={pack.socials.discord} />
+          {live ? <CopyCa ca={pack.mint} /> : null}
         </div>
+
+        <SphaCountdown
+          pack={{
+            mint: pack.mint,
+            phase: pack.phase,
+            countdown: pack.countdown,
+            stats,
+            extra,
+            image: pack.image,
+            blurb: pack.blurb,
+          }}
+          onNeedRefresh={load}
+        />
 
         <div className="mt-12 grid gap-4 sm:grid-cols-3">
           <Reveal delay={40} from="left">
@@ -95,13 +152,13 @@ export default function TokenPage() {
         </div>
 
         <div className="mt-10 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {t.stats.map((s) => (
+          {stats.map((s) => (
             <Bubble key={s.k} k={s.k} v={s.v} hint={s.hint} />
           ))}
         </div>
 
         <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {t.extra.map((s) => (
+          {extra.map((s) => (
             <Bubble key={s.k} k={s.k} v={s.v} />
           ))}
         </div>

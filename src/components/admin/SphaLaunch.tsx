@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Keypair } from "@solana/web3.js";
 import { SPHA_DEFAULT_IMAGE, SPHA_NAME, SPHA_SUPPLY, SPHA_SYMBOL, type SphaNetwork } from "@/lib/token/omics";
+import { SPHA_COUNTDOWN_MIN_MS, SPHA_MINT_LEAD_MS, pad2, splitRemaining } from "@/lib/token/countdown";
 import { useAdmin } from "./AdminProvider";
 import { Tokenomics } from "@/components/Tokenomics";
 import { CopyCa } from "@/components/CopyCa";
@@ -50,6 +51,19 @@ type Prep = {
   reserved?: number;
   curve?: number;
   dbc?: boolean;
+  countdown?: {
+    launchAt: number;
+    mintLeadMs: number;
+    armedAt: number;
+    status: string;
+    pendingMint?: string;
+    error?: string;
+    remainingMs: number;
+    mintAt: number;
+    inMintWindow: boolean;
+    timedOut: boolean;
+    publicMint: string;
+  };
 };
 
 function LaunchCaCard({
@@ -120,6 +134,8 @@ export function SphaLaunch() {
   const [tradeMint, setTradeMint] = useState("");
   const [log, setLog] = useState("");
   const [err, setErr] = useState("");
+  const [when, setWhen] = useState("");
+  const [armRun, setArmRun] = useState(false);
 
   async function loadPrep() {
     const r = await fetch("/api/admin/spha", { cache: "no-store" });
@@ -130,6 +146,49 @@ export function SphaLaunch() {
   useEffect(() => {
     loadPrep().catch(() => {});
   }, [data?.ownerWallet, data?.foundationWallet, data?.treasury, data?.sphaNetwork, data?.sphaMint, reloadAt]);
+
+  useEffect(() => {
+    const cd = prep?.countdown;
+    if (!cd?.launchAt || cd.status === "live" || data?.sphaMint) return;
+    let stop = false;
+    const beat = async () => {
+      if (stop || document.hidden) return;
+      try {
+        const r = await fetch("/api/admin/spha", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ action: "tickCountdown" }),
+        });
+        const j = (await r.json().catch(() => ({}))) as {
+          needsSigner?: boolean;
+          minted?: boolean;
+          revealed?: boolean;
+          mint?: string;
+          error?: string;
+        };
+        if (j?.needsSigner && !run) {
+          setLog("T-10 mint window. Signing with the owner project wallet…");
+          setMode("official");
+          await launch({ pending: true });
+        } else if (j?.minted && j.mint) {
+          setLog(`Official mint on the dashboard. CA ${j.mint}. Public reveal at T-0.`);
+        } else if (j?.revealed && j.mint) {
+          setLog(`Official $SPHA live. CA ${j.mint}`);
+        }
+        loadPrep().catch(() => {});
+      } catch {
+        /* next beat */
+      }
+    };
+    const id = window.setInterval(beat, 4_000);
+    beat();
+    return () => {
+      stop = true;
+      window.clearInterval(id);
+    };
+    // launch is stable enough for the armed watch
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prep?.countdown?.launchAt, prep?.countdown?.status, data?.sphaMint, run]);
 
   useEffect(() => {
     if (mode === "official") {
@@ -174,7 +233,7 @@ export function SphaLaunch() {
     return rows;
   }, [prep, tests]);
 
-  async function launch() {
+  async function launch(opts?: { pending?: boolean }) {
     setErr("");
     setLog("");
     const ownerW = projectWallet("owner");
@@ -188,23 +247,31 @@ export function SphaLaunch() {
       return;
     }
     const net = data?.sphaNetwork === "mainnet-beta" ? "mainnet-beta" : "devnet";
-    if (mode === "official" && net === "mainnet-beta" && !confirm("MAINNET $SPHA. 200,000,000 supply. 77.1% on the curve. Continue?")) {
+    const launchMode = opts?.pending ? "official" : mode;
+    const launchName = launchMode === "official" ? SPHA_NAME : name;
+    const launchSymbol = launchMode === "official" ? SPHA_SYMBOL : symbol;
+    if (
+      launchMode === "official" &&
+      net === "mainnet-beta" &&
+      !opts?.pending &&
+      !confirm("MAINNET $SPHA. 200,000,000 supply. 77.1% on the curve. Continue?")
+    ) {
       return;
     }
     setRun(true);
     try {
       const mint = Keypair.generate();
-      setLog(`Mint ${mint.publicKey.toBase58()} building 200M ${mode} launch`);
+      setLog(`Mint ${mint.publicKey.toBase58()} building 200M ${launchMode} launch`);
       const prepR = await fetch("/api/admin/spha", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           action: "prepare",
-          mode,
+          mode: launchMode,
           payer,
           mint: mint.publicKey.toBase58(),
-          name,
-          symbol,
+          name: launchName,
+          symbol: launchSymbol,
           uri: art?.uri,
           image: art?.image || SPHA_DEFAULT_IMAGE,
           blurb,
@@ -226,11 +293,12 @@ export function SphaLaunch() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           action: "record",
-          mode,
+          mode: launchMode,
+          pending: Boolean(opts?.pending && launchMode === "official"),
           mint: ca,
           network: net,
-          name,
-          symbol,
+          name: launchName,
+          symbol: launchSymbol,
           supply: SPHA_SUPPLY,
           sigs: [sig],
           allocations: (prep?.allocations || []).map((a) => ({ id: a.id, wallet: a.wallet, tokens: a.tokens })),
@@ -254,7 +322,7 @@ export function SphaLaunch() {
         notes.push("team mint pending");
       }
       try {
-        const metaNote = await writePoolMeta(ca, payer, metaImage);
+        const metaNote = await writePoolMeta(ca, payer, metaImage, launchName);
         if (metaNote) notes.push(metaNote);
       } catch {
         notes.push("pool metadata pending");
@@ -268,9 +336,11 @@ export function SphaLaunch() {
       }
       if (fail) setErr(fail);
       setLog(
-        mode === "official"
-          ? `Official $SPHA live. CA ${ca}. ${notes.join(" · ")}`
-          : `Test token live. CA ${ca} — official $SPHA is unchanged. ${notes.join(" · ")}`,
+        opts?.pending && launchMode === "official"
+          ? `Official mint ready on the dashboard. CA ${ca}. Public reveal at T-0. ${notes.join(" · ")}`
+          : launchMode === "official"
+            ? `Official $SPHA live. CA ${ca}. ${notes.join(" · ")}`
+            : `Test token live. CA ${ca} — official $SPHA is unchanged. ${notes.join(" · ")}`,
       );
       loadPrep().catch(() => {});
     } catch (e) {
@@ -311,7 +381,7 @@ export function SphaLaunch() {
     throw new Error(lastErr);
   }
 
-  async function writePoolMeta(mint: string, payer: string, logo: string): Promise<string> {
+  async function writePoolMeta(mint: string, payer: string, logo: string, tokenName = name): Promise<string> {
     let lastErr = "pool not on-chain yet";
     for (let i = 0; i < 6; i++) {
       if (i) await new Promise((r) => setTimeout(r, 1500));
@@ -323,7 +393,7 @@ export function SphaLaunch() {
             action: "preparePoolMeta",
             payer,
             mint,
-            name,
+            name: tokenName,
             website,
             logo,
           }),
@@ -434,12 +504,138 @@ export function SphaLaunch() {
     }
   }
 
+  async function armCountdown() {
+    setErr("");
+    const launchAt = new Date(when).getTime();
+    if (!Number.isFinite(launchAt) || launchAt < Date.now() + SPHA_COUNTDOWN_MIN_MS) {
+      setErr("Pick a time at least 10 minutes 30 seconds from now so the T-10 mint has a window.");
+      return;
+    }
+    if (!confirm("Arm official $SPHA. 10 minutes before T-0 the token mints and the CA appears here. At T-0 the website reveals the CA, confetti, and live metrics.")) {
+      return;
+    }
+    if (network === "mainnet-beta" && !confirm("MAINNET $SPHA. 200,000,000 supply. 77.1% on the curve. This arms the public countdown.")) {
+      return;
+    }
+    setArmRun(true);
+    try {
+      const r = await fetch("/api/admin/spha", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          action: "schedule",
+          launchAt,
+          confirmOfficial: true,
+          confirmMainnet: network === "mainnet-beta",
+        }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.message || j.error || "Could not arm the countdown.");
+      setLog(`Countdown armed. T-0 ${new Date(launchAt).toLocaleString()}. T-10 mint ${new Date(launchAt - SPHA_MINT_LEAD_MS).toLocaleString()}.`);
+      loadPrep().catch(() => {});
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Could not arm the countdown.");
+    } finally {
+      setArmRun(false);
+    }
+  }
+
+  async function clearCountdown() {
+    setErr("");
+    if (!confirm("Clear the official countdown? The public page goes back to Coming soon.")) return;
+    setArmRun(true);
+    try {
+      const r = await fetch("/api/admin/spha", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "clearSchedule" }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.message || j.error || "Could not clear the countdown.");
+      setLog("Countdown cleared. Public page is Coming soon.");
+      loadPrep().catch(() => {});
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Could not clear the countdown.");
+    } finally {
+      setArmRun(false);
+    }
+  }
+
   const network = data?.sphaNetwork === "mainnet-beta" ? "mainnet-beta" : "devnet";
   const ownerPk = projectWallet("owner")?.pubkey || data?.ownerWallet || "";
+  const cd = prep?.countdown;
+  const cdArmed = Boolean(cd?.launchAt && cd.status !== "live" && !data?.sphaMint);
+  const cdParts = splitRemaining(cd?.remainingMs || 0);
 
   return (
     <div className="space-y-5">
       <Tokenomics />
+
+      <div className="rounded-3xl border border-acid/25 bg-void/40 p-5">
+        <div className="font-mono text-[10px] tracking-[0.22em] text-acid">OFFICIAL COUNTDOWN · PUBLIC $SPHA PAGE</div>
+        <p className="mt-1 max-w-xl text-sm text-mute">
+          Until a time is set the token page says Coming soon. Arming this clock is the official launch: T-10 mints
+          $SPHA and shows the CA here. T-0 refreshes the website, fires confetti, publishes the copyable CA, and fills
+          live metrics.
+        </p>
+        {cdArmed ? (
+          <div className="mt-4 rounded-2xl border border-acid/30 bg-acid/5 p-4">
+            <div className="font-mono text-[11px] tracking-[0.18em] text-acid">
+              {cd?.inMintWindow ? (cd.pendingMint ? "CA READY · WAITING FOR T-0" : "MINT WINDOW") : "ARMED"}
+            </div>
+            <div className="mt-2 font-mono text-2xl text-ghost">
+              {pad2(cdParts.d)}d {pad2(cdParts.h)}h {pad2(cdParts.m)}m {pad2(cdParts.s)}s
+            </div>
+            <p className="mt-1 font-mono text-[11px] text-mute">
+              T-0 {cd?.launchAt ? new Date(cd.launchAt).toLocaleString() : "—"} · T-10 mint{" "}
+              {cd?.mintAt ? new Date(cd.mintAt).toLocaleString() : "—"}
+            </p>
+            {cd?.pendingMint ? (
+              <div className="mt-3">
+                <CopyCa ca={cd.pendingMint} full />
+                <p className="mt-2 font-mono text-[11px] text-mute">Admin-only until the public clock hits zero.</p>
+              </div>
+            ) : (
+              <p className="mt-2 text-sm text-mute">
+                Keep this dashboard open with the owner project wallet ready. Cron also mints if the owner key is on the
+                server.
+              </p>
+            )}
+            {!cd?.pendingMint ? (
+              <button
+                type="button"
+                disabled={armRun || run}
+                onClick={() => void clearCountdown()}
+                className="btn-ghost mt-3 rounded-full px-4 py-1.5 text-sm disabled:opacity-40"
+              >
+                Clear countdown
+              </button>
+            ) : null}
+          </div>
+        ) : data?.sphaMint ? (
+          <p className="mt-3 font-mono text-sm text-acid">Official $SPHA is live. The public countdown shows the CA.</p>
+        ) : (
+          <div className="mt-4 flex flex-wrap items-end gap-3">
+            <label className="block">
+              <span className="font-mono text-[10px] tracking-[0.16em] text-mute">T-0 LAUNCH TIME</span>
+              <input
+                type="datetime-local"
+                value={when}
+                onChange={(e) => setWhen(e.target.value)}
+                className="mt-1 block rounded-full border border-violet/30 bg-void px-4 py-2 text-sm text-ghost outline-none"
+              />
+            </label>
+            <button
+              type="button"
+              disabled={armRun || run || Boolean(prep?.missing?.length)}
+              onClick={() => void armCountdown()}
+              className="btn-acid rounded-full px-5 py-2 text-sm disabled:opacity-40"
+            >
+              {armRun ? "Arming…" : "Arm official countdown"}
+            </button>
+          </div>
+        )}
+      </div>
 
       <div className="rounded-3xl border border-violet/20 bg-void/40 p-5">
         <div className="flex flex-wrap items-end justify-between gap-3">
@@ -481,8 +677,22 @@ export function SphaLaunch() {
           ))}
         </div>
 
-        {(prep?.launch || tests.length > 0) && (
+        {(prep?.launch || tests.length > 0 || cd?.pendingMint) && (
           <div className="mt-4 grid gap-3 lg:grid-cols-2">
+            {cd?.pendingMint && !prep?.launch ? (
+              <LaunchCaCard
+                kicker="ARMED MINT · ADMIN CA · TAP TO MANAGE"
+                row={{
+                  mint: cd.pendingMint,
+                  network,
+                  launchedAt: cd.armedAt || Date.now(),
+                  name: SPHA_NAME,
+                  symbol: SPHA_SYMBOL,
+                }}
+                selected={tradeMint === cd.pendingMint}
+                onSelect={() => setTradeMint(cd.pendingMint!)}
+              />
+            ) : null}
             {prep?.launch ? (
               <LaunchCaCard
                 kicker="OFFICIAL $SPHA · TAP TO MANAGE"
@@ -715,11 +925,17 @@ export function SphaLaunch() {
 
         <button
           type="button"
-          disabled={run || splitRun || claimRun || Boolean(prep?.missing?.length)}
+          disabled={run || splitRun || claimRun || Boolean(prep?.missing?.length) || (cdArmed && mode === "official")}
           onClick={() => void launch()}
           className="btn-acid mt-4 rounded-full px-6 py-2 text-sm disabled:opacity-40"
         >
-          {run ? "Launching…" : mode === "test" ? `Launch ${symbol || "TESTTOKEN"} on ${network}` : `Launch official $SPHA on ${network}`}
+          {run
+            ? "Launching…"
+            : cdArmed && mode === "official"
+              ? "Official launch is armed on the countdown"
+              : mode === "test"
+                ? `Launch ${symbol || "TESTTOKEN"} on ${network}`
+                : `Launch official $SPHA on ${network}`}
         </button>
         {prep?.launch?.mint || prep?.testLaunch?.mint || tests.length ? (
           <button

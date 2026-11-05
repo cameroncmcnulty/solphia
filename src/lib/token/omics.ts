@@ -143,6 +143,7 @@ export function sphaLaunchMints(state: {
   sphaLaunch?: { mint?: string } | null;
   sphaTestLaunch?: { mint?: string } | null;
   sphaTestLaunches?: { mint?: string }[] | null;
+  sphaCountdown?: { pendingMint?: string } | null;
 } | null | undefined): string[] {
   const out: string[] = [];
   const seen = new Set<string>();
@@ -155,6 +156,7 @@ export function sphaLaunchMints(state: {
   if (!state) return out;
   push(state.sphaMint);
   push(state.sphaLaunch?.mint);
+  push(state.sphaCountdown?.pendingMint);
   push(state.sphaTestLaunch?.mint);
   for (const row of state.sphaTestLaunches || []) push(row?.mint);
   return out;
