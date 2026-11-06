@@ -88,17 +88,29 @@ function parseJson(raw: unknown): unknown | null {
   return null;
 }
 
-export async function kvGetJson(key: string): Promise<unknown | null> {
+export async function kvGetJsonOk(
+  key: string,
+  timeoutMs = 8_000,
+): Promise<{ ok: boolean; value: unknown | null }> {
   const kv = kvCreds();
-  if (!kv) return null;
-  const r = await fetch(`${kv.url}/get/${encodeURIComponent(key)}`, {
-    headers: { authorization: `Bearer ${kv.token}` },
-    cache: "no-store",
-    signal: AbortSignal.timeout(8_000),
-  });
-  if (!r.ok) return null;
-  const j = (await r.json()) as { result?: unknown };
-  return parseJson(j.result);
+  if (!kv) return { ok: false, value: null };
+  try {
+    const r = await fetch(`${kv.url}/get/${encodeURIComponent(key)}`, {
+      headers: { authorization: `Bearer ${kv.token}` },
+      cache: "no-store",
+      signal: AbortSignal.timeout(Math.max(3_000, timeoutMs)),
+    });
+    if (!r.ok) return { ok: false, value: null };
+    const j = (await r.json()) as { result?: unknown };
+    return { ok: true, value: parseJson(j.result) };
+  } catch {
+    return { ok: false, value: null };
+  }
+}
+
+export async function kvGetJson(key: string, timeoutMs = 8_000): Promise<unknown | null> {
+  const got = await kvGetJsonOk(key, timeoutMs);
+  return got.ok ? got.value : null;
 }
 
 export async function kvSetJson(key: string, value: unknown): Promise<boolean> {
@@ -130,6 +142,27 @@ export async function kvMGetJson(keys: string[]): Promise<(unknown | null)[]> {
   const cmd = await kvCommand(["MGET", ...keys]);
   const rows = Array.isArray(cmd.result) ? cmd.result : [];
   return keys.map((_, i) => parseJson(rows[i]));
+}
+
+/** SCAN MATCH. Empty if the command is unavailable. */
+export async function kvScanKeys(match: string, count = 200): Promise<string[]> {
+  const keys: string[] = [];
+  let cursor = "0";
+  const seen = new Set<string>();
+  for (let n = 0; n < 80; n++) {
+    const r = await kvCommand(["SCAN", cursor, "MATCH", match, "COUNT", Math.max(20, count)]);
+    if (!r.ok || !Array.isArray(r.result) || r.result.length < 2) break;
+    cursor = String(r.result[0] ?? "0");
+    const batch = Array.isArray(r.result[1]) ? r.result[1] : [];
+    for (const k of batch) {
+      const key = String(k);
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      keys.push(key);
+    }
+    if (cursor === "0") break;
+  }
+  return keys;
 }
 
 export async function kvDel(key: string): Promise<boolean> {

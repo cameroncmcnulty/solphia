@@ -7,14 +7,14 @@ import { protocolWalletsOf, userWalletsOf } from "@/lib/admin/platform";
 import { enrichProfitDesk } from "@/lib/profit/onchain";
 import { buildProfitDesk } from "@/lib/profit/catalog";
 import { grantFounder, grantMod, revokeFounder, revokeMod } from "@/lib/access";
-import { accountsOf, findAccount, normalizeEmail } from "@/lib/auth/accounts";
+import { accountsOf, findAccount, findByEmail, normalizeEmail } from "@/lib/auth/accounts";
 import { isSolanaAddress, isEmail, clientIp } from "@/lib/security";
 import { lockedAuto } from "@/lib/auto";
 import { latestBacktest, packFromAdminRuns, runBacktest, slimPublishedPack } from "@/lib/pair/backtest";
 import { loadBacktestTape } from "@/lib/pair/backtestTape";
 import { KEYS, kvSetJson } from "@/lib/persist";
-import { mutateState, audit, pushBounded, readyState, loadAllTraders, deleteTrader, withLaunch, saveTrader } from "@/lib/store";
-import { emptyLaunchBook } from "@/lib/launch/engine";
+import { mutateState, audit, pushBounded, readyState, loadAllTraders, deleteTrader, withLaunch, saveTrader, healLaunchReferrals } from "@/lib/store";
+import { emptyLaunchBook, referredBy } from "@/lib/launch/engine";
 import { setUsername } from "@/lib/launch/username";
 import { launchError } from "@/lib/launch/errors";
 import { socialHref } from "@/lib/launch/links";
@@ -74,6 +74,8 @@ const Patch = z.object({
     .optional(),
   runBacktest: z.boolean().optional(),
   publishBacktest: z.boolean().optional(),
+  healReferrals: z.boolean().optional(),
+  healEmail: z.string().max(120).optional(),
   user: z
     .object({
       pubkey: z.string().optional(),
@@ -231,6 +233,27 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       );
     }
+  }
+  if (body.healReferrals) {
+    const email = body.healEmail ? normalizeEmail(body.healEmail) : "";
+    const healed = await withLaunch(async (s) => {
+      const out = await healLaunchReferrals(s, { force: true });
+      const book = s.launch || emptyLaunchBook();
+      let wallets: string[] = [];
+      if (email) {
+        const login = findByEmail(s, email);
+        wallets = [...new Set([...(login?.wallets || []), ...(s.users || []).filter((u) => (u.email || "").toLowerCase() === email).map((u) => u.pubkey)].filter(Boolean))];
+      }
+      const referred = wallets.reduce((n, pk) => n + referredBy(book, pk).length, 0);
+      return { ...out, wallets: wallets.length, referred };
+    }, true);
+    await mutateState((s) => {
+      pushBounded(s.audit, audit("admin", "heal_referrals", `${healed.restored} restored`, ip), 400);
+    });
+    const note = email
+      ? `Restored ${healed.restored} referral links. That email now has ${healed.referred} invitees across ${healed.wallets} wallet${healed.wallets === 1 ? "" : "s"}.`
+      : `Restored ${healed.restored} referral links from identity shards, circle, and launches.`;
+    return NextResponse.json({ ok: true, note, healed, desk: buildAdminDesk() });
   }
   if (body.publishBacktest) {
     const state = await readyState();

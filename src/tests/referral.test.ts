@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { DEV_FEE_BPS, OWNER_FEE_BPS, REF_FEE_BPS, REFERRED_OWNER_BPS, REFERRED_TREAS_BPS, SWAP_FEE_BPS, TREAS_FEE_BPS, feeOn, splitFee } from "../lib/launch/curve";
-import { bindReferrer, buyCoin, createCoin, emptyLaunchBook, mergeLaunch, recordOnchainFill, withdrawReferral } from "../lib/launch/engine";
+import { bindReferrer, buyCoin, createCoin, emptyLaunchBook, identityAsAccount, mergeAccount, mergeLaunch, recordOnchainFill, restoreReferrers, withdrawReferral } from "../lib/launch/engine";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
@@ -55,7 +55,29 @@ describe("referral book", () => {
     const merged = mergeLaunch(stub, saved);
     assert.equal(merged.accounts[A].referrer, OWN);
     const store = readFileSync(path.join(process.cwd(), "src/lib/store.ts"), "utf8");
-    assert.match(store, /mergeAccountMaps\(extra as Record/);
+    assert.match(store, /mergeAccountMaps\(extraGot\.value as Record/);
+    assert.match(store, /overlayAccountIdentities/);
+    assert.match(store, /healLaunchReferrals/);
+    assert.match(store, /Existing shard is local so a hello\/XP stub cannot blank a filled referrer/);
+    assert.match(store, /kvGetJsonOk\(KEYS\.launchAccounts/);
+  });
+
+  it("restores a missing first inviter from identity/circle/coin hints and never overwrites", () => {
+    const book = emptyLaunchBook();
+    const lost = restoreReferrers(book, [{ pubkey: A, referrer: OWN, referredAt: 1_700_000_000_000 }]);
+    assert.equal(lost.restored, 1);
+    assert.equal(book.accounts[A].referrer, OWN);
+    assert.equal(book.accounts[A].referredAt, 1_700_000_000_000);
+    const again = restoreReferrers(book, [{ pubkey: A, referrer: B, referredAt: 9 }]);
+    assert.equal(again.restored, 0);
+    assert.equal(book.accounts[A].referrer, OWN);
+    assert.equal(book.accounts[A].referredAt, 1_700_000_000_000);
+    const shard = identityAsAccount({ pubkey: A, referrer: OWN, referredAt: 5, referralRewardsSol: 0 });
+    const stub = identityAsAccount({ pubkey: A, xp: 9, referralRewardsSol: 0 });
+    const kept = mergeAccount(stub, shard, A);
+    assert.equal(kept.referrer, OWN);
+    assert.equal(kept.referredAt, 5);
+    assert.equal(kept.xp, 9);
   });
 
   it("binds a username invite the same as a wallet invite", () => {

@@ -178,9 +178,18 @@ describe("ops overlay", () => {
     assert.match(store, /state.users = mergeUsers/);
     assert.match(store, /persistAccountIdentity/);
     assert.match(store, /overlayAccountIdentity/);
+    assert.match(store, /overlayAccountIdentities/);
+    assert.match(store, /healLaunchReferrals/);
+    assert.match(store, /kvGetJsonOk/);
+    const persist = readFileSync(new URL("../lib/persist.ts", import.meta.url), "utf8");
+    assert.match(persist, /export async function kvScanKeys/);
+    assert.match(persist, /export async function kvGetJsonOk/);
     const account = readFileSync(new URL("../app/api/account/route.ts", import.meta.url), "utf8");
     assert.match(account, /overlayAccountIdentity/);
     assert.match(account, /persistAccountIdentity/);
+    const admin = readFileSync(new URL("../app/api/admin/route.ts", import.meta.url), "utf8");
+    assert.match(admin, /healReferrals/);
+    assert.match(admin, /healLaunchReferrals/);
     const A = "CyaE1VxvBrahnPWkqm5VsdCvyS2QmNht2UFrKJHga54o";
     const merged = mergeUsers(
       [{ pubkey: A, createdAt: 2, lastSeen: 4, alertsEnabled: true, username: "Cam" }],

@@ -14,9 +14,11 @@ import {
   mergeAccount,
   mergeAccountMaps,
   mergeLaunch,
+  restoreReferrers,
   slimLaunch,
   type LaunchAccount,
   type LaunchBook,
+  type ReferrerHint,
 } from "./launch/engine";
 import { emptyLab, mergeLab } from "./desk/shadow";
 import { emptyMind, mergeMind } from "./mind/engine";
@@ -24,9 +26,11 @@ import {
   durableConfigured,
   durableKind,
   kvGetJson,
+  kvGetJsonOk,
   kvMGetJson,
   kvDel,
   kvSadd,
+  kvScanKeys,
   kvSetJson,
   kvSmembers,
   pullRemoteState,
@@ -531,17 +535,21 @@ async function overlayAuthOtps(state: AppState) {
 async function overlayLaunch(state: AppState) {
   if (!durableConfigured()) return;
   try {
-    const raw = await kvGetJson(KEYS.launch);
+    const raw = await kvGetJson(KEYS.launch, 20_000);
     if (raw && typeof raw === "object" && Array.isArray((raw as LaunchBook).coins)) {
       state.launch = mergeLaunch(state.launch || emptyLaunchBook(), raw as LaunchBook);
     }
-    const extra = await kvGetJson(KEYS.launchAccounts);
+    const extra = await kvGetJson(KEYS.launchAccounts, 20_000);
     if (extra && typeof extra === "object") {
       const book = state.launch || emptyLaunchBook();
       // Dedicated accounts shard is local so a fat-tape stub cannot wipe pfp / intro / username.
       book.accounts = mergeAccountMaps(book.accounts, extra as Record<string, LaunchAccount>);
       state.launch = book;
     }
+    const book = state.launch || emptyLaunchBook();
+    if (!state.launch) state.launch = book;
+    await overlayAccountIdentities(book);
+    await healLaunchReferrals(state);
   } catch {
     /* keep mem */
   }
@@ -587,13 +595,10 @@ export function mergeUsers(local: AppUser[] = [], remote: AppUser[] = []): AppUs
 async function persistLaunch(state: AppState) {
   if (!durableConfigured()) return;
   const slim = slimLaunch(state.launch || emptyLaunchBook());
-  try {
-    const extra = await kvGetJson(KEYS.launchAccounts);
-    if (extra && typeof extra === "object") {
-      slim.accounts = mergeAccountMaps(extra as Record<string, LaunchAccount>, slim.accounts || {});
-    }
-  } catch {
-    /* write what we have */
+  const extraGot = await kvGetJsonOk(KEYS.launchAccounts, 20_000);
+  if (!extraGot.ok) return;
+  if (extraGot.value && typeof extraGot.value === "object") {
+    slim.accounts = mergeAccountMaps(extraGot.value as Record<string, LaunchAccount>, slim.accounts || {});
   }
   if (state.launch) state.launch.accounts = slim.accounts;
   // Accounts first so a fat tape write cannot be the only copy of rank / usernames.
@@ -603,8 +608,23 @@ async function persistLaunch(state: AppState) {
 
 export async function persistAccountIdentity(acc: LaunchAccount | null | undefined) {
   if (!durableConfigured() || !acc?.pubkey) return;
-  if (!(acc.username || acc.referrer || acc.referralRewardsSol || acc.intro || acc.xp)) return;
-  await kvSetJson(KEYS.account(acc.pubkey), accountIdentity(acc));
+  const incoming = identityAsAccount(accountIdentity(acc));
+  let merged = incoming;
+  try {
+    const raw = await kvGetJson(KEYS.account(acc.pubkey));
+    if (raw && typeof raw === "object") {
+      // Existing shard is local so a hello/XP stub cannot blank a filled referrer.
+      merged = mergeAccount(incoming, identityAsAccount(raw as ReturnType<typeof accountIdentity>), acc.pubkey);
+    }
+  } catch {
+    /* write incoming */
+  }
+  if (!(merged.username || merged.referrer || merged.referralRewardsSol || merged.intro || merged.xp)) return;
+  if (!acc.referrer && merged.referrer) {
+    acc.referrer = merged.referrer;
+    acc.referredAt = merged.referredAt;
+  }
+  await kvSetJson(KEYS.account(acc.pubkey), accountIdentity(merged));
 }
 
 export async function overlayAccountIdentity(book: LaunchBook, pubkey: string) {
@@ -618,6 +638,70 @@ export async function overlayAccountIdentity(book: LaunchBook, pubkey: string) {
   } catch {
     /* keep mem */
   }
+}
+
+export async function overlayAccountIdentities(book: LaunchBook) {
+  if (!durableConfigured()) return;
+  const pks = Object.keys(book.accounts || {}).filter(Boolean);
+  for (let i = 0; i < pks.length; i += 80) {
+    const chunk = pks.slice(i, i + 80);
+    const rows = await kvMGetJson(chunk.map((pk) => KEYS.account(pk)));
+    for (let j = 0; j < chunk.length; j++) {
+      const raw = rows[j];
+      if (!raw || typeof raw !== "object") continue;
+      const pk = chunk[j];
+      const ident = identityAsAccount(raw as ReturnType<typeof accountIdentity>);
+      const cur = ensureAccount(book, pk);
+      book.accounts[pk] = mergeAccount(ident, cur, pk);
+    }
+  }
+}
+
+let lastReferralHeal = 0;
+const REFERRAL_HEAL_MS = 5 * 60_000;
+
+export async function healLaunchReferrals(
+  state: AppState,
+  opts?: { force?: boolean },
+): Promise<{ restored: number; scanned: number; pubkeys: string[] }> {
+  if (!durableConfigured()) return { restored: 0, scanned: 0, pubkeys: [] };
+  if (!opts?.force && Date.now() - lastReferralHeal < REFERRAL_HEAL_MS) {
+    return { restored: 0, scanned: 0, pubkeys: [] };
+  }
+  lastReferralHeal = Date.now();
+  const book = state.launch || emptyLaunchBook();
+  if (!state.launch) state.launch = book;
+  await overlayCircle(state);
+  await overlayAccountIdentities(book);
+  const hints: ReferrerHint[] = [];
+  const keys = await kvScanKeys("solphia:account:*");
+  for (let i = 0; i < keys.length; i += 50) {
+    const chunk = keys.slice(i, i + 50);
+    const rows = await kvMGetJson(chunk);
+    for (let j = 0; j < chunk.length; j++) {
+      const raw = rows[j];
+      if (!raw || typeof raw !== "object") continue;
+      const ident = identityAsAccount(raw as ReturnType<typeof accountIdentity>);
+      const pk = ident.pubkey || chunk[j].slice("solphia:account:".length);
+      if (ident.referrer) hints.push({ pubkey: pk, referrer: ident.referrer, referredAt: ident.referredAt });
+    }
+  }
+  const members = ensureCircle(state.circle).members || {};
+  for (const m of Object.values(members)) {
+    if (m.referrer) hints.push({ pubkey: m.pubkey, referrer: m.referrer, referredAt: m.joinedAt });
+    if (m.invitedPubkey) hints.push({ pubkey: m.invitedPubkey, referrer: m.pubkey, referredAt: m.joinedAt });
+  }
+  for (const c of book.coins || []) {
+    if (c.referrer && c.creator) hints.push({ pubkey: c.creator, referrer: c.referrer, referredAt: c.createdAt });
+  }
+  const out = restoreReferrers(book, hints);
+  if (out.restored > 0) {
+    for (const pk of out.pubkeys) {
+      await persistAccountIdentity(book.accounts[pk]);
+    }
+    await persistLaunch(state);
+  }
+  return { restored: out.restored, scanned: keys.length, pubkeys: out.pubkeys };
 }
 
 async function overlaySphaSocials(state: AppState) {

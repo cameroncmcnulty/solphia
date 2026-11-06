@@ -249,6 +249,26 @@ export function referredBy(book: LaunchBook, pubkey: string): string[] {
     .map((a) => a.pubkey);
 }
 
+export type ReferrerHint = { pubkey: string; referrer?: string; referredAt?: number };
+
+/** Re-bind missing first inviters. Never overwrites a filled referrer. */
+export function restoreReferrers(book: LaunchBook, hints: ReferrerHint[]): { restored: number; pubkeys: string[] } {
+  const pubkeys: string[] = [];
+  for (const h of hints) {
+    if (!h?.pubkey || !h.referrer) continue;
+    const acc = ensureAccount(book, h.pubkey);
+    if (acc.referrer) {
+      if (!acc.referredAt && h.referredAt) acc.referredAt = h.referredAt;
+      continue;
+    }
+    const r = bindReferrer(book, h.pubkey, h.referrer);
+    if (!r.ok || !r.bound) continue;
+    if (h.referredAt) acc.referredAt = h.referredAt;
+    pubkeys.push(h.pubkey);
+  }
+  return { restored: pubkeys.length, pubkeys };
+}
+
 function id(prefix: string) {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
 }
