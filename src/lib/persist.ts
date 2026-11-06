@@ -113,6 +113,16 @@ export async function kvGetJson(key: string, timeoutMs = 8_000): Promise<unknown
   return got.ok ? got.value : null;
 }
 
+export async function kvGetJsonRetry(key: string, timeoutMs = 8_000, tries = 3): Promise<unknown | null> {
+  let last: unknown | null = null;
+  for (let i = 0; i < Math.max(1, tries); i++) {
+    const got = await kvGetJsonOk(key, timeoutMs);
+    if (got.ok) return got.value;
+    last = got.value;
+  }
+  return last;
+}
+
 export async function kvSetJson(key: string, value: unknown): Promise<boolean> {
   const kv = kvCreds();
   if (!kv) return false;

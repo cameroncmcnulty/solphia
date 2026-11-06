@@ -184,6 +184,7 @@ describe("ops overlay", () => {
     const persist = readFileSync(new URL("../lib/persist.ts", import.meta.url), "utf8");
     assert.match(persist, /export async function kvScanKeys/);
     assert.match(persist, /export async function kvGetJsonOk/);
+    assert.match(persist, /export async function kvGetJsonRetry/);
     const account = readFileSync(new URL("../app/api/account/route.ts", import.meta.url), "utf8");
     assert.match(account, /overlayAccountIdentity/);
     assert.match(account, /persistAccountIdentity/);

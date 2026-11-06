@@ -41,10 +41,12 @@ function blankWallet(_pubkey: string): Omit<
 export function buildAdminUsers(state: AppState): AdminUser[] {
   const book: LaunchBook = state.launch || { coins: [], ownerWallet: "", ownerEarningsSol: 0, treasuryFeesSol: 0, accounts: {} };
   const logins = accountsOf(state);
+  const circleMembers = state.circle?.members || {};
   const keys = new Set<string>([
     ...Object.keys(state.traders || {}),
     ...(state.users || []).map((u) => u.pubkey),
     ...Object.keys(book.accounts || {}),
+    ...Object.keys(circleMembers),
     ...logins.flatMap((a) => a.wallets || []),
   ]);
   const now = Date.now();
@@ -67,7 +69,7 @@ export function buildAdminUsers(state: AppState): AdminUser[] {
       pubkey,
       accountId: login?.id || user?.accountId || null,
       username: acc.username || user?.username || null,
-      email: login?.email || user?.email || null,
+      email: login?.email || user?.email || circleMembers[pubkey]?.email || null,
       notes: acc.notes || user?.notes || login?.notes || null,
       pfp: Boolean(acc.pfp),
       plan: user?.plan || "paper",

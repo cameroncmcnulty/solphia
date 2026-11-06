@@ -15,6 +15,7 @@ import { loadBacktestTape } from "@/lib/pair/backtestTape";
 import { KEYS, kvSetJson } from "@/lib/persist";
 import { mutateState, audit, pushBounded, readyState, loadAllTraders, deleteTrader, withLaunch, saveTrader, healLaunchReferrals } from "@/lib/store";
 import { emptyLaunchBook, referredBy } from "@/lib/launch/engine";
+import { ensureCircle } from "@/lib/circle/engine";
 import { setUsername } from "@/lib/launch/username";
 import { launchError } from "@/lib/launch/errors";
 import { socialHref } from "@/lib/launch/links";
@@ -242,7 +243,16 @@ export async function POST(req: NextRequest) {
       let wallets: string[] = [];
       if (email) {
         const login = findByEmail(s, email);
-        wallets = [...new Set([...(login?.wallets || []), ...(s.users || []).filter((u) => (u.email || "").toLowerCase() === email).map((u) => u.pubkey)].filter(Boolean))];
+        const fromCircle = Object.values(ensureCircle(s.circle).members || {})
+          .filter((m) => (m.email || "").toLowerCase() === email)
+          .map((m) => m.pubkey);
+        wallets = [
+          ...new Set(
+            [...(login?.wallets || []), ...fromCircle, ...(s.users || []).filter((u) => (u.email || "").toLowerCase() === email).map((u) => u.pubkey)].filter(
+              Boolean,
+            ),
+          ),
+        ];
       }
       const referred = wallets.reduce((n, pk) => n + referredBy(book, pk).length, 0);
       return { ...out, wallets: wallets.length, referred };

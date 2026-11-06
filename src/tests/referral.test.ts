@@ -60,6 +60,9 @@ describe("referral book", () => {
     assert.match(store, /healLaunchReferrals/);
     assert.match(store, /Existing shard is local so a hello\/XP stub cannot blank a filled referrer/);
     assert.match(store, /kvGetJsonOk\(KEYS\.launchAccounts/);
+    assert.match(store, /kvGetJsonRetry\(KEYS\.launchAccounts/);
+    const users = readFileSync(path.join(process.cwd(), "src/lib/admin/users.ts"), "utf8");
+    assert.match(users, /circleMembers\[pubkey\]\?\.email/);
   });
 
   it("restores a missing first inviter from identity/circle/coin hints and never overwrites", () => {

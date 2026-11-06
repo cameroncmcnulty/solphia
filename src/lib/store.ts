@@ -27,6 +27,7 @@ import {
   durableKind,
   kvGetJson,
   kvGetJsonOk,
+  kvGetJsonRetry,
   kvMGetJson,
   kvDel,
   kvSadd,
@@ -535,20 +536,32 @@ async function overlayAuthOtps(state: AppState) {
 async function overlayLaunch(state: AppState) {
   if (!durableConfigured()) return;
   try {
-    const raw = await kvGetJson(KEYS.launch, 20_000);
+    const raw = await kvGetJsonRetry(KEYS.launch, 20_000, 3);
     if (raw && typeof raw === "object" && Array.isArray((raw as LaunchBook).coins)) {
       state.launch = mergeLaunch(state.launch || emptyLaunchBook(), raw as LaunchBook);
     }
-    const extra = await kvGetJson(KEYS.launchAccounts, 20_000);
+  } catch {
+    /* keep mem */
+  }
+  try {
+    const extra = await kvGetJsonRetry(KEYS.launchAccounts, 20_000, 3);
     if (extra && typeof extra === "object") {
       const book = state.launch || emptyLaunchBook();
       // Dedicated accounts shard is local so a fat-tape stub cannot wipe pfp / intro / username.
       book.accounts = mergeAccountMaps(book.accounts, extra as Record<string, LaunchAccount>);
       state.launch = book;
     }
-    const book = state.launch || emptyLaunchBook();
-    if (!state.launch) state.launch = book;
+  } catch {
+    /* keep mem */
+  }
+  const book = state.launch || emptyLaunchBook();
+  if (!state.launch) state.launch = book;
+  try {
     await overlayAccountIdentities(book);
+  } catch {
+    /* heal still runs */
+  }
+  try {
     await healLaunchReferrals(state);
   } catch {
     /* keep mem */
@@ -665,28 +678,12 @@ export async function healLaunchReferrals(
   opts?: { force?: boolean },
 ): Promise<{ restored: number; scanned: number; pubkeys: string[] }> {
   if (!durableConfigured()) return { restored: 0, scanned: 0, pubkeys: [] };
-  if (!opts?.force && Date.now() - lastReferralHeal < REFERRAL_HEAL_MS) {
-    return { restored: 0, scanned: 0, pubkeys: [] };
-  }
-  lastReferralHeal = Date.now();
   const book = state.launch || emptyLaunchBook();
   if (!state.launch) state.launch = book;
   await overlayCircle(state);
-  await overlayAccountIdentities(book);
   const hints: ReferrerHint[] = [];
-  const keys = await kvScanKeys("solphia:account:*");
-  for (let i = 0; i < keys.length; i += 50) {
-    const chunk = keys.slice(i, i + 50);
-    const rows = await kvMGetJson(chunk);
-    for (let j = 0; j < chunk.length; j++) {
-      const raw = rows[j];
-      if (!raw || typeof raw !== "object") continue;
-      const ident = identityAsAccount(raw as ReturnType<typeof accountIdentity>);
-      const pk = ident.pubkey || chunk[j].slice("solphia:account:".length);
-      if (ident.referrer) hints.push({ pubkey: pk, referrer: ident.referrer, referredAt: ident.referredAt });
-    }
-  }
-  const members = ensureCircle(state.circle).members || {};
+  const circle = ensureCircle(state.circle);
+  const members = circle.members || {};
   for (const m of Object.values(members)) {
     if (m.referrer) hints.push({ pubkey: m.pubkey, referrer: m.referrer, referredAt: m.joinedAt });
     if (m.invitedPubkey) hints.push({ pubkey: m.invitedPubkey, referrer: m.pubkey, referredAt: m.joinedAt });
@@ -694,14 +691,46 @@ export async function healLaunchReferrals(
   for (const c of book.coins || []) {
     if (c.referrer && c.creator) hints.push({ pubkey: c.creator, referrer: c.referrer, referredAt: c.createdAt });
   }
+  let scanned = 0;
+  const scan = Boolean(opts?.force) || Date.now() - lastReferralHeal >= REFERRAL_HEAL_MS;
+  if (scan) {
+    lastReferralHeal = Date.now();
+    await overlayAccountIdentities(book);
+    const keys = await kvScanKeys("solphia:account:*");
+    scanned = keys.length;
+    for (let i = 0; i < keys.length; i += 50) {
+      const chunk = keys.slice(i, i + 50);
+      const rows = await kvMGetJson(chunk);
+      for (let j = 0; j < chunk.length; j++) {
+        const raw = rows[j];
+        if (!raw || typeof raw !== "object") continue;
+        const ident = identityAsAccount(raw as ReturnType<typeof accountIdentity>);
+        const pk = ident.pubkey || chunk[j].slice("solphia:account:".length);
+        if (ident.referrer) hints.push({ pubkey: pk, referrer: ident.referrer, referredAt: ident.referredAt });
+      }
+    }
+  }
   const out = restoreReferrers(book, hints);
+  let circleDirty = false;
+  for (const acc of Object.values(book.accounts || {})) {
+    if (!acc?.pubkey || !acc.referrer) continue;
+    const m = members[acc.pubkey];
+    if (m && !m.referrer) {
+      m.referrer = acc.referrer;
+      circleDirty = true;
+    }
+  }
   if (out.restored > 0) {
     for (const pk of out.pubkeys) {
       await persistAccountIdentity(book.accounts[pk]);
     }
     await persistLaunch(state);
   }
-  return { restored: out.restored, scanned: keys.length, pubkeys: out.pubkeys };
+  if (circleDirty) {
+    state.circle = circle;
+    await persistCircle(state);
+  }
+  return { restored: out.restored, scanned, pubkeys: out.pubkeys };
 }
 
 async function overlaySphaSocials(state: AppState) {
