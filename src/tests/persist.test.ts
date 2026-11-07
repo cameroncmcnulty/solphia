@@ -181,6 +181,10 @@ describe("ops overlay", () => {
     assert.match(store, /overlayAccountIdentities/);
     assert.match(store, /healLaunchReferrals/);
     assert.match(store, /kvGetJsonOk/);
+    assert.match(store, /export async function overlayDesk/);
+    assert.match(store, /A miss\/null must not replace the dedicated accounts shard/);
+    assert.match(store, /Thin book: pull every identity shard/);
+    assert.match(store, /namesRestored/);
     const persist = readFileSync(new URL("../lib/persist.ts", import.meta.url), "utf8");
     assert.match(persist, /export async function kvScanKeys/);
     assert.match(persist, /export async function kvGetJsonOk/);
@@ -191,6 +195,7 @@ describe("ops overlay", () => {
     const admin = readFileSync(new URL("../app/api/admin/route.ts", import.meta.url), "utf8");
     assert.match(admin, /healReferrals/);
     assert.match(admin, /healLaunchReferrals/);
+    assert.match(admin, /overlayDesk/);
     const A = "CyaE1VxvBrahnPWkqm5VsdCvyS2QmNht2UFrKJHga54o";
     const merged = mergeUsers(
       [{ pubkey: A, createdAt: 2, lastSeen: 4, alertsEnabled: true, username: "Cam" }],

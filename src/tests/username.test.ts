@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { emptyLaunchBook, mergeLaunch } from "../lib/launch/engine";
+import { emptyLaunchBook, ensureAccount, identityAsAccount, mergeAccount, mergeLaunch } from "../lib/launch/engine";
 import { setUsername, usernameIssue, usernameOk } from "../lib/launch/username";
 
 const A = "CyaE1VxvBrahnPWkqm5VsdCvyS2QmNht2UFrKJHga54o";
@@ -59,5 +59,20 @@ describe("usernames", () => {
     const stampedStub = emptyLaunchBook();
     stampedStub.accounts[A] = { pubkey: A, referralRewardsSol: 0, usernameAt: 90, xp: 4 };
     assert.equal(mergeLaunch(stampedStub, saved).accounts[A].username, "Cam");
+  });
+
+  it("restores a missing handle from an identity shard onto an empty book row", () => {
+    const book = emptyLaunchBook();
+    const ident = identityAsAccount({ pubkey: A, username: "Cam", usernameAt: 50, referralRewardsSol: 0 });
+    const cur = ensureAccount(book, A);
+    book.accounts[A] = mergeAccount(ident, cur, A);
+    assert.equal(book.accounts[A].username, "Cam");
+    assert.equal(book.accounts[A].usernameAt, 50);
+    const filled = mergeAccount(
+      identityAsAccount({ pubkey: A, xp: 9, referralRewardsSol: 0 }),
+      book.accounts[A],
+      A,
+    );
+    assert.equal(filled.username, "Cam");
   });
 });

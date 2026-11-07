@@ -13,7 +13,7 @@ import { lockedAuto } from "@/lib/auto";
 import { latestBacktest, packFromAdminRuns, runBacktest, slimPublishedPack } from "@/lib/pair/backtest";
 import { loadBacktestTape } from "@/lib/pair/backtestTape";
 import { KEYS, kvSetJson } from "@/lib/persist";
-import { mutateState, audit, pushBounded, readyState, loadAllTraders, deleteTrader, withLaunch, saveTrader, healLaunchReferrals } from "@/lib/store";
+import { mutateState, audit, pushBounded, readyState, loadAllTraders, deleteTrader, withLaunch, saveTrader, healLaunchReferrals, overlayDesk } from "@/lib/store";
 import { emptyLaunchBook, referredBy } from "@/lib/launch/engine";
 import { ensureCircle } from "@/lib/circle/engine";
 import { setUsername } from "@/lib/launch/username";
@@ -28,6 +28,7 @@ export async function GET(req: NextRequest) {
   const denied = requireAdmin(req);
   if (denied) return denied;
   const state = await readyState();
+  await overlayDesk(state);
   await loadAllTraders(state);
   let profits = buildProfitDesk(state);
   try {

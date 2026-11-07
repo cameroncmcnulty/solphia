@@ -259,9 +259,21 @@ async function maybeOverlayOps(state: AppState) {
   lastOpsPull = Date.now();
   try {
     const raw = await kvGetJson(KEYS.ops);
-    if (raw && typeof raw === "object") applyOpsConfig(state, raw as AppState);
+    if (raw && typeof raw === "object") {
+      const remote = raw as AppState;
+      applyOpsConfig(state, remote);
+      if (Array.isArray(remote.users) && remote.users.length) {
+        state.users = mergeUsers(state.users || [], remote.users);
+      }
+    }
     await overlaySphaSocials(state);
     await overlaySphaCountdown(state);
+    const thin =
+      Object.keys(state.launch?.accounts || {}).length < 8 || (state.users || []).length < 8;
+    if (thin) {
+      await overlayLaunch(state);
+      await overlayLoginAccounts(state, true);
+    }
   } catch {
     /* keep mem */
   }
@@ -610,9 +622,9 @@ async function persistLaunch(state: AppState) {
   const slim = slimLaunch(state.launch || emptyLaunchBook());
   const extraGot = await kvGetJsonOk(KEYS.launchAccounts, 20_000);
   if (!extraGot.ok) return;
-  if (extraGot.value && typeof extraGot.value === "object") {
-    slim.accounts = mergeAccountMaps(extraGot.value as Record<string, LaunchAccount>, slim.accounts || {});
-  }
+  // A miss/null must not replace the dedicated accounts shard with a thin local map.
+  if (!extraGot.value || typeof extraGot.value !== "object" || Array.isArray(extraGot.value)) return;
+  slim.accounts = mergeAccountMaps(extraGot.value as Record<string, LaunchAccount>, slim.accounts || {});
   if (state.launch) state.launch.accounts = slim.accounts;
   // Accounts first so a fat tape write cannot be the only copy of rank / usernames.
   await kvSetJson(KEYS.launchAccounts, slim.accounts || {});
@@ -653,19 +665,39 @@ export async function overlayAccountIdentity(book: LaunchBook, pubkey: string) {
   }
 }
 
+async function applyIdentityRow(book: LaunchBook, raw: unknown, fallbackPk: string) {
+  if (!raw || typeof raw !== "object") return;
+  const ident = identityAsAccount(raw as ReturnType<typeof accountIdentity>);
+  const pk = ident.pubkey || fallbackPk;
+  if (!pk) return;
+  const cur = ensureAccount(book, pk);
+  book.accounts[pk] = mergeAccount(ident, cur, pk);
+}
+
 export async function overlayAccountIdentities(book: LaunchBook) {
   if (!durableConfigured()) return;
-  const pks = Object.keys(book.accounts || {}).filter(Boolean);
+  const known = new Set(Object.keys(book.accounts || {}).filter(Boolean));
+  const pks = [...known];
   for (let i = 0; i < pks.length; i += 80) {
     const chunk = pks.slice(i, i + 80);
     const rows = await kvMGetJson(chunk.map((pk) => KEYS.account(pk)));
     for (let j = 0; j < chunk.length; j++) {
-      const raw = rows[j];
-      if (!raw || typeof raw !== "object") continue;
-      const pk = chunk[j];
-      const ident = identityAsAccount(raw as ReturnType<typeof accountIdentity>);
-      const cur = ensureAccount(book, pk);
-      book.accounts[pk] = mergeAccount(ident, cur, pk);
+      await applyIdentityRow(book, rows[j], chunk[j]);
+    }
+  }
+  // Thin book: pull every identity shard so a wiped launch-accounts map cannot hide usernames.
+  if (pks.length >= 8) return;
+  const keys = await kvScanKeys("solphia:account:*");
+  const extra: string[] = [];
+  for (const key of keys) {
+    const pk = key.slice("solphia:account:".length);
+    if (pk && !known.has(pk)) extra.push(pk);
+  }
+  for (let i = 0; i < extra.length; i += 80) {
+    const chunk = extra.slice(i, i + 80);
+    const rows = await kvMGetJson(chunk.map((pk) => KEYS.account(pk)));
+    for (let j = 0; j < chunk.length; j++) {
+      await applyIdentityRow(book, rows[j], chunk[j]);
     }
   }
 }
@@ -692,7 +724,9 @@ export async function healLaunchReferrals(
     if (c.referrer && c.creator) hints.push({ pubkey: c.creator, referrer: c.referrer, referredAt: c.createdAt });
   }
   let scanned = 0;
-  const scan = Boolean(opts?.force) || Date.now() - lastReferralHeal >= REFERRAL_HEAL_MS;
+  let namesRestored = 0;
+  const thin = Object.keys(book.accounts || {}).length < 8;
+  const scan = Boolean(opts?.force) || thin || Date.now() - lastReferralHeal >= REFERRAL_HEAL_MS;
   if (scan) {
     lastReferralHeal = Date.now();
     await overlayAccountIdentities(book);
@@ -706,9 +740,21 @@ export async function healLaunchReferrals(
         if (!raw || typeof raw !== "object") continue;
         const ident = identityAsAccount(raw as ReturnType<typeof accountIdentity>);
         const pk = ident.pubkey || chunk[j].slice("solphia:account:".length);
+        if (!pk) continue;
+        const before = (ensureAccount(book, pk).username || "").trim();
+        book.accounts[pk] = mergeAccount(ident, book.accounts[pk], pk);
+        if (!before && (book.accounts[pk].username || "").trim()) namesRestored += 1;
         if (ident.referrer) hints.push({ pubkey: pk, referrer: ident.referrer, referredAt: ident.referredAt });
       }
     }
+  }
+  for (const u of state.users || []) {
+    if (!u?.pubkey || !u.username) continue;
+    const acc = ensureAccount(book, u.pubkey);
+    if ((acc.username || "").trim()) continue;
+    acc.username = u.username;
+    acc.usernameAt = acc.usernameAt || Date.now();
+    namesRestored += 1;
   }
   const out = restoreReferrers(book, hints);
   let circleDirty = false;
@@ -720,8 +766,12 @@ export async function healLaunchReferrals(
       circleDirty = true;
     }
   }
-  if (out.restored > 0) {
-    for (const pk of out.pubkeys) {
+  if (out.restored > 0 || namesRestored > 0) {
+    const dirty = new Set(out.pubkeys);
+    for (const [pk, acc] of Object.entries(book.accounts || {})) {
+      if ((acc?.username || "").trim()) dirty.add(pk);
+    }
+    for (const pk of dirty) {
       await persistAccountIdentity(book.accounts[pk]);
     }
     await persistLaunch(state);
@@ -772,6 +822,7 @@ async function overlaySphaCountdown(state: AppState) {
 async function persistSphaCountdown(state: AppState) {
   if (!durableConfigured()) return;
   const local = parseSphaCountdown(state) || emptySphaCountdown();
+  if (local.rehearsal) return;
   let remote = emptySphaCountdown();
   try {
     const parsed = parseSphaCountdown(await kvGetJson(KEYS.sphaCountdown));
@@ -1208,6 +1259,13 @@ export async function mutateState<T>(fn: (state: AppState) => T | Promise<T>): P
   const result = await fn(state);
   await saveState(state);
   return result;
+}
+
+/** Admin / desk reads overlay launch accounts so a thin warm instance cannot show 0 usernames. */
+export async function overlayDesk(state: AppState) {
+  if (!durableConfigured()) return;
+  await overlayLaunch(state);
+  await overlayLoginAccounts(state, true);
 }
 
 /** Launch tape is its own shard so coins survive across serverless instances. */
