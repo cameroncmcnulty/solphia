@@ -176,8 +176,11 @@ describe("spha countdown", () => {
 
   it("wires the public countdown, launcher clock, cron tick, and pending record", () => {
     const tokenPage = readFileSync(path.join(process.cwd(), "src/app/token/page.tsx"), "utf8");
-    assert.match(tokenPage, /SphaCountdown/);
-    assert.match(tokenPage, /Coming soon|phase/);
+    const tokenDesk = readFileSync(path.join(process.cwd(), "src/components/TokenDesk.tsx"), "utf8");
+    assert.match(tokenPage, /TokenDesk/);
+    assert.match(tokenPage, /force-dynamic/);
+    assert.match(tokenDesk, /SphaCountdown/);
+    assert.match(tokenDesk, /Coming soon|phase/);
     const cd = readFileSync(path.join(process.cwd(), "src/components/SphaCountdown.tsx"), "utf8");
     assert.match(cd, /COMING SOON/);
     assert.match(cd, /TealConfetti/);
@@ -220,6 +223,6 @@ describe("spha countdown", () => {
     const socials = readFileSync(path.join(process.cwd(), "src/components/SphaSocials.tsx"), "utf8");
     assert.match(socials, /website/);
     assert.match(socials, /SiteMark/);
-    assert.match(tokenPage, /website=/);
+    assert.match(tokenDesk, /website=/);
   });
 });

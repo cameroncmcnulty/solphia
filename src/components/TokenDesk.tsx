@@ -1,0 +1,209 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import { CopyCa } from "@/components/CopyCa";
+import { SphaMark } from "@/components/SphaMark";
+import { SphaSocials } from "@/components/SphaSocials";
+import { SolphiaConstellation } from "@/components/SolphiaConstellation";
+import { solphiaTokenDesk, type TokenStat } from "@/lib/token/solphia";
+import { Reveal } from "@/components/Reveal";
+import { Tokenomics } from "@/components/Tokenomics";
+import { SphaRoadmap } from "@/components/SphaRoadmap";
+import { JoinFoundersButton } from "@/components/JoinFoundersButton";
+import { SphaCountdown } from "@/components/SphaCountdown";
+import { SPHA_MINT_LEAD_MS, type SphaPublicCountdown, type SphaPublicPhase } from "@/lib/token/countdown";
+import { SPHA_BLURB, SPHA_DEFAULT_IMAGE, SPHA_TELEGRAM, SPHA_WEBSITE, SPHA_X } from "@/lib/token/omics";
+
+function tick(symbol: string) {
+  const s = symbol.replace(/^\$+/, "").replace(/\*+$/, "").trim();
+  return s ? `$${s}` : "";
+}
+
+export type SphaPack = {
+  mint: string;
+  name: string;
+  symbol: string;
+  phase: SphaPublicPhase;
+  countdown: SphaPublicCountdown;
+  stats: TokenStat[];
+  extra: TokenStat[];
+  image: string;
+  blurb: string;
+  socials: { x: string; telegram: string; discord: string; website: string };
+};
+
+function emptyPack(): SphaPack {
+  const desk = solphiaTokenDesk();
+  return {
+    mint: "",
+    name: desk.name,
+    symbol: desk.symbol,
+    phase: "soon",
+    countdown: { phase: "soon", launchAt: 0, remainingMs: 0, mintLeadMs: SPHA_MINT_LEAD_MS, serverNow: Date.now() },
+    stats: desk.stats,
+    extra: desk.extra,
+    image: SPHA_DEFAULT_IMAGE,
+    blurb: SPHA_BLURB,
+    socials: { x: SPHA_X, telegram: SPHA_TELEGRAM, discord: "", website: SPHA_WEBSITE },
+  };
+}
+
+export function TokenDesk({ initial }: { initial?: SphaPack }) {
+  const [pack, setPack] = useState<SphaPack>(initial || emptyPack);
+  const t = solphiaTokenDesk(pack.mint);
+  const symbol = pack.symbol || t.symbol;
+  const live = pack.phase === "live" && Boolean(pack.mint);
+  const stats = live && pack.stats?.length ? pack.stats : t.stats;
+  const extra = live && pack.extra?.length ? pack.extra : t.extra;
+
+  const load = useCallback(() => {
+    fetch("/api/spha", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => {
+        const desk = solphiaTokenDesk(typeof j?.mint === "string" ? j.mint : "");
+        const phase: SphaPublicPhase = j?.phase === "live" || j?.phase === "counting" ? j.phase : "soon";
+        setPack({
+          mint: desk.mint,
+          name: typeof j?.name === "string" && j.name.trim() ? j.name.trim() : desk.name,
+          symbol: typeof j?.symbol === "string" && j.symbol.trim() ? j.symbol.trim().replace(/^\$+/, "") : desk.symbol,
+          phase,
+          countdown: {
+            phase: j?.countdown?.phase === "live" || j?.countdown?.phase === "counting" ? j.countdown.phase : phase,
+            launchAt: Number(j?.countdown?.launchAt) || 0,
+            remainingMs: Number(j?.countdown?.remainingMs) || 0,
+            mintLeadMs: Number(j?.countdown?.mintLeadMs) || SPHA_MINT_LEAD_MS,
+            serverNow: Number(j?.countdown?.serverNow) || Date.now(),
+          },
+          stats: Array.isArray(j?.stats) ? j.stats : desk.stats,
+          extra: Array.isArray(j?.extra) ? j.extra : desk.extra,
+          image: j?.image || SPHA_DEFAULT_IMAGE,
+          blurb: j?.blurb || SPHA_BLURB,
+          socials: {
+            x: j?.socials?.x || SPHA_X,
+            telegram: j?.socials?.telegram || SPHA_TELEGRAM,
+            discord: j?.socials?.discord || "",
+            website: j?.socials?.website || SPHA_WEBSITE,
+          },
+        });
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    load();
+    const onFocus = () => load();
+    window.addEventListener("focus", onFocus);
+    const id = window.setInterval(() => {
+      if (document.hidden) return;
+      load();
+    }, pack.phase === "counting" ? 4_000 : 20_000);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      window.clearInterval(id);
+    };
+  }, [load, pack.phase]);
+
+  return (
+    <main className="relative min-h-screen overflow-x-hidden pb-24">
+      <SolphiaConstellation />
+      <div className="relative z-10 mx-auto max-w-6xl px-4 pt-8 md:px-8 md:pt-14">
+        <p className="font-mono text-[11px] tracking-[0.28em] text-acid">PROTOCOL TOKEN</p>
+        <div className="mt-3 flex items-center gap-4">
+          {pack.image ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={pack.image} alt="" className="h-14 w-14 rounded-2xl object-cover sm:h-16 sm:w-16" />
+          ) : (
+            <SphaMark className="h-14 w-14 sm:h-16 sm:w-16" />
+          )}
+          <h1 className="font-display text-5xl text-ghost sm:text-7xl">{tick(symbol)}</h1>
+        </div>
+        <p className="mt-5 max-w-2xl text-lg text-mute sm:text-xl">
+          {pack.blurb || `Swaps fund listings, buybacks, and ${tick(symbol)} burns.`}
+        </p>
+
+        <div className="mt-8 flex flex-wrap items-center gap-5">
+          <SphaSocials x={pack.socials.x} telegram={pack.socials.telegram} discord={pack.socials.discord} website={pack.socials.website} />
+          {live ? <CopyCa ca={pack.mint} /> : null}
+        </div>
+
+        <SphaCountdown
+          pack={{
+            mint: pack.mint,
+            symbol,
+            phase: pack.phase,
+            countdown: pack.countdown,
+            stats,
+            extra,
+            image: pack.image,
+            blurb: pack.blurb,
+          }}
+          onNeedRefresh={load}
+        />
+
+        <div className="mt-12 grid gap-4 sm:grid-cols-3">
+          <Reveal delay={40} from="left">
+            <Story
+              t="Listings"
+              d="A share is saved for future listings."
+            />
+          </Reveal>
+          <Reveal delay={120}>
+            <Story
+              t="Buybacks"
+              d="A share buys $SPHA on the open market."
+            />
+          </Reveal>
+          <Reveal delay={200} from="right">
+            <Story
+              t="Burns"
+              d="A share is taken out of supply."
+            />
+          </Reveal>
+        </div>
+
+        <div className="mt-10 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {stats.map((s) => (
+            <Bubble key={s.k} k={s.k} v={s.v} hint={s.hint} />
+          ))}
+        </div>
+
+        <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {extra.map((s) => (
+            <Bubble key={s.k} k={s.k} v={s.v} />
+          ))}
+        </div>
+
+        <div className="mt-10">
+          <Tokenomics />
+        </div>
+
+        <div className="mt-16 md:mt-24">
+          <SphaRoadmap />
+        </div>
+
+        <div className="mt-14">
+          <JoinFoundersButton />
+        </div>
+      </div>
+    </main>
+  );
+}
+
+function Story({ t, d }: { t: string; d: string }) {
+  return (
+    <div className="card-lift panel-bubble rounded-3xl p-6">
+      <div className="font-display text-2xl text-ghost">{t}</div>
+      <p className="mt-3 text-sm leading-relaxed text-mute sm:text-base">{d}</p>
+    </div>
+  );
+}
+
+function Bubble({ k, v, hint }: { k: string; v: string; hint?: string }) {
+  return (
+    <div className="panel-bubble rounded-3xl px-4 py-4">
+      <div className="font-mono text-[10px] tracking-[0.16em] text-mute">{k}</div>
+      <div className="stat-num mt-1 text-2xl text-ghost sm:text-3xl">{v}</div>
+      {hint && <div className="mt-1 font-mono text-[10px] text-mute">{hint}</div>}
+    </div>
+  );
+}

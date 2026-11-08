@@ -232,7 +232,7 @@ describe("spha social links", () => {
     const admin = readFileSync(join(process.cwd(), "src/components/admin/sections/Spha.tsx"), "utf8");
     assert.match(admin, /SphaSocials/);
     assert.match(admin, /PREVIEW/);
-    const token = readFileSync(join(process.cwd(), "src/app/token/page.tsx"), "utf8");
+    const token = readFileSync(join(process.cwd(), "src/components/TokenDesk.tsx"), "utf8");
     assert.match(token, /SphaSocials/);
   });
 });
