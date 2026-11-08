@@ -197,6 +197,32 @@ export function publicSphaCountdown(
   };
 }
 
+/** Keep an armed public clock. A stale soon/empty poll must not wipe launchAt. */
+export function mergeSphaPublicPack<T extends {
+  phase: SphaPublicPhase;
+  mint: string;
+  countdown: SphaPublicCountdown;
+}>(prev: T, next: T): T {
+  const mint = (next.mint || prev.mint || "").trim();
+  const launchAt = next.countdown.launchAt > 0 ? next.countdown.launchAt : prev.countdown.launchAt;
+  const mintLeadMs = next.countdown.mintLeadMs || prev.countdown.mintLeadMs || SPHA_MINT_LEAD_MS;
+  const serverNow = next.countdown.serverNow || prev.countdown.serverNow || Date.now();
+  const live = Boolean(mint) || next.phase === "live" || prev.phase === "live";
+  const phase: SphaPublicPhase = live ? "live" : launchAt > 0 ? "counting" : "soon";
+  return {
+    ...next,
+    mint,
+    phase,
+    countdown: {
+      phase,
+      launchAt,
+      remainingMs: live ? 0 : launchAt > 0 ? Math.max(0, launchAt - serverNow) : 0,
+      mintLeadMs,
+      serverNow,
+    },
+  };
+}
+
 export function splitRemaining(ms: number): { d: number; h: number; m: number; s: number } {
   const t = Math.max(0, Math.floor(ms / 1000));
   return {

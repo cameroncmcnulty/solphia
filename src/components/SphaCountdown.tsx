@@ -23,16 +23,17 @@ type Pack = {
   blurb?: string;
 };
 
-function remainingOf(cd: SphaPublicCountdown, fetchedAt: number, now: number) {
-  if (cd.phase !== "counting" || !(cd.launchAt > 0)) return 0;
-  const skew = cd.serverNow - fetchedAt;
-  return Math.max(0, cd.launchAt - (now + skew));
+function remainingOf(cd: SphaPublicCountdown, now: number) {
+  if (!(cd.launchAt > 0)) return Math.max(0, cd.remainingMs || 0);
+  if (now > 0) return Math.max(0, cd.launchAt - now);
+  if (cd.remainingMs > 0) return cd.remainingMs;
+  return Math.max(0, cd.launchAt - (cd.serverNow || 0));
 }
 
 function FlipCell({ label, value }: { label: string; value: string }) {
   return (
     <div className="spha-cd-cell">
-      <span key={value} className="spha-cd-num" data-value={value}>
+      <span key={value} className="spha-cd-num" data-value={value} suppressHydrationWarning>
         {value}
       </span>
       <span className="spha-cd-lbl">{label}</span>
@@ -47,25 +48,28 @@ export function SphaCountdown({
   pack: Pack;
   onNeedRefresh: () => void;
 }) {
-  const [now, setNow] = useState(() => Date.now());
-  const [fetchedAt] = useState(() => Date.now());
+  const [now, setNow] = useState(0);
   const [fire, setFire] = useState(false);
   const [tilt, setTilt] = useState({ x: 0, y: 0 });
   const stage = useRef<HTMLDivElement>(null);
   const liveOnce = useRef(false);
   const asked = useRef(false);
+  const launchAtHold = useRef(Math.max(0, pack.countdown.launchAt));
+  if (pack.countdown.launchAt > 0) launchAtHold.current = pack.countdown.launchAt;
 
-  const remaining = remainingOf(pack.countdown, fetchedAt, now);
-  const live = pack.phase === "live" && Boolean(pack.mint);
-  const counting = pack.phase === "counting" && pack.countdown.launchAt > 0;
+  const live = Boolean(pack.mint) || pack.phase === "live";
+  const launchAt = pack.countdown.launchAt > 0 ? pack.countdown.launchAt : launchAtHold.current;
+  const counting = !live && launchAt > 0;
+  const remaining = live ? 0 : remainingOf({ ...pack.countdown, launchAt }, now);
   const parts = splitRemaining(counting ? remaining : 0);
   const span = Math.max(pack.countdown.remainingMs, pack.countdown.mintLeadMs, 1);
   const progress = live ? 1 : counting ? Math.min(1, Math.max(0, 1 - remaining / Math.max(span, remaining, 1))) : 0.12;
   const ticker = (pack.symbol || "SPHA").replace(/^\$+/, "");
-  const whenLabel = formatSphaLaunchWhen(pack.countdown.launchAt);
+  const whenLabel = formatSphaLaunchWhen(launchAt);
 
   useEffect(() => {
     if (live) return;
+    setNow(Date.now());
     const id = window.setInterval(() => setNow(Date.now()), 100);
     return () => window.clearInterval(id);
   }, [live]);
@@ -79,7 +83,7 @@ export function SphaCountdown({
 
   useEffect(() => {
     if (live || asked.current) return;
-    if (pack.phase === "counting" && remaining <= 0) {
+    if (counting && remaining <= 0) {
       asked.current = true;
       onNeedRefresh();
       const t = window.setTimeout(() => {
@@ -87,7 +91,7 @@ export function SphaCountdown({
       }, 2500);
       return () => window.clearTimeout(t);
     }
-  }, [live, pack.phase, remaining, onNeedRefresh]);
+  }, [live, counting, remaining, onNeedRefresh]);
 
   const cells = useMemo(
     () => [
@@ -154,7 +158,7 @@ export function SphaCountdown({
           ) : counting ? (
             <div className="spha-cd-clock-wrap">
               {whenLabel ? <p className="spha-cd-when">{whenLabel}</p> : null}
-              <div className="spha-cd-clock" role="timer" aria-live="polite" aria-label={`Launch in ${parts.d} days ${parts.h} hours ${parts.m} minutes ${parts.s} seconds`}>
+              <div className="spha-cd-clock" role="timer" suppressHydrationWarning aria-live="polite" aria-label={`Launch in ${parts.d} days ${parts.h} hours ${parts.m} minutes ${parts.s} seconds`}>
                 {cells.map((c, i) => (
                   <div key={c.k} className="spha-cd-unit">
                     <FlipCell label={c.k} value={c.v} />

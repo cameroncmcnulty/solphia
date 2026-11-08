@@ -12,6 +12,7 @@ import {
   mergeSphaCountdown,
   pad2,
   parseSphaCountdown,
+  mergeSphaPublicPack,
   publicSphaCountdown,
   sphaInMintWindow,
   sphaMintAt,
@@ -224,5 +225,87 @@ describe("spha countdown", () => {
     assert.match(socials, /website/);
     assert.match(socials, /SiteMark/);
     assert.match(tokenDesk, /website=/);
+    assert.match(tokenDesk, /mergeSphaPublicPack/);
+    assert.match(tokenDesk, /setTimeout\(\(\) => \{[\s\S]*load\(\);[\s\S]*\}, 2500\)/);
+    assert.match(cd, /pack\.countdown\.launchAt > 0 \? pack\.countdown\.launchAt : launchAtHold\.current/);
+    assert.match(cd, /suppressHydrationWarning/);
+    assert.match(cd, /cd\.remainingMs > 0/);
+  });
+
+  it("keeps an armed public clock when a stale soon poll returns launchAt 0", () => {
+    const launchAt = SPHA_TGE_LAUNCH_AT_MS;
+    const counting = {
+      mint: "",
+      phase: "counting" as const,
+      countdown: {
+        phase: "counting" as const,
+        launchAt,
+        remainingMs: 4 * 86400_000,
+        mintLeadMs: SPHA_MINT_LEAD_MS,
+        serverNow: launchAt - 4 * 86400_000,
+      },
+    };
+    const staleSoon = {
+      mint: "",
+      phase: "soon" as const,
+      countdown: {
+        phase: "soon" as const,
+        launchAt: 0,
+        remainingMs: 0,
+        mintLeadMs: SPHA_MINT_LEAD_MS,
+        serverNow: Date.now(),
+      },
+    };
+    const kept = mergeSphaPublicPack(counting, staleSoon);
+    assert.equal(kept.phase, "counting");
+    assert.equal(kept.countdown.phase, "counting");
+    assert.equal(kept.countdown.launchAt, launchAt);
+    assert.ok(kept.countdown.remainingMs > 0);
+    assert.equal(kept.mint, "");
+  });
+
+  it("promotes an armed clock to live when the public mint lands and never returns to soon", () => {
+    const launchAt = SPHA_TGE_LAUNCH_AT_MS;
+    const counting = {
+      mint: "",
+      name: "Solphia",
+      phase: "counting" as const,
+      countdown: {
+        phase: "counting" as const,
+        launchAt,
+        remainingMs: 1_000,
+        mintLeadMs: SPHA_MINT_LEAD_MS,
+        serverNow: launchAt - 1_000,
+      },
+    };
+    const live = mergeSphaPublicPack(counting, {
+      ...counting,
+      mint: "Live11111111111111111111111111111111111111",
+      phase: "live",
+      countdown: {
+        phase: "live",
+        launchAt,
+        remainingMs: 0,
+        mintLeadMs: SPHA_MINT_LEAD_MS,
+        serverNow: launchAt,
+      },
+    });
+    assert.equal(live.phase, "live");
+    assert.equal(live.mint, "Live11111111111111111111111111111111111111");
+    const clobber = mergeSphaPublicPack(live, {
+      mint: "",
+      name: "Solphia",
+      phase: "soon",
+      countdown: {
+        phase: "soon",
+        launchAt: 0,
+        remainingMs: 0,
+        mintLeadMs: SPHA_MINT_LEAD_MS,
+        serverNow: launchAt + 5_000,
+      },
+    });
+    assert.equal(clobber.phase, "live");
+    assert.equal(clobber.mint, "Live11111111111111111111111111111111111111");
+    assert.equal(clobber.countdown.launchAt, launchAt);
   });
 });

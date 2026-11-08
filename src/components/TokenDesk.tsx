@@ -11,7 +11,7 @@ import { Tokenomics } from "@/components/Tokenomics";
 import { SphaRoadmap } from "@/components/SphaRoadmap";
 import { JoinFoundersButton } from "@/components/JoinFoundersButton";
 import { SphaCountdown } from "@/components/SphaCountdown";
-import { SPHA_MINT_LEAD_MS, type SphaPublicCountdown, type SphaPublicPhase } from "@/lib/token/countdown";
+import { SPHA_MINT_LEAD_MS, mergeSphaPublicPack, type SphaPublicCountdown, type SphaPublicPhase } from "@/lib/token/countdown";
 import { SPHA_BLURB, SPHA_DEFAULT_IMAGE, SPHA_TELEGRAM, SPHA_WEBSITE, SPHA_X } from "@/lib/token/omics";
 
 function tick(symbol: string) {
@@ -49,10 +49,10 @@ function emptyPack(): SphaPack {
 }
 
 export function TokenDesk({ initial }: { initial?: SphaPack }) {
-  const [pack, setPack] = useState<SphaPack>(initial || emptyPack);
+  const [pack, setPack] = useState<SphaPack>(() => initial || emptyPack());
   const t = solphiaTokenDesk(pack.mint);
   const symbol = pack.symbol || t.symbol;
-  const live = pack.phase === "live" && Boolean(pack.mint);
+  const live = Boolean(pack.mint) || pack.phase === "live";
   const stats = live && pack.stats?.length ? pack.stats : t.stats;
   const extra = live && pack.extra?.length ? pack.extra : t.extra;
 
@@ -62,7 +62,7 @@ export function TokenDesk({ initial }: { initial?: SphaPack }) {
       .then((j) => {
         const desk = solphiaTokenDesk(typeof j?.mint === "string" ? j.mint : "");
         const phase: SphaPublicPhase = j?.phase === "live" || j?.phase === "counting" ? j.phase : "soon";
-        setPack({
+        const next: SphaPack = {
           mint: desk.mint,
           name: typeof j?.name === "string" && j.name.trim() ? j.name.trim() : desk.name,
           symbol: typeof j?.symbol === "string" && j.symbol.trim() ? j.symbol.trim().replace(/^\$+/, "") : desk.symbol,
@@ -84,24 +84,33 @@ export function TokenDesk({ initial }: { initial?: SphaPack }) {
             discord: j?.socials?.discord || "",
             website: j?.socials?.website || SPHA_WEBSITE,
           },
-        });
+        };
+        setPack((prev) => mergeSphaPublicPack(prev, next));
       })
       .catch(() => {});
   }, []);
 
   useEffect(() => {
-    load();
-    const onFocus = () => load();
+    let ready = false;
+    const start = window.setTimeout(() => {
+      ready = true;
+      load();
+    }, 2500);
+    const onFocus = () => {
+      if (!ready) return;
+      load();
+    };
     window.addEventListener("focus", onFocus);
     const id = window.setInterval(() => {
-      if (document.hidden) return;
+      if (!ready || document.hidden) return;
       load();
-    }, pack.phase === "counting" ? 4_000 : 20_000);
+    }, 4_000);
     return () => {
       window.removeEventListener("focus", onFocus);
+      window.clearTimeout(start);
       window.clearInterval(id);
     };
-  }, [load, pack.phase]);
+  }, [load]);
 
   return (
     <main className="relative min-h-screen overflow-x-hidden pb-24">
