@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { DiscordMark, TelegramMark, XMark } from "@/components/SocialMarks";
+import { DiscordMark, SiteMark, TelegramMark, XMark } from "@/components/SocialMarks";
 import { socialHref } from "@/lib/launch/links";
 
 const TEAL = "#14F195";
@@ -41,12 +41,15 @@ export function SphaSocials({
   x,
   telegram,
   discord,
+  website,
 }: {
   x?: string;
   telegram?: string;
   discord?: string;
+  website?: string;
 }) {
   const links = [
+    { href: socialHref("website", website), label: "Website", node: <SiteMark className="h-[20px] w-[20px] sm:h-[22px] sm:w-[22px]" /> },
     { href: socialHref("x", x), label: "X", node: <XMark className="h-[17px] w-[17px] sm:h-[19px] sm:w-[19px]" /> },
     { href: socialHref("telegram", telegram), label: "Telegram", node: <TelegramMark className="h-[22px] w-[22px] sm:h-[26px] sm:w-[26px]" /> },
     { href: socialHref("discord", discord), label: "Discord", node: <DiscordMark className="h-[22px] w-[22px] sm:h-[26px] sm:w-[26px]" /> },

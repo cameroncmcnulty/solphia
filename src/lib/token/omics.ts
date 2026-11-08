@@ -6,6 +6,12 @@ export const SPHA_NAME = "Solphia";
 export const SPHA_SYMBOL = "SPHA";
 /** Public fallback art so a launch never points metadata at the homepage. */
 export const SPHA_DEFAULT_IMAGE = "https://solphia.io/spha-mark.png";
+export const SPHA_BLURB = "Solphia is a utility token on Solana.";
+export const SPHA_WEBSITE = "https://solphia.io";
+export const SPHA_X = "https://x.com/solphiaio";
+export const SPHA_TELEGRAM = "https://t.me/solphiaio";
+/** Thursday Nov 12, 2026 4:00 PM MST (UTC-7). Mint window opens 30 minutes earlier. */
+export const SPHA_TGE_LAUNCH_AT_MS = Date.parse("2026-11-12T16:00:00-07:00");
 
 export type SphaSliceId = "owner" | "foundation" | "treasury" | "lp";
 export type SphaNetwork = "devnet" | "mainnet-beta";

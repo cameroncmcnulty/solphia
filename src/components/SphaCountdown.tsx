@@ -3,11 +3,18 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 import { CopyCa } from "@/components/CopyCa";
 import { TealConfetti } from "@/components/TealConfetti";
-import { pad2, splitRemaining, type SphaPublicCountdown, type SphaPublicPhase } from "@/lib/token/countdown";
+import {
+  formatSphaLaunchWhen,
+  pad2,
+  splitRemaining,
+  type SphaPublicCountdown,
+  type SphaPublicPhase,
+} from "@/lib/token/countdown";
 import type { TokenStat } from "@/lib/token/solphia";
 
 type Pack = {
   mint: string;
+  symbol?: string;
   phase: SphaPublicPhase;
   countdown: SphaPublicCountdown;
   stats?: TokenStat[];
@@ -20,6 +27,17 @@ function remainingOf(cd: SphaPublicCountdown, fetchedAt: number, now: number) {
   if (cd.phase !== "counting" || !(cd.launchAt > 0)) return 0;
   const skew = cd.serverNow - fetchedAt;
   return Math.max(0, cd.launchAt - (now + skew));
+}
+
+function FlipCell({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="spha-cd-cell">
+      <span key={value} className="spha-cd-num" data-value={value}>
+        {value}
+      </span>
+      <span className="spha-cd-lbl">{label}</span>
+    </div>
+  );
 }
 
 export function SphaCountdown({
@@ -39,13 +57,16 @@ export function SphaCountdown({
 
   const remaining = remainingOf(pack.countdown, fetchedAt, now);
   const live = pack.phase === "live" && Boolean(pack.mint);
-  const parts = splitRemaining(remaining);
+  const counting = pack.phase === "counting" && pack.countdown.launchAt > 0;
+  const parts = splitRemaining(counting ? remaining : 0);
   const span = Math.max(pack.countdown.remainingMs, pack.countdown.mintLeadMs, 1);
-  const progress = live ? 1 : pack.phase === "soon" ? 0.18 : Math.min(1, Math.max(0, 1 - remaining / span));
+  const progress = live ? 1 : counting ? Math.min(1, Math.max(0, 1 - remaining / Math.max(span, remaining, 1))) : 0.12;
+  const ticker = (pack.symbol || "SPHA").replace(/^\$+/, "");
+  const whenLabel = formatSphaLaunchWhen(pack.countdown.launchAt);
 
   useEffect(() => {
     if (live) return;
-    const id = window.setInterval(() => setNow(Date.now()), 250);
+    const id = window.setInterval(() => setNow(Date.now()), 100);
     return () => window.clearInterval(id);
   }, [live]);
 
@@ -84,7 +105,7 @@ export function SphaCountdown({
     const r = el.getBoundingClientRect();
     const x = (e.clientX - r.left) / r.width - 0.5;
     const y = (e.clientY - r.top) / r.height - 0.5;
-    setTilt({ x: x * 10, y: y * -8 });
+    setTilt({ x: x * 8, y: y * -6 });
   }
 
   return (
@@ -92,7 +113,7 @@ export function SphaCountdown({
       <TealConfetti fire={fire} />
       <div
         ref={stage}
-        className="spha-cd"
+        className={`spha-cd${counting ? " spha-cd-live-tick" : ""}`}
         onPointerMove={onMove}
         onPointerLeave={() => setTilt({ x: 0, y: 0 })}
         style={{
@@ -111,9 +132,7 @@ export function SphaCountdown({
           <circle className="spha-cd-track" cx="100" cy="100" r="86" />
           <circle
             className="spha-cd-prog"
-            cx="100"
-            cy="100"
-            r="86"
+            cx="100" cy="100" r="86"
             style={{
               strokeDasharray: `${2 * Math.PI * 86}`,
               strokeDashoffset: `${2 * Math.PI * 86 * (1 - progress)}`,
@@ -122,26 +141,33 @@ export function SphaCountdown({
         </svg>
         <div className="spha-cd-core">
           <p className="spha-cd-kicker">
-            {live ? "PROTOCOL LIVE" : pack.phase === "counting" ? "T-MINUS OFFICIAL LAUNCH" : "OFFICIAL LAUNCH"}
+            {live ? "PROTOCOL LIVE" : counting ? "OFFICIAL $SPHA TGE" : "OFFICIAL LAUNCH"}
           </p>
           {live ? (
             <div className="spha-cd-live">
-              <div className="spha-cd-live-tag">$SPHA IS LIVE</div>
+              <div className="spha-cd-live-tag">${ticker} IS LIVE</div>
               <CopyCa ca={pack.mint} full />
+              <a className="spha-cd-buy" href={`/swap?mint=${encodeURIComponent(pack.mint)}`}>
+                BUY ${ticker}
+              </a>
             </div>
-          ) : pack.phase === "soon" ? (
+          ) : counting ? (
+            <div className="spha-cd-clock-wrap">
+              {whenLabel ? <p className="spha-cd-when">{whenLabel}</p> : null}
+              <div className="spha-cd-clock" role="timer" aria-live="polite" aria-label={`Launch in ${parts.d} days ${parts.h} hours ${parts.m} minutes ${parts.s} seconds`}>
+                {cells.map((c, i) => (
+                  <div key={c.k} className="spha-cd-unit">
+                    <FlipCell label={c.k} value={c.v} />
+                    {i < cells.length - 1 ? <span className="spha-cd-colon" aria-hidden>:</span> : null}
+                  </div>
+                ))}
+              </div>
+              <p className="spha-cd-sub">The clock is live. Contract address reveals here at T-0.</p>
+            </div>
+          ) : (
             <div className="spha-cd-soon">
               <span className="spha-cd-soon-glint">COMING SOON</span>
               <p className="spha-cd-sub">The official clock arms from the $SPHA launcher. Until then this core stays sealed.</p>
-            </div>
-          ) : (
-            <div className="spha-cd-clock" role="timer" aria-live="polite">
-              {cells.map((c) => (
-                <div key={c.k} className="spha-cd-cell">
-                  <span className="spha-cd-num">{c.v}</span>
-                  <span className="spha-cd-lbl">{c.k}</span>
-                </div>
-              ))}
             </div>
           )}
         </div>

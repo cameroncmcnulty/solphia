@@ -22,8 +22,10 @@ export const KEYS = {
   sphaSocials: "solphia:spha-socials",
   /** Official $SPHA countdown. Dual-written so a stale ops save cannot wipe the clock. */
   sphaCountdown: "solphia:spha-countdown",
-  /** NX lock while the T-10 official mint is in flight. */
+  /** NX lock while the T-30 official mint is in flight. */
   sphaMintLock: "solphia:spha-mint-lock",
+  /** Reserved mint keypair so a crashed T-30 send cannot mint a second 200M CA. */
+  sphaMintInflight: "solphia:spha-mint-inflight",
   circle: "solphia:circle",
   shill: "solphia:shill",
   mail: "solphia:mail",

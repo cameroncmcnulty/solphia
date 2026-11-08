@@ -12,6 +12,7 @@ import { SphaRoadmap } from "@/components/SphaRoadmap";
 import { JoinFoundersButton } from "@/components/JoinFoundersButton";
 import { SphaCountdown } from "@/components/SphaCountdown";
 import { SPHA_MINT_LEAD_MS, type SphaPublicCountdown, type SphaPublicPhase } from "@/lib/token/countdown";
+import { SPHA_BLURB, SPHA_DEFAULT_IMAGE, SPHA_TELEGRAM, SPHA_WEBSITE, SPHA_X } from "@/lib/token/omics";
 
 function tick(symbol: string) {
   const s = symbol.replace(/^\$+/, "").replace(/\*+$/, "").trim();
@@ -20,32 +21,37 @@ function tick(symbol: string) {
 
 type SphaPack = {
   mint: string;
+  name: string;
+  symbol: string;
   phase: SphaPublicPhase;
   countdown: SphaPublicCountdown;
   stats: TokenStat[];
   extra: TokenStat[];
   image: string;
   blurb: string;
-  socials: { x: string; telegram: string; discord: string };
+  socials: { x: string; telegram: string; discord: string; website: string };
 };
 
 function emptyPack(): SphaPack {
   const desk = solphiaTokenDesk();
   return {
     mint: "",
+    name: desk.name,
+    symbol: desk.symbol,
     phase: "soon",
     countdown: { phase: "soon", launchAt: 0, remainingMs: 0, mintLeadMs: SPHA_MINT_LEAD_MS, serverNow: Date.now() },
     stats: desk.stats,
     extra: desk.extra,
-    image: "",
-    blurb: "",
-    socials: { x: "", telegram: "", discord: "" },
+    image: SPHA_DEFAULT_IMAGE,
+    blurb: SPHA_BLURB,
+    socials: { x: SPHA_X, telegram: SPHA_TELEGRAM, discord: "", website: SPHA_WEBSITE },
   };
 }
 
 export default function TokenPage() {
   const [pack, setPack] = useState<SphaPack>(emptyPack);
   const t = solphiaTokenDesk(pack.mint);
+  const symbol = pack.symbol || t.symbol;
   const live = pack.phase === "live" && Boolean(pack.mint);
   const stats = live && pack.stats?.length ? pack.stats : t.stats;
   const extra = live && pack.extra?.length ? pack.extra : t.extra;
@@ -58,6 +64,8 @@ export default function TokenPage() {
         const phase: SphaPublicPhase = j?.phase === "live" || j?.phase === "counting" ? j.phase : "soon";
         setPack({
           mint: desk.mint,
+          name: typeof j?.name === "string" && j.name.trim() ? j.name.trim() : desk.name,
+          symbol: typeof j?.symbol === "string" && j.symbol.trim() ? j.symbol.trim().replace(/^\$+/, "") : desk.symbol,
           phase,
           countdown: {
             phase: j?.countdown?.phase === "live" || j?.countdown?.phase === "counting" ? j.countdown.phase : phase,
@@ -68,12 +76,13 @@ export default function TokenPage() {
           },
           stats: Array.isArray(j?.stats) ? j.stats : desk.stats,
           extra: Array.isArray(j?.extra) ? j.extra : desk.extra,
-          image: j?.image || "",
-          blurb: j?.blurb || "",
+          image: j?.image || SPHA_DEFAULT_IMAGE,
+          blurb: j?.blurb || SPHA_BLURB,
           socials: {
-            x: j?.socials?.x || "",
-            telegram: j?.socials?.telegram || "",
+            x: j?.socials?.x || SPHA_X,
+            telegram: j?.socials?.telegram || SPHA_TELEGRAM,
             discord: j?.socials?.discord || "",
+            website: j?.socials?.website || SPHA_WEBSITE,
           },
         });
       })
@@ -106,20 +115,21 @@ export default function TokenPage() {
           ) : (
             <SphaMark className="h-14 w-14 sm:h-16 sm:w-16" />
           )}
-          <h1 className="font-display text-5xl text-ghost sm:text-7xl">{tick(t.symbol)}</h1>
+          <h1 className="font-display text-5xl text-ghost sm:text-7xl">{tick(symbol)}</h1>
         </div>
         <p className="mt-5 max-w-2xl text-lg text-mute sm:text-xl">
-          {pack.blurb || `Swaps fund listings, buybacks, and ${tick(t.symbol)} burns.`}
+          {pack.blurb || `Swaps fund listings, buybacks, and ${tick(symbol)} burns.`}
         </p>
 
         <div className="mt-8 flex flex-wrap items-center gap-5">
-          <SphaSocials x={pack.socials.x} telegram={pack.socials.telegram} discord={pack.socials.discord} />
+          <SphaSocials x={pack.socials.x} telegram={pack.socials.telegram} discord={pack.socials.discord} website={pack.socials.website} />
           {live ? <CopyCa ca={pack.mint} /> : null}
         </div>
 
         <SphaCountdown
           pack={{
             mint: pack.mint,
+            symbol,
             phase: pack.phase,
             countdown: pack.countdown,
             stats,

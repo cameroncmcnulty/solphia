@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/admin/auth";
 import { ipfsMetadataUrl, pinBytes, pinJson, pinataConfigured } from "@/lib/pinata";
 import { tokenMetadataJson } from "@/lib/token/metadata";
-import { SPHA_NAME, SPHA_SYMBOL } from "@/lib/token/omics";
+import { SPHA_NAME, SPHA_SYMBOL, SPHA_TELEGRAM, SPHA_X } from "@/lib/token/omics";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -35,7 +35,16 @@ export async function POST(req: NextRequest) {
   const ext = mime.includes("png") ? "png" : mime.includes("webp") ? "webp" : mime.includes("gif") ? "gif" : "jpg";
   const image = ipfsMetadataUrl(pinned.cid, ext);
   const meta = await pinJson(
-    tokenMetadataJson({ name, symbol, description: blurb || `${name} · ${symbol}`, image, website, mime }),
+    tokenMetadataJson({
+      name,
+      symbol,
+      description: blurb || `${name} · ${symbol}`,
+      image,
+      website,
+      x: symbol.toUpperCase() === SPHA_SYMBOL ? SPHA_X : undefined,
+      telegram: symbol.toUpperCase() === SPHA_SYMBOL ? SPHA_TELEGRAM : undefined,
+      mime,
+    }),
     "spha-meta",
   );
   if (!meta?.cid) return NextResponse.json({ error: "pin_meta", message: "Could not pin token metadata." }, { status: 400 });

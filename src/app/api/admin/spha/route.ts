@@ -6,10 +6,14 @@ import { rpcUrl } from "@/lib/config";
 import { treasuryAddress } from "@/lib/treasury";
 import { audit, mutateState, pushBounded, readyState, withLaunch } from "@/lib/store";
 import {
+  SPHA_BLURB,
   SPHA_DECIMALS,
   SPHA_NAME,
   SPHA_SUPPLY,
   SPHA_SYMBOL,
+  SPHA_TELEGRAM,
+  SPHA_WEBSITE,
+  SPHA_X,
   sphaAllocations,
   sphaCurveTokens,
   sphaMissingDest,
@@ -30,7 +34,8 @@ import {
   emptySphaCountdown,
   normalizeSphaCountdown,
 } from "@/lib/token/countdown";
-import { countdownForAdmin, tickSphaCountdown } from "@/lib/token/sphaAutoLaunch";
+import { countdownForAdmin, rehearseSphaCountdown, tickSphaCountdown } from "@/lib/token/sphaAutoLaunch";
+import { durableConfigured } from "@/lib/persist";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -145,6 +150,7 @@ export async function GET(req: NextRequest) {
     dbc: dbcEnabled(),
     mints: sphaLaunchMints(s),
     countdown: countdownForAdmin(s.sphaCountdown, s.sphaMint || ""),
+    localRehearsal: !durableConfigured(),
   });
 }
 
@@ -215,7 +221,7 @@ const Schedule = z.object({
   action: z.literal("schedule"),
   launchAt: z.number().int().positive(),
   confirmOfficial: z.literal(true),
-  confirmMainnet: z.boolean().optional(),
+  confirmMainnet: z.literal(true),
 });
 
 const ClearSchedule = z.object({
@@ -224,6 +230,10 @@ const ClearSchedule = z.object({
 
 const TickCountdown = z.object({
   action: z.literal("tickCountdown"),
+});
+
+const RehearseCountdown = z.object({
+  action: z.literal("rehearseCountdown"),
 });
 
 export async function POST(req: NextRequest) {
@@ -246,6 +256,8 @@ export async function POST(req: NextRequest) {
   if (asClear.success) return clearSchedule(req);
   const asTick = TickCountdown.safeParse(raw);
   if (asTick.success) return tick(req);
+  const asRehearse = RehearseCountdown.safeParse(raw);
+  if (asRehearse.success) return rehearse(req);
   const parsed = Recorded.safeParse(raw);
   if (!parsed.success) return NextResponse.json({ error: "bad_request" }, { status: 400 });
   return record(req, parsed.data);
@@ -257,7 +269,7 @@ async function schedule(req: NextRequest, b: z.infer<typeof Schedule>) {
     return NextResponse.json(
       {
         error: "too_soon",
-        message: "Set the official launch at least 10 minutes 30 seconds from now so the T-10 mint has a window.",
+        message: "Set the official launch at least 30 minutes 30 seconds from now so the T-30 mint has a window.",
       },
       { status: 400 },
     );
@@ -270,8 +282,7 @@ async function schedule(req: NextRequest, b: z.infer<typeof Schedule>) {
   if ((cd.pendingMint || "").trim()) {
     return NextResponse.json({ error: "already_minted", message: "The official mint already exists. Wait for T-0 to reveal it." }, { status: 400 });
   }
-  const net: SphaNetwork = s.sphaNetwork === "mainnet-beta" ? "mainnet-beta" : "devnet";
-  if (net === "mainnet-beta" && b.confirmMainnet !== true) {
+  if (b.confirmMainnet !== true) {
     return NextResponse.json(
       { error: "confirm_mainnet", message: "Confirm MAINNET official $SPHA to arm the countdown." },
       { status: 400 },
@@ -285,12 +296,33 @@ async function schedule(req: NextRequest, b: z.infer<typeof Schedule>) {
     );
   }
   await mutateState((st) => {
+    st.sphaNetwork = "mainnet-beta";
+    st.sphaSocials = {
+      x: SPHA_X,
+      telegram: SPHA_TELEGRAM,
+      discord: st.sphaSocials?.discord || "",
+      website: SPHA_WEBSITE,
+    };
+    st.sphaSocialsAt = now;
     st.sphaCountdown = {
       ...emptySphaCountdown(),
       launchAt: b.launchAt,
       mintLeadMs: SPHA_MINT_LEAD_MS,
       armedAt: now,
       status: "armed",
+      pendingLaunch: {
+        mint: "",
+        network: "mainnet-beta",
+        name: SPHA_NAME,
+        symbol: SPHA_SYMBOL,
+        supply: SPHA_SUPPLY,
+        launchedAt: 0,
+        sigs: [],
+        allocations: [],
+        image: SPHA_DEFAULT_IMAGE,
+        blurb: SPHA_BLURB,
+        website: SPHA_WEBSITE,
+      },
       at: now,
     };
     pushBounded(st.audit, audit("admin", "spha_schedule", String(b.launchAt), clientIp(req)), 400);
@@ -305,15 +337,23 @@ async function schedule(req: NextRequest, b: z.infer<typeof Schedule>) {
 async function clearSchedule(req: NextRequest) {
   const s = await readyState();
   const cd = normalizeSphaCountdown(s.sphaCountdown);
-  if ((s.sphaMint || "").trim() || cd.status === "live") {
-    return NextResponse.json({ error: "already_live", message: "Official $SPHA is already live." }, { status: 400 });
-  }
-  if ((cd.pendingMint || "").trim()) {
-    return NextResponse.json({ error: "already_minted", message: "The official mint already exists. The countdown cannot be cleared." }, { status: 400 });
+  const localRehearsal = Boolean(cd.rehearsal) && !durableConfigured();
+  if (!localRehearsal) {
+    if ((s.sphaMint || "").trim() || cd.status === "live") {
+      return NextResponse.json({ error: "already_live", message: "Official $SPHA is already live." }, { status: 400 });
+    }
+    if ((cd.pendingMint || "").trim()) {
+      return NextResponse.json({ error: "already_minted", message: "The official mint already exists. The countdown cannot be cleared." }, { status: 400 });
+    }
   }
   await mutateState((st) => {
+    const next = normalizeSphaCountdown(st.sphaCountdown);
+    if (next.rehearsal || localRehearsal || !durableConfigured()) {
+      if ((st.sphaLaunch?.symbol || "").toUpperCase() === "TESTSPHA") st.sphaLaunch = undefined;
+      if (next.rehearsal || localRehearsal) st.sphaMint = "";
+    }
     st.sphaCountdown = { ...emptySphaCountdown(), at: Date.now() };
-    pushBounded(st.audit, audit("admin", "spha_schedule_clear", "cleared", clientIp(req)), 400);
+    pushBounded(st.audit, audit("admin", "spha_schedule_clear", localRehearsal ? "rehearsal" : "cleared", clientIp(req)), 400);
   });
   return NextResponse.json({ ok: true, countdown: countdownForAdmin(emptySphaCountdown(), "", Date.now()) });
 }
@@ -325,6 +365,14 @@ async function tick(_req: NextRequest) {
     ...out,
     countdown: countdownForAdmin(s.sphaCountdown, s.sphaMint || ""),
   });
+}
+
+async function rehearse(_req: NextRequest) {
+  const out = await rehearseSphaCountdown();
+  if (!out.ok) {
+    return NextResponse.json({ error: "rehearsal_blocked", message: out.error }, { status: 400 });
+  }
+  return NextResponse.json({ ok: true, countdown: out.countdown, localRehearsal: true });
 }
 
 async function prepare(req: NextRequest, b: z.infer<typeof Prepare>) {
@@ -356,6 +404,8 @@ async function prepare(req: NextRequest, b: z.infer<typeof Prepare>) {
       description: b.blurb,
       image: image || SPHA_DEFAULT_IMAGE,
       website,
+      x: b.mode === "official" ? s.sphaSocials?.x || SPHA_X : undefined,
+      telegram: b.mode === "official" ? s.sphaSocials?.telegram || SPHA_TELEGRAM : undefined,
     });
     if (!pinned?.uri || !isTokenMetaUri(pinned.uri)) {
       return NextResponse.json(

@@ -1,7 +1,11 @@
 /** Official $SPHA public countdown. Empty launchAt means Coming soon — never mint. */
 
-export const SPHA_MINT_LEAD_MS = 10 * 60_000;
+/** Admin-only mint / CA window before public T-0. */
+export const SPHA_MINT_LEAD_MS = 30 * 60_000;
 export const SPHA_COUNTDOWN_MIN_MS = SPHA_MINT_LEAD_MS + 30_000;
+/** Local fs-only rehearsal. Never used on a durable (Redis) store. */
+export const SPHA_REHEARSAL_MS = 2 * 60_000;
+export const SPHA_REHEARSAL_LEAD_MS = 45_000;
 
 export type SphaCountdownStatus = "soon" | "armed" | "minting" | "minted" | "live" | "failed";
 
@@ -33,6 +37,8 @@ export type SphaCountdown = {
   error?: string;
   revealedAt?: number;
   mintingAt?: number;
+  /** Local TESTSPHA clock. Persist skips Redis when this is set. */
+  rehearsal?: boolean;
   at: number;
 };
 
@@ -98,6 +104,7 @@ export function normalizeSphaCountdown(raw: Partial<SphaCountdown> | null | unde
     error: str(raw.error) || undefined,
     revealedAt: num(raw.revealedAt) > 0 ? Math.floor(num(raw.revealedAt)) : undefined,
     mintingAt: num(raw.mintingAt) > 0 ? Math.floor(num(raw.mintingAt)) : undefined,
+    rehearsal: Boolean(raw.rehearsal) || undefined,
     at: Math.max(0, Math.floor(num(raw.at))),
   };
 }
@@ -202,4 +209,30 @@ export function splitRemaining(ms: number): { d: number; h: number; m: number; s
 
 export function pad2(n: number): string {
   return String(Math.max(0, Math.floor(n))).padStart(2, "0");
+}
+
+/** Public clock label in Mountain time (MST in November). */
+export function formatSphaLaunchWhen(ms: number, timeZone = "America/Denver"): string {
+  if (!(ms > 0)) return "";
+  try {
+    return new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      timeZoneName: "short",
+    }).format(new Date(ms));
+  } catch {
+    return new Date(ms).toUTCString();
+  }
+}
+
+/** Browser-local value for <input type="datetime-local">. */
+export function toDatetimeLocalValue(ms: number): string {
+  const d = new Date(ms);
+  if (!Number.isFinite(d.getTime())) return "";
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
 }

@@ -20,6 +20,9 @@ export async function pinSphaTokenMeta(opts: {
   description?: string;
   image?: string;
   website?: string;
+  x?: string;
+  telegram?: string;
+  discord?: string;
 }): Promise<{ image: string; uri: string } | null> {
   if (!pinataConfigured()) return null;
   const image = /^https:\/\//i.test((opts.image || "").trim()) ? opts.image!.trim() : SPHA_DEFAULT_IMAGE;
@@ -30,6 +33,9 @@ export async function pinSphaTokenMeta(opts: {
       description: opts.description || `${opts.name} on Solphia`,
       image,
       website: opts.website || "https://solphia.io",
+      x: opts.x,
+      telegram: opts.telegram,
+      discord: opts.discord,
     }),
     `${opts.symbol}-meta`,
   );

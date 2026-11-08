@@ -872,46 +872,102 @@ body {
   line-height: 1.5;
   color: rgba(247, 244, 255, 0.55);
 }
+.spha-cd-clock-wrap {
+  margin-top: 1.1rem;
+  width: min(40rem, 100%);
+}
+.spha-cd-when {
+  margin: 0 0 0.85rem;
+  font-family: var(--font-plex), ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(128, 234, 255, 0.85);
+}
 .spha-cd-clock {
-  margin-top: 1.4rem;
-  display: grid;
-  grid-template-columns: repeat(4, minmax(3.4rem, 1fr));
-  gap: 0.6rem;
-  width: min(28rem, 100%);
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  gap: 0.15rem;
+  width: 100%;
+}
+.spha-cd-unit {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+  min-width: 0;
+  flex: 1;
 }
 .spha-cd-cell {
   position: relative;
   overflow: hidden;
-  border-radius: 1.1rem;
-  border: 1px solid rgba(20, 241, 149, 0.28);
-  background: linear-gradient(180deg, rgba(20, 241, 149, 0.1), rgba(8, 4, 16, 0.7));
-  padding: 0.85rem 0.3rem 0.7rem;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 10px 24px rgba(0, 0, 0, 0.25);
+  flex: 1;
+  min-width: 3.4rem;
+  perspective: 420px;
+  border-radius: 1.15rem;
+  border: 1px solid rgba(20, 241, 149, 0.32);
+  background:
+    linear-gradient(180deg, rgba(20, 241, 149, 0.16) 0%, rgba(8, 4, 16, 0.88) 48%, rgba(4, 0, 10, 0.92) 52%, rgba(20, 241, 149, 0.08) 100%);
+  padding: 1rem 0.25rem 0.75rem;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 14px 32px rgba(0, 0, 0, 0.35);
 }
 .spha-cd-cell::before {
   content: "";
   position: absolute;
   inset: 0 auto 50% 0;
   right: 0;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), transparent);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), transparent);
+  pointer-events: none;
+}
+.spha-cd-cell::after {
+  content: "";
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  top: 50%;
+  height: 1px;
+  background: rgba(4, 0, 10, 0.55);
   pointer-events: none;
 }
 .spha-cd-num {
   display: block;
   font-family: var(--font-plex), ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: clamp(1.6rem, 6vw, 2.4rem);
+  font-size: clamp(2.1rem, 8vw, 3.4rem);
   font-weight: 700;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.04em;
+  line-height: 1;
   color: #f7f4ff;
   font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 18px rgba(20, 241, 149, 0.35);
+  transform-origin: 50% 50%;
+  animation: spha-cd-tick 0.38s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 .spha-cd-lbl {
   display: block;
-  margin-top: 0.2rem;
+  margin-top: 0.45rem;
   font-family: var(--font-plex), ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 10px;
-  letter-spacing: 0.22em;
-  color: rgba(247, 244, 255, 0.45);
+  letter-spacing: 0.24em;
+  color: rgba(247, 244, 255, 0.48);
+}
+.spha-cd-colon {
+  display: block;
+  padding-bottom: 1.1rem;
+  font-family: var(--font-plex), ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: clamp(1.4rem, 6vw, 2.4rem);
+  font-weight: 700;
+  color: #14f195;
+  animation: spha-cd-colon 1s steps(1) infinite;
+  text-shadow: 0 0 12px rgba(20, 241, 149, 0.7);
+}
+.spha-cd-live-tick {
+  box-shadow:
+    0 30px 80px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 0 70px rgba(20, 241, 149, 0.18);
+}
+.spha-cd-live-tick .spha-cd-colon {
+  animation: spha-cd-colon 1s steps(1) infinite;
 }
 .spha-cd-live {
   margin-top: 1.25rem;
@@ -926,6 +982,26 @@ body {
   font-size: clamp(2rem, 6vw, 3.2rem);
   color: #14f195;
   text-shadow: 0 0 28px rgba(20, 241, 149, 0.45);
+}
+.spha-cd-buy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 3.4rem;
+  width: 100%;
+  max-width: 22rem;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #39ffb0, #14f195);
+  color: #04000a;
+  font-family: var(--font-display), ui-sans-serif, system-ui, sans-serif;
+  font-size: 1.15rem;
+  letter-spacing: 0.08em;
+  box-shadow: 0 0 28px rgba(20, 241, 149, 0.45);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.spha-cd-buy:hover {
+  transform: translateY(-1px) scale(1.02);
+  box-shadow: 0 0 40px rgba(20, 241, 149, 0.7);
 }
 .spha-cd-bit {
   pointer-events: none;
@@ -977,6 +1053,15 @@ body {
   0%, 100% { transform: translate3d(0, 0, 0); opacity: 0.7; }
   50% { transform: translate3d(10px, -14px, 0); opacity: 1; }
 }
+@keyframes spha-cd-colon {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0.15; }
+}
+@keyframes spha-cd-tick {
+  0% { transform: rotateX(-80deg); opacity: 0.35; filter: blur(2px); }
+  55% { transform: rotateX(8deg); opacity: 1; filter: blur(0); }
+  100% { transform: rotateX(0deg); opacity: 1; }
+}
 
 @media (prefers-reduced-motion: reduce) {
   .spha-cd,
@@ -986,7 +1071,9 @@ body {
   .spha-cd-orbit-b,
   .spha-cd-soon-glint,
   .spha-cd-bit,
-  .spha-cd-prog {
+  .spha-cd-prog,
+  .spha-cd-colon,
+  .spha-cd-num {
     animation: none !important;
     transition: none !important;
     transform: none !important;

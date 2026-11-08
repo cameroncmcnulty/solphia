@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Keypair } from "@solana/web3.js";
-import { SPHA_DEFAULT_IMAGE, SPHA_NAME, SPHA_SUPPLY, SPHA_SYMBOL, type SphaNetwork } from "@/lib/token/omics";
-import { SPHA_COUNTDOWN_MIN_MS, SPHA_MINT_LEAD_MS, pad2, splitRemaining } from "@/lib/token/countdown";
+import { SPHA_DEFAULT_IMAGE, SPHA_NAME, SPHA_SUPPLY, SPHA_SYMBOL, SPHA_TGE_LAUNCH_AT_MS, type SphaNetwork } from "@/lib/token/omics";
+import { SPHA_COUNTDOWN_MIN_MS, SPHA_MINT_LEAD_MS, formatSphaLaunchWhen, pad2, splitRemaining, toDatetimeLocalValue } from "@/lib/token/countdown";
 import { useAdmin } from "./AdminProvider";
 import { Tokenomics } from "@/components/Tokenomics";
 import { CopyCa } from "@/components/CopyCa";
@@ -63,7 +63,9 @@ type Prep = {
     inMintWindow: boolean;
     timedOut: boolean;
     publicMint: string;
+    rehearsal?: boolean;
   };
+  localRehearsal?: boolean;
 };
 
 function LaunchCaCard({
@@ -134,7 +136,7 @@ export function SphaLaunch() {
   const [tradeMint, setTradeMint] = useState("");
   const [log, setLog] = useState("");
   const [err, setErr] = useState("");
-  const [when, setWhen] = useState("");
+  const [when, setWhen] = useState(() => toDatetimeLocalValue(SPHA_TGE_LAUNCH_AT_MS));
   const [armRun, setArmRun] = useState(false);
 
   async function loadPrep() {
@@ -167,7 +169,7 @@ export function SphaLaunch() {
           error?: string;
         };
         if (j?.needsSigner && !run) {
-          setLog("T-10 mint window. Signing with the owner project wallet…");
+          setLog("T-30 mint window. Signing with the owner project wallet…");
           setMode("official");
           await launch({ pending: true });
         } else if (j?.minted && j.mint) {
@@ -508,13 +510,13 @@ export function SphaLaunch() {
     setErr("");
     const launchAt = new Date(when).getTime();
     if (!Number.isFinite(launchAt) || launchAt < Date.now() + SPHA_COUNTDOWN_MIN_MS) {
-      setErr("Pick a time at least 10 minutes 30 seconds from now so the T-10 mint has a window.");
+      setErr("Pick a time at least 30 minutes 30 seconds from now so the T-30 mint has a window.");
       return;
     }
-    if (!confirm("Arm official $SPHA. 10 minutes before T-0 the token mints and the CA appears here. At T-0 the website reveals the CA, confetti, and live metrics.")) {
+    if (!confirm("Arm official MAINNET $SPHA. 30 minutes before T-0 the token mints and the CA appears here only. At T-0 the website reveals the copyable CA, confetti, and BUY $SPHA.")) {
       return;
     }
-    if (network === "mainnet-beta" && !confirm("MAINNET $SPHA. 200,000,000 supply. 77.1% on the curve. This arms the public countdown.")) {
+    if (!confirm("MAINNET $SPHA. 200,000,000 supply. 77.1% on the curve. This arms the public countdown.")) {
       return;
     }
     setArmRun(true);
@@ -526,15 +528,35 @@ export function SphaLaunch() {
           action: "schedule",
           launchAt,
           confirmOfficial: true,
-          confirmMainnet: network === "mainnet-beta",
+          confirmMainnet: true,
         }),
       });
       const j = await r.json();
       if (!r.ok) throw new Error(j.message || j.error || "Could not arm the countdown.");
-      setLog(`Countdown armed. T-0 ${new Date(launchAt).toLocaleString()}. T-10 mint ${new Date(launchAt - SPHA_MINT_LEAD_MS).toLocaleString()}.`);
+      setLog(`Countdown armed. T-0 ${new Date(launchAt).toLocaleString()}. T-30 mint ${new Date(launchAt - SPHA_MINT_LEAD_MS).toLocaleString()}.`);
       loadPrep().catch(() => {});
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Could not arm the countdown.");
+    } finally {
+      setArmRun(false);
+    }
+  }
+
+  async function rehearseCountdown() {
+    setErr("");
+    setArmRun(true);
+    try {
+      const r = await fetch("/api/admin/spha", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "rehearseCountdown" }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.message || j.error || "Could not start the local rehearsal.");
+      setLog("Local 2-minute TESTSPHA countdown armed. CA lands here at T-45s. Public reveal at T-0. Redis is off.");
+      loadPrep().catch(() => {});
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Could not start the local rehearsal.");
     } finally {
       setArmRun(false);
     }
@@ -574,9 +596,9 @@ export function SphaLaunch() {
       <div className="rounded-3xl border border-acid/25 bg-void/40 p-5">
         <div className="font-mono text-[10px] tracking-[0.22em] text-acid">OFFICIAL COUNTDOWN · PUBLIC $SPHA PAGE</div>
         <p className="mt-1 max-w-xl text-sm text-mute">
-          Until a time is set the token page says Coming soon. Arming this clock is the official launch: T-10 mints
-          $SPHA and shows the CA here. T-0 refreshes the website, fires confetti, publishes the copyable CA, and fills
-          live metrics.
+          Until a time is set the token page says Coming soon. Arming this clock is the official launch: T-30 mints
+          $SPHA on mainnet (Token-2022 DBC, same path as the dashboard launcher) and shows the CA here only. T-0
+          refreshes the website, fires confetti, publishes the copyable CA, and a BUY $SPHA button into the swap widget.
         </p>
         {cdArmed ? (
           <div className="mt-4 rounded-2xl border border-acid/30 bg-acid/5 p-4">
@@ -587,7 +609,7 @@ export function SphaLaunch() {
               {pad2(cdParts.d)}d {pad2(cdParts.h)}h {pad2(cdParts.m)}m {pad2(cdParts.s)}s
             </div>
             <p className="mt-1 font-mono text-[11px] text-mute">
-              T-0 {cd?.launchAt ? new Date(cd.launchAt).toLocaleString() : "—"} · T-10 mint{" "}
+              T-0 {cd?.launchAt ? new Date(cd.launchAt).toLocaleString() : "—"} · T-30 mint{" "}
               {cd?.mintAt ? new Date(cd.mintAt).toLocaleString() : "—"}
             </p>
             {cd?.pendingMint ? (
@@ -624,6 +646,9 @@ export function SphaLaunch() {
                 onChange={(e) => setWhen(e.target.value)}
                 className="mt-1 block rounded-full border border-violet/30 bg-void px-4 py-2 text-sm text-ghost outline-none"
               />
+              <span className="mt-1 block font-mono text-[10px] text-mute">
+                Default {formatSphaLaunchWhen(SPHA_TGE_LAUNCH_AT_MS)}. Mint 30 minutes earlier.
+              </span>
             </label>
             <button
               type="button"
@@ -633,6 +658,16 @@ export function SphaLaunch() {
             >
               {armRun ? "Arming…" : "Arm official countdown"}
             </button>
+            {prep?.localRehearsal ? (
+              <button
+                type="button"
+                disabled={armRun || run}
+                onClick={() => void rehearseCountdown()}
+                className="btn-ghost rounded-full px-5 py-2 text-sm disabled:opacity-40"
+              >
+                Local 2-min TESTSPHA rehearsal
+              </button>
+            ) : null}
           </div>
         )}
       </div>
