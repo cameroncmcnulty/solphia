@@ -163,6 +163,9 @@ describe("spha tokenomics", () => {
     assert.match(mint, /sphaTeamLegs/);
     assert.match(mint, /createMintToCheckedInstruction/);
     assert.match(mint, /AuthorityType.MintTokens, null/);
+    assert.match(mint, /tokenUiAmount/);
+    assert.match(mint, /sphaHookExtraPda/);
+    assert.match(mint, /SPHA_SUPPLY - supplyUi/);
   });
 
   it("keeps the last eight admin test launches, newer stamp wins, local overwrites equal stamps", () => {

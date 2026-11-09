@@ -860,6 +860,7 @@ export default function LaunchPage() {
     if (!mint || !isSolanaAddress(mint)) return;
     bootMint.current = true;
     setCaQuery(mint);
+    setLookedMint(mint);
     const t = window.setTimeout(() => {
       searchMint(mint).catch(() => {});
     }, 500);

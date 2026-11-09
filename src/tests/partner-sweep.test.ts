@@ -22,6 +22,8 @@ describe("partner fee sweep", () => {
     assert.match(src, /buildProtocolPartnerClaim/);
     const cron = readFileSync(path.join(process.cwd(), "src/app/api/cron/tick/route.ts"), "utf8");
     assert.match(cron, /sweepPartnerFees/);
+    assert.match(cron, /sphaLaunchMints/);
+    assert.match(cron, /maxDuration = 300/);
     const route = readFileSync(path.join(process.cwd(), "src/app/api/launch/route.ts"), "utf8");
     assert.match(route, /buildProtocolPartnerClaim/);
     assert.match(route, /partnerTotalsWithMints/);

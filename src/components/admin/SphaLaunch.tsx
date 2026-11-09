@@ -66,6 +66,7 @@ type Prep = {
     rehearsal?: boolean;
   };
   localRehearsal?: boolean;
+  signerReady?: { owner: boolean; treasury: boolean; foundation: boolean };
 };
 
 function LaunchCaCard({
@@ -623,6 +624,16 @@ export function SphaLaunch() {
                 server.
               </p>
             )}
+            {cdArmed && !cd?.pendingMint && prep?.signerReady && !prep.signerReady.owner ? (
+              <p className="mt-2 text-sm text-acid">
+                Owner project key is not loaded on the server. T-30 mint needs that key, or this dashboard open to sign.
+              </p>
+            ) : null}
+            {cd?.error === "owner_sol" ? (
+              <p className="mt-2 text-sm text-acid">
+                Owner wallet needs SOL for rent plus 0.05 SOL for the opening buy before T-30.
+              </p>
+            ) : null}
             {!cd?.pendingMint ? (
               <button
                 type="button"

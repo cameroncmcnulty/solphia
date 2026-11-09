@@ -1,4 +1,4 @@
-import { Keypair, PublicKey } from "@solana/web3.js";
+import { Keypair, LAMPORTS_PER_SOL, PublicKey } from "@solana/web3.js";
 import { isSolanaAddress } from "../security";
 import { audit, mutateState, pushBounded, readyState, withLaunch } from "../store";
 import { loadProjectServerKeypair } from "../wallet/projectKeys";
@@ -10,6 +10,7 @@ import { b64ToBytes, bytesToB64 } from "../solana/wire";
 import { connection } from "../solana/connection";
 import { encodeTx, buildSphaTeamMintTx } from "./mint";
 import { pinSphaTokenMeta, isTokenMetaUri, SPHA_DEFAULT_IMAGE } from "./sphaMeta";
+import { tokenUiAmount } from "../solana/tokenBalance";
 import {
   SPHA_BLURB,
   SPHA_NAME,
@@ -34,9 +35,11 @@ import {
   type SphaCountdownLaunch,
 } from "./countdown";
 
-const LOCK_TTL_S = 120;
+const LOCK_TTL_S = 320;
 const FIRST_BUY_SOL = 0.05;
 const INFLIGHT_TTL_S = 40 * 60;
+/** Config + pool + ATAs + 0.05 opening buy. Owner must be funded before T-30. */
+const MIN_OWNER_SOL = 0.2;
 
 type InflightMint = {
   mint: string;
@@ -170,8 +173,9 @@ export async function mintOfficialPending(now = Date.now()): Promise<{
   if (!(cd0.launchAt > 0) || !sphaInMintWindow(cd0, now)) {
     return { ok: true, minted: false, mint: "" };
   }
-  if (cd0.status === "minting" && cd0.mintingAt && now - cd0.mintingAt < 90_000) {
-    return { ok: true, minted: false, mint: "" };
+  if (cd0.status === "minting" && cd0.mintingAt && now - cd0.mintingAt < 45_000) {
+    const inflight = await loadInflightMint();
+    if (!inflight) return { ok: true, minted: false, mint: "" };
   }
   if (cd0.rehearsal) return mintRehearsalPending(now);
   if (!durableConfigured()) {
@@ -200,6 +204,22 @@ export async function mintOfficialPending(now = Date.now()): Promise<{
       });
       return { ok: false as const, minted: false, mint: "", needsSigner: true, error: "needs_signer" };
     }
+    const ownerLamports = await connection().getBalance(owner.publicKey, "confirmed");
+    if (ownerLamports < MIN_OWNER_SOL * LAMPORTS_PER_SOL) {
+      await mutateState((st) => {
+        const next = normalizeSphaCountdown(st.sphaCountdown);
+        next.status = "armed";
+        next.error = "owner_sol";
+        next.at = Date.now();
+        st.sphaCountdown = next;
+      });
+      return {
+        ok: false as const,
+        minted: false,
+        mint: "",
+        error: "Owner wallet needs SOL for rent and the 0.05 opening buy.",
+      };
+    }
     await mutateState((st) => {
       const next = normalizeSphaCountdown(st.sphaCountdown);
       next.status = "minting";
@@ -224,8 +244,14 @@ export async function mintOfficialPending(now = Date.now()): Promise<{
       mintKp = Keypair.generate();
     }
     const mint = mintKp.publicKey.toBase58();
-    let uri = inflight?.uri && isTokenMetaUri(inflight.uri) ? inflight.uri : "";
-    let image = inflight?.image || SPHA_DEFAULT_IMAGE;
+    const pendingUri = (cd.pendingLaunch?.uri || "").trim();
+    let uri =
+      inflight?.uri && isTokenMetaUri(inflight.uri)
+        ? inflight.uri
+        : pendingUri && isTokenMetaUri(pendingUri)
+          ? pendingUri
+          : "";
+    let image = inflight?.image || cd.pendingLaunch?.image || SPHA_DEFAULT_IMAGE;
 
     if (await mintAccountExists(mint)) {
       const allocations = sphaAllocations(dest).map((a) => ({ id: a.id, wallet: a.wallet, tokens: a.tokens }));
@@ -374,11 +400,7 @@ export async function mintOfficialPending(now = Date.now()): Promise<{
       /* pool meta pending */
     }
     try {
-      const pool = await dbc.waitForDbcPool(mint, 16);
-      if (pool) {
-        const buy = await dbc.buildDbcTradeTx({ mint, owner: payer, side: "buy", sol: FIRST_BUY_SOL });
-        if (buy.ok) await signSend(buy.transaction, [owner]);
-      }
+      await maybeFirstBuy(dbc, payer, mint, owner, 16);
     } catch {
       /* first buy pending */
     }
@@ -441,8 +463,7 @@ async function finalizeOfficialPending(now = Date.now()): Promise<void> {
       /* pool meta may already exist */
     }
     try {
-      const buy = await dbc.buildDbcTradeTx({ mint, owner: payer, side: "buy", sol: FIRST_BUY_SOL });
-      if (buy.ok) await signSend(buy.transaction, [owner]);
+      await maybeFirstBuy(dbc, payer, mint, owner, 8);
     } catch {
       /* first buy may already have landed */
     }
@@ -568,6 +589,61 @@ export async function rehearseSphaCountdown(now = Date.now()): Promise<{
   return { ok: true, countdown: countdownForAdmin(after.sphaCountdown, after.sphaMint || "", now) };
 }
 
+async function maybeFirstBuy(
+  dbc: typeof import("../launch/dbc"),
+  payer: string,
+  mint: string,
+  owner: Keypair,
+  tries: number,
+): Promise<void> {
+  const held = await tokenUiAmount(connection(), payer, mint);
+  if (held.amount > 0) return;
+  const pool = await dbc.waitForDbcPool(mint, tries);
+  if (!pool) return;
+  const buy = await dbc.buildDbcTradeTx({ mint, owner: payer, side: "buy", sol: FIRST_BUY_SOL });
+  if (buy.ok) await signSend(buy.transaction, [owner]);
+}
+
+async function ensureOfficialMeta(): Promise<void> {
+  if (!durableConfigured()) return;
+  const s = await readyState();
+  const cd = normalizeSphaCountdown(s.sphaCountdown);
+  if (cd.rehearsal || (s.sphaMint || "").trim() || (cd.pendingMint || "").trim()) return;
+  if (!(cd.launchAt > 0)) return;
+  if (cd.pendingLaunch?.uri && isTokenMetaUri(cd.pendingLaunch.uri)) return;
+  const pinned = await pinSphaTokenMeta({
+    name: SPHA_NAME,
+    symbol: SPHA_SYMBOL,
+    description: SPHA_BLURB,
+    image: cd.pendingLaunch?.image || SPHA_DEFAULT_IMAGE,
+    website: (s.sphaSocials?.website || "").trim() || SPHA_WEBSITE,
+    x: (s.sphaSocials?.x || "").trim() || SPHA_X,
+    telegram: (s.sphaSocials?.telegram || "").trim() || SPHA_TELEGRAM,
+  });
+  if (!pinned?.uri || !isTokenMetaUri(pinned.uri)) return;
+  await mutateState((st) => {
+    const next = normalizeSphaCountdown(st.sphaCountdown);
+    if (!(next.launchAt > 0) || next.pendingMint || st.sphaMint) return;
+    next.pendingLaunch = {
+      mint: next.pendingLaunch?.mint || "",
+      network: "mainnet-beta",
+      name: SPHA_NAME,
+      symbol: SPHA_SYMBOL,
+      supply: SPHA_SUPPLY,
+      launchedAt: next.pendingLaunch?.launchedAt || 0,
+      sigs: next.pendingLaunch?.sigs || [],
+      allocations: next.pendingLaunch?.allocations || [],
+      image: pinned.image,
+      blurb: SPHA_BLURB,
+      uri: pinned.uri,
+      website: (st.sphaSocials?.website || "").trim() || SPHA_WEBSITE,
+      config: next.pendingLaunch?.config,
+    };
+    next.at = Date.now();
+    st.sphaCountdown = next;
+  });
+}
+
 export async function tickSphaCountdown(now = Date.now()): Promise<{
   ok: boolean;
   phase: string;
@@ -586,6 +662,11 @@ export async function tickSphaCountdown(now = Date.now()): Promise<{
   }
   if (!(cd.launchAt > 0)) {
     return { ok: true, phase: "soon", minted: false, revealed: false, mint: "" };
+  }
+  try {
+    await ensureOfficialMeta();
+  } catch {
+    /* T-30 still pins if this misses */
   }
   let minted = Boolean(cd.pendingMint);
   let mint = cd.pendingMint || "";

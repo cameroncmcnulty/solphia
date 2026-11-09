@@ -1,14 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { CRON_SECRET } from "@/lib/config";
 import { runMarketTick } from "@/lib/tick";
-import { loadState, mutateState } from "@/lib/store";
+import { loadState, mutateState, readyState } from "@/lib/store";
+import { sphaLaunchMints } from "@/lib/token/omics";
 import { queueEmail } from "@/lib/email/send";
 import { alertEmailHtml } from "@/lib/email/templates";
 import { maybeGeneratePromos } from "@/lib/admin/promo";
 import { runHouseShill } from "@/lib/shill/house";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 export async function GET(req: NextRequest) {
   const auth = req.headers.get("authorization") || "";
@@ -50,7 +51,11 @@ export async function GET(req: NextRequest) {
   let partnerClaims = 0;
   let partnerSol = 0;
   try {
-    const mints = (loadState().launch?.coins || []).map((c) => c.mint || "").filter(Boolean);
+    const s = await readyState();
+    const mints = [...new Set([
+      ...sphaLaunchMints(s),
+      ...(s.launch?.coins || []).map((c) => c.mint || "").filter(Boolean),
+    ])];
     const swept = await (await import("@/lib/launch/partnerSweep")).sweepPartnerFees({ mints, limit: 4 });
     partnerClaims = swept.claimed;
     partnerSol = swept.sol;

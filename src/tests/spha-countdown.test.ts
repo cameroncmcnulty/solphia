@@ -221,6 +221,12 @@ describe("spha countdown", () => {
     assert.match(auto, /network: "mainnet-beta"/);
     assert.match(auto, /sphaMintInflight/);
     assert.match(auto, /pinSphaTokenMeta/);
+    assert.match(auto, /ensureOfficialMeta/);
+    assert.match(auto, /maybeFirstBuy/);
+    assert.match(auto, /MIN_OWNER_SOL/);
+    assert.match(auto, /LOCK_TTL_S = 320/);
+    const swapPage = readFileSync(path.join(process.cwd(), "src/app/launch/page.tsx"), "utf8");
+    assert.match(swapPage, /setLookedMint\(mint\)/);
     const socials = readFileSync(path.join(process.cwd(), "src/components/SphaSocials.tsx"), "utf8");
     assert.match(socials, /website/);
     assert.match(socials, /SiteMark/);

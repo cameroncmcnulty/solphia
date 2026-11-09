@@ -36,9 +36,10 @@ import {
 } from "@/lib/token/countdown";
 import { countdownForAdmin, rehearseSphaCountdown, tickSphaCountdown } from "@/lib/token/sphaAutoLaunch";
 import { durableConfigured } from "@/lib/persist";
+import { projectServerReady } from "@/lib/wallet/projectKeys";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 function destOf(s: Awaited<ReturnType<typeof readyState>>) {
   return {
@@ -151,6 +152,7 @@ export async function GET(req: NextRequest) {
     mints: sphaLaunchMints(s),
     countdown: countdownForAdmin(s.sphaCountdown, s.sphaMint || ""),
     localRehearsal: !durableConfigured(),
+    signerReady: await projectServerReady(),
   });
 }
 

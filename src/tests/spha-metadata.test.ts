@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { PublicKey } from "@solana/web3.js";
 import { metadataPda, parseMetaplexData, TOKEN_METADATA_PROGRAM_ID, tokenMetadataJson } from "../lib/token/metadata";
-import { isTokenMetaUri } from "../lib/token/sphaMeta";
+import { isTokenMetaUri, SPHA_FALLBACK_META_URI } from "../lib/token/sphaMeta";
 import { SPHA_DEFAULT_IMAGE } from "../lib/token/omics";
 
 describe("spha metadata", () => {
@@ -86,5 +88,13 @@ describe("spha metadata", () => {
     assert.equal(isTokenMetaUri("https://gateway.pinata.cloud/ipfs/QmMetaJson"), true);
     assert.equal(isTokenMetaUri("https://example.com/spha.json"), true);
     assert.equal(isTokenMetaUri("not-a-url"), false);
+    assert.equal(isTokenMetaUri(SPHA_FALLBACK_META_URI), true);
+    const hosted = readFileSync(path.join(process.cwd(), "public/spha-meta.json"), "utf8");
+    assert.match(hosted, /"symbol": "SPHA"/);
+    assert.match(hosted, /spha-mark\.png/);
+    assert.match(hosted, /solphiaio/);
+    const pin = readFileSync(path.join(process.cwd(), "src/lib/token/sphaMeta.ts"), "utf8");
+    assert.match(pin, /SPHA_FALLBACK_META_URI/);
+    assert.match(pin, /if \(pinataConfigured\(\)\)/);
   });
 });

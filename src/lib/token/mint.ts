@@ -1,4 +1,5 @@
 import {
+  ComputeBudgetProgram,
   Connection,
   Keypair,
   PublicKey,
@@ -29,7 +30,8 @@ import {
   type SphaNetwork,
 } from "./omics";
 import { createMetadataV3Ix } from "./metadata";
-import { sphaHookInitIx } from "./sphaHook";
+import { sphaHookExtraPda, sphaHookInitIx } from "./sphaHook";
+import { tokenUiAmount } from "../solana/tokenBalance";
 
 export function sphaRpc(network: SphaNetwork, mainnetRpc: string): string {
   if (network === "devnet") return "https://api.devnet.solana.com";
@@ -122,14 +124,28 @@ export async function buildSphaTeamMintTx(opts: {
   const mintState = unpackMint(mint, info, tokenProgram);
   const legs = sphaTeamLegs(opts.dest);
   if (!legs.length) throw new Error("Set owner, foundation, and treasury wallets first.");
+  const supplyUi = Number(mintState.supply) / 10 ** mintState.decimals;
+  let room = Math.max(0, SPHA_SUPPLY - supplyUi);
+  const extraPda = tokenProgram.equals(TOKEN_2022_PROGRAM_ID) ? sphaHookExtraPda(mint) : null;
+  const extraInfo = extraPda ? await opts.conn.getAccountInfo(extraPda, "confirmed") : null;
   const { blockhash, lastValidBlockHeight } = await opts.conn.getLatestBlockhash("confirmed");
-  const tx = new Transaction();
-  if (tokenProgram.equals(TOKEN_2022_PROGRAM_ID)) tx.add(sphaHookInitIx(payer, mint));
+  const tx = new Transaction().add(
+    ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }),
+    ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 50_000 }),
+  );
+  if (tokenProgram.equals(TOKEN_2022_PROGRAM_ID) && !extraInfo) tx.add(sphaHookInitIx(payer, mint));
+  const minted: { id: string; to: string; tokens: number }[] = [];
   for (const leg of legs) {
+    if (!(room > 0)) break;
+    const have = await tokenUiAmount(opts.conn, leg.to, opts.mint);
+    const need = Math.min(Math.max(0, Math.floor(leg.tokens - (have.amount || 0) + 1e-6)), Math.floor(room));
+    if (!(need > 0)) continue;
     const owner = new PublicKey(leg.to);
     const ata = getAssociatedTokenAddressSync(mint, owner, false, tokenProgram);
     tx.add(createAssociatedTokenAccountIdempotentInstruction(payer, ata, owner, mint, tokenProgram));
-    tx.add(createMintToCheckedInstruction(mint, ata, payer, sphaRawAmount(leg.tokens, mintState.decimals), mintState.decimals, [], tokenProgram));
+    tx.add(createMintToCheckedInstruction(mint, ata, payer, sphaRawAmount(need, mintState.decimals), mintState.decimals, [], tokenProgram));
+    minted.push({ id: leg.id, to: leg.to, tokens: need });
+    room -= need;
   }
   if (mintState.mintAuthority && mintState.mintAuthority.equals(payer)) {
     tx.add(createSetAuthorityInstruction(mint, payer, AuthorityType.MintTokens, null, [], tokenProgram));
@@ -137,10 +153,11 @@ export async function buildSphaTeamMintTx(opts: {
   if (mintState.freezeAuthority && mintState.freezeAuthority.equals(payer)) {
     tx.add(createSetAuthorityInstruction(mint, payer, AuthorityType.FreezeAccount, null, [], tokenProgram));
   }
+  if (tx.instructions.length <= 2) throw new Error("Team slices already minted.");
   tx.feePayer = payer;
   tx.recentBlockhash = blockhash;
   tx.lastValidBlockHeight = lastValidBlockHeight;
-  return { transaction: tx, legs };
+  return { transaction: tx, legs: minted.length ? minted : legs };
 }
 
 export function encodeTx(tx: Transaction | { serialize: (opts?: any) => Uint8Array | Buffer }): string {

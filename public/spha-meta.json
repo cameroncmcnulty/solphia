@@ -1,0 +1,16 @@
+{
+  "name": "Solphia",
+  "symbol": "SPHA",
+  "description": "Solphia is a utility token on Solana.",
+  "image": "https://solphia.io/spha-mark.png?ext=png",
+  "showName": true,
+  "createdOn": "https://solphia.io",
+  "external_url": "https://solphia.io",
+  "website": "https://solphia.io",
+  "twitter": "https://x.com/solphiaio",
+  "telegram": "https://t.me/solphiaio",
+  "properties": {
+    "files": [{ "uri": "https://solphia.io/spha-mark.png?ext=png", "type": "image/png" }],
+    "category": "image"
+  }
+}

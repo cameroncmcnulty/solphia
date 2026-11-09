@@ -4,6 +4,9 @@ import { SPHA_DEFAULT_IMAGE } from "./omics";
 
 export { SPHA_DEFAULT_IMAGE };
 
+/** Hosted fallback so T-30 mint still has a JSON URI if Pinata is down. */
+export const SPHA_FALLBACK_META_URI = "https://solphia.io/spha-meta.json";
+
 /** DBC / Phantom / Dexscreener need a JSON document, not the marketing site. */
 export function isTokenMetaUri(uri?: string): boolean {
   const u = (uri || "").trim();
@@ -24,21 +27,25 @@ export async function pinSphaTokenMeta(opts: {
   telegram?: string;
   discord?: string;
 }): Promise<{ image: string; uri: string } | null> {
-  if (!pinataConfigured()) return null;
   const image = /^https:\/\//i.test((opts.image || "").trim()) ? opts.image!.trim() : SPHA_DEFAULT_IMAGE;
-  const meta = await pinJson(
-    tokenMetadataJson({
-      name: opts.name,
-      symbol: opts.symbol,
-      description: opts.description || `${opts.name} on Solphia`,
-      image,
-      website: opts.website || "https://solphia.io",
-      x: opts.x,
-      telegram: opts.telegram,
-      discord: opts.discord,
-    }),
-    `${opts.symbol}-meta`,
-  );
-  if (!meta?.cid) return null;
-  return { image, uri: ipfsMetadataUrl(meta.cid, "json") };
+  if (pinataConfigured()) {
+    const meta = await pinJson(
+      tokenMetadataJson({
+        name: opts.name,
+        symbol: opts.symbol,
+        description: opts.description || `${opts.name} on Solphia`,
+        image,
+        website: opts.website || "https://solphia.io",
+        x: opts.x,
+        telegram: opts.telegram,
+        discord: opts.discord,
+      }),
+      `${opts.symbol}-meta`,
+    );
+    if (meta?.cid) {
+      const uri = ipfsMetadataUrl(meta.cid, "json");
+      if (isTokenMetaUri(uri)) return { image, uri };
+    }
+  }
+  return { image, uri: SPHA_FALLBACK_META_URI };
 }
