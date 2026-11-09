@@ -4,7 +4,7 @@ import path from "node:path";
 import { describe, it } from "node:test";
 import { PNG } from "pngjs";
 import { bookHoldingUsd, sumWindows, windowClip } from "../lib/admin/stats";
-import { buildPlatformSnapshot, userWalletsOf } from "../lib/admin/platform";
+import { buildPlatformSnapshot, mergePlatformSnapshot, userWalletsOf } from "../lib/admin/platform";
 import { emptyCurve } from "../lib/launch/curve";
 import { prunePromos, PROMO_CAP } from "../lib/admin/promo";
 import { localPack } from "../lib/content/copy";
@@ -138,9 +138,30 @@ describe("platform snapshot", () => {
     assert.equal(withChain.userWalletSol, 3);
     assert.equal(withChain.protocolSol, 1);
     assert.equal(withChain.assetsUsd, 3300);
+    const light = buildPlatformSnapshot(s, now, { solUsd: 200, spyxUsd: 0, qqqxUsd: 0, gldxUsd: 0 });
+    assert.equal(light.userWalletSol, 0);
+    assert.equal(light.assetsUsd, 2500);
+    const kept = mergePlatformSnapshot(withChain, light);
+    assert.equal(kept.userWalletSol, 3);
+    assert.equal(kept.protocolSol, 1);
+    assert.equal(kept.sampledWallets, 2);
+    assert.equal(kept.assetsUsd, 3300);
+    const pricedFromSample = buildPlatformSnapshot(s, now, { solUsd: 0, spyxUsd: 0, qqqxUsd: 0, gldxUsd: 0 }, {
+      userSol: 3,
+      protocolSol: 1,
+      sampled: 2,
+      solUsd: 200,
+    });
+    assert.equal(pricedFromSample.solUsd, 200);
+    assert.equal(pricedFromSample.assetsUsd, 3300);
     const overview = fs.readFileSync(path.join(process.cwd(), "src/components/admin/sections/Overview.tsx"), "utf8");
     assert.match(overview, /PLATFORM · SPONSOR SNAPSHOT/);
     assert.match(overview, /SOL in wallets/);
+    const mergeDesk = fs.readFileSync(path.join(process.cwd(), "src/components/admin/ui.tsx"), "utf8");
+    assert.match(mergeDesk, /mergePlatformSnapshot/);
+    const stream = fs.readFileSync(path.join(process.cwd(), "src/app/api/admin/stream/route.ts"), "utf8");
+    assert.match(stream, /hydratePlatformOnchain/);
+    assert.match(stream, /peekPlatformOnchain/);
   });
 });
 

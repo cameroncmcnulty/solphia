@@ -19,6 +19,7 @@ import { activeMembers, ensureCircle, spotsLeft } from "../circle/engine";
 import { seatSol } from "../seat";
 import { promoDataUrl, promoViewToken } from "./promoFile";
 import { bookHoldingUsd, sumWindows, tradingNow, uniqueWallets } from "./stats";
+import { peekPlatformOnchain } from "./onchain";
 import { buildPlatformSnapshot } from "./platform";
 import { buildAdminUsers } from "./users";
 import { ensureShill, livePins } from "../shill/engine";
@@ -36,7 +37,7 @@ export function buildAdminDesk(opts?: { light?: boolean; profits?: ProfitDesk; o
   const paper = publicBook(s.paper);
   const pair = (lastPairDesk() || (s.lastPair as PairDeskPublic | null) || null) as PairDeskPublic | null;
   const px = lastPairPrices();
-  const solUsd = px.solUsd || pair?.solUsd || 0;
+  const solUsd = Number(px.solUsd) || Number(pair?.solUsd) || 0;
   const spyxUsd = px.spyxUsd || pair?.spyxUsd || 0;
   const qqqxUsd = px.qqqxUsd || pair?.qqqxUsd || 0;
   const gldxUsd = px.gldxUsd || pair?.gldxUsd || 0;
@@ -196,7 +197,7 @@ export function buildAdminDesk(opts?: { light?: boolean; profits?: ProfitDesk; o
       newWallets24,
       solIn: round2(solIn),
     },
-    platform: buildPlatformSnapshot(s, now, prices, opts?.onchain),
+    platform: buildPlatformSnapshot(s, now, prices, opts?.onchain ?? peekPlatformOnchain()),
     promos,
     promoPending: Boolean(s.promoPending),
     lastPromoDay: s.lastPromoDay || "",

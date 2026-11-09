@@ -35,6 +35,8 @@ export const KEYS = {
   signer: (owner: string) => `solphia:signer:${owner}`,
   projectKeys: "solphia:project-keys",
   phjob: (id: string) => `solphia:ph:${id}`,
+  /** Last admin snapshot of SOL in known user + protocol wallets. */
+  platformOnchain: "solphia:platform-onchain",
 };
 
 const BLOB_PATH = "solphia-state.json";

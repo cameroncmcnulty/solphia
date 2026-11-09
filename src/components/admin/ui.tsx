@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { mergePlatformSnapshot } from "@/lib/admin/platform";
 import type { AdminDesk } from "@/lib/admin/types";
 
 export function mergeDesk(prev: AdminDesk | null, next: AdminDesk): AdminDesk {
@@ -11,6 +12,7 @@ export function mergeDesk(prev: AdminDesk | null, next: AdminDesk): AdminDesk {
   });
   return {
     ...next,
+    platform: mergePlatformSnapshot(prev.platform, next.platform),
     promos,
     backtest: next.backtest || prev.backtest,
     backtestLev2: next.backtestLev2 || prev.backtestLev2,

@@ -33,6 +33,8 @@ export function userWalletsOf(state: AppState): string[] {
     addPk(set, t.owner);
     addPk(set, t.tradingPubkey || t.auto?.tradingPubkey);
   }
+  for (const mem of Object.values(ensureShill(state.shill).members || {})) addPk(set, mem.pubkey);
+  for (const mem of activeMembers(ensureCircle(state.circle))) addPk(set, mem.pubkey);
   for (const pk of protocolWalletsOf(state)) set.delete(pk);
   return [...set];
 }
@@ -60,7 +62,7 @@ export function buildPlatformSnapshot(
   const circle = ensureCircle(state.circle);
   const logins = accountsOf(state);
   const users = state.users || [];
-  const solUsd = Number(prices.solUsd) || 0;
+  const solUsd = Number(prices.solUsd) || Number(onchain?.solUsd) || 0;
   const px: Prices = {
     solUsd,
     spyxUsd: Number(prices.spyxUsd) || 0,
@@ -178,4 +180,18 @@ export function buildPlatformSnapshot(
     assetsUsd,
     solUsd: round2(solUsd),
   };
+}
+
+/** Keep the last on-chain wallet sample when a later desk tick omitted RPC. */
+export function mergePlatformSnapshot(prev: AdminPlatform | null | undefined, next: AdminPlatform): AdminPlatform {
+  if (!prev) return next;
+  const nextHas = (next.sampledWallets || 0) > 0 || next.userWalletSol > 0 || next.protocolSol > 0;
+  const prevHas = (prev.sampledWallets || 0) > 0 || prev.userWalletSol > 0 || prev.protocolSol > 0;
+  if (nextHas || !prevHas) return next;
+  const userWalletSol = prev.userWalletSol;
+  const protocolSol = prev.protocolSol;
+  const sampledWallets = prev.sampledWallets;
+  const solUsd = next.solUsd || prev.solUsd;
+  const assetsUsd = round2(next.deskUsd + (next.padTvlSol + userWalletSol + protocolSol) * solUsd);
+  return { ...next, userWalletSol, protocolSol, sampledWallets, assetsUsd, solUsd };
 }

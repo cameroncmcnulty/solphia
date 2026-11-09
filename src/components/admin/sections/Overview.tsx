@@ -58,7 +58,7 @@ export function OverviewSection() {
           <Stat
             k="Assets on platform"
             v={money(plat.assetsUsd)}
-            sub={plat.solUsd ? `SOL ${money(plat.solUsd)}` : "desk + pad + wallets"}
+            sub={`${solAmt(plat.userWalletSol + plat.protocolSol + plat.padTvlSol)}${plat.solUsd ? ` · SOL ${money(plat.solUsd)}` : ""}`}
           />
           <Stat
             k="SOL in wallets"

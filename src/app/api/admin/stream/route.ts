@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { requireAdmin } from "@/lib/admin/auth";
 import { buildAdminDesk } from "@/lib/admin/desk";
+import { hydratePlatformOnchain, peekPlatformOnchain } from "@/lib/admin/onchain";
 import { readyState } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
@@ -16,8 +17,10 @@ export async function GET(req: NextRequest) {
       const send = async () => {
         if (closed) return;
         try {
-          await readyState();
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify(buildAdminDesk({ light: true }))}\n\n`));
+          await Promise.all([readyState(), hydratePlatformOnchain()]);
+          controller.enqueue(
+            encoder.encode(`data: ${JSON.stringify(buildAdminDesk({ light: true, onchain: peekPlatformOnchain() }))}\n\n`),
+          );
         } catch {
           closed = true;
         }

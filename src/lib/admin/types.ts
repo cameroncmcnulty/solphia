@@ -107,6 +107,8 @@ export type AdminPlatformOnchain = {
   userSol: number;
   protocolSol: number;
   sampled: number;
+  /** SOL/USD at sample time so a cold instance can still price assets. */
+  solUsd?: number;
 };
 
 /** Sponsor snapshot: activity and assets on the Solphia platform. */
