@@ -46,7 +46,7 @@ export async function quotePadSwap(opts: {
   if (!(opts.amount > 0)) return { ok: false, reason: "Enter an amount." };
   if (isDeskMint(opts.mint)) return { ok: false, reason: launchError("desk_mint"), error: "desk_mint" };
   if (dbcEnabled()) {
-    const { quoteDbcTrade } = await import("../launch/dbc");
+    const { mintUsesTransferHook, quoteDbcTrade } = await import("../launch/dbc");
     let dbc: Awaited<ReturnType<typeof quoteDbcTrade>>;
     try {
       dbc = await quoteDbcTrade({ mint: opts.mint, side: opts.side, sol: opts.side === "buy" ? opts.amount : undefined, tokens: opts.side === "sell" ? opts.amount : undefined });
@@ -71,6 +71,13 @@ export async function quotePadSwap(opts: {
         inAmount: dbc.inAmount,
       };
     }
+    if (dbc.error === "curve_opening") {
+      return {
+        ok: false,
+        reason: "The Solphia curve is opening. Wait a few seconds and try the swap again.",
+        error: "curve_opening",
+      };
+    }
     if (dbc.error && dbc.error !== "curve_missing") {
       const { isRateLimit, RPC_BUSY_SWAP } = await import("../solana/connection");
       const busy = isRateLimit(dbc.error);
@@ -82,6 +89,13 @@ export async function quotePadSwap(opts: {
             ? "The curve does not have enough SOL for that sell yet."
             : dbc.error,
         error: busy ? "rpc_busy" : dbc.error,
+      };
+    }
+    if (await mintUsesTransferHook(opts.mint)) {
+      return {
+        ok: false,
+        reason: "The Solphia curve is opening. Wait a few seconds and try the swap again.",
+        error: "curve_opening",
       };
     }
   }
@@ -129,15 +143,39 @@ export async function buildPadSwapTx(opts: {
 }): Promise<{ ok: true; transaction: string } | { ok: false; reason: string }> {
   if (!isSolanaAddress(opts.owner)) return { ok: false, reason: "Connect a wallet first." };
   if (dbcEnabled()) {
-    const { buildDbcTradeTx } = await import("../launch/dbc");
-    const dbc = await buildDbcTradeTx({
-      mint: opts.mint,
-      owner: opts.owner,
-      side: opts.side,
-      sol: opts.side === "buy" ? opts.amount : undefined,
-      tokens: opts.side === "sell" ? opts.amount : undefined,
-    });
-    if (dbc.ok) return { ok: true, transaction: dbc.transaction };
+    const { buildDbcTradeTx, mintUsesTransferHook } = await import("../launch/dbc");
+    try {
+      const dbc = await buildDbcTradeTx({
+        mint: opts.mint,
+        owner: opts.owner,
+        side: opts.side,
+        sol: opts.side === "buy" ? opts.amount : undefined,
+        tokens: opts.side === "sell" ? opts.amount : undefined,
+      });
+      if (dbc.ok) return { ok: true, transaction: dbc.transaction };
+      if (dbc.error === "curve_opening" || (await mintUsesTransferHook(opts.mint))) {
+        return {
+          ok: false,
+          reason:
+            dbc.error === "curve_opening"
+              ? "The Solphia curve is opening. Wait a few seconds and try the swap again."
+              : dbc.error === "curve_missing"
+                ? "The Solphia curve is opening. Wait a few seconds and try the swap again."
+                : dbc.error,
+        };
+      }
+      if (dbc.error && dbc.error !== "curve_missing") {
+        const { isRateLimit, RPC_BUSY_SWAP } = await import("../solana/connection");
+        return { ok: false, reason: isRateLimit(dbc.error) ? RPC_BUSY_SWAP : dbc.error };
+      }
+    } catch (e) {
+      const { swapBusyReason } = await import("../solana/connection");
+      const busy = swapBusyReason(e);
+      if (busy) return { ok: false, reason: busy };
+      if (await mintUsesTransferHook(opts.mint)) {
+        return { ok: false, reason: e instanceof Error ? e.message : "Could not build the swap." };
+      }
+    }
   }
   const live = await padCurveReady(opts.mint);
   const creator = opts.creator || (live.ok ? live.creator : opts.owner);

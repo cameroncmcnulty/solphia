@@ -22,6 +22,7 @@ import { useActiveWallet } from "@/lib/wallet/useVault";
 import { WalletSheet } from "./wallet/sheet";
 import {
   clearSwapNotice,
+  formatSwapError,
   loadSwapNotice,
   noticeFromSwapError,
   saveSwapNotice,
@@ -361,16 +362,35 @@ export function SwapWidget({
   }, [pk]);
 
   useEffect(() => {
-    const ctrl = new AbortController();
-    void fetch("/api/spha", { signal: ctrl.signal, cache: "no-store" })
-      .then((r) => r.json())
-      .then((j) => {
-        const mint = typeof j?.mint === "string" ? j.mint : "";
-        if (!isSolanaAddress(mint)) return;
-        setSpha({ mint, symbol: "SPHA", name: "Solphia", image: j?.image });
-      })
-      .catch(() => {});
-    return () => ctrl.abort();
+    let stop = false;
+    let timer = 0;
+    let ctrl = new AbortController();
+    const load = () => {
+      ctrl.abort();
+      ctrl = new AbortController();
+      return fetch("/api/spha", { signal: ctrl.signal, cache: "no-store" })
+        .then((r) => r.json())
+        .then((j) => {
+          if (stop) return true;
+          const mint = typeof j?.mint === "string" ? j.mint : "";
+          if (!isSolanaAddress(mint)) return false;
+          setSpha({ mint, symbol: "SPHA", name: "Solphia", image: j?.image });
+          return true;
+        })
+        .catch(() => false);
+    };
+    const tick = () => {
+      void load().then((ready) => {
+        if (stop || ready) return;
+        timer = window.setTimeout(tick, 4000);
+      });
+    };
+    tick();
+    return () => {
+      stop = true;
+      ctrl.abort();
+      if (timer) window.clearTimeout(timer);
+    };
   }, []);
 
   useEffect(() => {
@@ -505,40 +525,55 @@ export function SwapWidget({
     }
     const ctrl = new AbortController();
     const t = window.setTimeout(() => {
-      fetch("/api/swap/quote", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          owner: pk || undefined,
-          inputMint: pay.mint,
-          outputMint: recv.mint,
-          amount: payNum,
-          slippageBps: slipBps,
-        }),
-        signal: ctrl.signal,
-      })
-        .then((r) => r.json())
-        .then((j) => {
-          if (j.ok) {
-            setQuoteErr("");
-            setQuote({
-              outAmount: Number(j.outAmount) || 0,
-              via: typeof j.via === "string" ? j.via : "",
-              impactPct: Number(j.impactPct) || 0,
-              feeSol: Number(j.feeSol) || 0,
-              hopSol: Number(j.hopSol) || undefined,
-              clipped: Boolean(j.clipped),
-              inAmount: Number(j.inAmount) || undefined,
-            });
-          } else {
-            setQuote(null);
-            setQuoteErr(typeof j.message === "string" ? j.message : typeof j.error === "string" ? j.error : "");
-          }
+      const ask = (tries = 0) => {
+        fetch("/api/swap/quote", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            owner: pk || undefined,
+            inputMint: pay.mint,
+            outputMint: recv.mint,
+            amount: payNum,
+            slippageBps: slipBps,
+          }),
+          signal: ctrl.signal,
         })
-        .catch(() => {
-          setQuote(null);
-          setQuoteErr("");
-        });
+          .then((r) => r.json())
+          .then((j) => {
+            if (ctrl.signal.aborted) return;
+            if (j.ok) {
+              setQuoteErr("");
+              setQuote({
+                outAmount: Number(j.outAmount) || 0,
+                via: typeof j.via === "string" ? j.via : "",
+                impactPct: Number(j.impactPct) || 0,
+                feeSol: Number(j.feeSol) || 0,
+                hopSol: Number(j.hopSol) || undefined,
+                clipped: Boolean(j.clipped),
+                inAmount: Number(j.inAmount) || undefined,
+              });
+              return;
+            }
+            const raw = typeof j.message === "string" && j.message.trim() ? j.message : typeof j.error === "string" ? j.error : "";
+            const busy = /rate_limited|busy|Too many|API Gateway|429|opening/i.test(raw);
+            if (busy && tries < 2) {
+              window.setTimeout(() => ask(tries + 1), 900 * (tries + 1));
+              return;
+            }
+            setQuote(null);
+            setQuoteErr(raw ? formatSwapError(raw) : "");
+          })
+          .catch(() => {
+            if (ctrl.signal.aborted) return;
+            if (tries < 2) {
+              window.setTimeout(() => ask(tries + 1), 900 * (tries + 1));
+              return;
+            }
+            setQuote(null);
+            setQuoteErr("");
+          });
+      };
+      ask();
     }, 280);
     return () => {
       window.clearTimeout(t);
@@ -697,8 +732,13 @@ export function SwapWidget({
                   { skipPreflight: false },
                 );
           }
-          last = typeof j.error === "string" ? j.error : last;
-          if (i < retries && /Not enough SOL/i.test(last)) continue;
+          last =
+            typeof j.message === "string" && j.message.trim()
+              ? j.message
+              : typeof j.error === "string"
+                ? j.error
+                : last;
+          if (i < retries && /Not enough SOL|busy|rate_limited|opening|429|API Gateway/i.test(last)) continue;
           throw new Error(last);
         }
         throw new Error(last);
@@ -710,7 +750,7 @@ export function SwapWidget({
         sig = await sendLeg(pay.mint, SOL_MINT, payAmt);
         sig = await sendLeg(SOL_MINT, recv.mint, hopSol * 0.995, 6);
       } else {
-        sig = await sendLeg(pay.mint, recv.mint, payAmt);
+        sig = await sendLeg(pay.mint, recv.mint, payAmt, 3);
       }
       if (settledRef.current) return;
       idleSigning();

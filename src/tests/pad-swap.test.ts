@@ -94,8 +94,21 @@ describe("in-house pad venue", () => {
     assert.match(open, /swapBusyReason/);
     const padSrc = readFileSync(path.join(process.cwd(), "src/lib/swap/pad.ts"), "utf8");
     assert.match(padSrc, /rpc_busy/);
+    assert.match(padSrc, /curve_opening/);
+    assert.match(padSrc, /mintUsesTransferHook/);
     assert.match(open, /clipped: pad.clipped/);
     assert.match(quote, /message: q\.reason/);
+    assert.match(quote, /padquote", 60/);
+    assert.match(quote, /RPC_BUSY_SWAP/);
+    const swapBuild = readFileSync(path.join(process.cwd(), "src/app/api/swap/build/route.ts"), "utf8");
+    assert.match(swapBuild, /padswap", 24/);
+    assert.match(swapBuild, /RPC_BUSY_SWAP/);
+    assert.match(widget, /formatSwapError/);
+    assert.match(widget, /4000/);
+    assert.match(dbc, /resolveDbcPool/);
+    assert.match(dbc, /export async function mintUsesTransferHook/);
+    const sim = readFileSync(path.join(process.cwd(), "src/lib/solana/simulate.ts"), "utf8");
+    assert.match(sim, /RPC_BUSY_SWAP/);
   });
 });
 

@@ -1,5 +1,5 @@
 import { Transaction, VersionedTransaction } from "@solana/web3.js";
-import { connection } from "./connection";
+import { connection, isRateLimit, RPC_BUSY_SWAP } from "./connection";
 
 export function swapSimReason(err: unknown, logs?: string[] | null): string {
   const blob = `${typeof err === "string" ? err : JSON.stringify(err)} ${(logs || []).join(" ")}`;
@@ -34,6 +34,7 @@ export async function simulateUnsignedB64(b64: string): Promise<{ ok: true } | {
     if (sim.value.err) return { ok: false, reason: swapSimReason(sim.value.err, sim.value.logs) };
     return { ok: true };
   } catch (e) {
+    if (isRateLimit(e)) return { ok: false, reason: RPC_BUSY_SWAP };
     return { ok: false, reason: e instanceof Error ? e.message : "Could not simulate the swap." };
   }
 }

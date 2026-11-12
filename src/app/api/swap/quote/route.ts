@@ -5,6 +5,7 @@ import { SOL_MINT } from "@/lib/pair/mints";
 import { quoteAnySwap } from "@/lib/swap/open";
 import { isProjectProtocolWallet } from "@/lib/projectDest";
 import { readyState } from "@/lib/store";
+import { RPC_BUSY_SWAP } from "@/lib/solana/connection";
 
 export const dynamic = "force-dynamic";
 
@@ -19,8 +20,8 @@ const Body = z.object({
 });
 
 export async function POST(req: NextRequest) {
-  if (!rateLimit(clientIp(req) + ":padquote", 20, 60_000)) {
-    return NextResponse.json({ error: "rate_limited" }, { status: 429 });
+  if (!rateLimit(clientIp(req) + ":padquote", 60, 60_000)) {
+    return NextResponse.json({ error: "rate_limited", message: RPC_BUSY_SWAP }, { status: 429 });
   }
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "bad_request" }, { status: 400 });

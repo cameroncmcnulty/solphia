@@ -239,7 +239,7 @@ describe("spha countdown", () => {
   });
 
   it("keeps an armed public clock when a stale soon poll returns launchAt 0", () => {
-    const launchAt = SPHA_TGE_LAUNCH_AT_MS;
+    const launchAt = Date.now() + 4 * 86400_000;
     const counting = {
       mint: "",
       phase: "counting" as const,

@@ -285,7 +285,7 @@ export async function dbcPoolByMint(mint: string) {
   }
 }
 
-async function mintUsesTransferHook(mint: string): Promise<boolean> {
+export async function mintUsesTransferHook(mint: string): Promise<boolean> {
   try {
     const pk = new PublicKey(mint);
     const info = await connection().getAccountInfo(pk, "confirmed");
@@ -294,6 +294,26 @@ async function mintUsesTransferHook(mint: string): Promise<boolean> {
     return Boolean(hook && !hook.programId.equals(PublicKey.default));
   } catch {
     return false;
+  }
+}
+
+async function resolveDbcPool(mint: string) {
+  const dbc = client();
+  const load = () => withRpcRetry(() => dbc.state.getPoolByBaseMint(mint));
+  try {
+    let row = await load();
+    if (row) return { ok: true as const, dbc, row };
+    if (await mintUsesTransferHook(mint)) {
+      for (let i = 0; i < 4; i++) {
+        await new Promise((r) => setTimeout(r, 400 * (i + 1)));
+        row = await load();
+        if (row) return { ok: true as const, dbc, row };
+      }
+      return { ok: false as const, error: "curve_opening" };
+    }
+    return { ok: false as const, error: "curve_missing" };
+  } catch (e) {
+    return { ok: false as const, error: swapBusyReason(e) || (e instanceof Error ? e.message : "curve_missing") };
   }
 }
 
@@ -969,12 +989,11 @@ export async function quoteDbcTrade(opts: {
   tokens?: number;
 }): Promise<DbcTradeQuote> {
   const { SwapMode } = sdk();
-  const dbc = client();
-  let row: Awaited<ReturnType<typeof dbc.state.getPoolByBaseMint>>;
+  const found = await resolveDbcPool(opts.mint);
+  if (!found.ok) return found;
+  const { dbc, row } = found;
   let cfg: Awaited<ReturnType<typeof dbc.state.getPoolConfig>>;
   try {
-    row = await withRpcRetry(() => dbc.state.getPoolByBaseMint(opts.mint));
-    if (!row) return { ok: false, error: "curve_missing" };
     const vp0 = asPool(row);
     const inner0 = vp0.poolState || vp0;
     cfg = await withRpcRetry(() => dbc.state.getPoolConfig(inner0.config));
@@ -983,7 +1002,6 @@ export async function quoteDbcTrade(opts: {
     return { ok: false, error: swapBusyReason(e) || (e instanceof Error ? e.message : "curve_missing") };
   }
   const vp = asPool(row);
-  const inner = vp.poolState || vp;
   const currentPoint = new BN(Math.floor(Date.now() / 1000));
   const buy = opts.side === "buy";
   const tokenDec = await mintTokenDecimals(opts.mint);
@@ -1043,9 +1061,9 @@ export async function buildDbcTradeTx(opts: {
   tokens?: number;
 }): Promise<{ ok: true; transaction: string; tokensOut?: number; solOut?: number; feeSol: number } | { ok: false; error: string }> {
   const { SwapMode } = sdk();
-  const dbc = client();
-  const row = await dbc.state.getPoolByBaseMint(opts.mint);
-  if (!row) return { ok: false, error: "curve_missing" };
+  const found = await resolveDbcPool(opts.mint);
+  if (!found.ok) return found;
+  const { dbc, row } = found;
   const quoted = await quoteDbcTrade(opts);
   if (!quoted.ok) return quoted;
   const owner = new PublicKey(opts.owner);
@@ -1065,15 +1083,19 @@ export async function buildDbcTradeTx(opts: {
     minimumAmountOut: minOut.toString() === "0" ? new BN(1) : minOut,
     referralTokenAccount: null,
   };
-  const raw = (await mintUsesTransferHook(opts.mint))
-    ? await dbc.pool.swap2WithTransferHook(swapArg)
-    : await dbc.pool.swap2(swapArg);
-  const tx = await readyTx(raw, owner);
-  return {
-    ok: true,
-    transaction: encodeTx(tx),
-    tokensOut: quoted.tokensOut,
-    solOut: quoted.solOut,
-    feeSol: quoted.feeSol,
-  };
+  try {
+    const raw = (await mintUsesTransferHook(opts.mint))
+      ? await dbc.pool.swap2WithTransferHook(swapArg)
+      : await dbc.pool.swap2(swapArg);
+    const tx = await readyTx(raw, owner);
+    return {
+      ok: true,
+      transaction: encodeTx(tx),
+      tokensOut: quoted.tokensOut,
+      solOut: quoted.solOut,
+      feeSol: quoted.feeSol,
+    };
+  } catch (e) {
+    return { ok: false, error: swapBusyReason(e) || (e instanceof Error ? e.message : "Could not build the swap.") };
+  }
 }

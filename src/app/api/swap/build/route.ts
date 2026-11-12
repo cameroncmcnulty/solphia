@@ -8,6 +8,7 @@ import { readyState, withLaunch } from "@/lib/store";
 import { emptyLaunchBook } from "@/lib/launch/engine";
 import { creditRank } from "@/lib/rank/engine";
 import { creditSwapHold } from "@/lib/fees/income";
+import { RPC_BUSY_SWAP } from "@/lib/solana/connection";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -24,8 +25,8 @@ const Body = z.object({
 });
 
 export async function POST(req: NextRequest) {
-  if (!rateLimit(clientIp(req) + ":padswap", 8, 60_000)) {
-    return NextResponse.json({ error: "rate_limited" }, { status: 429 });
+  if (!rateLimit(clientIp(req) + ":padswap", 24, 60_000)) {
+    return NextResponse.json({ error: "rate_limited", message: RPC_BUSY_SWAP }, { status: 429 });
   }
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success || !isSolanaAddress(parsed.data.owner)) {
