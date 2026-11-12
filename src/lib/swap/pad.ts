@@ -47,7 +47,15 @@ export async function quotePadSwap(opts: {
   if (isDeskMint(opts.mint)) return { ok: false, reason: launchError("desk_mint"), error: "desk_mint" };
   if (dbcEnabled()) {
     const { quoteDbcTrade } = await import("../launch/dbc");
-    const dbc = await quoteDbcTrade({ mint: opts.mint, side: opts.side, sol: opts.side === "buy" ? opts.amount : undefined, tokens: opts.side === "sell" ? opts.amount : undefined });
+    let dbc: Awaited<ReturnType<typeof quoteDbcTrade>>;
+    try {
+      dbc = await quoteDbcTrade({ mint: opts.mint, side: opts.side, sol: opts.side === "buy" ? opts.amount : undefined, tokens: opts.side === "sell" ? opts.amount : undefined });
+    } catch (e) {
+      const { swapBusyReason } = await import("../solana/connection");
+      const busy = swapBusyReason(e);
+      if (busy) return { ok: false, reason: busy, error: "rpc_busy" };
+      throw e;
+    }
     if (dbc.ok) {
       return {
         ok: true,
@@ -64,12 +72,16 @@ export async function quotePadSwap(opts: {
       };
     }
     if (dbc.error && dbc.error !== "curve_missing") {
+      const { isRateLimit, RPC_BUSY_SWAP } = await import("../solana/connection");
+      const busy = isRateLimit(dbc.error);
       return {
         ok: false,
-        reason: /insufficient liquidity/i.test(dbc.error)
-          ? "The curve does not have enough SOL for that sell yet."
-          : dbc.error,
-        error: dbc.error,
+        reason: busy
+          ? RPC_BUSY_SWAP
+          : /insufficient liquidity/i.test(dbc.error)
+            ? "The curve does not have enough SOL for that sell yet."
+            : dbc.error,
+        error: busy ? "rpc_busy" : dbc.error,
       };
     }
   }

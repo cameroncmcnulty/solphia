@@ -91,6 +91,9 @@ describe("in-house pad venue", () => {
     assert.match(dbc, /clipped: true/);
     assert.match(dbc, /On-chain creator is/);
     assert.match(open, /pad.error !== "curve_missing"/);
+    assert.match(open, /swapBusyReason/);
+    const padSrc = readFileSync(path.join(process.cwd(), "src/lib/swap/pad.ts"), "utf8");
+    assert.match(padSrc, /rpc_busy/);
     assert.match(open, /clipped: pad.clipped/);
     assert.match(quote, /message: q\.reason/);
   });

@@ -15,9 +15,9 @@ const STABLE = new Set([
 
 const accountCache = new Map<string, { at: number; info: AccountInfo<Buffer> | null }>();
 
-function isRateLimit(e: unknown) {
+export function isRateLimit(e: unknown) {
   const m = e instanceof Error ? e.message : String(e);
-  return /429|Too Many Requests|rate.?limit|busy/i.test(m);
+  return /429|Too Many Requests|API Gateway|rate.?limit|\bbusy\b/i.test(m);
 }
 
 async function rpcFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
@@ -76,12 +76,30 @@ export function connection(): Connection {
   return conn;
 }
 
+export const RPC_BUSY_SWAP = "Quote service is busy. Wait a few seconds and try the swap again.";
+
 export function rpcBusyMessage(e: unknown): string | null {
-  const m = e instanceof Error ? e.message : String(e);
-  if (/429|Too Many Requests|rate.?limit/i.test(m)) {
-    return "Solana is busy right now. Wait a few seconds and tap Launch again.";
+  if (!isRateLimit(e)) return null;
+  return "Solana is busy right now. Wait a few seconds and tap Launch again.";
+}
+
+export function swapBusyReason(e: unknown): string | null {
+  if (!isRateLimit(e)) return null;
+  return RPC_BUSY_SWAP;
+}
+
+export async function withRpcRetry<T>(fn: () => Promise<T>, tries = 3): Promise<T> {
+  let last: unknown;
+  for (let i = 0; i < tries; i++) {
+    try {
+      return await fn();
+    } catch (e) {
+      last = e;
+      if (!isRateLimit(e) || i === tries - 1) throw e;
+      await new Promise((r) => setTimeout(r, 400 * 2 ** i));
+    }
   }
-  return null;
+  throw last instanceof Error ? last : new Error("rpc");
 }
 
 export function heliusEnabled(): boolean {

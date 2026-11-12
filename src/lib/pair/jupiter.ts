@@ -1,4 +1,5 @@
 import { isSolanaAddress } from "../security";
+import { isRateLimit, RPC_BUSY_SWAP } from "../solana/connection";
 import {
   SOL_MINT,
   USDC_MINT,
@@ -144,7 +145,8 @@ export async function quoteOnce(opts: {
   for (const base of QUOTE_URLS) {
     const r = await jupFetch(`${base}?${qs}`);
     if (!r.ok || !r.data) {
-      last = r.error || last;
+      last = isRateLimit(r.error || "") || r.status === 429 ? RPC_BUSY_SWAP : r.error || last;
+      if (r.status === 429) await new Promise((res) => setTimeout(res, 400));
       continue;
     }
     const quote = parseQuote(r.data as Record<string, unknown>);

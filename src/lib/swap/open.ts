@@ -106,7 +106,10 @@ export async function quoteAnySwap(opts: {
       if (pad.error && pad.error !== "curve_missing" && pad.error !== "not_on_curve") {
         return { ok: false, reason: pad.reason };
       }
-    } catch {
+    } catch (e) {
+      const { swapBusyReason } = await import("../solana/connection");
+      const busy = swapBusyReason(e);
+      if (busy) return { ok: false, reason: busy };
       /* not on our curve — Jupiter next */
     }
   }

@@ -17,6 +17,9 @@ function store(): Storage | null {
 }
 
 function friendlySwapText(text: string): string {
+  if (/429|Too Many Requests|API Gateway|rate.?limit/i.test(text)) {
+    return "Quote service is busy. Wait a few seconds and try the swap again.";
+  }
   if (/0x1788|InsufficientFunds/i.test(text)) return "Not enough of that token in this wallet. Try a smaller amount.";
   if (/0x1771|SlippageToleranceExceeded/i.test(text)) return "Price moved. Try again.";
   if (/malicious|transaction simulation failed/i.test(text) && /0x1788|insufficient/i.test(text)) {

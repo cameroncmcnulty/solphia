@@ -7,7 +7,7 @@
 import * as DbcMod from "@meteora-ag/dynamic-bonding-curve-sdk";
 import BN from "bn.js";
 
-import { connection } from "../solana/connection";
+import { connection, swapBusyReason, withRpcRetry } from "../solana/connection";
 import { ComputeBudgetProgram, Keypair, PublicKey, Transaction, VersionedTransaction } from "@solana/web3.js";
 import { TOKEN_2022_PROGRAM_ID, getTransferHook, unpackMint } from "@solana/spl-token";
 import { encodeTx } from "../token/mint";
@@ -970,12 +970,20 @@ export async function quoteDbcTrade(opts: {
 }): Promise<DbcTradeQuote> {
   const { SwapMode } = sdk();
   const dbc = client();
-  const row = await dbc.state.getPoolByBaseMint(opts.mint);
-  if (!row) return { ok: false, error: "curve_missing" };
+  let row: Awaited<ReturnType<typeof dbc.state.getPoolByBaseMint>>;
+  let cfg: Awaited<ReturnType<typeof dbc.state.getPoolConfig>>;
+  try {
+    row = await withRpcRetry(() => dbc.state.getPoolByBaseMint(opts.mint));
+    if (!row) return { ok: false, error: "curve_missing" };
+    const vp0 = asPool(row);
+    const inner0 = vp0.poolState || vp0;
+    cfg = await withRpcRetry(() => dbc.state.getPoolConfig(inner0.config));
+    if (!cfg) return { ok: false, error: "curve_missing" };
+  } catch (e) {
+    return { ok: false, error: swapBusyReason(e) || (e instanceof Error ? e.message : "curve_missing") };
+  }
   const vp = asPool(row);
   const inner = vp.poolState || vp;
-  const cfg = await dbc.state.getPoolConfig(inner.config);
-  if (!cfg) return { ok: false, error: "curve_missing" };
   const currentPoint = new BN(Math.floor(Date.now() / 1000));
   const buy = opts.side === "buy";
   const tokenDec = await mintTokenDecimals(opts.mint);

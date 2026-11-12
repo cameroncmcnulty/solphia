@@ -81,6 +81,7 @@ describe("jupiter swap v2", () => {
 
 describe("jupiter swap notice", () => {
   it("pulls the real message out of Jupiter error shapes", () => {
+    assert.equal(formatSwapError("[API Gateway] Too many requests"), "Quote service is busy. Wait a few seconds and try the swap again.");
     assert.equal(formatSwapError("slippage exceeded"), "slippage exceeded");
     assert.equal(formatSwapError(new Error("no route")), "no route");
     assert.equal(formatSwapError({ message: "Transaction simulation failed" }), "Transaction simulation failed");
