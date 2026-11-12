@@ -186,8 +186,9 @@ describe("spha countdown", () => {
     assert.match(cd, /COMING SOON/);
     assert.match(cd, /TealConfetti/);
     assert.match(cd, /CopyCa/);
-    assert.match(cd, /spha-cd-buy/);
-    assert.match(cd, /\/swap\?mint=/);
+    assert.match(cd, /SwapWidget/);
+    assert.match(cd, /spha-tge-swap/);
+    assert.match(cd, /defaultSide="buy"/);
     assert.match(cd, /formatSphaLaunchWhen/);
     assert.match(cd, /setInterval\(\(\) => setNow\(Date\.now\(\)\), 100\)/);
     const launch = readFileSync(path.join(process.cwd(), "src/components/admin/SphaLaunch.tsx"), "utf8");
@@ -232,7 +233,8 @@ describe("spha countdown", () => {
     assert.match(socials, /SiteMark/);
     assert.match(tokenDesk, /website=/);
     assert.match(tokenDesk, /mergeSphaPublicPack/);
-    assert.match(tokenDesk, /setTimeout\(\(\) => \{[\s\S]*load\(\);[\s\S]*\}, 2500\)/);
+    assert.match(tokenDesk, /onNeedRefresh=\{load\}/);
+    assert.match(tokenDesk, /live \? 8_000 : 2_000/);
     assert.match(cd, /pack\.countdown\.launchAt > 0 \? pack\.countdown\.launchAt : launchAtHold\.current/);
     assert.match(cd, /suppressHydrationWarning/);
     assert.match(cd, /cd\.remainingMs > 0/);

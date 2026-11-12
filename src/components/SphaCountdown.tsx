@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 import { CopyCa } from "@/components/CopyCa";
 import { TealConfetti } from "@/components/TealConfetti";
+import { SwapWidget } from "@/components/SwapWidget";
 import {
   formatSphaLaunchWhen,
   pad2,
@@ -14,6 +15,7 @@ import type { TokenStat } from "@/lib/token/solphia";
 
 type Pack = {
   mint: string;
+  name?: string;
   symbol?: string;
   phase: SphaPublicPhase;
   countdown: SphaPublicCountdown;
@@ -53,14 +55,15 @@ export function SphaCountdown({
   const [tilt, setTilt] = useState({ x: 0, y: 0 });
   const stage = useRef<HTMLDivElement>(null);
   const liveOnce = useRef(false);
-  const asked = useRef(false);
   const launchAtHold = useRef(Math.max(0, pack.countdown.launchAt));
   if (pack.countdown.launchAt > 0) launchAtHold.current = pack.countdown.launchAt;
 
-  const live = Boolean(pack.mint) || pack.phase === "live";
+  const tradeMint = (pack.mint || "").trim();
+  const live = tradeMint.length >= 32;
   const launchAt = pack.countdown.launchAt > 0 ? pack.countdown.launchAt : launchAtHold.current;
   const counting = !live && launchAt > 0;
   const remaining = live ? 0 : remainingOf({ ...pack.countdown, launchAt }, now);
+  const revealSoon = counting && remaining <= 8_000;
   const parts = splitRemaining(counting ? remaining : 0);
   const span = Math.max(pack.countdown.remainingMs, pack.countdown.mintLeadMs, 1);
   const progress = live ? 1 : counting ? Math.min(1, Math.max(0, 1 - remaining / Math.max(span, remaining, 1))) : 0.12;
@@ -82,16 +85,11 @@ export function SphaCountdown({
   }, [live]);
 
   useEffect(() => {
-    if (live || asked.current) return;
-    if (counting && remaining <= 0) {
-      asked.current = true;
-      onNeedRefresh();
-      const t = window.setTimeout(() => {
-        asked.current = false;
-      }, 2500);
-      return () => window.clearTimeout(t);
-    }
-  }, [live, counting, remaining, onNeedRefresh]);
+    if (live || !revealSoon) return;
+    onNeedRefresh();
+    const id = window.setInterval(onNeedRefresh, 1_200);
+    return () => window.clearInterval(id);
+  }, [live, revealSoon, onNeedRefresh]);
 
   const cells = useMemo(
     () => [
@@ -117,7 +115,7 @@ export function SphaCountdown({
       <TealConfetti fire={fire} />
       <div
         ref={stage}
-        className={`spha-cd${counting ? " spha-cd-live-tick" : ""}`}
+        className={`spha-cd${counting ? " spha-cd-live-tick" : ""}${live ? " spha-cd-open" : ""}`}
         onPointerMove={onMove}
         onPointerLeave={() => setTilt({ x: 0, y: 0 })}
         style={{
@@ -150,10 +148,17 @@ export function SphaCountdown({
           {live ? (
             <div className="spha-cd-live">
               <div className="spha-cd-live-tag">${ticker} IS LIVE</div>
-              <CopyCa ca={pack.mint} full />
-              <a className="spha-cd-buy" href={`/swap?mint=${encodeURIComponent(pack.mint)}`}>
-                BUY ${ticker}
-              </a>
+              <CopyCa ca={tradeMint} full />
+              <div className="spha-cd-widget">
+                <SwapWidget
+                  defaultMint={tradeMint}
+                  defaultSymbol={ticker}
+                  defaultName={pack.name || "Solphia"}
+                  defaultImage={pack.image}
+                  defaultSide="buy"
+                  widgetId="spha-tge-swap"
+                />
+              </div>
             </div>
           ) : counting ? (
             <div className="spha-cd-clock-wrap">
@@ -166,7 +171,11 @@ export function SphaCountdown({
                   </div>
                 ))}
               </div>
-              <p className="spha-cd-sub">The clock is live. Contract address reveals here at T-0.</p>
+              <p className="spha-cd-sub">
+                {remaining <= 0
+                  ? "Opening the curve. The swap widget lands here in a moment."
+                  : "The clock is live. At T-0 this becomes the $SPHA swap."}
+              </p>
             </div>
           ) : (
             <div className="spha-cd-soon">

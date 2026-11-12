@@ -91,26 +91,18 @@ export function TokenDesk({ initial }: { initial?: SphaPack }) {
   }, []);
 
   useEffect(() => {
-    let ready = false;
-    const start = window.setTimeout(() => {
-      ready = true;
-      load();
-    }, 2500);
-    const onFocus = () => {
-      if (!ready) return;
-      load();
-    };
+    load();
+    const onFocus = () => load();
     window.addEventListener("focus", onFocus);
     const id = window.setInterval(() => {
-      if (!ready || document.hidden) return;
+      if (document.hidden) return;
       load();
-    }, 4_000);
+    }, live ? 8_000 : 2_000);
     return () => {
       window.removeEventListener("focus", onFocus);
-      window.clearTimeout(start);
       window.clearInterval(id);
     };
-  }, [load]);
+  }, [load, live]);
 
   return (
     <main className="relative min-h-screen overflow-x-hidden pb-24">
@@ -138,6 +130,7 @@ export function TokenDesk({ initial }: { initial?: SphaPack }) {
         <SphaCountdown
           pack={{
             mint: pack.mint,
+            name: pack.name,
             symbol,
             phase: pack.phase,
             countdown: pack.countdown,

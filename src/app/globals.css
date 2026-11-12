@@ -969,6 +969,17 @@ body {
 .spha-cd-live-tick .spha-cd-colon {
   animation: spha-cd-colon 1s steps(1) infinite;
 }
+.spha-cd-open {
+  overflow: visible;
+}
+.spha-cd-open .spha-cd-orbit,
+.spha-cd-open .spha-cd-ring {
+  display: none;
+}
+.spha-cd-open .spha-cd-core {
+  min-height: 0;
+  justify-content: flex-start;
+}
 .spha-cd-live {
   margin-top: 1.25rem;
   display: flex;
@@ -976,6 +987,11 @@ body {
   flex-direction: column;
   align-items: center;
   gap: 1rem;
+}
+.spha-cd-widget {
+  width: 100%;
+  max-width: 32rem;
+  text-align: left;
 }
 .spha-cd-live-tag {
   font-family: var(--font-display), ui-sans-serif, system-ui, sans-serif;

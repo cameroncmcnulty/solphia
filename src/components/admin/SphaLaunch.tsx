@@ -599,7 +599,7 @@ export function SphaLaunch() {
         <p className="mt-1 max-w-xl text-sm text-mute">
           Until a time is set the token page says Coming soon. Arming this clock is the official launch: T-30 mints
           $SPHA on mainnet (Token-2022 DBC, same path as the dashboard launcher) and shows the CA here only. T-0
-          refreshes the website, fires confetti, publishes the copyable CA, and a BUY $SPHA button into the swap widget.
+          refreshes the website, fires confetti, publishes the copyable CA, and turns the clock into the $SPHA swap widget.
         </p>
         {cdArmed ? (
           <div className="mt-4 rounded-2xl border border-acid/30 bg-acid/5 p-4">
