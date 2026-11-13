@@ -320,9 +320,9 @@ function venueLabel(c: Coin) {
   return "MKT";
 }
 
-export default function LaunchPage() {
+export default function LaunchPage({ mode }: { mode?: "swap" } = {}) {
   const path = usePathname();
-  const isSwap = path.startsWith("/swap");
+  const isSwap = mode === "swap" || path.startsWith("/swap");
   const connected = useOwner();
   const owner = connected || (typeof window !== "undefined" ? loadOwner() : null);
   const [coins, setCoins] = useState<Coin[]>([]);

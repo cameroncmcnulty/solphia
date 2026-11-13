@@ -26,7 +26,11 @@ describe("public desk yard", () => {
     assert.equal(home.includes("Launch pad and Shill Zone are open now"), false);
     const swap = readFileSync(path.join(process.cwd(), "src/app/swap/page.tsx"), "utf8");
     assert.match(swap, /LaunchPad/);
+    assert.match(swap, /mode="swap"/);
     assert.equal(swap.includes("DeskYard"), false);
     assert.equal(swap.includes("../launch/page"), false);
+    const pad = readFileSync(path.join(process.cwd(), "src/components/LaunchPad.tsx"), "utf8");
+    assert.match(pad, /mode === "swap" \|\| path\.startsWith\("\/swap"\)/);
+    assert.match(pad, /\{isSwap \? "Swap" : "Launch"\}/);
   });
 });
