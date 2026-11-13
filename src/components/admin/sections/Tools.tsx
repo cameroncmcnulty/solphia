@@ -20,6 +20,10 @@ type TokenRow = {
   teamBps: number;
   error?: string;
   snipers: Snipers;
+  dumpAt?: number;
+  dumped?: boolean;
+  dumpSol?: number;
+  returnedSol?: number;
 };
 
 type Campaign = {
@@ -98,6 +102,7 @@ type Desk = {
     measuredCostSol?: number;
     relayLeftSol?: number;
     relayFunded?: boolean;
+    returnedSol?: number;
   };
   sweep?: Sweep | null;
   sweepResult?: { ok: boolean; movedSol: number; signatures: string[]; error?: string };
@@ -249,8 +254,9 @@ export function ToolsSection() {
             <h2 className="font-display text-3xl text-ghost">Data launcher</h2>
             <p className="mt-2 max-w-2xl text-sm text-mute">
               First R&amp;D tool. Click LAUNCH and Treasury seeds the first wallet with 0.5 SOL. That wallet launches,
-              then relays whatever SOL is left to the next wallet. The desk stops on the first insufficient-funds
-              error and reports how much each launch actually cost. Full 1% swap fees on these tokens go to owner.
+              waits 30 seconds, sells its bag into SOL for whatever the curve will pay, then hops leftover SOL to the
+              next wallet. The last leftover goes to owner. The desk stops on the first insufficient-funds error and
+              reports how much each launch actually cost. Full 1% swap fees on these tokens go to owner.
             </p>
           </div>
           <div className="tools-ring" style={{ ["--pct" as string]: `${pct}` }}>
@@ -270,7 +276,11 @@ export function ToolsSection() {
           v={fuel.measuredCostSol > 0 ? `${fuel.measuredCostSol.toFixed(4)} SOL` : "—"}
           sub={fuel.dry ? "measured until dry" : "measured after each live launch"}
         />
-        <Stat k="Relay left" v={solAmt(fuel.relayLeftSol)} sub={`${fuel.remaining} still queued`} />
+        <Stat
+          k="Relay left"
+          v={solAmt(fuel.relayLeftSol)}
+          sub={`${fuel.remaining} queued${summary?.returnedSol ? ` · ${solAmt(summary.returnedSol)} to owner` : ""}`}
+        />
         <Stat k="Sniper volume" v={solAmt(summary?.volumeSol || 0)} sub={`${summary?.buys || 0} buys · ${summary?.sells || 0} sells`} />
         <Stat
           k="Next shot"
@@ -341,7 +351,8 @@ export function ToolsSection() {
         <p className="mt-3 text-sm text-mute">
           Same hooked Token-2022 curve as official SPHA, with this tester&apos;s 1% going 100% to the owner wallet.
           Project mint is a random 3–20% into that token&apos;s launch wallet. Shared pad config is never overwritten.
-          Seed is 0.5 SOL once. Remainder hops wallet to wallet until a launch fails on insufficient funds.
+          Seed is 0.5 SOL once. 30 seconds after each launch the wallet sells its holdings into SOL, then remainder hops
+          to the next wallet until a launch fails on insufficient funds. End of the path sends leftover SOL to owner.
         </p>
         {(fuel.dry || campaign?.dry) && (
           <div className="mt-3 rounded-xl border border-blood/40 bg-blood/10 px-4 py-3 text-sm text-ghost">
@@ -544,8 +555,13 @@ export function ToolsSection() {
                     <div className="text-[10px] text-mute">curve {solAmt(t.snipers.curveSol)}</div>
                   </td>
                   <td className={`px-3 py-2 font-mono text-[11px] ${statusTone(t.status)}`}>
-                    {t.status}
+                    {t.status === "live" && !t.dumped ? "dumping" : t.status}
                     {t.status === "queued" && t.scheduledAt > now ? <div className="text-mute">{eta(t.scheduledAt, now)}</div> : null}
+                    {t.status === "live" && !t.dumped && t.dumpAt && t.dumpAt > now ? (
+                      <div className="text-mute">sell {eta(t.dumpAt, now)}</div>
+                    ) : null}
+                    {t.dumped && t.dumpSol ? <div className="text-mute">sold {solAmt(t.dumpSol)}</div> : null}
+                    {t.returnedSol ? <div className="text-mute">to owner {solAmt(t.returnedSol)}</div> : null}
                     {t.error ? <div className="max-w-[12rem] truncate text-blood">{t.error}</div> : null}
                   </td>
                 </tr>

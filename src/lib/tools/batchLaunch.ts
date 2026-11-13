@@ -8,6 +8,7 @@ import {
   SystemProgram,
   Transaction,
 } from "@solana/web3.js";
+import { createCloseAccountInstruction, TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID } from "@solana/spl-token";
 import { isSolanaAddress } from "../security";
 import { SITE_URL } from "../config";
 import { connection, waitForSignature } from "../solana/connection";
@@ -15,6 +16,8 @@ import { signPackedB64 } from "../solana/extraSign";
 import { broadcastB64 } from "../solana/broadcast";
 import { b64ToBytes, bytesToB64 } from "../solana/wire";
 import { encodeTx } from "../token/mint";
+import { TOKEN_2022_PROGRAM, TOKEN_PROGRAM } from "../solana/tokenBalance";
+import { SOL_MINT } from "../pair/mints";
 import { isTokenMetaUri, pinSphaTokenMeta } from "../token/sphaMeta";
 import { createCoin, emptyLaunchBook } from "../launch/engine";
 import { dbcEnabled } from "../launch/dbcIds";
@@ -33,6 +36,7 @@ import {
   DEFAULT_NARRATIVE,
   DEFAULT_RANDOM,
   DEFAULT_WINDOW_MS,
+  DUMP_DELAY_MS,
   MAX_BATCH,
   splitMix,
   buildIdentities,
@@ -61,6 +65,10 @@ export type CampaignToken = TokenIdentity & {
   curveTokens: number;
   error?: string;
   snipers: SniperStats;
+  dumpAt?: number;
+  dumped?: boolean;
+  dumpSol?: number;
+  returnedSol?: number;
 };
 
 export type Campaign = {
@@ -80,6 +88,7 @@ export type Campaign = {
   nextAt?: number;
   lastLaunchAt?: number;
   error?: string;
+  returnedSol?: number;
   tokens: CampaignToken[];
 };
 
@@ -223,6 +232,7 @@ function normalizeCampaign(raw: unknown): Campaign {
     nextAt: Number(o.nextAt) || undefined,
     lastLaunchAt: Number(o.lastLaunchAt) || undefined,
     error: typeof o.error === "string" ? o.error : undefined,
+    returnedSol: Number(o.returnedSol) || undefined,
     tokens,
   };
 }
@@ -256,6 +266,10 @@ function normalizeToken(raw: unknown): CampaignToken {
     curveTokens: Number(o.curveTokens) || curveTokensFor(Number(o.teamBps) || 300),
     error: typeof o.error === "string" ? o.error : undefined,
     snipers: o.snipers || emptySnipers(),
+    dumpAt: Number(o.dumpAt) || undefined,
+    dumped: Boolean(o.dumped),
+    dumpSol: Number(o.dumpSol) || undefined,
+    returnedSol: Number(o.returnedSol) || undefined,
   };
 }
 
@@ -384,8 +398,7 @@ export async function resumeCampaign(): Promise<Campaign> {
   const c = await loadCampaign();
   if (c.status === "paused") {
     c.status = "running";
-    const next = c.tokens.find((t) => t.status === "queued" || t.status === "funding" || t.status === "launching");
-    c.nextAt = next?.scheduledAt || Date.now();
+    c.nextAt = nextWorkAt(c) || Date.now();
     c.error = undefined;
     await saveCampaign(c);
   }
@@ -397,8 +410,13 @@ export async function stopCampaign(): Promise<Campaign> {
   if (c.status === "running" || c.status === "paused") {
     c.status = "stopped";
     await saveCampaign(c);
+    try {
+      await closeOutCampaign(c, { limit: 8 });
+    } catch {
+      /* cron finishes leftover hops */
+    }
   }
-  return c;
+  return loadCampaign();
 }
 
 export async function resetCampaign(): Promise<Campaign> {
@@ -477,11 +495,30 @@ function markDry(c: Campaign, token: CampaignToken, walletSol: number, message: 
   c.error = `Stopped on insufficient funds after ${live} live launch${live === 1 ? "" : "es"}. Seed was ${BATCH_RELAY_SOL} SOL. About ${(c.measuredCostSol || 0).toFixed(4)} SOL used per launch. ${walletSol.toFixed(4)} SOL left in the last wallet. ${message}`;
 }
 
+async function returnWalletToOwner(c: Campaign, from: Keypair, token: CampaignToken): Promise<void> {
+  const owner = ownerAddress();
+  if (!isSolanaAddress(owner) || from.publicKey.toBase58() === owner) {
+    const left = await connection().getBalance(from.publicKey, "confirmed").catch(() => 0);
+    measureRelay(c, left / LAMPORTS_PER_SOL);
+    return;
+  }
+  try {
+    const relayed = await relayAll(from, new PublicKey(owner));
+    if (relayed.sig) token.sigs.push(relayed.sig);
+    const sol = relayed.lamports / LAMPORTS_PER_SOL;
+    token.returnedSol = (token.returnedSol || 0) + sol;
+    c.returnedSol = (c.returnedSol || 0) + sol;
+    measureRelay(c, 0);
+  } catch {
+    const left = await connection().getBalance(from.publicKey, "confirmed").catch(() => 0);
+    measureRelay(c, left / LAMPORTS_PER_SOL);
+  }
+}
+
 async function relayToNext(c: Campaign, from: Keypair, token: CampaignToken, keys: KeyPack): Promise<void> {
   const next = c.tokens.find((t) => (t.status === "queued" || t.status === "funding") && t.id !== token.id);
   if (!next) {
-    const left = await connection().getBalance(from.publicKey, "confirmed").catch(() => 0);
-    measureRelay(c, left / LAMPORTS_PER_SOL);
+    await returnWalletToOwner(c, from, token);
     return;
   }
   const nextKp = await ensureWallet(next, keys);
@@ -495,6 +532,180 @@ async function relayToNext(c: Campaign, from: Keypair, token: CampaignToken, key
     if (isInsufficientFunds(msg) && token.status !== "live") markDry(c, token, left / LAMPORTS_PER_SOL, msg);
     else measureRelay(c, left / LAMPORTS_PER_SOL);
   }
+}
+
+type WalletBag = { mint: string; amount: number; account: PublicKey; program: PublicKey };
+
+async function listWalletBags(owner: string): Promise<WalletBag[]> {
+  const conn = connection();
+  const ownerPk = new PublicKey(owner);
+  const [legacy, t22] = await Promise.all([
+    conn.getParsedTokenAccountsByOwner(ownerPk, { programId: new PublicKey(TOKEN_PROGRAM) }),
+    conn.getParsedTokenAccountsByOwner(ownerPk, { programId: new PublicKey(TOKEN_2022_PROGRAM) }),
+  ]);
+  const out: WalletBag[] = [];
+  const push = (row: { pubkey: PublicKey; account: { data: unknown } }, program: PublicKey) => {
+    const data = row.account.data as {
+      parsed?: { info?: { mint?: string; tokenAmount?: { uiAmount?: number } } };
+    };
+    const mint = data?.parsed?.info?.mint || "";
+    const amount = Number(data?.parsed?.info?.tokenAmount?.uiAmount) || 0;
+    if (!isSolanaAddress(mint) || mint === SOL_MINT || !(amount > 0)) return;
+    out.push({ mint, amount, account: row.pubkey, program });
+  };
+  for (const row of legacy.value) push(row, TOKEN_PROGRAM_ID);
+  for (const row of t22.value) push(row, TOKEN_2022_PROGRAM_ID);
+  return out;
+}
+
+async function sellHolding(kp: Keypair, mint: string, tokens: number): Promise<{ sig: string; solOut: number } | null> {
+  if (!(tokens > 0) || !isSolanaAddress(mint)) return null;
+  const dbc = await import("../launch/dbc");
+  const built = await dbc.buildDbcTradeTx({
+    mint,
+    owner: kp.publicKey.toBase58(),
+    side: "sell",
+    tokens,
+  });
+  if (!built.ok) return null;
+  const sig = await signSend(built.transaction, [kp]);
+  await waitForSignature(sig, 24);
+  return { sig, solOut: Number(built.solOut) || 0 };
+}
+
+async function closeEmptyBags(kp: Keypair, bags: WalletBag[]): Promise<string | null> {
+  if (!bags.length) return null;
+  const conn = connection();
+  const ixs = [];
+  for (const bag of bags) {
+    try {
+      const info = await conn.getTokenAccountBalance(bag.account, "confirmed");
+      if (BigInt(info.value.amount || "0") !== 0n) continue;
+      ixs.push(createCloseAccountInstruction(bag.account, kp.publicKey, kp.publicKey, [], bag.program));
+    } catch {
+      /* leave the ATA */
+    }
+  }
+  if (!ixs.length) return null;
+  const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash("confirmed");
+  const tx = new Transaction().add(
+    ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 50_000 }),
+    ...ixs.slice(0, 8),
+  );
+  tx.feePayer = kp.publicKey;
+  tx.recentBlockhash = blockhash;
+  tx.lastValidBlockHeight = lastValidBlockHeight;
+  tx.sign(kp);
+  const sig = await broadcastB64(bytesToB64(tx.serialize()), { skipPreflight: true });
+  await waitForSignature(sig, 20);
+  return sig;
+}
+
+async function sellAllHoldings(kp: Keypair, token: CampaignToken): Promise<number> {
+  let recovered = 0;
+  for (let pass = 0; pass < 4; pass++) {
+    const bags = await listWalletBags(kp.publicKey.toBase58());
+    if (!bags.length) break;
+    bags.sort((a, b) => {
+      if (token.mint && a.mint === token.mint) return -1;
+      if (token.mint && b.mint === token.mint) return 1;
+      return b.amount - a.amount;
+    });
+    let any = false;
+    for (const bag of bags) {
+      try {
+        const sold = await sellHolding(kp, bag.mint, bag.amount);
+        if (!sold) continue;
+        any = true;
+        recovered += sold.solOut;
+        token.sigs.push(sold.sig);
+      } catch {
+        /* try the next bag */
+      }
+    }
+    try {
+      const closed = await closeEmptyBags(kp, bags);
+      if (closed) token.sigs.push(closed);
+    } catch {
+      /* rent reclaim is best-effort */
+    }
+    if (!any) break;
+  }
+  token.dumpSol = (token.dumpSol || 0) + recovered;
+  return recovered;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function waitForDump(dumpAt: number): Promise<void> {
+  const wait = Math.min(DUMP_DELAY_MS + 5_000, Math.max(0, dumpAt - Date.now()));
+  if (wait > 0) await sleep(wait);
+}
+
+async function dumpAndAdvance(c: Campaign, token: CampaignToken): Promise<void> {
+  const keys = await loadKeys();
+  if (!token.wallet || !keys[token.wallet]) {
+    token.dumped = true;
+    return;
+  }
+  const kp = walletOf(keys[token.wallet]!);
+  await waitForDump(token.dumpAt || 0);
+  try {
+    await sellAllHoldings(kp, token);
+  } catch {
+    /* still hop the leftover SOL */
+  }
+  token.dumped = true;
+  await relayToNext(c, kp, token, keys);
+}
+
+async function closeOutCampaign(c: Campaign, opts?: { limit?: number }): Promise<void> {
+  const keys = await loadKeys();
+  const owner = ownerAddress();
+  if (!isSolanaAddress(owner)) return;
+  const to = new PublicKey(owner);
+  const limit = Math.max(1, Math.min(12, opts?.limit ?? 8));
+  let sent = 0;
+  for (const token of c.tokens) {
+    if (sent >= limit) break;
+    if (!token.wallet || !keys[token.wallet]) continue;
+    const kp = walletOf(keys[token.wallet]!);
+    if (kp.publicKey.toBase58() === owner) continue;
+    if (!token.dumped && (token.status === "live" || token.mint)) {
+      try {
+        await sellAllHoldings(kp, token);
+      } catch {
+        /* SOL still moves */
+      }
+      token.dumped = true;
+    }
+    const bal = await connection().getBalance(kp.publicKey, "confirmed").catch(() => 0);
+    if (bal <= RELAY_FEE_LAMPORTS) continue;
+    try {
+      const relayed = await relayAll(kp, to);
+      if (relayed.sig) token.sigs.push(relayed.sig);
+      const sol = relayed.lamports / LAMPORTS_PER_SOL;
+      token.returnedSol = (token.returnedSol || 0) + sol;
+      c.returnedSol = (c.returnedSol || 0) + sol;
+      sent += 1;
+    } catch {
+      /* next wallet */
+    }
+  }
+  await saveCampaign(c);
+}
+
+function pendingDump(c: Campaign): CampaignToken | undefined {
+  return c.tokens.find((t) => t.status === "live" && !t.dumped && Boolean(t.wallet));
+}
+
+function nextWorkAt(c: Campaign): number | undefined {
+  const dump = pendingDump(c);
+  const next = c.tokens.find((t) => t.status === "queued" || t.status === "funding" || t.status === "launching");
+  const times = [dump?.dumpAt, next?.scheduledAt].filter((n): n is number => Boolean(n));
+  return times.length ? Math.min(...times) : undefined;
 }
 
 async function pinMeta(token: CampaignToken): Promise<{ image: string; uri: string }> {
@@ -563,6 +774,7 @@ async function launchOne(c: Campaign, token: CampaignToken): Promise<CampaignTok
     const left = await conn.getBalance(walletKp.publicKey, "confirmed").catch(() => 0);
     if (isInsufficientFunds(msg)) {
       markDry(c, token, left / LAMPORTS_PER_SOL, msg);
+      await returnWalletToOwner(c, walletKp, token);
       return token;
     }
     token.status = "failed";
@@ -602,6 +814,7 @@ async function launchOne(c: Campaign, token: CampaignToken): Promise<CampaignTok
     const left = await conn.getBalance(walletKp.publicKey, "confirmed").catch(() => 0);
     if (isInsufficientFunds(msg)) {
       markDry(c, token, left / LAMPORTS_PER_SOL, msg);
+      await returnWalletToOwner(c, walletKp, token);
       return token;
     }
     token.status = "failed";
@@ -656,8 +869,9 @@ async function launchOne(c: Campaign, token: CampaignToken): Promise<CampaignTok
   }
   token.status = "live";
   token.launchedAt = Date.now();
+  token.dumpAt = token.launchedAt + DUMP_DELAY_MS;
+  token.dumped = false;
   token.error = undefined;
-  await relayToNext(c, walletKp, token, keys);
   return token;
 }
 
@@ -667,6 +881,19 @@ function nextQueued(c: Campaign, now: number): CampaignToken | undefined {
     .sort((a, b) => a.scheduledAt - b.scheduledAt)[0];
 }
 
+async function finishTickState(c: Campaign) {
+  const next = c.tokens.find((t) => t.status === "queued" || t.status === "funding" || t.status === "launching");
+  const dump = pendingDump(c);
+  c.nextAt = nextWorkAt(c);
+  if (!next && !dump && c.status === "running") {
+    c.status = "done";
+    c.nextAt = undefined;
+    await closeOutCampaign(c, { limit: 8 });
+    return;
+  }
+  await saveCampaign(c);
+}
+
 export async function tickBatchLaunch(opts?: { limit?: number }): Promise<{
   ran: number;
   failed: number;
@@ -674,7 +901,19 @@ export async function tickBatchLaunch(opts?: { limit?: number }): Promise<{
   nextAt?: number;
 }> {
   const c0 = await loadCampaign();
-  if (c0.status !== "running") return { ran: 0, failed: 0, status: c0.status, nextAt: c0.nextAt };
+  if (c0.status !== "running") {
+    if (c0.status === "stopped" || c0.status === "done") {
+      try {
+        await withLaunchLock(async () => {
+          const c = await loadCampaign();
+          await closeOutCampaign(c, { limit: 6 });
+        });
+      } catch {
+        /* desk still loads */
+      }
+    }
+    return { ran: 0, failed: 0, status: c0.status, nextAt: c0.nextAt };
+  }
   const locked = await withLaunchLock(async () => {
     let ran = 0;
     let failed = 0;
@@ -682,31 +921,40 @@ export async function tickBatchLaunch(opts?: { limit?: number }): Promise<{
     for (let i = 0; i < limit; i++) {
       const c = await loadCampaign();
       if (c.status !== "running") break;
+      const dump = pendingDump(c);
+      if (dump) {
+        const idx = c.tokens.findIndex((t) => t.id === dump.id);
+        try {
+          await dumpAndAdvance(c, dump);
+          if (idx >= 0) c.tokens[idx] = dump;
+        } catch (e) {
+          dump.error = e instanceof Error ? e.message : "Dump failed.";
+          dump.dumped = true;
+          if (idx >= 0) c.tokens[idx] = dump;
+        }
+        await finishTickState(c);
+        if (c.dry || c.status !== "running") break;
+        continue;
+      }
       const now = Date.now();
       const token = nextQueued(c, now);
       if (!token) {
-        const pending = c.tokens.find((t) => t.status === "queued" || t.status === "funding" || t.status === "launching");
-        if (!pending) {
-          c.status = "done";
-          c.nextAt = undefined;
-          await saveCampaign(c);
-        } else {
-          c.nextAt = pending.scheduledAt;
-          await saveCampaign(c);
-        }
+        await finishTickState(c);
         break;
       }
       const idx = c.tokens.findIndex((t) => t.id === token.id);
       try {
         const live = await launchOne(c, token);
         if (idx >= 0) c.tokens[idx] = live;
-        if (live.status === "live") ran += 1;
-        else failed += 1;
+        if (live.status === "live") {
+          ran += 1;
+          c.lastLaunchAt = Date.now();
+          await saveCampaign(c);
+          await dumpAndAdvance(c, live);
+          if (idx >= 0) c.tokens[idx] = live;
+        } else failed += 1;
         c.lastLaunchAt = Date.now();
-        const next = c.tokens.find((t) => t.status === "queued" || t.status === "funding" || t.status === "launching");
-        c.nextAt = next?.scheduledAt;
-        if (!next && c.status === "running") c.status = "done";
-        await saveCampaign(c);
+        await finishTickState(c);
         if (c.dry || c.status !== "running") break;
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Launch failed.";
@@ -784,5 +1032,6 @@ export function campaignSummary(c: Campaign) {
     measuredCostSol: Number(c.measuredCostSol) || 0,
     relayLeftSol: Number(c.relayLeftSol) || 0,
     relayFunded: Boolean(c.relayFunded),
+    returnedSol: Number(c.returnedSol) || 0,
   };
 }

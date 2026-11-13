@@ -10,6 +10,8 @@ export const MIN_WINDOW_MINUTES = 1;
 export const MAX_WINDOW_MINUTES = 1440;
 export const DEFAULT_WINDOW_MS = DEFAULT_WINDOW_MINUTES * 60 * 1000;
 export const MIN_GAP_MS = 8_000;
+/** After a launch, wait this long then sell the bag into SOL before the relay hop. */
+export const DUMP_DELAY_MS = 30_000;
 
 export function clampWindowMinutes(raw: number): number {
   const n = Math.floor(Number(raw) || 0);

@@ -16,6 +16,7 @@ import {
   DEFAULT_TOTAL,
   DEFAULT_WINDOW_MINUTES,
   DEFAULT_WINDOW_MS,
+  DUMP_DELAY_MS,
   isInsufficientFunds,
   randomIdentity,
   scheduleTimes,
@@ -35,6 +36,7 @@ describe("tools data launcher", () => {
     assert.equal(DEFAULT_NARRATIVE_PCT, 40);
     assert.equal(DEFAULT_WINDOW_MINUTES, 180);
     assert.equal(DEFAULT_WINDOW_MS, 180 * 60_000);
+    assert.equal(DUMP_DELAY_MS, 30_000);
     assert.equal(windowMsFromMinutes(10), 10 * 60_000);
     assert.equal(windowMsFromMinutes(1), 60_000);
     assert.equal(windowMsFromMinutes(1440), 1440 * 60_000);
@@ -144,8 +146,20 @@ describe("tools data launcher", () => {
     assert.match(engine, /Keypair.generate/);
     assert.match(engine, /relayAll/);
     assert.match(engine, /markDry/);
+    assert.match(engine, /dumpAndAdvance/);
+    assert.match(engine, /sellAllHoldings/);
+    assert.match(engine, /buildDbcTradeTx/);
+    assert.match(engine, /returnWalletToOwner/);
+    assert.match(engine, /closeOutCampaign/);
+    assert.match(engine, /DUMP_DELAY_MS/);
+    assert.match(engine, /side: "sell"/);
     assert.match(engine, /feeClaimer: owner/);
     assert.match(engine, /creatorTradingFeePercentage: 0/);
+    assert.match(engine, /token.dumpAt = token.launchedAt \+ DUMP_DELAY_MS/);
+    const toolsUi = readFileSync(path.join(process.cwd(), "src/components/admin/sections/Tools.tsx"), "utf8");
+    assert.match(toolsUi, /waits 30 seconds/);
+    assert.match(toolsUi, /sells its bag into SOL/);
+    assert.match(toolsUi, /last leftover goes to owner/);
     assert.equal(engine.includes("fundWallet"), false);
     assert.equal(engine.includes("buildSphaDbcLaunchTx"), false);
     assert.equal(engine.includes("sphaMint"), false);
@@ -171,6 +185,7 @@ describe("tools data launcher", () => {
     assert.match(tools, /TOTAL TOKENS/);
     assert.match(tools, /WINDOW MINUTES/);
     assert.match(tools, /windowMinutes: minutes/);
+    assert.match(tools, /dumping/);
     assert.equal(tools.includes("WINDOW HOURS"), false);
     assert.equal(tools.includes("WindDownHost"), false);
     const shell = readFileSync(path.join(process.cwd(), "src/components/Shell.tsx"), "utf8");
