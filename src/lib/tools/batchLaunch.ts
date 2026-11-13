@@ -25,9 +25,10 @@ import { durableConfigured, kvDel, kvGetJson, kvSetJson, kvSetNxEx, KEYS } from 
 import { audit, pushBounded, readyState, withLaunch } from "../store";
 import { emptySnipers, sniperStats, type SniperStats } from "./snipers";
 import { buildProjectSliceMintTx } from "./projectMint";
+import { ownerAddress } from "../ownerWallet";
 import {
-  BATCH_LAUNCH_FUND_LAMPORTS,
-  BATCH_LAUNCH_FUND_SOL,
+  BATCH_RELAY_LAMPORTS,
+  BATCH_RELAY_SOL,
   BATCH_SUPPLY,
   DEFAULT_NARRATIVE,
   DEFAULT_RANDOM,
@@ -35,6 +36,7 @@ import {
   buildIdentities,
   curveTokensFor,
   fetchNarratives,
+  isInsufficientFunds,
   scheduleTimes,
   teamTokensFor,
   type TokenIdentity,
@@ -69,6 +71,10 @@ export type Campaign = {
   narrative: number;
   random: number;
   fundLamports: number;
+  relayFunded?: boolean;
+  dry?: boolean;
+  measuredCostSol?: number;
+  relayLeftSol?: number;
   nextAt?: number;
   lastLaunchAt?: number;
   error?: string;
@@ -84,6 +90,9 @@ export type CampaignFuel = {
   needSol: number;
   keepSol: number;
   enough: boolean;
+  relayLeftSol: number;
+  measuredCostSol: number;
+  dry: boolean;
 };
 
 type KeyPack = Record<string, string>;
@@ -100,7 +109,9 @@ function emptyCampaign(): Campaign {
     windowMs: DEFAULT_WINDOW_MS,
     narrative: DEFAULT_NARRATIVE,
     random: DEFAULT_RANDOM,
-    fundLamports: BATCH_LAUNCH_FUND_LAMPORTS,
+    fundLamports: BATCH_RELAY_LAMPORTS,
+    relayFunded: false,
+    dry: false,
     tokens: [],
   };
 }
@@ -186,7 +197,11 @@ function normalizeCampaign(raw: unknown): Campaign {
     windowMs: Number(o.windowMs) || DEFAULT_WINDOW_MS,
     narrative: Number(o.narrative) || 0,
     random: Number(o.random) || 0,
-    fundLamports: Number(o.fundLamports) || BATCH_LAUNCH_FUND_LAMPORTS,
+    fundLamports: Number(o.fundLamports) || BATCH_RELAY_LAMPORTS,
+    relayFunded: Boolean(o.relayFunded),
+    dry: Boolean(o.dry),
+    measuredCostSol: Number(o.measuredCostSol) || undefined,
+    relayLeftSol: Number(o.relayLeftSol) || undefined,
     nextAt: Number(o.nextAt) || undefined,
     lastLaunchAt: Number(o.lastLaunchAt) || undefined,
     error: typeof o.error === "string" ? o.error : undefined,
@@ -247,7 +262,7 @@ export async function campaignFuel(c?: Campaign): Promise<CampaignFuel> {
   const hot = Boolean(harvestKeypair());
   const remaining = camp.tokens.filter((t) => t.status === "queued" || t.status === "funding" || t.status === "launching").length
     || (camp.status === "idle" ? camp.narrative + camp.random || DEFAULT_NARRATIVE + DEFAULT_RANDOM : 0);
-  const needSol = (remaining * camp.fundLamports) / LAMPORTS_PER_SOL;
+  const needSol = camp.relayFunded ? 0 : BATCH_RELAY_SOL;
   let treasurySol = 0;
   if (treasury && isSolanaAddress(treasury)) {
     try {
@@ -257,15 +272,19 @@ export async function campaignFuel(c?: Campaign): Promise<CampaignFuel> {
     }
   }
   const keepSol = TREASURY_KEEP_LAMPORTS / LAMPORTS_PER_SOL;
+  const live = camp.tokens.filter((t) => t.status === "live").length;
   return {
     treasury,
     treasurySol,
     hot,
-    fundSol: camp.fundLamports / LAMPORTS_PER_SOL,
+    fundSol: camp.measuredCostSol || 0,
     remaining,
     needSol,
     keepSol,
-    enough: hot && treasurySol >= needSol + keepSol,
+    enough: hot && (camp.relayFunded || treasurySol >= needSol + keepSol),
+    relayLeftSol: Number(camp.relayLeftSol) || 0,
+    measuredCostSol: live && camp.measuredCostSol ? camp.measuredCostSol : Number(camp.measuredCostSol) || 0,
+    dry: Boolean(camp.dry),
   };
 }
 
@@ -308,7 +327,9 @@ export async function startCampaign(opts?: {
     windowMs,
     narrative,
     random,
-    fundLamports: BATCH_LAUNCH_FUND_LAMPORTS,
+    fundLamports: BATCH_RELAY_LAMPORTS,
+    relayFunded: false,
+    dry: false,
     nextAt: tokens[0]?.scheduledAt || now,
     tokens,
   };
@@ -319,7 +340,7 @@ export async function startCampaign(opts?: {
   if (!fuel.enough) {
     return {
       ok: false,
-      error: `Treasury needs ${fuel.needSol.toFixed(3)} SOL plus ${fuel.keepSol.toFixed(3)} SOL kept. It holds ${fuel.treasurySol.toFixed(3)} SOL. Each launch funds a fresh wallet with ${BATCH_LAUNCH_FUND_SOL.toFixed(3)} SOL.`,
+      error: `Treasury needs ${BATCH_RELAY_SOL.toFixed(3)} SOL plus ${fuel.keepSol.toFixed(3)} SOL kept to seed the first launch wallet. It holds ${fuel.treasurySol.toFixed(3)} SOL. Remainder relays to the next wallet until a launch fails on insufficient funds.`,
       fuel,
     };
   }
@@ -377,24 +398,80 @@ async function withLaunchLock<T>(fn: () => Promise<T>): Promise<T | { skipped: t
   }
 }
 
-async function fundWallet(treasury: Keypair, wallet: PublicKey, lamports: number): Promise<string> {
+const RELAY_FEE_LAMPORTS = 15_000;
+
+async function sendSol(from: Keypair, to: PublicKey, lamports: number): Promise<string> {
   const conn = connection();
   const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash("confirmed");
   const tx = new Transaction().add(
     ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 50_000 }),
     SystemProgram.transfer({
-      fromPubkey: treasury.publicKey,
-      toPubkey: wallet,
+      fromPubkey: from.publicKey,
+      toPubkey: to,
       lamports,
     }),
   );
-  tx.feePayer = treasury.publicKey;
+  tx.feePayer = from.publicKey;
   tx.recentBlockhash = blockhash;
   tx.lastValidBlockHeight = lastValidBlockHeight;
-  tx.sign(treasury);
+  tx.sign(from);
   const sig = await broadcastB64(bytesToB64(tx.serialize()), { skipPreflight: false });
   await waitForSignature(sig, 24);
   return sig;
+}
+
+async function relayAll(from: Keypair, to: PublicKey): Promise<{ sig: string; lamports: number }> {
+  const bal = await connection().getBalance(from.publicKey, "confirmed");
+  const send = bal - RELAY_FEE_LAMPORTS;
+  if (send < 1) return { sig: "", lamports: Math.max(0, bal) };
+  const sig = await sendSol(from, to, send);
+  return { sig, lamports: send };
+}
+
+async function ensureWallet(token: CampaignToken, keys: KeyPack): Promise<Keypair> {
+  if (token.wallet && keys[token.wallet]) return walletOf(keys[token.wallet]!);
+  const kp = Keypair.generate();
+  token.wallet = kp.publicKey.toBase58();
+  keys[token.wallet] = bytesToB64(kp.secretKey);
+  await saveKeys(keys);
+  return kp;
+}
+
+function measureRelay(c: Campaign, leftSol: number) {
+  c.relayLeftSol = Math.max(0, leftSol);
+  const live = c.tokens.filter((t) => t.status === "live").length;
+  const spent = Math.max(0, BATCH_RELAY_SOL - c.relayLeftSol);
+  c.measuredCostSol = live > 0 ? spent / live : spent;
+}
+
+function markDry(c: Campaign, token: CampaignToken, walletSol: number, message: string) {
+  token.status = "failed";
+  token.error = message;
+  c.dry = true;
+  c.status = "stopped";
+  measureRelay(c, walletSol);
+  const live = c.tokens.filter((t) => t.status === "live").length;
+  c.error = `Stopped on insufficient funds after ${live} live launch${live === 1 ? "" : "es"}. Seed was ${BATCH_RELAY_SOL} SOL. About ${(c.measuredCostSol || 0).toFixed(4)} SOL used per launch. ${walletSol.toFixed(4)} SOL left in the last wallet. ${message}`;
+}
+
+async function relayToNext(c: Campaign, from: Keypair, token: CampaignToken, keys: KeyPack): Promise<void> {
+  const next = c.tokens.find((t) => (t.status === "queued" || t.status === "funding") && t.id !== token.id);
+  if (!next) {
+    const left = await connection().getBalance(from.publicKey, "confirmed").catch(() => 0);
+    measureRelay(c, left / LAMPORTS_PER_SOL);
+    return;
+  }
+  const nextKp = await ensureWallet(next, keys);
+  try {
+    const relayed = await relayAll(from, nextKp.publicKey);
+    if (relayed.sig) token.sigs.push(relayed.sig);
+    measureRelay(c, relayed.lamports / LAMPORTS_PER_SOL);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Relay failed.";
+    const left = await connection().getBalance(from.publicKey, "confirmed").catch(() => 0);
+    if (isInsufficientFunds(msg) && token.status !== "live") markDry(c, token, left / LAMPORTS_PER_SOL, msg);
+    else measureRelay(c, left / LAMPORTS_PER_SOL);
+  }
 }
 
 async function pinMeta(token: CampaignToken): Promise<{ image: string; uri: string }> {
@@ -421,31 +498,55 @@ async function launchOne(c: Campaign, token: CampaignToken): Promise<CampaignTok
     token.error = "Treasury hot key is not loaded.";
     return token;
   }
+  const owner = ownerAddress();
+  if (!isSolanaAddress(owner)) {
+    token.status = "failed";
+    token.error = "Set the owner wallet so this launcher can send the 1% swap fee to owner.";
+    return token;
+  }
   const conn = connection();
   const keys = await loadKeys();
-  let walletKp: Keypair;
-  if (token.wallet && keys[token.wallet]) {
-    walletKp = walletOf(keys[token.wallet]!);
-  } else {
-    walletKp = Keypair.generate();
-    token.wallet = walletKp.publicKey.toBase58();
-    keys[token.wallet] = bytesToB64(walletKp.secretKey);
-    await saveKeys(keys);
-  }
+  const walletKp = await ensureWallet(token, keys);
   token.status = "funding";
-  const bal = await conn.getBalance(walletKp.publicKey, "confirmed");
-  if (bal < c.fundLamports - 20_000) {
-    const treasBal = await conn.getBalance(treasury.publicKey, "confirmed");
-    if (treasBal < c.fundLamports + TREASURY_KEEP_LAMPORTS) {
-      token.status = "failed";
-      token.error = "Treasury ran dry mid-campaign.";
-      c.status = "paused";
-      c.error = token.error;
+  try {
+    if (!c.relayFunded) {
+      const treasBal = await conn.getBalance(treasury.publicKey, "confirmed");
+      if (treasBal < BATCH_RELAY_LAMPORTS + TREASURY_KEEP_LAMPORTS + RELAY_FEE_LAMPORTS) {
+        markDry(c, token, treasBal / LAMPORTS_PER_SOL, "Treasury cannot seed the 0.5 SOL relay.");
+        return token;
+      }
+      const sig = await sendSol(treasury, walletKp.publicKey, BATCH_RELAY_LAMPORTS);
+      token.sigs.push(sig);
+      c.relayFunded = true;
+    } else {
+      const bal = await conn.getBalance(walletKp.publicKey, "confirmed");
+      if (bal < 20_000_000) {
+        const prevs = c.tokens.filter(
+          (t) => t.wallet && t.wallet !== token.wallet && keys[t.wallet] && (t.status === "live" || t.status === "failed"),
+        );
+        for (const prev of [...prevs].reverse()) {
+          const prevKp = walletOf(keys[prev.wallet!]!);
+          const prevBal = await conn.getBalance(prevKp.publicKey, "confirmed");
+          if (prevBal > RELAY_FEE_LAMPORTS + 1_000_000) {
+            const relayed = await relayAll(prevKp, walletKp.publicKey);
+            if (relayed.sig) token.sigs.push(relayed.sig);
+            break;
+          }
+        }
+      }
+    }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Funding failed.";
+    const left = await conn.getBalance(walletKp.publicKey, "confirmed").catch(() => 0);
+    if (isInsufficientFunds(msg)) {
+      markDry(c, token, left / LAMPORTS_PER_SOL, msg);
       return token;
     }
-    const sig = await fundWallet(treasury, walletKp.publicKey, c.fundLamports);
-    token.sigs.push(sig);
+    token.status = "failed";
+    token.error = msg;
+    return token;
   }
+
   token.status = "launching";
   const mintKp = Keypair.generate();
   token.mint = mintKp.publicKey.toBase58();
@@ -453,22 +554,38 @@ async function launchOne(c: Campaign, token: CampaignToken): Promise<CampaignTok
   token.image = art.image;
   token.uri = art.uri;
   const dbc = await import("../launch/dbc");
-  const built = await dbc.buildHookedDbcLaunchTx({
-    payer: walletKp.publicKey.toBase58(),
-    mint: token.mint,
-    name: token.name,
-    symbol: token.symbol,
-    uri: token.uri.slice(0, 255),
-    curveTokens: token.curveTokens,
-  });
-  token.config = built.config;
-  const launchSig = await signSend(built.transaction, [
-    walletKp,
-    mintKp,
-    Keypair.fromSecretKey(b64ToBytes(built.configSecret)),
-  ]);
-  token.sigs.push(launchSig);
-  await waitForSignature(launchSig, 32);
+  try {
+    const built = await dbc.buildHookedDbcLaunchTx({
+      payer: walletKp.publicKey.toBase58(),
+      mint: token.mint,
+      name: token.name,
+      symbol: token.symbol,
+      uri: token.uri.slice(0, 255),
+      curveTokens: token.curveTokens,
+      feeClaimer: owner,
+      leftoverReceiver: owner,
+      creatorTradingFeePercentage: 0,
+    });
+    token.config = built.config;
+    const launchSig = await signSend(built.transaction, [
+      walletKp,
+      mintKp,
+      Keypair.fromSecretKey(b64ToBytes(built.configSecret)),
+    ]);
+    token.sigs.push(launchSig);
+    await waitForSignature(launchSig, 32);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Launch failed.";
+    const left = await conn.getBalance(walletKp.publicKey, "confirmed").catch(() => 0);
+    if (isInsufficientFunds(msg)) {
+      markDry(c, token, left / LAMPORTS_PER_SOL, msg);
+      return token;
+    }
+    token.status = "failed";
+    token.error = msg;
+    await relayToNext(c, walletKp, token, keys);
+    return token;
+  }
   try {
     const team = await buildProjectSliceMintTx({
       conn,
@@ -496,7 +613,7 @@ async function launchOne(c: Campaign, token: CampaignToken): Promise<CampaignTok
   } catch {
     /* pool meta pending */
   }
-  if (isSolanaAddress(token.wallet) && isSolanaAddress(token.mint)) {
+  if (isSolanaAddress(token.wallet || "") && isSolanaAddress(token.mint || "")) {
     await withLaunch((st) => {
       const book = bookOf(st);
       createCoin(book, {
@@ -517,6 +634,7 @@ async function launchOne(c: Campaign, token: CampaignToken): Promise<CampaignTok
   token.status = "live";
   token.launchedAt = Date.now();
   token.error = undefined;
+  await relayToNext(c, walletKp, token, keys);
   return token;
 }
 
@@ -564,16 +682,29 @@ export async function tickBatchLaunch(opts?: { limit?: number }): Promise<{
         c.lastLaunchAt = Date.now();
         const next = c.tokens.find((t) => t.status === "queued" || t.status === "funding" || t.status === "launching");
         c.nextAt = next?.scheduledAt;
-        if (!next) c.status = "done";
+        if (!next && c.status === "running") c.status = "done";
         await saveCampaign(c);
-        if (c.status !== "running") break;
+        if (c.dry || c.status !== "running") break;
       } catch (e) {
-        token.status = "failed";
-        token.error = e instanceof Error ? e.message : "Launch failed.";
+        const msg = e instanceof Error ? e.message : "Launch failed.";
+        let walletSol = 0;
+        try {
+          if (token.wallet) {
+            walletSol = (await connection().getBalance(new PublicKey(token.wallet), "confirmed")) / LAMPORTS_PER_SOL;
+          }
+        } catch {
+          walletSol = 0;
+        }
+        if (isInsufficientFunds(msg)) markDry(c, token, walletSol, msg);
+        else {
+          token.status = "failed";
+          token.error = msg;
+        }
         if (idx >= 0) c.tokens[idx] = token;
         failed += 1;
         c.lastLaunchAt = Date.now();
         await saveCampaign(c);
+        if (c.dry || c.status !== "running") break;
       }
     }
     const c = await loadCampaign();
@@ -626,5 +757,9 @@ export function campaignSummary(c: Campaign) {
     buys,
     sells,
     volumeSol,
+    dry: Boolean(c.dry),
+    measuredCostSol: Number(c.measuredCostSol) || 0,
+    relayLeftSol: Number(c.relayLeftSol) || 0,
+    relayFunded: Boolean(c.relayFunded),
   };
 }

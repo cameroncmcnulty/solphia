@@ -157,6 +157,8 @@ describe("platform snapshot", () => {
     const overview = fs.readFileSync(path.join(process.cwd(), "src/components/admin/sections/Overview.tsx"), "utf8");
     assert.match(overview, /PLATFORM · SPONSOR SNAPSHOT/);
     assert.match(overview, /SOL in wallets/);
+    assert.match(overview, /user-held · non-custodial/);
+    assert.match(overview, /Open Tools sweep/);
     const mergeDesk = fs.readFileSync(path.join(process.cwd(), "src/components/admin/ui.tsx"), "utf8");
     assert.match(mergeDesk, /mergePlatformSnapshot/);
     const stream = fs.readFileSync(path.join(process.cwd(), "src/app/api/admin/stream/route.ts"), "utf8");

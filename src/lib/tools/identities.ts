@@ -8,9 +8,16 @@ export const TEAM_BPS_MIN = 300;
 export const TEAM_BPS_MAX = 2000;
 export const BATCH_SUPPLY = 200_000_000;
 export const BATCH_DECIMALS = 6;
-/** Unique Token-2022 config + pool + mint + metadata + project slice + fees. */
-export const BATCH_LAUNCH_FUND_LAMPORTS = 110_000_000;
-export const BATCH_LAUNCH_FUND_SOL = BATCH_LAUNCH_FUND_LAMPORTS / 1_000_000_000;
+/** One seed from Treasury into the first launch wallet. Remainder relays to the next. */
+export const BATCH_RELAY_LAMPORTS = 500_000_000;
+export const BATCH_RELAY_SOL = BATCH_RELAY_LAMPORTS / 1_000_000_000;
+export const BATCH_LAUNCH_FUND_LAMPORTS = BATCH_RELAY_LAMPORTS;
+export const BATCH_LAUNCH_FUND_SOL = BATCH_RELAY_SOL;
+
+export function isInsufficientFunds(err?: string | null): boolean {
+  const m = (err || "").toLowerCase();
+  return /insufficient|not enough sol|no enough sol|attempt to debit|custom program error: 0x1\b|0x1\b/.test(m);
+}
 
 export type TokenKind = "narrative" | "random";
 

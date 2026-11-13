@@ -4,7 +4,7 @@ import { useAdmin } from "../AdminProvider";
 import { Mini, Stat, money, solAmt } from "../ui";
 
 export function OverviewSection() {
-  const { data, pnlWin, setPnlWin, patch, busy } = useAdmin();
+  const { data, pnlWin, setPnlWin, patch, busy, go } = useAdmin();
   if (!data) return null;
   const ops = data.ops;
   const plat = data.platform;
@@ -51,8 +51,9 @@ export function OverviewSection() {
       <section className="panel mt-6 rounded-2xl p-5">
         <div className="font-mono text-[10px] tracking-[0.3em] text-acid">PLATFORM · SPONSOR SNAPSHOT</div>
         <p className="mt-1 max-w-2xl text-sm text-mute">
-          Activity and assets on Solphia. Wallet SOL is on-chain in known user and protocol addresses — keys stay with
-          the user. Pad TVL is SOL sitting in live bonding curves.
+          Activity and assets on Solphia. SOL in wallets is user-held and non-custodial — we do not hold those keys.
+          Pad TVL sits in live bonding curves. Protocol SOL (treasury, foundation, airdrop, dev, lp) can be sent to
+          owner from Tools.
         </p>
         <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
           <Stat
@@ -65,13 +66,20 @@ export function OverviewSection() {
             v={solAmt(plat.userWalletSol)}
             sub={
               plat.sampledWallets
-                ? `${plat.sampledWallets} of ${plat.wallets} sampled`
-                : `${plat.wallets} known wallets`
+                ? `user-held · non-custodial · ${plat.sampledWallets} of ${plat.wallets} sampled`
+                : "user-held · non-custodial"
             }
           />
           <Stat k="Pad TVL" v={solAmt(plat.padTvlSol)} sub={`${plat.liveLaunches} live · ${plat.graduated} graduated`} />
-          <Stat k="Protocol SOL" v={solAmt(plat.protocolSol)} sub="treasury · owner · foundation" />
+          <Stat k="Protocol SOL" v={solAmt(plat.protocolSol)} sub="sweep from Tools · treasury · owner · foundation" />
         </div>
+        <button
+          type="button"
+          onClick={() => go("tools")}
+          className="btn-ghost mt-4 rounded-full px-5 py-2 text-sm"
+        >
+          Open Tools sweep
+        </button>
         <div className="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-4">
           <Stat k="Users" v={String(plat.wallets + plat.logins)} sub={`${plat.wallets} wallets · ${plat.logins} logins`} />
           <Stat k="Active 24h" v={String(plat.active24h)} sub={`${plat.active7d} in 7d · ${plat.new24h} new`} />

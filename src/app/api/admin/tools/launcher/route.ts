@@ -14,6 +14,7 @@ import {
   stopCampaign,
   tickBatchLaunch,
 } from "@/lib/tools/batchLaunch";
+import { previewProtocolSweep, sweepProtocolToOwner } from "@/lib/tools/protocolSweep";
 import {
   DEFAULT_NARRATIVE,
   DEFAULT_RANDOM,
@@ -24,7 +25,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 const Body = z.object({
-  action: z.enum(["start", "pause", "resume", "stop", "reset", "tick"]),
+  action: z.enum(["start", "pause", "resume", "stop", "reset", "tick", "sweepProtocol"]),
   narrative: z.number().int().min(0).max(400).optional(),
   random: z.number().int().min(0).max(400).optional(),
   windowHours: z.number().min(0.05).max(24).optional(),
@@ -33,7 +34,8 @@ const Body = z.object({
 async function desk() {
   const campaign = publicCampaign(await loadCampaign());
   const fuel = await campaignFuel(campaign);
-  return { campaign, fuel, summary: campaignSummary(campaign) };
+  const sweep = await previewProtocolSweep().catch(() => null);
+  return { campaign, fuel, summary: campaignSummary(campaign), sweep };
 }
 
 export async function GET(req: NextRequest) {
@@ -81,6 +83,16 @@ export async function POST(req: NextRequest) {
     } else if (b.action === "stop") await stopCampaign();
     else if (b.action === "reset") await resetCampaign();
     else if (b.action === "tick") await tickBatchLaunch({ limit: 1 });
+    else if (b.action === "sweepProtocol") {
+      const result = await sweepProtocolToOwner();
+      if (!result.ok) {
+        return NextResponse.json(
+          { error: "sweep_failed", message: result.error, sweepResult: result, ...(await desk()) },
+          { status: 400 },
+        );
+      }
+      return NextResponse.json({ ok: true, sweepResult: result, ...(await desk()) });
+    }
     return NextResponse.json({ ok: true, ...(await desk()) });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Tools launcher failed.";

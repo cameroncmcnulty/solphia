@@ -13,6 +13,7 @@ import { TOKEN_2022_PROGRAM_ID, getTransferHook, unpackMint } from "@solana/spl-
 import { encodeTx } from "../token/mint";
 import { bytesToB64 } from "../solana/wire";
 import { treasuryAddress } from "../treasury";
+import { ownerAddress } from "../ownerWallet";
 import { liveDbcConfig, dbcEnabled } from "./dbcIds";
 import { emptyCurve, MIN_TRADE_SOL, quoteBuy } from "./curve";
 import { CLAIM_DUST_SOL, feesFromPoolAccount } from "./claim";
@@ -147,13 +148,15 @@ export async function sphaCurveConfig() {
 }
 
 /**
- * Same 1% / 50% creator / DAMM 100 bps as official $SPHA.
+ * R&D hooked curve. Same 1% / DAMM 100 bps as official SPHA.
+ * creatorTradingFeePercentage 0 sends the whole 1% to feeClaimer (owner on the Tools launcher).
  * Curve supply is the float on the pad; the project slice is minted after.
  * Never write this config onto the shared pad curve.
  */
-export async function hookedCurveConfig(curveTokens: number) {
+export async function hookedCurveConfig(curveTokens: number, opts?: { creatorTradingFeePercentage?: number }) {
   const m = sdk();
   const supply = Math.max(1_000_000, Math.floor(Number(curveTokens) || 0));
+  const creatorPct = opts?.creatorTradingFeePercentage;
   return m.buildCurveWithMarketCap({
     token: {
       tokenType: m.TokenType.Token2022,
@@ -175,7 +178,7 @@ export async function hookedCurveConfig(curveTokens: number) {
       },
       dynamicFeeEnabled: false,
       collectFeeMode: m.CollectFeeMode.QuoteToken,
-      creatorTradingFeePercentage: 50,
+      creatorTradingFeePercentage: creatorPct == null ? 0 : creatorPct,
       poolCreationFee: 0,
       enableFirstSwapWithMinFee: false,
     },
@@ -525,6 +528,9 @@ export async function buildHookedDbcLaunchTx(opts: {
   symbol: string;
   uri: string;
   curveTokens: number;
+  feeClaimer?: string;
+  leftoverReceiver?: string;
+  creatorTradingFeePercentage?: number;
 }): Promise<{
   transaction: string;
   mint: string;
@@ -538,13 +544,16 @@ export async function buildHookedDbcLaunchTx(opts: {
   const payer = new PublicKey(opts.payer);
   const mint = new PublicKey(opts.mint);
   const configKp = Keypair.generate();
-  const treasury = new PublicKey(treasuryAddress());
-  const curve = await hookedCurveConfig(opts.curveTokens);
+  const claimer = new PublicKey(opts.feeClaimer || ownerAddress());
+  const leftover = new PublicKey(opts.leftoverReceiver || claimer.toBase58());
+  const curve = await hookedCurveConfig(opts.curveTokens, {
+    creatorTradingFeePercentage: opts.creatorTradingFeePercentage ?? 0,
+  });
   const raw = await client().partner.createConfigAndPoolWithTransferHook({
     ...curve,
     config: configKp.publicKey,
-    feeClaimer: treasury,
-    leftoverReceiver: treasury,
+    feeClaimer: claimer,
+    leftoverReceiver: leftover,
     quoteMint: new PublicKey(WSOL),
     payer,
     transferHookProgram: new PublicKey(SPHA_TRANSFER_HOOK),

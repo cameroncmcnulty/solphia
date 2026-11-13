@@ -31,6 +31,10 @@ type Campaign = {
   narrative: number;
   random: number;
   fundLamports: number;
+  relayFunded?: boolean;
+  dry?: boolean;
+  measuredCostSol?: number;
+  relayLeftSol?: number;
   nextAt?: number;
   error?: string;
   tokens: TokenRow[];
@@ -45,23 +49,64 @@ type Fuel = {
   needSol: number;
   keepSol: number;
   enough: boolean;
+  relayLeftSol: number;
+  measuredCostSol: number;
+  dry: boolean;
+};
+
+type SweepLeg = {
+  role: string;
+  from: string;
+  sol: number;
+  keepSol: number;
+  sendSol: number;
+  hot: boolean;
+  skip?: string;
+};
+
+type Sweep = {
+  owner: string;
+  userWalletSol: number;
+  protocolSol: number;
+  padTvlSol: number;
+  movableSol: number;
+  keepRelaySol: number;
+  legs: SweepLeg[];
+  note: string;
 };
 
 type Desk = {
   campaign: Campaign;
   fuel: Fuel;
-  summary: { total: number; live: number; failed: number; queued: number; buys: number; sells: number; volumeSol: number };
+  summary: {
+    total: number;
+    live: number;
+    failed: number;
+    queued: number;
+    buys: number;
+    sells: number;
+    volumeSol: number;
+    dry?: boolean;
+    measuredCostSol?: number;
+    relayLeftSol?: number;
+    relayFunded?: boolean;
+  };
+  sweep?: Sweep | null;
+  sweepResult?: { ok: boolean; movedSol: number; signatures: string[]; error?: string };
 };
 
 const emptyFuel: Fuel = {
   treasury: "",
   treasurySol: 0,
   hot: false,
-  fundSol: 0.11,
+  fundSol: 0,
   remaining: 250,
-  needSol: 27.5,
+  needSol: 0.5,
   keepSol: 0.002,
   enough: false,
+  relayLeftSol: 0,
+  measuredCostSol: 0,
+  dry: false,
 };
 
 function shortPk(pk?: string) {
@@ -190,9 +235,9 @@ export function ToolsSection() {
           <div>
             <h2 className="font-display text-3xl text-ghost">Data launcher</h2>
             <p className="mt-2 max-w-2xl text-sm text-mute">
-              First R&amp;D tool. Click LAUNCH and the desk fires tokens on the Solphia curve over a 3 hour window with
-              randomized gaps. Each token gets a fresh wallet funded from Treasury, its own art, and matching socials.
-              100 ride current meme narratives. 150 are random word names like Cat or The World.
+              First R&amp;D tool. Click LAUNCH and Treasury seeds the first wallet with 0.5 SOL. That wallet launches,
+              then relays whatever SOL is left to the next wallet. The desk stops on the first insufficient-funds
+              error and reports how much each launch actually cost. Full 1% swap fees on these tokens go to owner.
             </p>
           </div>
           <div className="tools-ring" style={{ ["--pct" as string]: `${pct}` }}>
@@ -204,15 +249,20 @@ export function ToolsSection() {
         </div>
       </section>
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
         <Stat k="Treasury" v={solAmt(fuel.treasurySol)} sub={fuel.hot ? "hot key ready" : "hot key missing"} good={fuel.hot} />
-        <Stat k="Per launch" v={`${fuel.fundSol.toFixed(3)} SOL`} sub="exact fund into a new wallet" />
-        <Stat k="Still needed" v={solAmt(fuel.needSol)} sub={`${fuel.remaining} wallets · keep ${fuel.keepSol.toFixed(3)}`} good={fuel.enough} />
+        <Stat k="Relay seed" v="0.500 SOL" sub={campaign?.relayFunded ? "first wallet funded" : "moves once from treasury"} />
+        <Stat
+          k="Cost / launch"
+          v={fuel.measuredCostSol > 0 ? `${fuel.measuredCostSol.toFixed(4)} SOL` : "—"}
+          sub={fuel.dry ? "measured until dry" : "measured after each live launch"}
+        />
+        <Stat k="Relay left" v={solAmt(fuel.relayLeftSol)} sub={`${fuel.remaining} still queued`} />
         <Stat k="Sniper volume" v={solAmt(summary?.volumeSol || 0)} sub={`${summary?.buys || 0} buys · ${summary?.sells || 0} sells`} />
         <Stat
           k="Next shot"
           v={running && campaign?.nextAt ? eta(campaign.nextAt, now) : campaign?.status || "idle"}
-          sub={running ? "randomized over the window" : "waiting"}
+          sub={running ? "randomized over the window" : fuel.dry ? "stopped dry" : "waiting"}
         />
       </div>
 
@@ -257,12 +307,18 @@ export function ToolsSection() {
           </label>
         </div>
         <p className="mt-3 text-sm text-mute">
-          Same hooked Token-2022 curve as official SPHA. Project mint is a random 3–20% into that token&apos;s launch
-          wallet. Shared pad config is never overwritten. Fund is {fuel.fundSol.toFixed(3)} SOL each — config, pool,
-          mint, metadata, slice, and fees.
+          Same hooked Token-2022 curve as official SPHA, with this tester&apos;s 1% going 100% to the owner wallet.
+          Project mint is a random 3–20% into that token&apos;s launch wallet. Shared pad config is never overwritten.
+          Seed is 0.5 SOL once. Remainder hops wallet to wallet until a launch fails on insufficient funds.
         </p>
+        {(fuel.dry || campaign?.dry) && (
+          <div className="mt-3 rounded-xl border border-blood/40 bg-blood/10 px-4 py-3 text-sm text-ghost">
+            <div className="font-mono text-[10px] tracking-[0.2em] text-blood">STOPPED · INSUFFICIENT FUNDS</div>
+            <p className="mt-1">{campaign?.error || "Relay ran dry. Cost per launch is on the desk above."}</p>
+          </div>
+        )}
         {err && <p className="mt-3 text-sm text-blood">{err}</p>}
-        {campaign?.error && <p className="mt-3 text-sm text-blood">{campaign.error}</p>}
+        {campaign?.error && !fuel.dry && !campaign?.dry && <p className="mt-3 text-sm text-blood">{campaign.error}</p>}
         <div className="mt-4 flex flex-wrap gap-3">
           <button
             type="button"
@@ -293,6 +349,80 @@ export function ToolsSection() {
             </button>
           )}
         </div>
+      </Panel>
+
+      <Panel kicker="PROTOCOL SWEEP">
+        <p className="mt-3 max-w-2xl text-sm text-mute">
+          The Overview &quot;SOL in wallets&quot; figure is user-held and non-custodial. Pad TVL stays in bonding
+          curves. This button only moves protocol wallets we hold a hot key for (treasury, foundation, airdrop, dev,
+          lp) into the owner wallet. Treasury keeps {fuel.keepSol.toFixed(3)} SOL
+          {desk?.sweep?.keepRelaySol ? ` plus ${desk.sweep.keepRelaySol.toFixed(3)} SOL to seed this launcher` : ""}.
+        </p>
+        <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+          <Mini k="User-held" v={solAmt(desk?.sweep?.userWalletSol || 0)} />
+          <Mini k="Pad TVL" v={solAmt(desk?.sweep?.padTvlSol || 0)} />
+          <Mini k="Protocol" v={solAmt(desk?.sweep?.protocolSol || 0)} />
+          <Mini k="Movable" v={solAmt(desk?.sweep?.movableSol || 0)} />
+        </div>
+        <div className="mt-3 overflow-auto">
+          <table className="w-full min-w-[520px] text-left text-sm">
+            <thead className="font-mono text-[10px] tracking-[0.2em] text-mute">
+              <tr>
+                <th className="px-2 py-1">Role</th>
+                <th className="px-2 py-1">Wallet</th>
+                <th className="px-2 py-1">SOL</th>
+                <th className="px-2 py-1">Send</th>
+                <th className="px-2 py-1">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(desk?.sweep?.legs || []).map((leg) => (
+                <tr key={`${leg.role}-${leg.from}`} className="border-t border-line/60">
+                  <td className="px-2 py-1 font-mono text-[11px] text-ghost">{leg.role}</td>
+                  <td className="px-2 py-1 font-mono text-[11px] text-ghost">{shortPk(leg.from)}</td>
+                  <td className="px-2 py-1 font-mono text-[11px] text-ghost">{solAmt(leg.sol)}</td>
+                  <td className="px-2 py-1 font-mono text-[11px] text-ghost">{solAmt(leg.sendSol)}</td>
+                  <td className="px-2 py-1 font-mono text-[11px] text-mute">
+                    {leg.skip || (leg.hot ? "ready" : "no key")}
+                  </td>
+                </tr>
+              ))}
+              {!(desk?.sweep?.legs || []).length && (
+                <tr>
+                  <td colSpan={5} className="px-2 py-3 text-mute">
+                    No protocol wallets loaded.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        {desk?.sweepResult && (
+          <p className={`mt-3 text-sm ${desk.sweepResult.ok ? "text-acid" : "text-blood"}`}>
+            {desk.sweepResult.ok
+              ? `Moved ${solAmt(desk.sweepResult.movedSol)} to owner${desk.sweepResult.signatures?.length ? ` · ${desk.sweepResult.signatures.length} tx` : ""}.`
+              : desk.sweepResult.error || "Sweep failed."}
+          </p>
+        )}
+        <button
+          type="button"
+          disabled={busy || !(desk?.sweep?.movableSol || 0)}
+          onClick={() => {
+            const movable = desk?.sweep?.movableSol || 0;
+            const owner = desk?.sweep?.owner || "owner";
+            if (
+              !window.confirm(
+                `Send ${movable.toFixed(4)} SOL from protocol wallets to ${owner.slice(0, 4)}…${owner.slice(-4)}? User wallets and pad TVL stay put.`,
+              )
+            ) {
+              return;
+            }
+            void act("sweepProtocol");
+          }}
+          className="btn-acid mt-4 rounded-full px-6 py-3 text-sm"
+        >
+          Sweep protocol SOL to owner
+        </button>
       </Panel>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">

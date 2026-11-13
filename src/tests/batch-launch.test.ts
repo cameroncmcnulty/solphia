@@ -6,11 +6,13 @@ import { sniperStats } from "../lib/tools/snipers";
 import { pngMagic, renderTokenPng } from "../lib/tools/tokenArt";
 import {
   BATCH_LAUNCH_FUND_LAMPORTS,
+  BATCH_RELAY_LAMPORTS,
   BATCH_SUPPLY,
   buildIdentities,
   curveTokensFor,
   DEFAULT_NARRATIVE,
   DEFAULT_RANDOM,
+  isInsufficientFunds,
   randomIdentity,
   scheduleTimes,
   teamBpsAt,
@@ -99,20 +101,41 @@ describe("tools data launcher", () => {
     assert.equal(stats.curveSol, 1.2);
   });
 
-  it("funds each launch wallet with a fixed exact amount and never writes the shared pad curve", () => {
-    assert.equal(BATCH_LAUNCH_FUND_LAMPORTS, 110_000_000);
+  it("seeds 0.5 SOL once, relays remainder, and never writes the shared pad curve", () => {
+    assert.equal(BATCH_RELAY_LAMPORTS, 500_000_000);
+    assert.equal(BATCH_LAUNCH_FUND_LAMPORTS, BATCH_RELAY_LAMPORTS);
+    assert.equal(isInsufficientFunds("insufficient funds for rent"), true);
+    assert.equal(isInsufficientFunds("custom program error: 0x1"), true);
+    assert.equal(isInsufficientFunds("Launch landed"), false);
     const dbc = readFileSync(path.join(process.cwd(), "src/lib/launch/dbc.ts"), "utf8");
     assert.match(dbc, /buildHookedDbcLaunchTx/);
     assert.match(dbc, /hookedCurveConfig/);
     assert.match(dbc, /createConfigAndPoolWithTransferHook/);
+    assert.match(dbc, /opts.feeClaimer \|\| ownerAddress/);
+    assert.match(dbc, /creatorPct == null \? 0 : creatorPct/);
+    assert.match(dbc, /creatorTradingFeePercentage: 50/);
     assert.equal(dbc.includes("book.dbcConfig"), false);
     const engine = readFileSync(path.join(process.cwd(), "src/lib/tools/batchLaunch.ts"), "utf8");
     assert.match(engine, /harvestKeypair/);
     assert.match(engine, /buildHookedDbcLaunchTx/);
     assert.match(engine, /buildProjectSliceMintTx/);
     assert.match(engine, /Keypair.generate/);
+    assert.match(engine, /relayAll/);
+    assert.match(engine, /markDry/);
+    assert.match(engine, /feeClaimer: owner/);
+    assert.match(engine, /creatorTradingFeePercentage: 0/);
+    assert.equal(engine.includes("fundWallet"), false);
     assert.equal(engine.includes("buildSphaDbcLaunchTx"), false);
     assert.equal(engine.includes("sphaMint"), false);
+    const sweep = readFileSync(path.join(process.cwd(), "src/lib/tools/protocolSweep.ts"), "utf8");
+    assert.match(sweep, /sweepProtocolToOwner/);
+    assert.match(sweep, /User wallets and bonding-curve TVL stay put/);
+    const route = readFileSync(path.join(process.cwd(), "src/app/api/admin/tools/launcher/route.ts"), "utf8");
+    assert.match(route, /sweepProtocol/);
+    const tools = readFileSync(path.join(process.cwd(), "src/components/admin/sections/Tools.tsx"), "utf8");
+    assert.match(tools, /0\.500 SOL/);
+    assert.match(tools, /Sweep protocol SOL to owner/);
+    assert.equal(tools.includes("7.5rem"), false);
     const cron = readFileSync(path.join(process.cwd(), "src/app/api/cron/tick/route.ts"), "utf8");
     assert.match(cron, /tickBatchLaunch/);
     const nav = readFileSync(path.join(process.cwd(), "src/lib/admin/nav.ts"), "utf8");
