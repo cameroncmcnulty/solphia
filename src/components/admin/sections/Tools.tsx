@@ -70,10 +70,15 @@ type Sweep = {
   protocolSol: number;
   padTvlSol: number;
   launchSol: number;
+  liveSol?: number;
+  vaultSol?: number;
+  liveCount?: number;
+  vaultCount?: number;
   movableSol: number;
   keepRelaySol: number;
   lockedSol: number;
   campaignRunning: boolean;
+  remainingSends?: number;
   legs: SweepLeg[];
   note: string;
 };
@@ -377,17 +382,20 @@ export function ToolsSection() {
 
       <Panel kicker="EXTRACT ALL">
         <p className="mt-3 max-w-2xl text-sm text-mute">
-          Pulls every SOL we can sign into the owner wallet: treasury, foundation, airdrop, dev, lp, and Tools launch
-          wallets. The Overview wallet figure is user-held SOL with no server key, so it cannot move from here. Pad
-          TVL stays in bonding curves. Pause the launcher first if it is running. Refill treasury 0.5 SOL before the
-          next LAUNCH.
+          Signs every key the server holds into owner: protocol wallets, Tools launch wallets, delegated live-trading
+          wallets, and every fee vault we can derive. Click again if wallets remain (80 txs per pass). Seed wallets
+          live in the browser PIN vault — those cannot be signed from the server. Pad TVL stays in bonding curves.
+          Pause the launcher first. Refill treasury 0.5 SOL before the next LAUNCH.
         </p>
-        <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-5">
+        <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
           <Mini k="User-held" v={solAmt(desk?.sweep?.userWalletSol || 0)} />
           <Mini k="Pad TVL" v={solAmt(desk?.sweep?.padTvlSol || 0)} />
           <Mini k="Protocol" v={solAmt(desk?.sweep?.protocolSol || 0)} />
           <Mini k="Launch wallets" v={solAmt(desk?.sweep?.launchSol || 0)} />
+          <Mini k="Live trading" v={solAmt(desk?.sweep?.liveSol || 0)} />
+          <Mini k="Fee vaults" v={solAmt(desk?.sweep?.vaultSol || 0)} />
           <Mini k="Extractable" v={solAmt(desk?.sweep?.movableSol || 0)} />
+          <Mini k="This pass" v={String(Math.min(80, desk?.sweep?.remainingSends || 0))} />
         </div>
         <div className="mt-3 overflow-auto">
           <table className="w-full min-w-[520px] text-left text-sm">

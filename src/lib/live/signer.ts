@@ -1,7 +1,8 @@
 import fs from "fs";
 import path from "path";
 import { Keypair } from "@solana/web3.js";
-import { durableConfigured, KEYS, kvDel, kvGetJson, kvSetJson } from "../persist";
+import { durableConfigured, KEYS, kvDel, kvGetJson, kvScanKeys, kvSetJson } from "../persist";
+import { isSolanaAddress } from "../security";
 import { decryptBytes, encryptBytes, secretFromB64, signerConfigured } from "./crypto";
 
 export { signerConfigured };
@@ -95,4 +96,38 @@ export async function delegatedStatus(owner: string): Promise<{ delegated: boole
   const rec = await readRecord(owner);
   if (!rec?.pubkey) return { delegated: false, pubkey: null, at: null };
   return { delegated: true, pubkey: rec.pubkey, at: rec.at || null };
+}
+
+/** Every live trading key the server can decrypt. SCAN Redis plus local files plus extra owners. */
+export async function listDelegatedSigners(extraOwners: string[] = []): Promise<{ owner: string; pubkey: string; kp: Keypair }[]> {
+  if (!signerConfigured()) return [];
+  const owners = new Set<string>();
+  for (const pk of extraOwners) if (isSolanaAddress(pk)) owners.add(pk);
+  try {
+    if (durableConfigured()) {
+      const keys = await kvScanKeys("solphia:signer:*", 200);
+      for (const k of keys) {
+        const owner = k.slice("solphia:signer:".length);
+        if (isSolanaAddress(owner)) owners.add(owner);
+      }
+    } else if (fs.existsSync(localDir())) {
+      for (const f of fs.readdirSync(localDir())) {
+        const owner = f.replace(/\.json$/i, "");
+        if (isSolanaAddress(owner)) owners.add(owner);
+      }
+    }
+  } catch {
+    /* still try extraOwners */
+  }
+  const out: { owner: string; pubkey: string; kp: Keypair }[] = [];
+  const seen = new Set<string>();
+  for (const owner of owners) {
+    const kp = await loadDelegatedKeypair(owner);
+    if (!kp) continue;
+    const pubkey = kp.publicKey.toBase58();
+    if (seen.has(pubkey)) continue;
+    seen.add(pubkey);
+    out.push({ owner, pubkey, kp });
+  }
+  return out;
 }

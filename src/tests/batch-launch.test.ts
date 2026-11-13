@@ -138,7 +138,13 @@ describe("tools data launcher", () => {
     const sweep = readFileSync(path.join(process.cwd(), "src/lib/tools/protocolSweep.ts"), "utf8");
     assert.match(sweep, /sweepProtocolToOwner/);
     assert.match(sweep, /listCampaignSigners/);
+    assert.match(sweep, /listDelegatedSigners/);
+    assert.match(sweep, /feeVaultKeypair/);
+    assert.match(sweep, /live-trading/);
     assert.match(sweep, /EXTRACT ALL/);
+    const signer = readFileSync(path.join(process.cwd(), "src/lib/live/signer.ts"), "utf8");
+    assert.match(signer, /listDelegatedSigners/);
+    assert.match(signer, /kvScanKeys/);
     const route = readFileSync(path.join(process.cwd(), "src/app/api/admin/tools/launcher/route.ts"), "utf8");
     assert.match(route, /extractAll/);
     assert.match(route, /splitMix/);
