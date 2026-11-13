@@ -297,17 +297,22 @@ export async function mintUsesTransferHook(mint: string): Promise<boolean> {
   }
 }
 
-async function resolveDbcPool(mint: string) {
+type DbcPoolRow = { publicKey: PublicKey; account: any };
+
+async function resolveDbcPool(mint: string): Promise<
+  | { ok: true; dbc: ReturnType<typeof client>; row: DbcPoolRow }
+  | { ok: false; error: string }
+> {
   const dbc = client();
-  const load = () => withRpcRetry(() => dbc.state.getPoolByBaseMint(mint));
+  const load = () => withRpcRetry(() => dbc.state.getPoolByBaseMint(mint) as Promise<DbcPoolRow | null | undefined>);
   try {
     let row = await load();
-    if (row) return { ok: true as const, dbc, row };
+    if (row?.publicKey) return { ok: true as const, dbc, row };
     if (await mintUsesTransferHook(mint)) {
       for (let i = 0; i < 4; i++) {
         await new Promise((r) => setTimeout(r, 400 * (i + 1)));
         row = await load();
-        if (row) return { ok: true as const, dbc, row };
+        if (row?.publicKey) return { ok: true as const, dbc, row };
       }
       return { ok: false as const, error: "curve_opening" };
     }
