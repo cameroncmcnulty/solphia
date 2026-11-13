@@ -155,7 +155,7 @@ describe("open market swap fees", () => {
     assert.match(widget, /isPlaceholderLabel/);
     assert.match(widget, /\/api\/sol\/holdings/);
     assert.match(widget, /bag\?\.launched/);
-    const launch = readFileSync(path.join(process.cwd(), "src/app/launch/page.tsx"), "utf8");
+    const launch = readFileSync(path.join(process.cwd(), "src/components/LaunchPad.tsx"), "utf8");
     assert.equal(launch.includes("function MarketSwap"), false);
     assert.match(launch, /<SwapWidget/);
     const lookup = readFileSync(path.join(process.cwd(), "src/app/api/launch/lookup/route.ts"), "utf8");

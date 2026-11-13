@@ -260,7 +260,7 @@ describe("rocket boosts", () => {
 
   it("opens a boosted rail token even when it is not already on the tape", () => {
     const rail = readFileSync(path.join(process.cwd(), "src/components/BoostBuy.tsx"), "utf8");
-    const page = readFileSync(path.join(process.cwd(), "src/app/launch/page.tsx"), "utf8");
+    const page = readFileSync(path.join(process.cwd(), "src/components/LaunchPad.tsx"), "utf8");
     assert.match(rail, /onClick=\{\(\) => onOpen\(b\)\}/);
     assert.match(page, /onOpen=\{\(b\) => \{/);
     assert.match(page, /searchMint\(mint\)/);

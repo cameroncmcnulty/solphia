@@ -1,0 +1,2658 @@
+"use client";
+
+import { useEffect, useMemo, useRef, useState } from "react";
+import { RefreshCw, Rocket } from "lucide-react";
+import { Keypair } from "@solana/web3.js";
+import { usePathname } from "next/navigation";
+import { CopyCa } from "@/components/CopyCa";
+
+
+import { TokenArt } from "@/components/TokenArt";
+import { PumpCoinRow } from "@/components/PumpCoinRow";
+import { TokenChart } from "@/components/TokenChart";
+import { TokenSocials } from "@/components/TokenSocials";
+import { WalletConnect } from "@/components/WalletConnect";
+import { useOwner } from "@/lib/hooks";
+import {
+  buySupplyPct,
+  emptyCurve,
+  launchDevBuyCap,
+} from "@/lib/launch/curve";
+import { launchError } from "@/lib/launch/errors";
+import {
+  NAME_MAX,
+  NAME_MIN,
+  TICKER_MAX,
+  TICKER_MIN,
+  launchCodeToField,
+  validateLaunchCreate,
+  type LaunchField,
+} from "@/lib/launch/validate";
+import { FieldError, FormAlert, SafeField, fieldClass, useConfirmErrors } from "@/components/form/confirm";
+import { loadOwner, signPhantomAndSend } from "@/lib/wallet/trading";
+import { clearPhantomWaiting, isPhantomRedirect, PHANTOM_EVENT, phantomWaitingAt, readPhantomReturn } from "@/lib/wallet/phantomConnect";
+import { markActionSpot, readActionSpot, restoreActionSpot, scrollToSpot } from "@/lib/wallet/actionSpot";
+import type { PhAfter } from "@/lib/wallet/phantomBox";
+import { asTxB64, b64ToBytes, bytesToB64 } from "@/lib/solana/wire";
+import { mintPda, newMintNonce, nonceToB64 } from "@/lib/launch/pda";
+import { dbcEnabled } from "@/lib/launch/dbcIds";
+
+import { auditLaunchCoin, rankTape, scoreTape } from "@/lib/launch/audit";
+import { BoostBuy, BoostRail, fmtLeft } from "@/components/BoostBuy";
+
+import { TokenImageCrop, readLaunchImage, type CropSource } from "@/components/TokenImageCrop";
+import { yourLaunches } from "@/lib/launch/yours";
+import { claimableCreator, claimButtonSol, claimHint, fmtClaimSol, nextCreatorPayout, sortByNewest, sumCreatorGenerated, uniqueByMint, vaultClaimHint } from "@/lib/launch/claim";
+import { preferLiveLabel } from "@/lib/launch/labels";
+import { clearPending, loadPending, savePending, type PendingLaunch } from "@/lib/launch/pending";
+import { hideLaunch, loadHidden } from "@/lib/launch/hidden";
+import { PadPitch } from "@/components/PadPitch";
+import { killNativeValidity } from "@/lib/killNativeValidity";
+
+import { SwapWidget } from "@/components/SwapWidget";
+import type { BoostRank } from "@/lib/launch/boost";
+import { filterTape, sortByTrending, sortTape, type AgeFilter, type VolWindow } from "@/lib/launch/tape";
+import { isSolanaAddress } from "@/lib/wallet/addr";
+import { peekRef } from "@/components/ReferralCapture";
+import { DEFAULT_OWNER, DEFAULT_TREASURY } from "@/lib/protocolWallets";
+
+
+const PRESETS = [0.1, 0.25, 0.5, 1];
+const DEV_CAP = launchDevBuyCap();
+const CLAIM_ALL_MAX = 40;
+const LAUNCH_TAB_KEY = "solphia:launch-tab";
+
+function readLaunchTab(): "tape" | "mine" {
+  try {
+    return sessionStorage.getItem(LAUNCH_TAB_KEY) === "mine" ? "mine" : "tape";
+  } catch {
+    return "tape";
+  }
+}
+
+function writeLaunchTab(tab: "tape" | "mine") {
+  try {
+    sessionStorage.setItem(LAUNCH_TAB_KEY, tab);
+  } catch {
+    /* private mode */
+  }
+}
+
+type Spark = { t: number; o: number; h: number; l: number; c: number };
+type Coin = {
+  id: string;
+  mint?: string;
+  born?: boolean;
+  venue?: string;
+  pairAddress?: string;
+  pairUrl?: string;
+  liqUsd?: number;
+  score?: number;
+  grade?: string;
+  name: string;
+  symbol: string;
+  image?: string;
+  blurb: string;
+  links?: { website?: string; x?: string; telegram?: string; discord?: string };
+  creator: string;
+  createdAt: number;
+  status: "curve" | "graduated";
+  priceSol: number;
+  marketCapSol: number;
+  marketCapUsd: number;
+  progress: number;
+  realSol: number;
+  liqSol?: number;
+  holders: number;
+  myTokens?: number;
+  maxBuySol?: number;
+  devRewardsSol: number;
+  creatorFeesSol?: number;
+  creatorUnclaimedSol?: number;
+  partnerFeesSol?: number;
+  partnerUnclaimedSol?: number;
+  volSol?: number;
+  vol5m?: number;
+  vol30m?: number;
+  vol1h?: number;
+  vol6h?: number;
+  vol24h?: number;
+  txns?: number;
+  txns5m?: number;
+  txns1h?: number;
+  buys?: number;
+  sells?: number;
+  buys1h?: number;
+  sells1h?: number;
+  unique1h?: number;
+  uniqueAll?: number;
+  top10HolderPct?: number;
+  creatorHoldPct?: number;
+  largestWalletPct?: number;
+  bundleRatio?: number;
+  devSoldPct?: number;
+  deployerTokenCount?: number;
+  deployerDeathRate?: number;
+  creatorRecentLaunches?: number;
+  change5m?: number;
+  change1h?: number;
+  change6h?: number;
+  change24h?: number;
+  spark?: Spark[];
+  fills: { at: number; side: "buy" | "sell"; sol: number; tokens: number; owner?: string }[];
+  curve?: {
+    virtualSol: number;
+    virtualTokens: number;
+    realSol: number;
+    tokensSold: number;
+    phase: "curve" | "graduated";
+  };
+};
+
+function LengthHint({
+  n,
+  min,
+  max,
+  empty,
+  short,
+  error,
+}: {
+  n: number;
+  min: number;
+  max: number;
+  empty: string;
+  short: string;
+  error?: string;
+}) {
+  if (error) {
+    return (
+      <p role="alert" className="mt-1.5 font-mono text-[11px] leading-snug text-blood">
+        {error}
+      </p>
+    );
+  }
+  const bad = n > 0 && (n < min || n > max);
+  return (
+    <p className={`mt-1.5 font-mono text-[11px] leading-snug ${bad ? "text-blood" : "text-mute"}`}>
+      {n === 0 ? empty : n < min ? `${n}/${max} — ${short}` : `${n}/${max}`}
+    </p>
+  );
+}
+
+async function waitForPhantomRoute(mint: string): Promise<{ ok: boolean; via?: string }> {
+  for (let i = 0; i < 8; i++) {
+    try {
+      const r = await fetch(`/api/launch/jup?mint=${encodeURIComponent(mint)}`, { cache: "no-store" });
+      const j = await r.json();
+      if (j.ok) return { ok: true, via: typeof j.via === "string" ? j.via : undefined };
+    } catch {
+      /* keep polling */
+    }
+    await new Promise((res) => setTimeout(res, 2000));
+  }
+  return { ok: false };
+}
+
+function fmtAge(ms: number) {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  if (h < 48) return `${h}h`;
+  return `${Math.floor(h / 24)}d`;
+}
+
+function fmtUsd(n: number) {
+  if (!(n > 0)) return "—";
+  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(2)}M`;
+  if (n >= 1_000) return `$${(n / 1_000).toFixed(1)}K`;
+  return `$${n.toFixed(2)}`;
+}
+
+function fmtSol(n: number, d = 3) {
+  if (!(n > 0)) return "0";
+  if (n >= 1) return n.toFixed(Math.min(d, 2));
+  return n.toFixed(d);
+}
+
+function tick(symbol?: string) {
+  const s = (symbol || "").replace(/^\$+/, "").replace(/\*+$/, "").trim();
+  return s ? `$${s}` : "";
+}
+
+function packFromPrep(j: Record<string, unknown>): string {
+  try {
+    return asTxB64(j.tx ?? (Array.isArray(j.txs) ? j.txs[0] : j.transaction));
+  } catch {
+    return "";
+  }
+}
+
+async function postLaunch(body: Record<string, unknown>, ms = 20_000): Promise<{ ok: boolean; status: number; json: Record<string, unknown> }> {
+  const ac = new AbortController();
+  const t = window.setTimeout(() => ac.abort(), ms);
+  try {
+    const r = await fetch("/api/launch", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+      signal: ac.signal,
+    });
+    const text = await r.text();
+    let json: Record<string, unknown> = {};
+    try {
+      json = JSON.parse(text) as Record<string, unknown>;
+    } catch {
+      json = { error: "chain_failed", message: "Launch API is down (" + r.status + ")." };
+    }
+    return { ok: r.ok, status: r.status, json };
+  } finally {
+    window.clearTimeout(t);
+  }
+}
+
+const LAUNCH_DRAFT = "solphia_launch_draft";
+
+function saveLaunchDraft(d: Record<string, unknown>) {
+  const raw = JSON.stringify(d);
+  try {
+    localStorage.setItem(LAUNCH_DRAFT, raw);
+  } catch {
+    /* quota */
+  }
+  try {
+    sessionStorage.setItem(LAUNCH_DRAFT, raw);
+  } catch {
+    /* ITP */
+  }
+}
+
+function loadLaunchDraft(): Record<string, unknown> | null {
+  try {
+    const raw = localStorage.getItem(LAUNCH_DRAFT) || sessionStorage.getItem(LAUNCH_DRAFT);
+    return raw ? (JSON.parse(raw) as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
+
+function clearLaunchDraft() {
+  try {
+    localStorage.removeItem(LAUNCH_DRAFT);
+  } catch {
+    /* ignore */
+  }
+  try {
+    sessionStorage.removeItem(LAUNCH_DRAFT);
+  } catch {
+    /* ignore */
+  }
+}
+
+function mergeCoins(remote: Coin[], prev: Coin[]): Coin[] {
+  const seen = new Set<string>();
+  for (const c of remote) {
+    seen.add(c.id);
+    if (c.mint) seen.add(c.mint);
+  }
+  const keepBorn = prev.filter((c) => c.born && !seen.has(c.id) && !(c.mint && seen.has(c.mint)));
+  return [...remote, ...keepBorn];
+}
+
+function fmtPct(n?: number) {
+  if (n == null || !Number.isFinite(n) || n === 0) return "0%";
+  const pct = n * 100;
+  return `${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%`;
+}
+
+function fmtPx(n?: number) {
+  if (!(n && n > 0)) return "—";
+  if (n >= 1) return `$${n.toFixed(n >= 100 ? 2 : 4)}`;
+  return `$${n.toPrecision(4)}`;
+}
+
+function venueLabel(c: Coin) {
+  if (c.born) return "SOLPHIA";
+  if (c.venue === "pumpfun" || c.venue === "pumpswap") return "PUMP";
+  if (c.venue === "raydium" || c.venue === "launchlab") return "RAY";
+  if (c.venue === "meteora") return "MET";
+  return "MKT";
+}
+
+export default function LaunchPage() {
+  const path = usePathname();
+  const isSwap = path.startsWith("/swap");
+  const connected = useOwner();
+  const owner = connected || (typeof window !== "undefined" ? loadOwner() : null);
+  const [coins, setCoins] = useState<Coin[]>([]);
+  const [open, setOpen] = useState<Coin | null>(null);
+  const [name, setName] = useState("");
+  const [symbol, setSymbol] = useState("");
+  const [blurb, setBlurb] = useState("");
+  const [image, setImage] = useState("");
+  const [pinnedUrl, setPinnedUrl] = useState("");
+  const tookDraft = useRef(false);
+  const [cropSrc, setCropSrc] = useState<CropSource | null>(null);
+  const [cropOpen, setCropOpen] = useState(false);
+  const [website, setWebsite] = useState("");
+  const [x, setX] = useState("");
+  const [telegram, setTelegram] = useState("");
+  const [discord, setDiscord] = useState("");
+  const [devBuy, setDevBuy] = useState(0);
+
+  const [msg, setMsg] = useState("");
+  const [err, setErr] = useState("");
+  const createErr = useConfirmErrors<LaunchField>();
+  const [busy, setBusy] = useState(false);
+  const [work, setWork] = useState<"launch" | "claim" | "swap" | "">("");
+  const [solUsd, setSolUsd] = useState(0);
+  const [tab, setTab] = useState<"tape" | "mine">(() => (typeof window === "undefined" ? "tape" : readLaunchTab()));
+  const [age, setAge] = useState<AgeFilter>("newest");
+  const [vol, setVol] = useState<VolWindow | null>(null);
+  const [ranked, setRanked] = useState(false);
+  const [tapeSort, setTapeSort] = useState<"trending" | "newest" | "mcap" | "vol5m" | "vol1h" | "rank">(
+    isSwap ? "trending" : "newest",
+  );
+  const [boostOpen, setBoostOpen] = useState(false);
+  const [boostRank, setBoostRank] = useState<BoostRank[]>([]);
+  const [boostMine, setBoostMine] = useState<{
+    live: { symbol: string; leftMs: number; rockets: number }[];
+    queued: { symbol: string; position: number; etaMs: number; rockets: number }[];
+  }>({ live: [], queued: [] });
+  const [source, setSource] = useState<"all" | "born" | "market">("all");
+  const [tapeLoading, setTapeLoading] = useState(true);
+  const [padLoading, setPadLoading] = useState(true);
+  const [caQuery, setCaQuery] = useState("");
+  const [caBusy, setCaBusy] = useState(false);
+  const [caErr, setCaErr] = useState("");
+  const [lookedMint, setLookedMint] = useState<string | null>(null);
+  const bootMint = useRef(false);
+  const [snapAt, setSnapAt] = useState(0);
+  const [pending, setPending] = useState<PendingLaunch[]>([]);
+  const [hidden, setHidden] = useState<string[]>([]);
+  const [ownerWallet, setOwnerWallet] = useState(DEFAULT_OWNER);
+  const [treasuryWallet, setTreasuryWallet] = useState(DEFAULT_TREASURY);
+  const [protocol, setProtocol] = useState<{ partnerUnclaimedSol: number; partnerFeesSol: number } | null>(null);
+  const [vault, setVault] = useState<{ pk: string; sol: number; claimableSol: number } | null>(null);
+  const [feesSyncing, setFeesSyncing] = useState(false);
+  const lastMintRef = useRef("");
+  const finishPhantomRef = useRef<(sig: string, after: PhAfter) => Promise<void>>(async () => {});
+  const cropUrlRef = useRef<string>("");
+  const claimSeqRef = useRef(0);
+  const claimLock = useRef("");
+  const isSwapRef = useRef(isSwap);
+  isSwapRef.current = isSwap;
+  const devPct = buySupplyPct(emptyCurve(), devBuy);
+
+  useEffect(() => {
+    setPending(loadPending());
+    setHidden(loadHidden());
+    const d = loadLaunchDraft();
+    if (d) {
+      tookDraft.current = true;
+      if (typeof d.name === "string") setName(d.name);
+      if (typeof d.symbol === "string") setSymbol(d.symbol);
+      if (typeof d.blurb === "string") setBlurb(d.blurb);
+      if (typeof d.image === "string") setImage(d.image);
+      if (typeof d.website === "string") setWebsite(d.website);
+      if (typeof d.x === "string") setX(d.x);
+      if (typeof d.telegram === "string") setTelegram(d.telegram);
+      if (typeof d.discord === "string") setDiscord(d.discord);
+      if (typeof d.devBuy === "number") setDevBuy(d.devBuy);
+    }
+    return () => {
+      if (cropUrlRef.current) URL.revokeObjectURL(cropUrlRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    const onPh = (e: Event) => {
+      const j = (e as CustomEvent<{ signature?: string; after?: PhAfter; error?: string }>).detail;
+      if (!j) return;
+      const after = j.after;
+      const openSwap = after?.kind === "jup_swap" || (after?.kind === "swap" && !after.id);
+      if (isSwapRef.current && (openSwap || (!after && j.error))) return;
+      if (openSwap) return;
+      if (j.error) {
+        setErr(j.error);
+        setBusy(false);
+        setWork("");
+        setMsg("");
+        if (after?.kind === "claim") {
+          setTab("mine");
+          writeLaunchTab("mine");
+        }
+        return;
+      }
+      if (!j.signature || !after) return;
+      const claiming = after.kind === "claim";
+      if (claiming) {
+        setTab("mine");
+        writeLaunchTab("mine");
+        setWork("claim");
+        setBusy(true);
+        setErr("");
+        setMsg("Confirming claim…");
+      } else {
+        setWork(after.kind === "swap" || after.kind === "jup_swap" ? "swap" : "launch");
+        setBusy(true);
+        setErr("");
+        setMsg("Finishing on Solana…");
+      }
+      void finishPhantomRef.current(j.signature, after).catch((err) => {
+        setErr(err instanceof Error ? err.message : claiming ? "Claim failed after signing." : "Launch failed after signing.");
+        setBusy(false);
+        setWork("");
+        if (claiming) {
+          setTab("mine");
+          writeLaunchTab("mine");
+        }
+      });
+    };
+    window.addEventListener(PHANTOM_EVENT, onPh);
+    const unstick = () => {
+      if (readPhantomReturn()) return;
+      if (!phantomWaitingAt()) return;
+      window.setTimeout(() => {
+        if (readPhantomReturn()) return;
+        if (!phantomWaitingAt()) return;
+        clearPhantomWaiting();
+        setBusy(false);
+        setWork("");
+        setMsg("");
+        setErr(
+          readLaunchTab() === "mine"
+            ? "Wallet closed without a signature. Tap Claim again."
+            : "Wallet closed without a signature. Tap Launch again.",
+        );
+      }, 1800);
+    };
+    const onVis = () => {
+      if (document.visibilityState === "visible") unstick();
+    };
+    window.addEventListener("pageshow", unstick);
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      window.removeEventListener(PHANTOM_EVENT, onPh);
+      window.removeEventListener("pageshow", unstick);
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, []);
+
+  useEffect(() => {
+    const spot = readActionSpot();
+    if (spot?.id === "creator-fees" || spot?.id === "protocol-fees" || spot?.id === "your-tokens") {
+      setTab("mine");
+      writeLaunchTab("mine");
+    }
+    const run = () => restoreActionSpot();
+    const t = window.setTimeout(run, 60);
+    const onPhRestore = () => {
+      const next = readActionSpot();
+      if (next?.id === "creator-fees" || next?.id === "protocol-fees" || next?.id === "your-tokens") {
+        setTab("mine");
+        writeLaunchTab("mine");
+      }
+      window.setTimeout(run, 40);
+    };
+    const onShow = (e: PageTransitionEvent) => {
+      if (e.persisted) run();
+    };
+    window.addEventListener(PHANTOM_EVENT, onPhRestore);
+    window.addEventListener("pageshow", onShow);
+    return () => {
+      window.clearTimeout(t);
+      window.removeEventListener(PHANTOM_EVENT, onPhRestore);
+      window.removeEventListener("pageshow", onShow);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (isSwap) return;
+    if (tab !== "tape") return;
+    if (!busy && !msg && !err && !createErr.banner) return;
+    const id = err ? "launch-status" : "launch-form-status";
+    const t = window.setTimeout(() => {
+      document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 60);
+    return () => window.clearTimeout(t);
+  }, [busy, msg, err, createErr.banner, tab, isSwap]);
+
+  useEffect(() => {
+    if (isSwap) return;
+    if (!open || !snapAt) return;
+    const id = `desk-${open.id}`;
+    let n = 0;
+    const go = () => {
+      const el = document.getElementById(id);
+      if (el) {
+        el.scrollIntoView({ behavior: "auto", block: "start" });
+        return;
+      }
+      if (n++ < 16) requestAnimationFrame(go);
+    };
+    requestAnimationFrame(go);
+  }, [open?.id, snapAt, isSwap]);
+
+  async function refreshPad(sync = false) {
+    const q = owner ? `pubkey=${encodeURIComponent(owner)}` : "";
+    const extra = [isSwap ? "list=all" : "", sync && owner ? "sync=1" : ""].filter(Boolean).join("&");
+    const r = await fetch(`/api/launch?${q}${extra ? `&${extra}` : ""}`, { cache: "no-store" });
+    if (!r.ok) return;
+    const pad = await r.json().catch(() => null);
+    if (!pad || typeof pad !== "object" || !Array.isArray(pad.coins)) return;
+    if (pad.solUsd) setSolUsd(pad.solUsd);
+    if (typeof pad.ownerWallet === "string") setOwnerWallet(pad.ownerWallet);
+    if (typeof pad.treasuryWallet === "string") setTreasuryWallet(pad.treasuryWallet);
+    if (pad.protocol && typeof pad.protocol === "object") {
+      setProtocol({
+        partnerUnclaimedSol: Number(pad.protocol.partnerUnclaimedSol) || 0,
+        partnerFeesSol: Number(pad.protocol.partnerFeesSol) || 0,
+      });
+    }
+    if (pad.vault && typeof pad.vault === "object" && typeof pad.vault.pk === "string") {
+      setVault({
+        pk: pad.vault.pk,
+        sol: Number(pad.vault.sol) || 0,
+        claimableSol: Number(pad.vault.claimableSol) || 0,
+      });
+    } else {
+      setVault(null);
+    }
+    const d = pad.draft as Record<string, unknown> | null | undefined;
+    if (!tookDraft.current && d && typeof d === "object" && typeof d.name === "string" && d.name) {
+      tookDraft.current = true;
+      setName(d.name);
+      if (typeof d.symbol === "string") setSymbol(d.symbol);
+      if (typeof d.blurb === "string") setBlurb(d.blurb);
+      if (typeof d.image === "string" && d.image) setImage(d.image);
+      if (typeof d.website === "string") setWebsite(d.website);
+      if (typeof d.x === "string") setX(d.x);
+      if (typeof d.telegram === "string") setTelegram(d.telegram);
+      if (typeof d.discord === "string") setDiscord(d.discord);
+      if (typeof d.devBuy === "number") setDevBuy(d.devBuy);
+    }
+    const padCoins: Coin[] = Array.isArray(pad.coins) ? pad.coins.map((c: Coin) => ({ ...c, born: true })) : [];
+    if (isSwap) {
+      setCoins((prev) => {
+        const market = prev.filter((c) => !c.born);
+        const next = [...padCoins, ...market];
+        setOpen((cur) => (cur ? next.find((c) => c.id === cur.id) || cur : cur));
+        return next;
+      });
+      return;
+    }
+    setCoins((prev) => {
+      const market = prev.filter((c) => !c.born);
+      const padded = padCoins.map((c) => {
+        const old = prev.find((p) => p.id === c.id || (c.mint && p.mint === c.mint));
+        if (!old) return c;
+        return {
+          ...c,
+          name: preferLiveLabel(c.name, old.name),
+          symbol: preferLiveLabel(c.symbol, old.symbol),
+          image: /solphia\.io\/og/i.test(c.image || "") && old.image ? old.image : c.image || old.image,
+          creatorFeesSol: typeof c.creatorFeesSol === "number" ? c.creatorFeesSol : Number(old.creatorFeesSol) || Number(old.devRewardsSol) || 0,
+          creatorUnclaimedSol: typeof c.creatorUnclaimedSol === "number" ? c.creatorUnclaimedSol : old.creatorUnclaimedSol,
+          partnerFeesSol: typeof c.partnerFeesSol === "number" ? c.partnerFeesSol : old.partnerFeesSol,
+          partnerUnclaimedSol: typeof c.partnerUnclaimedSol === "number" ? c.partnerUnclaimedSol : old.partnerUnclaimedSol,
+          devRewardsSol: typeof c.creatorFeesSol === "number" ? c.creatorFeesSol : Math.max(Number(c.devRewardsSol) || 0, Number(old.devRewardsSol) || 0),
+          marketCapUsd: Math.max(Number(c.marketCapUsd) || 0, Number(old.marketCapUsd) || 0),
+        };
+      });
+      const next = [...padded, ...market];
+      setOpen((cur) => (cur ? next.find((c) => c.id === cur.id) || cur : cur));
+      return mergeCoins(next, prev.filter((c) => c.born));
+    });
+  }
+
+  async function refreshBoosts() {
+    const q = owner ? `?pubkey=${encodeURIComponent(owner)}` : "";
+    const j = await fetch(`/api/launch/boost${q}`, { cache: "no-store" }).then((r) => r.json());
+    const incoming = Array.isArray(j.ranked) ? j.ranked : Array.isArray(j.live) ? j.live : null;
+    if (incoming && incoming.length > 0) setBoostRank(incoming);
+    if (j.mine) setBoostMine({ live: j.mine.live || [], queued: [] });
+  }
+
+  async function refreshTape() {
+    try {
+      const tape = await fetch("/api/launch/tape", { cache: "no-store" }).then((r) => r.json());
+      if (tape.solUsd) setSolUsd((s) => s || tape.solUsd);
+      if (Array.isArray(tape.ranked) && tape.ranked.length > 0) setBoostRank(tape.ranked);
+      const market: Coin[] = Array.isArray(tape.coins) ? tape.coins : [];
+      setCoins((prev) => {
+        const padCoins = prev.filter((c) => c.born);
+        const padMints = new Set(padCoins.map((c) => c.mint).filter(Boolean));
+        const extra = market.filter((c) => !c.mint || !padMints.has(c.mint));
+        const next = [...padCoins, ...extra];
+        setOpen((cur) => (cur ? next.find((c) => c.id === cur.id) || cur : cur));
+        return next;
+      });
+    } catch {
+      /* keep whatever is on screen */
+    } finally {
+      setTapeLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (isSwap) {
+      setTab("tape");
+      return;
+    }
+    const saved = readLaunchTab();
+    setTab(saved);
+  }, [isSwap]);
+
+  useEffect(() => killNativeValidity(), []);
+
+  async function absorbPending(p: PendingLaunch) {
+    if (!owner) return;
+    try {
+      const r = await fetch("/api/launch", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          action: "confirm",
+          pubkey: owner,
+          mint: p.mint,
+          sigs: p.sig ? [p.sig] : ["1111111111111111111111111111111111111111111111111111111111111111"],
+          name: p.name,
+          symbol: p.symbol,
+          image: p.image,
+        }),
+      });
+      const j = await r.json();
+      if (r.ok && j.coin) {
+        clearPending(p.mint);
+        setPending(loadPending());
+        setCoins((prev) => [j.coin, ...prev.filter((c) => c.id !== j.coin.id)]);
+      }
+    } catch {
+      /* stay on pending until they remove it */
+    }
+  }
+
+  function removeFromDashboard(mint: string, symbol?: string) {
+    const label = symbol ? `$${symbol}` : "this token";
+    const ok = window.confirm(
+      `Remove ${label} from your dashboard? This is permanent on this device. The token still exists on Solana.`,
+    );
+    if (!ok) return;
+    hideLaunch(mint);
+    clearPending(mint);
+    setHidden(loadHidden());
+    setPending(loadPending());
+    setOpen((cur) => (cur?.mint === mint ? null : cur));
+  }
+
+  async function pickArtFile() {
+    const file = await new Promise<File | null>((resolve) => {
+      const i = document.createElement("input");
+      i.type = "file";
+      i.addEventListener(
+        "invalid",
+        (e) => {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+        },
+        true,
+      );
+      const done = (f: File | null) => {
+        i.onchange = null;
+        window.removeEventListener("focus", onFocus);
+        i.remove();
+        resolve(f);
+      };
+      const onFocus = () => window.setTimeout(() => done(i.files?.[0] || null), 400);
+      i.onchange = () => done(i.files?.[0] || null);
+      window.addEventListener("focus", onFocus);
+      i.click();
+    });
+    if (!file) return;
+    try {
+      const src = await readLaunchImage(file);
+      if (cropUrlRef.current) URL.revokeObjectURL(cropUrlRef.current);
+      cropUrlRef.current = src.url;
+      setCropSrc(src);
+      setCropOpen(true);
+      createErr.clear("image");
+      setErr("");
+    } catch (er) {
+      const message = er instanceof Error ? er.message : "image failed";
+      setImage("");
+      createErr.fail({ image: message }, message);
+    }
+  }
+
+  useEffect(() => {
+    refreshPad(false)
+      .then(() => setPadLoading(false))
+      .catch(() => setPadLoading(false));
+    if (!isSwap && owner) {
+      void refreshPad(true).catch(() => {});
+    }
+    refreshTape().catch(() => setTapeLoading(false));
+    refreshBoosts().catch(() => {});
+    const padT = setInterval(() => {
+      if (document.hidden) return;
+      refreshPad(false).catch(() => {});
+    }, 20_000);
+    const tapeT = setInterval(() => {
+      if (document.hidden) return;
+      refreshTape().catch(() => {});
+    }, 60_000);
+    const boostT = setInterval(() => {
+      if (document.hidden) return;
+      refreshBoosts().catch(() => {});
+    }, 20_000);
+    const syncT = isSwap
+      ? null
+      : setInterval(() => {
+          if (document.hidden) return;
+          refreshPad(true).catch(() => {});
+        }, 90_000);
+    return () => {
+      clearInterval(padT);
+      clearInterval(tapeT);
+      clearInterval(boostT);
+      if (syncT) clearInterval(syncT);
+    };
+  }, [owner, isSwap]);
+
+  useEffect(() => {
+    if (!owner) return;
+    const rows = loadPending();
+    if (!rows.length) return;
+    let stop = false;
+    void (async () => {
+      for (const p of rows) {
+        if (stop) return;
+        const r = await postLaunch({
+          action: "recover",
+          pubkey: owner,
+          mint: p.mint,
+          name: p.name,
+          symbol: p.symbol,
+          image: p.image,
+        });
+        if (r.ok) clearPending(p.mint);
+      }
+      if (stop) return;
+      setPending(loadPending());
+      await refreshPad().catch(() => {});
+    })();
+    return () => {
+      stop = true;
+    };
+  }, [owner]);
+
+  useEffect(() => {
+    if (!owner) return;
+    const leftover = loadPending().filter((p) => !hidden.includes(p.mint));
+    leftover.forEach((p) => absorbPending(p).catch(() => {}));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [owner]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const q = new URLSearchParams(window.location.search).get("mint") || "";
+    if (isSolanaAddress(q)) {
+      setCaQuery(q);
+      searchMint(q).catch(() => {});
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function searchMint(raw?: string) {
+    const q = (raw ?? caQuery).trim();
+    setCaErr("");
+    if (!q) {
+      setCaErr("Paste a mint address.");
+      return;
+    }
+    const local = coins.find((c) => {
+      if (c.mint && c.mint === q) return true;
+      const sym = (c.symbol || "").replace(/^\$+/, "").toLowerCase();
+      return sym && sym === q.replace(/^\$+/, "").toLowerCase();
+    });
+    if (local) {
+      setOpen(local);
+      setLookedMint(local.mint || local.id);
+      setTab("tape");
+      window.setTimeout(() => {
+        document.getElementById(`desk-${local.id}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 60);
+      return;
+    }
+    if (!isSolanaAddress(q)) {
+      setCaErr("Paste a mint address to look up a token off the tape.");
+      return;
+    }
+    setCaBusy(true);
+    try {
+      const r = await fetch(`/api/launch/lookup?mint=${encodeURIComponent(q)}`, { cache: "no-store" });
+      const j = await r.json();
+      if (!r.ok || !j.coin) {
+        setCaErr(j.error === "not_found" ? "No token at that mint." : j.error || "Lookup failed.");
+        return;
+      }
+      const coin = j.coin as Coin;
+      if (j.solUsd) setSolUsd((s) => s || j.solUsd);
+      setCoins((prev) => [coin, ...prev.filter((c) => c.mint !== coin.mint && c.id !== coin.id)]);
+      setOpen(coin);
+      setLookedMint(coin.mint || coin.id);
+      setTab("tape");
+      window.setTimeout(() => {
+        document.getElementById(`desk-${coin.id}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 60);
+    } catch (e) {
+      setCaErr(e instanceof Error ? e.message : "Lookup failed.");
+    } finally {
+      setCaBusy(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!isSwap || bootMint.current) return;
+    const mint = new URLSearchParams(window.location.search).get("mint") || "";
+    if (!mint || !isSolanaAddress(mint)) return;
+    bootMint.current = true;
+    setCaQuery(mint);
+    setLookedMint(mint);
+    const t = window.setTimeout(() => {
+      searchMint(mint).catch(() => {});
+    }, 500);
+    return () => window.clearTimeout(t);
+  }, [isSwap]);
+
+  async function launchToken() {
+    const issues = validateLaunchCreate(
+      {
+        creator: owner || "",
+        name,
+        symbol,
+        blurb,
+        image,
+        website,
+        x,
+        telegram,
+        discord,
+        launchBuySol: devBuy,
+      },
+      { requireImage: true },
+    );
+    if (Object.keys(issues).length) {
+      createErr.fail(issues);
+      setErr("");
+      return;
+    }
+    createErr.ok();
+    if (!owner) {
+      createErr.fail({ wallet: "Connect your wallet to launch." });
+      return;
+    }
+    markActionSpot("solphia-launch");
+    const art = pinnedUrl || image;
+    saveLaunchDraft({ name, symbol, blurb, image: art, website, x, telegram, discord, devBuy });
+    void postLaunch({
+      action: "save_draft",
+      pubkey: owner,
+      name,
+      symbol,
+      blurb,
+      image: art,
+      website,
+      x,
+      telegram,
+      discord,
+      launchBuySol: devBuy,
+    }).catch(() => {});
+    setBusy(true);
+    setWork("launch");
+    setMsg("");
+    setErr("");
+    try {
+      const useDbc = dbcEnabled();
+      const mintKp = useDbc ? Keypair.generate() : null;
+      const nonce = useDbc ? null : newMintNonce();
+      const mintPk = mintKp ? mintKp.publicKey.toBase58() : mintPda(owner, nonce!).toBase58();
+      lastMintRef.current = mintPk;
+      savePending({ mint: mintPk, name: name.trim(), symbol: symbol.trim().toUpperCase(), image: art, at: Date.now() });
+      setPending(loadPending());
+      setMsg(art.startsWith("data:") ? "Saving art, then building the launch…" : "Building the launch…");
+      const prep = await postLaunch({
+        action: "prepare",
+        pubkey: owner,
+        mint: mintPk,
+        nonce: nonce ? nonceToB64(nonce) : undefined,
+        name,
+        symbol,
+        blurb,
+        image: art,
+        website,
+        x,
+        telegram,
+        discord,
+        launchBuySol: devBuy,
+        referrer: peekRef() || undefined,
+      }, 40_000);
+      const pj = prep.json;
+      const packed = packFromPrep(pj);
+      if (!prep.ok || !packed) {
+        const code = typeof pj.error === "string" ? pj.error : "";
+        const message =
+          (typeof pj.message === "string" && pj.message) ||
+          launchError(code) ||
+          "Could not build the launch.";
+        const field = launchCodeToField(code);
+        if (field !== "form") createErr.fail({ [field]: message } as Partial<Record<LaunchField, string>>, message);
+        else createErr.fail({}, message);
+        throw new Error(message);
+      }
+      if (typeof pj.image === "string" && pj.image.startsWith("https://")) setPinnedUrl(pj.image);
+      setMsg("Sign in Solphia… CA " + mintPk);
+      const extras: import("@solana/web3.js").Keypair[] = [];
+      if (mintKp) extras.push(mintKp);
+      if (typeof pj.configSecret === "string") extras.push(Keypair.fromSecretKey(b64ToBytes(pj.configSecret)));
+      const sig = await signPhantomAndSend(packed, extras.length ? extras : undefined, {
+        kind: "launch_pool",
+        owner,
+        mint: mintPk,
+        mintSecret: mintKp ? bytesToB64(mintKp.secretKey) : undefined,
+        config: typeof pj.config === "string" ? pj.config : undefined,
+        tokensOut: Number(pj.tokensOut) || 0,
+        uri: typeof pj.uri === "string" ? pj.uri : undefined,
+        image: typeof pj.image === "string" ? pj.image : art,
+        name: name.trim(),
+        symbol: symbol.trim(),
+        blurb,
+        website,
+        x,
+        telegram,
+        discord,
+        launchBuySol: devBuy,
+        firstBuyIncluded: Boolean(pj.firstBuyIncluded),
+      });
+      savePending({ mint: mintPk, name: name.trim(), symbol: symbol.trim().toUpperCase(), image, at: Date.now(), sig });
+      setPending(loadPending());
+      setMsg("Waiting for the curve on Solana… CA " + mintPk);
+      const confirmBody = {
+        action: "confirm",
+        pubkey: owner,
+        mint: mintPk,
+        sigs: [sig],
+        tokens: Number(pj.tokensOut) || 0,
+        name,
+        symbol,
+        blurb,
+        image: pj.image || art,
+        website,
+        x,
+        telegram,
+        discord,
+        launchBuySol: devBuy,
+        uri: pj.uri,
+        referrer: peekRef() || undefined,
+        config: typeof pj.config === "string" ? pj.config : undefined,
+      };
+      let r = await fetch("/api/launch", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(confirmBody),
+      });
+      let j = await r.json();
+      for (let i = 0; i < 8 && !r.ok && j.error === "curve_missing"; i++) {
+        setMsg("Landing on Solana…");
+        await new Promise((res) => setTimeout(res, 2500));
+        r = await fetch("/api/launch", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(confirmBody),
+        });
+        j = await r.json();
+      }
+      if (!r.ok) {
+        const code = typeof j.error === "string" ? j.error : "";
+        const message = j.message || launchError(code) || "Curve landed but the pad could not list it yet.";
+        createErr.fail({}, message);
+        throw new Error(message);
+      }
+      if (j.coin) {
+        const listed = { ...j.coin, born: true, creator: j.coin.creator || owner, mint: j.coin.mint || mintPk };
+        setOpen(listed);
+        setCoins((prev) => [listed, ...prev.filter((c) => c.id !== listed.id && c.mint !== listed.mint)]);
+      }
+      setTab("mine");
+      tookDraft.current = true;
+      clearPending(mintPk);
+      setPending(loadPending());
+      await Promise.all([refreshPad(), refreshTape()]).catch(() => {});
+      createErr.ok();
+      setName("");
+      setSymbol("");
+      setBlurb("");
+      setImage("");
+      setPinnedUrl("");
+      if (cropUrlRef.current) URL.revokeObjectURL(cropUrlRef.current);
+      cropUrlRef.current = "";
+      setCropSrc(null);
+      setCropOpen(false);
+      setWebsite("");
+      setX("");
+      setTelegram("");
+      setDiscord("");
+      setDevBuy(0);
+      clearLaunchDraft();
+      void postLaunch({
+        action: "save_draft",
+        pubkey: owner,
+        name: "",
+        symbol: "",
+        blurb: "",
+        image: "",
+        website: "",
+        x: "",
+        telegram: "",
+        discord: "",
+        launchBuySol: 0,
+      }).catch(() => {});
+      setBusy(false);
+      setWork("");
+      setSnapAt(Date.now());
+      markActionSpot("your-tokens");
+      window.setTimeout(() => {
+        document.getElementById("your-tokens")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 80);
+      if (devBuy >= 0.01 && !pj.firstBuyIncluded) {
+        try {
+          await signDevBuy(owner, mintPk, typeof j.coin?.id === "string" ? j.coin.id : undefined, devBuy);
+        } catch (buyErr) {
+          if (isPhantomRedirect(buyErr)) throw buyErr;
+          setErr(buyErr instanceof Error ? buyErr.message : "First buy did not land. Buy it from Your tokens.");
+        }
+      }
+      setMsg(
+        devBuy > 0
+          ? `Live on the Solphia curve. CA ${mintPk}. First buy is in this wallet. If a wallet hides it: Manage Tokens, toggle on, Report as not spam.`
+          : `Live on the Solphia curve. CA ${mintPk}. If a wallet hides it: Manage Tokens, toggle on, Report as not spam.`,
+      );
+      const routed = await waitForPhantomRoute(mintPk);
+      setMsg(
+        routed.ok
+          ? `Live. CA ${mintPk}`
+          : `Live on the curve. CA ${mintPk}`,
+      );
+    } catch (e) {
+      if (isPhantomRedirect(e)) {
+        setMsg("Approve in your wallet. You'll come back here.");
+        return;
+      }
+      const timed = e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError");
+      const raw = e instanceof Error ? e.message : "launch failed";
+      if (!createErr.banner) {
+        const busy = /429|Too Many Requests|Solana is busy/i.test(raw);
+        setErr(timed ? "Launch timed out building the curve. Try again." : busy ? "Solana is busy right now. Wait a few seconds and tap Launch again." : raw);
+      }
+      setBusy(false);
+      setWork("");
+    }
+  }
+
+  async function finishPhantomLaunch(sig: string, after: PhAfter) {
+    const ownerPk = after.owner || loadOwner() || owner;
+    if (!ownerPk) throw new Error("Connect a wallet, then tap Launch again.");
+    if (after.kind === "launch_config") {
+      setBusy(true);
+      setMsg("Installing the Solphia curve…");
+      const cfgRes = await fetch("/api/launch", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "confirm_dbc_config", pubkey: ownerPk, config: after.config, sig }),
+      });
+      if (!cfgRes.ok) throw new Error("Could not save the Solphia curve. Try Launch again.");
+      setMsg("Curve is live. Building your token…");
+      let prep2 = await postLaunch({
+        action: "prepare",
+        pubkey: ownerPk,
+        mint: after.mint,
+        name: after.name,
+        symbol: after.symbol,
+        blurb: after.blurb,
+        image: after.image,
+        website: after.website,
+        x: after.x,
+        telegram: after.telegram,
+        discord: after.discord,
+        launchBuySol: after.launchBuySol,
+        referrer: peekRef() || undefined,
+        config: after.config,
+      }, 24_000);
+      if (prep2.json.step === "config") {
+        await new Promise((res) => setTimeout(res, 1600));
+        prep2 = await postLaunch({
+          action: "prepare",
+          pubkey: ownerPk,
+          mint: after.mint,
+          name: after.name,
+          symbol: after.symbol,
+          blurb: after.blurb,
+          image: after.image,
+          website: after.website,
+          x: after.x,
+          telegram: after.telegram,
+          discord: after.discord,
+          launchBuySol: after.launchBuySol,
+          referrer: peekRef() || undefined,
+          config: after.config,
+        }, 24_000);
+      }
+      const p2 = prep2.json;
+      if (p2.step === "config") throw new Error("Curve is still saving. Tap Launch once more.");
+      const packed = packFromPrep(p2);
+      if (!prep2.ok || !packed) {
+        throw new Error(
+          (typeof p2.message === "string" && p2.message) ||
+            launchError(typeof p2.error === "string" ? p2.error : "") ||
+            "Could not build the token.",
+        );
+      }
+      const mintKp = after.mintSecret ? Keypair.fromSecretKey(b64ToBytes(after.mintSecret)) : null;
+      setMsg("Sign in Solphia… CA " + (after.mint || ""));
+      await signPhantomAndSend(packed, mintKp ? [mintKp] : undefined, {
+        ...after,
+        kind: "launch_pool",
+        tokensOut: Number(p2.tokensOut) || 0,
+        firstBuyIncluded: Boolean(p2.firstBuyIncluded),
+        uri: typeof p2.uri === "string" ? p2.uri : after.uri,
+        image: typeof p2.image === "string" ? p2.image : after.image,
+        config: typeof p2.config === "string" ? p2.config : after.config,
+      });
+      return;
+    }
+    if (after.kind === "launch_pool") {
+      const mintPk = after.mint || "";
+      lastMintRef.current = mintPk;
+      setBusy(true);
+      setMsg("Waiting for the curve on Solana… CA " + mintPk);
+      const confirmBody = {
+        action: "confirm",
+        pubkey: ownerPk,
+        mint: mintPk,
+        sigs: [sig],
+        tokens: Number(after.tokensOut) || 0,
+        name: after.name,
+        symbol: after.symbol,
+        blurb: after.blurb,
+        image: after.image,
+        website: after.website,
+        x: after.x,
+        telegram: after.telegram,
+        discord: after.discord,
+        launchBuySol: after.launchBuySol,
+        uri: after.uri,
+        referrer: peekRef() || undefined,
+        config: after.config,
+      };
+      let r = await fetch("/api/launch", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(confirmBody),
+      });
+      let j = await r.json();
+      for (let i = 0; i < 8 && !r.ok && j.error === "curve_missing"; i++) {
+        setMsg("Landing on Solana…");
+        await new Promise((res) => setTimeout(res, 2500));
+        r = await fetch("/api/launch", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(confirmBody),
+        });
+        j = await r.json();
+      }
+      if (!r.ok) {
+        const code = typeof j.error === "string" ? j.error : "";
+        throw new Error(j.message || launchError(code) || "Curve landed but the pad could not list it yet.");
+      }
+      if (j.coin) {
+        const listed = { ...j.coin, born: true, creator: j.coin.creator || ownerPk, mint: j.coin.mint || mintPk };
+        setOpen(listed);
+        setCoins((prev) => [listed, ...prev.filter((c) => c.id !== listed.id && c.mint !== listed.mint)]);
+      }
+      setTab("mine");
+      tookDraft.current = true;
+      clearPending(mintPk);
+      setPending(loadPending());
+      await Promise.all([refreshPad(), refreshTape()]).catch(() => {});
+      if ((Number(after.launchBuySol) || 0) >= 0.01 && !after.firstBuyIncluded) {
+        try {
+          await signDevBuy(ownerPk, mintPk, typeof j.coin?.id === "string" ? j.coin.id : undefined, Number(after.launchBuySol) || 0);
+        } catch (buyErr) {
+          if (isPhantomRedirect(buyErr)) throw buyErr;
+          setErr(buyErr instanceof Error ? buyErr.message : "First buy did not land. Buy it from Your tokens.");
+        }
+      }
+      createErr.ok();
+      setName("");
+      setSymbol("");
+      setBlurb("");
+      setPinnedUrl("");
+      setImage("");
+      if (cropUrlRef.current) URL.revokeObjectURL(cropUrlRef.current);
+      cropUrlRef.current = "";
+      setCropSrc(null);
+      setCropOpen(false);
+      setWebsite("");
+      setX("");
+      setTelegram("");
+      setDiscord("");
+      setDevBuy(0);
+      clearLaunchDraft();
+      if (ownerPk) {
+        void postLaunch({
+          action: "save_draft",
+          pubkey: ownerPk,
+          name: "",
+          symbol: "",
+          blurb: "",
+          image: "",
+          website: "",
+          x: "",
+          telegram: "",
+          discord: "",
+          launchBuySol: 0,
+        }).catch(() => {});
+      }
+      setBusy(false);
+      setWork("");
+      setSnapAt(Date.now());
+      markActionSpot("your-tokens");
+      window.setTimeout(() => {
+        document.getElementById("your-tokens")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 80);
+      setMsg(
+        (after.launchBuySol || 0) > 0
+          ? `Live on the Solphia curve. CA ${mintPk}. First buy is in this wallet. If a wallet hides it: Manage Tokens, toggle on, Report as not spam.`
+          : `Live on the Solphia curve. CA ${mintPk}. If a wallet hides it: Manage Tokens, toggle on, Report as not spam.`,
+      );
+      const routed = await waitForPhantomRoute(mintPk);
+      setMsg(routed.ok ? `Live. CA ${mintPk}` : `Live on the curve. CA ${mintPk}`);
+      return;
+    }
+    if (after.kind === "claim") {
+      setTab("mine");
+      writeLaunchTab("mine");
+      setWork("claim");
+      await Promise.all([refreshPad(true), refreshTape()]).catch(() => {});
+      const paid = Number(after.claimSol) || 0;
+      const nextMint = after.claimAll ? (after.remainingMints || []).find((m) => m && m !== after.mint) : "";
+      if (nextMint && claimSeqRef.current < CLAIM_ALL_MAX && claimLock.current !== nextMint) {
+        claimLock.current = nextMint;
+        claimSeqRef.current += 1;
+        setMsg(
+          paid
+            ? `Claimed ${fmtClaimSol(paid)} SOL. Approve the next unpaid token in your wallet…`
+            : "Claimed. Approve the next unpaid token in your wallet…",
+        );
+        await act({
+          action: after.partner ? "withdraw_partner" : "withdraw_dev",
+          mint: nextMint,
+          mints: after.remainingMints || [nextMint],
+          claimAll: true,
+        });
+        return;
+      }
+      setMsg(
+        after.partner
+          ? "Protocol fees claimed into this wallet."
+          : nextMint
+            ? paid
+              ? `Claimed ${fmtClaimSol(paid)} SOL. ${fmtClaimSol(Number(after.remainingSol) || 0)} SOL still unclaimed — tap Claim.`
+              : "Claimed. Tap Claim for the rest."
+            : paid
+              ? `Claimed ${fmtClaimSol(paid)} SOL into this wallet.`
+              : "All creator fees claimed into this wallet.",
+      );
+      setBusy(false);
+      setWork("");
+      markActionSpot(after.partner ? "protocol-fees" : "creator-fees");
+      scrollToSpot(after.partner ? "protocol-fees" : "creator-fees");
+      return;
+    }
+    if (after.kind === "jup_swap") {
+      setBusy(false);
+      return;
+    }
+    if (after.kind === "swap") {
+      if (after.id) {
+        const conf = await fetch("/api/launch", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            action: "trade_confirm",
+            pubkey: ownerPk,
+            id: after.id,
+            mint: after.mint,
+            side: after.side === "sell" ? "sell" : "buy",
+            sol: after.sol,
+            tokens: after.tokens,
+            sig,
+          }),
+        });
+        const listed = await conf.json();
+        if (!conf.ok) throw new Error(listed.message || launchError(listed.error) || "Trade landed but the tape missed it.");
+        if (listed.coin) {
+          setOpen(listed.coin);
+          setCoins((prev) => [listed.coin, ...prev.filter((c: { id: string }) => c.id !== listed.coin.id)]);
+        }
+      }
+      setMsg(`Filled · ${sig.slice(0, 8)}… Tokens landed in your wallet.`);
+      await Promise.all([refreshPad(), refreshTape()]).catch(() => {});
+      setBusy(false);
+      markActionSpot("swap-widget");
+      scrollToSpot("swap-widget");
+    }
+  }
+
+  finishPhantomRef.current = finishPhantomLaunch;
+
+  async function signDevBuy(payer: string, mint: string, id: string | undefined, sol: number) {
+    if (!(sol >= 0.01) || !mint || !payer) return;
+    setBusy(true);
+    setWork("swap");
+    setMsg(`Live. Sign the ${sol} SOL first buy in your wallet…`);
+    let last = "curve_missing";
+    for (let i = 0; i < 8; i++) {
+      if (i) await new Promise((r) => setTimeout(r, 2000));
+      const r = await fetch("/api/launch", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "buy", pubkey: payer, mint, id, sol }),
+      });
+      const j = await r.json();
+      if (r.ok && j.needsSign && j.transaction) {
+        await signPhantomAndSend(j.transaction, undefined, {
+          kind: "swap",
+          owner: payer,
+          mint,
+          id,
+          side: "buy",
+          sol,
+          tokens: Number(j.tokensOut) || 0,
+        });
+        setBusy(false);
+        setWork("");
+        return;
+      }
+      last = typeof j.error === "string" ? j.error : last;
+      if (last !== "curve_missing" && last !== "chain_failed") break;
+    }
+    setBusy(false);
+    setWork("");
+    throw new Error(launchError(last) || "First buy did not land. Buy it from Your tokens.");
+  }
+
+  async function act(body: Record<string, unknown>) {
+    if (!owner) {
+      if (body.action === "create") createErr.fail({ wallet: "Connect your wallet to launch." });
+      else setErr("Connect your wallet to launch or swap.");
+      return;
+    }
+    setBusy(true);
+    setWork(body.action === "withdraw_dev" || body.action === "withdraw_partner" ? "claim" : body.action === "create" ? "launch" : "swap");
+    if (body.action === "withdraw_dev" || body.action === "withdraw_partner") {
+      setTab("mine");
+      writeLaunchTab("mine");
+      markActionSpot(body.action === "withdraw_partner" ? "protocol-fees" : "creator-fees");
+    } else if (body.action === "create") {
+      markActionSpot("solphia-launch");
+    } else {
+      markActionSpot("swap-widget");
+    }
+    setMsg("");
+    setErr("");
+    let redirected = false;
+    try {
+      const r = await fetch("/api/launch", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ...body, pubkey: owner }),
+      });
+      const j = await r.json();
+      if (!r.ok) {
+        const code = typeof j.error === "string" ? j.error : "";
+        const message = j.message || launchError(code) || "failed";
+        if (body.action === "create") {
+          const field = launchCodeToField(code);
+          if (field !== "form") createErr.fail({ [field]: message } as Partial<Record<LaunchField, string>>, message);
+          else createErr.fail({}, message);
+        }
+        throw new Error(message);
+      }
+      let listed = j;
+      if (j.needsSign && j.transaction) {
+        if (j.claim && !(Number(j.claimSol) > 0)) throw new Error("This claim pays nothing on-chain.");
+        setMsg(
+          j.claim
+            ? `Sign ${fmtClaimSol(Number(j.claimSol))} SOL in your wallet…`
+            : "Sign the swap in your wallet…",
+        );
+        const remainingMints = Array.isArray(j.remainingMints) ? j.remainingMints.filter((m: unknown) => typeof m === "string") : [];
+        const claimAll = Boolean(body.claimAll) || Boolean(j.claim && !j.partner);
+        const amt = Number(j.claimSol) || 0;
+        const leftSol = Number(j.remainingSol) || 0;
+        const sig = await signPhantomAndSend(j.transaction, undefined, {
+          kind: j.claim ? "claim" : "swap",
+          owner,
+          mint: j.coin?.mint || (typeof body.mint === "string" ? body.mint : undefined),
+          id: typeof body.id === "string" ? body.id : undefined,
+          claim: Boolean(j.claim),
+          partner: Boolean(j.partner),
+          claimAll,
+          remainingMints,
+          claimSol: amt,
+          remainingSol: leftSol,
+          side: body.action === "sell" ? "sell" : "buy",
+          sol: body.action === "sell" ? Number(j.solOut) || 0 : Number(body.sol) || 0,
+          tokens: body.action === "sell" ? Number(body.tokens) || 0 : Number(j.tokensOut) || 0,
+        });
+        if (j.claim) {
+          const more = Number(j.remaining) || 0;
+          const nextMint = claimAll ? remainingMints[0] : "";
+          if (nextMint && claimSeqRef.current < CLAIM_ALL_MAX && claimLock.current !== nextMint) {
+            claimLock.current = nextMint;
+            claimSeqRef.current += 1;
+            setTab("mine");
+            writeLaunchTab("mine");
+            setMsg(`Claimed ${fmtClaimSol(amt)} SOL. Approve the next unpaid token in your wallet…`);
+            await Promise.all([refreshPad(true), refreshTape()]);
+            await act({
+              action: j.partner ? "withdraw_partner" : "withdraw_dev",
+              mint: nextMint,
+              mints: remainingMints,
+              claimAll: true,
+            });
+            return;
+          }
+          setMsg(
+            j.partner
+              ? "Protocol fees claimed into this wallet."
+              : nextMint || more
+                ? `Claimed ${fmtClaimSol(amt)} SOL. ${fmtClaimSol(leftSol)} SOL still unclaimed — tap Claim.`
+                : amt
+                  ? `Claimed ${fmtClaimSol(amt)} SOL into this wallet.`
+                  : "All creator fees claimed into this wallet.",
+          );
+          await Promise.all([refreshPad(true), refreshTape()]);
+          markActionSpot(j.partner ? "protocol-fees" : "creator-fees");
+          scrollToSpot(j.partner ? "protocol-fees" : "creator-fees");
+          return;
+        }
+        const conf = await fetch("/api/launch", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            action: "trade_confirm",
+            pubkey: owner,
+            id: body.id,
+            mint: j.coin?.mint,
+            side: body.action === "sell" ? "sell" : "buy",
+            sol: body.action === "sell" ? j.solOut : body.sol,
+            tokens: body.action === "sell" ? body.tokens : j.tokensOut,
+            feeSol: j.feeSol,
+            sig,
+          }),
+        });
+        listed = await conf.json();
+        if (!conf.ok) throw new Error(listed.message || launchError(listed.error) || "Trade landed but the tape missed it.");
+      }
+      if (listed.coin) {
+        setOpen(listed.coin);
+        setCoins((prev) => [listed.coin, ...prev.filter((c: { id: string }) => c.id !== listed.coin.id)]);
+      }
+      await Promise.all([refreshPad(), refreshTape()]);
+      if (body.action === "create") {
+        createErr.ok();
+        setName("");
+        setSymbol("");
+        setBlurb("");
+        setImage("");
+        if (cropUrlRef.current) URL.revokeObjectURL(cropUrlRef.current);
+        cropUrlRef.current = "";
+        setCropSrc(null);
+        setCropOpen(false);
+        setWebsite("");
+        setX("");
+        setTelegram("");
+        setDiscord("");
+        setDevBuy(0);
+        setTab("mine");
+        setMsg("Live on the Solphia curve. If a wallet hides it: Manage Tokens, toggle on, Report as not spam.");
+      } else if (body.action === "withdraw_dev" || body.action === "withdraw_partner") {
+        setMsg("Fees claimed.");
+        scrollToSpot(body.action === "withdraw_partner" ? "protocol-fees" : "creator-fees");
+      } else {
+        setMsg("Filled. Tokens are in your wallet.");
+        scrollToSpot("swap-widget");
+      }
+    } catch (e) {
+      if (isPhantomRedirect(e)) {
+        redirected = true;
+        if (body.action === "withdraw_dev" || body.action === "withdraw_partner") {
+          setTab("mine");
+          writeLaunchTab("mine");
+          setMsg("Approve this claim in your wallet. You'll come back to Your tokens.");
+        } else {
+          setMsg("Approve in your wallet. You'll come back here.");
+        }
+      } else if (body.action !== "create") setErr(e instanceof Error ? e.message : "failed");
+    } finally {
+      if (!redirected) {
+        setBusy(false);
+        setWork("");
+      }
+    }
+  }
+
+  async function claimVault(mints: string[]): Promise<{ sol: number; harvested: number } | null> {
+    if (!owner) return null;
+    setBusy(true);
+    setWork("claim");
+    setTab("mine");
+    writeLaunchTab("mine");
+    markActionSpot("creator-fees");
+    setMsg("Harvesting unpaid pools into your vault…");
+    setErr("");
+    try {
+      const r = await fetch("/api/launch", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "claim_vault", pubkey: owner, mints }),
+      });
+      const j = await r.json().catch(() => null);
+      if (!r.ok) return null;
+      const sol = Number(j?.sol) || 0;
+      const harvested = Number(j?.harvested?.claimed) || 0;
+      await Promise.all([refreshPad(true), refreshTape()]).catch(() => {});
+      if (sol > 0) {
+        setMsg(`Claimed ${fmtClaimSol(sol)} SOL into this wallet.`);
+        scrollToSpot("creator-fees");
+        return { sol, harvested };
+      }
+      if (harvested > 0) {
+        setMsg("Harvested into your vault. Tap Claim to drain it in one transfer.");
+        scrollToSpot("creator-fees");
+        return { sol: 0, harvested };
+      }
+      return null;
+    } catch {
+      return null;
+    } finally {
+      setBusy(false);
+      setWork("");
+    }
+  }
+
+  const mine = uniqueByMint(
+    (owner && treasuryWallet && owner === treasuryWallet
+      ? coins.filter((c) => c.born)
+      : yourLaunches(coins, owner)
+    ).filter((c) => !hidden.includes(c.mint || "")),
+  );
+  const claimable = claimableCreator(mine);
+  const generatedSol = sumCreatorGenerated(mine);
+  const payout = nextCreatorPayout(mine);
+  const unclaimedSol = payout.totalUnclaimed;
+  const pool = isSwap ? coins : mine;
+  const board = useMemo(() => {
+    if (!isSwap) {
+      const rows = sortByNewest(mine).map((coin) => ({
+        coin,
+        rank: 0,
+        audit: undefined as undefined,
+        boost: undefined as undefined,
+      }));
+      return rows;
+    }
+    const sourced =
+      source === "born"
+        ? pool.filter((c) => c.born)
+        : source === "market"
+          ? pool.filter((c) => !c.born)
+          : pool;
+    const q = caQuery.trim().toLowerCase().replace(/^\$+/, "");
+    const searched = q
+      ? sourced.filter((c) => {
+          const sym = (c.symbol || "").toLowerCase().replace(/^\$+/, "");
+          const name = (c.name || "").toLowerCase();
+          const mint = (c.mint || "").toLowerCase();
+          return sym.includes(q) || name.includes(q) || mint.includes(q);
+        })
+      : sourced;
+    const aged = filterTape(searched, age);
+    const rows =
+      tapeSort === "rank" || ranked
+        ? rankTape(aged, solUsd)
+        : tapeSort === "mcap"
+          ? scoreTape(
+              aged.slice().sort((a, b) => (b.marketCapUsd || 0) - (a.marketCapUsd || 0) || b.createdAt - a.createdAt),
+              solUsd,
+            )
+          : tapeSort === "trending"
+            ? scoreTape(sortByTrending(aged, solUsd), solUsd)
+            : scoreTape(sortTape(aged, vol), solUsd);
+    const boosted = [];
+    const rest = [];
+    for (const row of rows) {
+      const b = boostRank.find((x) => x.coinId === row.coin.id || (x.mint && x.mint === row.coin.mint));
+      if (b) boosted.push({ ...row, boost: b });
+      else rest.push({ ...row, boost: undefined as undefined });
+    }
+    boosted.sort((a, b) => (b.boost?.rockets || 0) - (a.boost?.rockets || 0));
+    let next = isSwap ? rows.map((row) => {
+      const b = boostRank.find((x) => x.coinId === row.coin.id || (x.mint && x.mint === row.coin.mint));
+      return { ...row, boost: b };
+    }) : [...boosted, ...rest];
+    if (lookedMint) {
+      const pinned = coins.find((c) => c.mint === lookedMint || c.id === lookedMint);
+      if (pinned) {
+        const already = next.find((r) => r.coin.id === pinned.id || r.coin.mint === pinned.mint);
+        if (already) next = [already, ...next.filter((r) => r !== already)];
+        else {
+          const extra = scoreTape([pinned], solUsd)[0];
+          if (extra) {
+            const b = boostRank.find((x) => x.coinId === pinned.id || (x.mint && x.mint === pinned.mint));
+            next = [{ ...extra, boost: b }, ...next];
+          }
+        }
+      }
+    }
+    return next;
+  }, [isSwap, mine, pool, age, vol, ranked, tapeSort, solUsd, source, boostRank, lookedMint, coins, caQuery]);
+  const rows = board.map((r) => r.coin);
+
+  return (
+    <main className="relative min-h-[calc(100vh-4rem)] overflow-x-hidden pb-24">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(120%_80%_at_50%_-10%,rgba(20,80,40,0.35),transparent_55%)]" />
+      <div className={`relative z-10 mx-auto px-4 pt-5 md:pt-8 ${isSwap ? "max-w-lg md:max-w-2xl lg:max-w-3xl" : "max-w-lg md:max-w-2xl"}`}>
+        <div>
+          <p className="text-[32px] font-semibold tracking-tight text-white">{isSwap ? "Swap" : "Launch"}</p>
+          {isSwap ? (
+            <p className="mt-1 text-[15px] text-white/45">Trending on Solana. Pick one below, or paste a CA.</p>
+          ) : null}
+        </div>
+        {isSwap && (
+          <div className="mt-4">
+            <SwapWidget
+              owner={owner}
+              defaultMint={open?.mint || lookedMint || ""}
+              defaultSymbol={open?.symbol || ""}
+              defaultName={open?.name || ""}
+              defaultImage={open?.image || ""}
+              tokens={sortByTrending(coins.filter((c) => c.mint), solUsd)
+                .slice(0, 48)
+                .map((c) => ({ mint: c.mint || "", symbol: c.symbol, name: c.name, image: c.image }))}
+              onMint={(mint) => {
+                setLookedMint(mint);
+              }}
+              onDone={() => {
+                markActionSpot("swap-widget");
+                scrollToSpot("swap-widget");
+                void Promise.all([refreshPad(), refreshTape()]).catch(() => {});
+              }}
+            />
+          </div>
+        )}
+        {isSwap && (
+          <div id="boost-desk" className="mt-4 scroll-mt-20 overflow-hidden rounded-[28px] border border-white/10 bg-[#0b0714] shadow-[0_20px_60px_rgba(0,0,0,0.45)]">
+            <div className="flex items-center justify-between gap-3 px-4 pt-4 sm:px-5">
+              <div className="flex items-center gap-2.5">
+                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-acid/15 text-acid">
+                  <Rocket className="h-4 w-4" fill="currentColor" />
+                </span>
+                <div>
+                  <p className="text-[18px] font-semibold tracking-tight text-white">Boost</p>
+                  <p className="font-mono text-[10px] tracking-[0.18em] text-white/35">24H ON THE RAIL</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setBoostOpen((v) => !v)}
+                className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[13px] font-semibold ${
+                  boostOpen ? "bg-white/10 text-white" : "bg-[#14f195] text-[#04000a]"
+                }`}
+              >
+                <Rocket className="h-3.5 w-3.5" fill="currentColor" />
+                {boostOpen ? "Close" : "Boost a coin"}
+              </button>
+            </div>
+            <BoostRail
+              rows={boostRank.map((b) => {
+                const hit = coins.find((c) => c.mint === b.mint || c.id === b.coinId || c.id === b.mint);
+                return {
+                  ...b,
+                  image: b.image || hit?.image,
+                  name: b.name || hit?.name,
+                  symbol: b.symbol || hit?.symbol || "",
+                };
+              })}
+              onOpen={(b) => {
+                const mint = b.mint || b.coinId;
+                const hit = coins.find((c) => c.mint === mint || c.id === b.coinId || c.id === mint);
+                if (hit) {
+                  setOpen(hit);
+                  setLookedMint(hit.mint || hit.id);
+                  setSnapAt(Date.now());
+                  setTab("tape");
+                  window.setTimeout(() => {
+                    document.getElementById(`desk-${hit.id}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+                  }, 60);
+                  return;
+                }
+                if (!mint) return;
+                const seeded: Coin = {
+                  id: b.coinId || mint,
+                  mint,
+                  name: b.name || b.symbol || "Token",
+                  symbol: b.symbol || "",
+                  image: b.image,
+                  blurb: "",
+                  creator: "",
+                  createdAt: Date.now(),
+                  status: "graduated",
+                  priceSol: 0,
+                  marketCapSol: 0,
+                  marketCapUsd: 0,
+                  progress: 1,
+                  realSol: 0,
+                  holders: 0,
+                  devRewardsSol: 0,
+                  fills: [],
+                };
+                setCoins((prev) => [seeded, ...prev.filter((c) => c.mint !== mint && c.id !== seeded.id)]);
+                setOpen(seeded);
+                setLookedMint(mint);
+                setSnapAt(Date.now());
+                setTab("tape");
+                window.setTimeout(() => {
+                  document.getElementById(`desk-${seeded.id}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+                }, 60);
+                if (isSolanaAddress(mint)) searchMint(mint).catch(() => {});
+              }}
+            />
+            {boostOpen && (
+              <div className="border-t border-white/10 px-3 pb-4 pt-3 sm:px-4">
+                {owner ? (
+                  <BoostBuy
+                    owner={owner}
+                    coinId={open?.id}
+                    symbol={open?.symbol}
+                    name={open?.name}
+                    image={open?.image}
+                    mint={open?.mint}
+                    onDone={() => {
+                      markActionSpot("boost-desk");
+                      scrollToSpot("boost-desk");
+                      refreshBoosts().catch(() => {});
+                    }}
+                    onPick={(token) => {
+                      if (token.mint) searchMint(token.mint).catch(() => {});
+                    }}
+                  />
+                ) : (
+                  <p className="px-1 py-2 text-center text-[13px] text-white/45">Connect a wallet to boost.</p>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {!isSwap && (
+          <div className="mt-5 flex gap-5 border-b border-white/10 text-[16px]">
+            <button
+              type="button"
+              onClick={() => {
+                setTab("tape");
+                writeLaunchTab("tape");
+                setOpen(null);
+              }}
+              className={`inline-flex items-center gap-1.5 pb-2 ${tab === "tape" ? "border-b-2 border-white font-medium text-white" : "text-white/40"}`}
+            >
+              <Rocket className="h-4 w-4" />
+              Launch
+            </button>
+            <button
+              type="button"
+              id="your-tokens"
+              onClick={() => {
+                setTab("mine");
+                writeLaunchTab("mine");
+              }}
+              className={`scroll-mt-20 pb-2 ${tab === "mine" ? "border-b-2 border-white font-medium text-white" : "text-white/40"}`}
+            >
+              Your tokens
+            </button>
+          </div>
+        )}
+
+        <div className="mt-6">
+          {!isSwap && tab === "tape" && (
+          <div className="space-y-5">
+          <PadPitch />
+          <section id="solphia-launch" className="scroll-mt-20 overflow-hidden rounded-3xl border border-white/10 bg-black/30 p-5">
+            <h2 className="mb-1 text-[22px] font-semibold text-white">Create a coin</h2>
+            <p className="mb-4 text-[15px] text-white/45">Name, ticker, art. You sign. It lives on the Solphia curve.</p>
+            {!owner ? (
+              <div className="mt-6 space-y-3">
+                <p className="text-sm text-mute">Launch signs in your Solphia wallet. Create or import to continue.</p>
+                <WalletConnect />
+              </div>
+            ) : (
+              <>
+                <div className="mt-4 flex items-center gap-3">
+                  <button
+                    type="button"
+                    data-field="image"
+                    onClick={() => (cropSrc ? setCropOpen(true) : pickArtFile().catch(() => {}))}
+                    className={`relative h-20 w-20 shrink-0 overflow-hidden rounded-2xl border bg-void ${fieldClass(createErr.errors.image, "border-violet/40")}`}
+                  >
+                    {image ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={image} alt="" className="h-full w-full object-cover" />
+                    ) : (
+                      <span className="flex h-full items-center justify-center font-mono text-[10px] text-mute">art</span>
+                    )}
+                  </button>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm text-ghost">Token art</p>
+                    <p className="mt-0.5 text-sm text-mute">Any photo. You frame a square. We save a JPEG wallets can show.</p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <button type="button" onClick={() => pickArtFile().catch(() => {})} className="font-mono text-[11px] text-acid">
+                        {image ? "Replace" : "Choose photo"}
+                      </button>
+                      {cropSrc ? (
+                        <button type="button" onClick={() => setCropOpen(true)} className="font-mono text-[11px] text-mute">
+                          Recrop
+                        </button>
+                      ) : null}
+                      {image ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setImage("");
+                            setPinnedUrl("");
+                            if (cropUrlRef.current) URL.revokeObjectURL(cropUrlRef.current);
+                            cropUrlRef.current = "";
+                            setCropSrc(null);
+                            createErr.clear("image");
+                          }}
+                          className="font-mono text-[11px] text-mute"
+                        >
+                          Remove
+                        </button>
+                      ) : null}
+                    </div>
+                    <FieldError error={createErr.errors.image} />
+                  </div>
+                </div>
+                {cropOpen && cropSrc ? (
+                  <TokenImageCrop
+                    source={cropSrc}
+                    onCancel={() => setCropOpen(false)}
+                    onDone={(dataUrl) => {
+                      setImage(dataUrl);
+                      setPinnedUrl("");
+                      setCropOpen(false);
+                      createErr.clear("image");
+                      void fetch("/api/launch/art", {
+                        method: "POST",
+                        headers: { "content-type": "application/json" },
+                        body: JSON.stringify({ image: dataUrl, symbol }),
+                      })
+                        .then((r) => r.json())
+                        .then((j) => {
+                          if (typeof j.url === "string" && j.url.startsWith("https://")) {
+                            setPinnedUrl(j.url);
+                            saveLaunchDraft({ name, symbol, blurb, image: j.url, website, x, telegram, discord, devBuy });
+                          }
+                        })
+                        .catch(() => undefined);
+                    }}
+                  />
+                ) : null}
+                <div>
+                <label className="mt-4 block">
+                  <div className="mb-1.5 flex items-baseline justify-between gap-3">
+                    <span className={`text-xs ${createErr.errors.name ? "text-blood" : "text-mute"}`}>Name</span>
+                    <span className="font-mono text-[10px] text-mute">{NAME_MIN}–{NAME_MAX} characters</span>
+                  </div>
+                  <SafeField
+                    field="name"
+                    value={name}
+                    max={NAME_MAX}
+                    placeholder="Name"
+                    className={`w-full rounded-2xl border bg-void px-4 py-3 text-ghost ${fieldClass(createErr.errors.name)}`}
+                    onChange={(v) => {
+                      setName(v);
+                      createErr.clear("name");
+                    }}
+                  />
+                  <LengthHint
+                    n={name.trim().length}
+                    min={NAME_MIN}
+                    max={NAME_MAX}
+                    empty={`${NAME_MIN}–${NAME_MAX} characters. “HI” is valid.`}
+                    short={`needs at least ${NAME_MIN} characters`}
+                    error={createErr.errors.name}
+                  />
+                </label>
+                <label
+                  data-field="symbol"
+                  className="mt-3 block"
+                >
+                  <div className="mb-1.5 flex items-baseline justify-between gap-3">
+                    <span className={`text-xs ${createErr.errors.symbol ? "text-blood" : "text-mute"}`}>Ticker</span>
+                    <span className="font-mono text-[10px] text-mute">{TICKER_MIN}–{TICKER_MAX} letters or numbers</span>
+                  </div>
+                  <div className={`flex w-full items-center rounded-2xl border bg-void px-4 py-3 font-mono text-ghost ${fieldClass(createErr.errors.symbol)}`}>
+                    <span className="pr-1 text-acid">$</span>
+                    <SafeField
+                      field="symbol"
+                      value={symbol}
+                      max={TICKER_MAX}
+                      placeholder="TICKER"
+                      className="w-full bg-transparent outline-none"
+                      filter={(v) => v.replace(/^\$+/, "").toUpperCase().replace(/[^A-Z0-9]/g, "")}
+                      onChange={(v) => {
+                        setSymbol(v);
+                        createErr.clear("symbol");
+                      }}
+                    />
+                  </div>
+                  <LengthHint
+                    n={symbol.trim().length}
+                    min={TICKER_MIN}
+                    max={TICKER_MAX}
+                    empty={`${TICKER_MIN}–${TICKER_MAX} letters or numbers. No spaces or symbols. “HI” is valid.`}
+                    short={`needs at least ${TICKER_MIN} letters or numbers`}
+                    error={createErr.errors.symbol}
+                  />
+                </label>
+                <SafeField
+                  field="blurb"
+                  value={blurb}
+                  max={280}
+                  placeholder="One line (optional)"
+                  className={`mt-3 w-full rounded-2xl border bg-void px-4 py-3 text-ghost ${fieldClass(createErr.errors.blurb)}`}
+                  onChange={(v) => {
+                    setBlurb(v);
+                    createErr.clear("blurb");
+                  }}
+                />
+                <FieldError error={createErr.errors.blurb} />
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  <div>
+                    <SafeField
+                      field="website"
+                      value={website}
+                      max={160}
+                      placeholder="website.com"
+                      className={`rounded-2xl border bg-void px-3 py-2 text-sm text-ghost ${fieldClass(createErr.errors.website)}`}
+                      onChange={(v) => {
+                        setWebsite(v);
+                        createErr.clear("website");
+                      }}
+                    />
+                    <FieldError error={createErr.errors.website} />
+                  </div>
+                  <div>
+                    <SafeField
+                      field="x"
+                      value={x}
+                      max={80}
+                      placeholder="@handle or x.com/…"
+                      className={`rounded-2xl border bg-void px-3 py-2 text-sm text-ghost ${fieldClass(createErr.errors.x)}`}
+                      onChange={(v) => {
+                        setX(v);
+                        createErr.clear("x");
+                      }}
+                    />
+                    <FieldError error={createErr.errors.x} />
+                  </div>
+                  <div>
+                    <SafeField
+                      field="telegram"
+                      value={telegram}
+                      max={80}
+                      placeholder="t.me/…"
+                      className={`rounded-2xl border bg-void px-3 py-2 text-sm text-ghost ${fieldClass(createErr.errors.telegram)}`}
+                      onChange={(v) => {
+                        setTelegram(v);
+                        createErr.clear("telegram");
+                      }}
+                    />
+                    <FieldError error={createErr.errors.telegram} />
+                  </div>
+                  <div>
+                    <SafeField
+                      field="discord"
+                      value={discord}
+                      max={120}
+                      placeholder="discord.gg/…"
+                      className={`rounded-2xl border bg-void px-3 py-2 text-sm text-ghost ${fieldClass(createErr.errors.discord)}`}
+                      onChange={(v) => {
+                        setDiscord(v);
+                        createErr.clear("discord");
+                      }}
+                    />
+                    <FieldError error={createErr.errors.discord} />
+                  </div>
+                </div>
+                <label data-field="launchBuySol" className="mt-4 block">
+                  <div className="flex justify-between text-sm">
+                    <span className={createErr.errors.launchBuySol ? "text-blood" : "text-mute"}>Dev buy</span>
+                    <span className="font-mono text-acid">
+                      {devBuy.toFixed(2)} SOL · {(devPct * 100).toFixed(2)}% of supply
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min={0}
+                    max={DEV_CAP}
+                    step={0.05}
+                    value={Math.min(devBuy, DEV_CAP)}
+                    onChange={(e) => {
+                      setDevBuy(Number(e.target.value));
+                      createErr.clear("launchBuySol");
+                    }}
+                    className="mt-2 w-full accent-[#14f195]"
+                  />
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {[0, ...PRESETS.filter((n) => n <= DEV_CAP), Number(DEV_CAP.toFixed(2))].filter((n, i, a) => a.indexOf(n) === i).map((n) => (
+                      <button
+                        key={n}
+                        type="button"
+                        onClick={() => {
+                          setDevBuy(n);
+                          createErr.clear("launchBuySol");
+                        }}
+                        className={`rounded-full px-3 py-1.5 text-[13px] font-medium ${
+                          Math.abs(devBuy - n) < 0.001 ? "bg-[#14f195] text-black" : "bg-white/10 text-white"
+                        }`}
+                      >
+                        {n === 0 ? "0" : `${n} SOL`}
+                      </button>
+                    ))}
+                  </div>
+                  <FieldError error={createErr.errors.launchBuySol} />
+                  <p className="mt-1 text-xs text-mute">
+                    Optional first buy into this wallet, bundled in the same signature. Leave at 0 to put the whole
+                    supply on the curve. Capped at 5% of supply ({fmtSol(DEV_CAP, 2)} SOL at open).
+                  </p>
+                </label>
+                <div className="mt-4 flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => launchToken().catch(() => {})}
+                    className="btn-acid min-h-[48px] rounded-full px-6 disabled:opacity-40"
+                  >
+                    {busy && work === "launch" ? "Launching…" : "Launch on Solana"}
+                  </button>
+                </div>
+                <p className="mt-2 text-xs text-mute">You sign once. The token lives on the Solphia curve.</p>
+                <FieldError error={createErr.errors.wallet} />
+                <div id="launch-form-status" className="mt-3">
+                  <FormAlert error={createErr.banner} />
+                  {msg && tab === "tape" ? <p className="mt-2 font-mono text-sm text-acid">{msg}</p> : null}
+                </div>
+                </div>
+              </>
+            )}
+          </section>
+          </div>
+          )}
+
+          {((!isSwap && tab === "mine") || isSwap) && (
+          <section className="mt-2">
+            {isSwap && (
+            <div className="space-y-3">
+              <div className="relative">
+                <SafeField
+                  value={caQuery}
+                  placeholder="Search by CA or ticker"
+                  className="min-h-[44px] w-full rounded-full border border-white/10 bg-black/35 px-4 pl-4 text-[15px] text-white"
+                  onChange={(v) => {
+                    setCaQuery(v);
+                    setCaErr("");
+                  }}
+                />
+                <button
+                  type="button"
+                  disabled={caBusy}
+                  onClick={() => searchMint().catch(() => {})}
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-full bg-acid px-4 py-1.5 text-[13px] font-semibold text-void disabled:opacity-40"
+                >
+                  {caBusy ? "…" : "Go"}
+                </button>
+              </div>
+              {caErr && <p className="text-[13px] text-blood">{caErr}</p>}
+              <div className="flex gap-1 overflow-x-auto pb-1">
+                {(
+                  [
+                    ["trending", "Trending"],
+                    ["rank", "Rank"],
+                    ["newest", "New"],
+                    ["mcap", "Mcap"],
+                    ["vol5m", "5m vol"],
+                    ["vol1h", "1h vol"],
+                  ] as const
+                ).map(([k, label]) => (
+                  <button
+                    key={k}
+                    type="button"
+                    onClick={() => {
+                      setTapeSort(k);
+                      setRanked(k === "rank");
+                      setVol(k === "vol5m" ? "5m" : k === "vol1h" ? "1h" : null);
+                    }}
+                    className={`shrink-0 rounded-full px-3.5 py-1.5 text-[13px] font-medium ${
+                      tapeSort === k ? "bg-acid/20 text-acid" : "bg-white/[0.06] text-white/45"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <div className="flex gap-1 overflow-x-auto">
+                {(["newest", "1h", "6h", "24h"] as const).map((k) => (
+                  <button
+                    key={k}
+                    type="button"
+                    onClick={() => setAge(k)}
+                    className={`shrink-0 rounded-full px-3 py-1 text-[12px] ${
+                      age === k ? "text-white" : "text-white/35"
+                    }`}
+                  >
+                    {k === "newest" ? "Any age" : k}
+                  </button>
+                ))}
+                <span className="mx-1 h-5 w-px self-center bg-white/10" />
+                {(["all", "born", "market"] as const).map((k) => (
+                  <button
+                    key={k}
+                    type="button"
+                    onClick={() => setSource(k)}
+                    className={`shrink-0 rounded-full px-3 py-1 text-[12px] ${
+                      source === k ? "text-white" : "text-white/35"
+                    }`}
+                  >
+                    {k === "all" ? "All" : k === "born" ? "Pad" : "Market"}
+                  </button>
+                ))}
+              </div>
+            </div>
+            )}
+            {!isSwap && owner && (owner === treasuryWallet || owner === ownerWallet) && (
+              <div id="protocol-fees" className="mb-4 scroll-mt-20 rounded-3xl border border-white/10 bg-black/30 p-4">
+                <p className="font-mono text-[11px] tracking-[0.28em] text-acid">
+                  {owner === treasuryWallet ? "TREASURY" : "OWNER"}
+                </p>
+                <h2 className="mt-1 text-[22px] font-semibold tracking-tight text-white">
+                  {owner === treasuryWallet ? "Treasury cut" : "Owner cut"}
+                </h2>
+                <p className="mt-1 text-[14px] leading-snug text-white/45">
+                  {owner === treasuryWallet
+                    ? "This wallet is treasury — a different wallet from owner. Claim unpaid pad partner fees here, or from the admin dashboard project wallet. Widget open-market swaps already land 50/50 here live."
+                    : "This wallet is owner — a different wallet from treasury. Claim unpaid pad partner fees here, or from the admin dashboard project wallet. Widget open-market swaps already land 50/50 here live. Curve swaps keep 50% for the coin creator."}
+                </p>
+                <div className="mt-4 grid grid-cols-2 gap-3">
+                  <div>
+                    <p className="font-mono text-[10px] text-white/40">YOUR PAD SHARE</p>
+                    <p className="stat-num text-[18px] text-acid">
+                      {fmtSol((protocol?.partnerUnclaimedSol || 0) / 2, 4)} SOL
+                    </p>
+                  </div>
+                  <div>
+                    <p className="font-mono text-[10px] text-white/40">STILL IN POOLS</p>
+                    <p className="stat-num text-[18px] text-white">{fmtSol(protocol?.partnerUnclaimedSol || 0, 4)} SOL</p>
+                  </div>
+                </div>
+                <div className="mt-4 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  disabled={busy || !((protocol?.partnerUnclaimedSol || 0) > 1e-6 || coins.some((c) => (c.partnerUnclaimedSol || 0) > 1e-6))}
+                  onClick={() => {
+                    const unpaid = coins
+                      .filter((c) => (c.partnerUnclaimedSol || 0) > 1e-6)
+                      .map((c) => c.mint)
+                      .filter((m): m is string => Boolean(m));
+                    const mint = unpaid[0];
+                    if (!mint) {
+                      setErr("No unpaid partner fees on listed tokens.");
+                      return;
+                    }
+                    claimSeqRef.current = 0;
+                    claimLock.current = "";
+                    setTab("mine");
+                    writeLaunchTab("mine");
+                    markActionSpot("protocol-fees");
+                    act({
+                      action: "withdraw_partner",
+                      mint,
+                      mints: unpaid,
+                      claimAll: true,
+                    });
+                  }}
+                  className="rounded-full bg-[#14f195] px-4 py-2 text-[14px] font-semibold text-[#04000a] disabled:opacity-40"
+                >
+                  {(protocol?.partnerUnclaimedSol || 0) > 0
+                    ? `Claim ${fmtSol((protocol?.partnerUnclaimedSol || 0) / 2, 4)} SOL`
+                    : owner === treasuryWallet
+                      ? "Claim treasury fees"
+                      : "Claim owner fees"}
+                </button>
+                <button
+                  type="button"
+                  disabled={busy || feesSyncing}
+                  onClick={() => {
+                    markActionSpot("protocol-fees");
+                    void (async () => {
+                      setFeesSyncing(true);
+                      try {
+                        await refreshPad(true);
+                      } finally {
+                        setFeesSyncing(false);
+                        scrollToSpot("protocol-fees");
+                      }
+                    })();
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-4 py-2 text-[14px] font-semibold text-white disabled:opacity-40"
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 ${feesSyncing ? "animate-spin" : ""}`} />
+                  {feesSyncing ? "Refreshing…" : "Refresh"}
+                </button>
+                </div>
+              </div>
+            )}
+            {!isSwap && (
+              <div id="creator-fees" className="mb-4 scroll-mt-20 rounded-3xl border border-white/10 bg-black/30 p-4">
+                <p className="font-mono text-[11px] tracking-[0.28em] text-acid">DEV REWARDS</p>
+                <h2 className="mt-1 text-[22px] font-semibold tracking-tight text-white">Claim fees</h2>
+                <p className="mt-1 text-[14px] leading-snug text-white/45">
+                  {vault && (vault.claimableSol || 0) > 0
+                    ? "Some fees are in your Solphia vault. Claim sends that vault into this wallet in one transfer. Unpaid curve fees still need one approval per token."
+                    : "Unclaimed is every unpaid token added up. Claim all — your wallet asks once per token until this hits 0."}
+                </p>
+                <div className="mt-4 grid grid-cols-2 gap-3">
+                  <div>
+                    <p className="font-mono text-[10px] text-white/40">GENERATED</p>
+                    <p className="stat-num text-[18px] text-acid">{fmtClaimSol(generatedSol)} SOL</p>
+                  </div>
+                  <div>
+                    <p className="font-mono text-[10px] text-white/40">UNCLAIMED</p>
+                    <p className="stat-num text-[18px] text-white">
+                      {fmtClaimSol(Math.max(vault?.claimableSol || 0, unclaimedSol))} SOL
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    disabled={busy || ((vault?.claimableSol || 0) <= 0 && claimable.length === 0)}
+                    onClick={() => {
+                      const mints = claimable.map((c) => c.mint).filter(Boolean) as string[];
+                      markActionSpot("creator-fees");
+                      void (async () => {
+                        const got = await claimVault(mints);
+                        if (got?.sol) return;
+                        const mint = payout.next?.mint;
+                        if (!mint) return;
+                        claimSeqRef.current = 0;
+                        claimLock.current = "";
+                        setTab("mine");
+                        writeLaunchTab("mine");
+                        act({
+                          action: "withdraw_dev",
+                          id: payout.next?.id,
+                          mint,
+                          mints,
+                          claimAll: true,
+                        });
+                      })();
+                    }}
+                    className="rounded-full bg-[#14f195] px-4 py-2 text-[14px] font-semibold text-[#04000a] disabled:opacity-40"
+                  >
+                    {(vault?.claimableSol || 0) > 0
+                      ? `Claim ${fmtClaimSol(vault?.claimableSol || 0)} SOL`
+                      : claimButtonSol(payout) > 0
+                        ? `Claim all ${fmtClaimSol(claimButtonSol(payout))} SOL`
+                        : "Claim creator fees"}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy || feesSyncing}
+                    onClick={() => {
+                      markActionSpot("creator-fees");
+                      void (async () => {
+                        setFeesSyncing(true);
+                        try {
+                          await refreshPad(true);
+                        } finally {
+                          setFeesSyncing(false);
+                          scrollToSpot("creator-fees");
+                        }
+                      })();
+                    }}
+                    className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-4 py-2 text-[14px] font-semibold text-white disabled:opacity-40"
+                  >
+                    <RefreshCw className={`h-3.5 w-3.5 ${feesSyncing ? "animate-spin" : ""}`} />
+                    {feesSyncing ? "Refreshing…" : "Refresh"}
+                  </button>
+                </div>
+                {(vault?.claimableSol || 0) > 0 ? (
+                  <p className="mt-2 text-[12px] text-white/40">{vaultClaimHint(vault?.claimableSol || 0)}</p>
+                ) : unclaimedSol > 0 ? (
+                  <p className="mt-2 text-[12px] text-white/40">{claimHint(payout)}</p>
+                ) : null}
+                {tab === "mine" && (msg || err) ? (
+                  <p className={`mt-2 font-mono text-[13px] ${err ? "text-blood" : "text-acid"}`}>{err || msg}</p>
+                ) : null}
+                <p className="mt-2 text-[12px] text-white/35">
+                  If a wallet hides a new token: Manage Tokens, toggle it on, Report as not spam.
+                </p>
+              </div>
+            )}
+            <div className="mt-3 space-y-2">
+              {!isSwap && tab === "mine" && boostMine.live.length > 0 && (
+                <div className="space-y-1 text-[12px] text-mute">
+                  {boostMine.live.map((b) => (
+                    <div key={`l-${b.symbol}`} className="inline-flex items-center gap-1.5 text-acid">
+                      <Rocket className="h-3.5 w-3.5" fill="currentColor" />
+                      ${b.symbol} · {b.rockets} · {fmtLeft(b.leftMs)} left
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="mt-1 divide-y divide-white/[0.06]">
+              {!isSwap &&
+                pending
+                  .filter((p) => !mine.some((c) => c.mint === p.mint) && !hidden.includes(p.mint))
+                  .map((p) => (
+                    <div key={p.mint} className="py-3">
+                      <PumpCoinRow
+                        name={p.name || "Pending"}
+                        symbol={p.symbol || "…"}
+                        image={p.image}
+                        mint={p.mint}
+                        onOpen={() => window.open("https://solscan.io/token/" + p.mint, "_blank", "noopener,noreferrer")}
+                      />
+                      <div className="flex flex-wrap items-center gap-2 px-1 pb-2">
+                        <CopyCa ca={p.mint} compact />
+                        <p className="text-[13px] text-white/45">Signing finished. Listing it on your dashboard…</p>
+                        <button
+                          type="button"
+                          className="rounded-full bg-white/10 px-3 py-1 text-[13px] text-white"
+                          onClick={() => removeFromDashboard(p.mint, p.symbol)}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+              {rows.length === 0 && (isSwap ? tapeLoading : padLoading) && pending.length === 0 && (
+                <div className="space-y-2 py-3">
+                  {Array.from({ length: 12 }).map((_, i) => (
+                    <div key={i} className="h-[72px] animate-pulse rounded-2xl bg-white/5" />
+                  ))}
+                </div>
+              )}
+              {rows.length === 0 && !tapeLoading && pending.filter((p) => !mine.some((c) => c.mint === p.mint)).length === 0 && (
+                <div className="py-10">
+                  <p className="text-[22px] font-semibold text-white">{!isSwap ? "No tokens yet" : "Get your first coin today!"}</p>
+                  <p className="mt-2 text-[15px] text-white/45">
+                    {!isSwap
+                      ? owner
+                        ? "Launch a coin on the Launch tab. It will show up here to manage and claim rewards."
+                        : "Connect a wallet, then launch a coin."
+                      : "No coins in this window."}
+                  </p>
+                </div>
+              )}
+              {board.map((row, i) => (
+                <div key={row.coin.id}>
+                  <PumpCoinRow
+                    name={row.coin.name}
+                    symbol={row.coin.symbol}
+                    image={row.coin.image}
+                    mint={row.coin.mint}
+                    eager={i < 16}
+                    marketCapUsd={row.coin.marketCapUsd || (solUsd > 0 ? (row.coin.marketCapSol || 0) * solUsd : 0)}
+                    marketCapSol={row.coin.marketCapSol}
+                    change={row.coin.change24h ?? row.coin.change1h}
+                    active={open?.id === row.coin.id}
+                    place={isSwap && tapeSort === "rank" && row.rank >= 1 && row.rank <= 3 ? row.rank : undefined}
+                    rockets={row.boost?.rockets}
+                    badge={row.coin.born ? "✓" : undefined}
+                    onOpen={() => {
+                      setOpen((cur) => {
+                        if (cur?.id === row.coin.id) return null;
+                        setSnapAt(Date.now());
+                        setLookedMint(row.coin.mint || row.coin.id);
+                        return row.coin;
+                      });
+                    }}
+                  />
+                  {!isSwap && owner && row.coin.creator === owner ? (
+                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2 px-1 pb-2">
+                      <p className="text-[13px] text-white/45">
+                        {owner === treasuryWallet
+                          ? `${fmtSol(row.coin.partnerFeesSol || 0, 4)} SOL protocol generated · ${fmtSol(row.coin.partnerUnclaimedSol || 0, 4)} SOL unclaimed`
+                          : `${fmtClaimSol(row.coin.creatorFeesSol || 0)} SOL generated · ${fmtClaimSol(row.coin.creatorUnclaimedSol || 0)} SOL unclaimed`}
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => row.coin.mint && removeFromDashboard(row.coin.mint, row.coin.symbol)}
+                          className="rounded-full bg-white/10 px-3 py-1.5 text-[13px] text-white/70"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+                  {open?.id === row.coin.id && (
+                    <div id={`desk-${open.id}`} className="scroll-mt-[4.75rem]">
+                      <CoinDesk
+                        open={open}
+                        owner={owner}
+                        solUsd={solUsd}
+                        hideTrade={isSwap}
+                        onClose={() => setOpen(null)}
+                        onBuy={
+                          isSwap
+                            ? () => {
+                                if (open.mint) setLookedMint(open.mint);
+                                setOpen(null);
+                                markActionSpot("swap-widget");
+                                window.setTimeout(() => scrollToSpot("swap-widget"), 50);
+                              }
+                            : undefined
+                        }
+                        onSwapDone={() => {
+                          markActionSpot("swap-widget");
+                          scrollToSpot("swap-widget");
+                          void Promise.all([refreshPad(), refreshTape()]).catch(() => {});
+                        }}
+                      />
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </section>
+          )}
+        </div>
+
+        {err && tab !== "mine" && (
+          <div id="launch-status" className="relative z-10 mt-4 rounded-2xl border border-blood/50 bg-blood/10 px-4 py-3 text-sm text-blood">
+            <p className="font-mono">{err}</p>
+            {pending[0]?.mint ? (
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-ghost">
+                <span className="text-[13px] text-white/70">Mint CA</span>
+                <CopyCa ca={pending[0].mint} compact />
+              </div>
+            ) : null}
+          </div>
+        )}
+        {msg && !err && tab !== "mine" && <p className="relative z-10 mt-4 font-mono text-sm text-acid">{msg}</p>}
+      </div>
+    </main>
+  );
+}
+
+function CoinDesk({
+  open,
+  owner,
+  solUsd,
+  hideTrade,
+  onClose,
+  onBuy,
+  onSwapDone,
+}: {
+  open: Coin;
+  owner: string | null;
+  solUsd: number;
+  hideTrade?: boolean;
+  onClose: () => void;
+  onBuy?: () => void;
+  onSwapDone?: () => void;
+}) {
+  const audit = useMemo(() => auditLaunchCoin(open, solUsd), [open, solUsd]);
+
+  return (
+    <section className="pump-card mt-2 flex min-w-0 flex-col gap-5 overflow-x-hidden">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <TokenArt src={open.image} mint={open.mint} label={open.symbol} eager className="h-14 w-14 rounded-2xl" />
+          <div className="min-w-0">
+            <div className="font-display text-3xl text-ghost">{tick(open.symbol)}</div>
+            <div className="text-sm text-mute">{open.name}</div>
+            <div className={`mt-1 font-mono text-sm ${(open.change24h || 0) >= 0 ? "text-acid" : "text-blood"}`}>
+              {fmtPx((open.priceSol || 0) * (solUsd || 0))}
+              <span className="ml-2">{fmtPct(open.change24h)} 24h</span>
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <span className={`rounded-full px-2 py-0.5 font-mono text-[10px] ${open.born ? "bg-acid/15 text-acid" : "bg-white/10 text-mute"}`}>
+                {venueLabel(open)}
+              </span>
+              <TokenSocials links={open.links} size="md" />
+              <CopyCa ca={open.mint} compact />
+            </div>
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          {hideTrade && onBuy ? (
+            <button type="button" onClick={onBuy} className="btn-acid min-h-[44px] shrink-0 rounded-full px-4 py-2 text-sm">
+              Buy
+            </button>
+          ) : null}
+          <button type="button" onClick={onClose} className="btn-ghost min-h-[44px] shrink-0 rounded-full px-4 py-2 text-sm">
+            Close
+          </button>
+        </div>
+      </div>
+
+      <TokenChart
+        key={open.mint || open.id}
+        mint={open.mint}
+        pair={open.pairAddress}
+        venue={open.venue || (open.born ? "launchlab" : undefined)}
+        seed={open.spark}
+        change24h={open.change24h}
+        solUsd={solUsd}
+      />
+
+      <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(280px,400px)]">
+        <div className="min-w-0">
+          {open.born && (
+            <div className="mb-3 h-1.5 overflow-hidden rounded-full bg-void">
+              <div className="h-full bg-acid" style={{ width: `${Math.round((open.progress || 0) * 100)}%` }} />
+            </div>
+          )}
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <Stat k="MC" v={open.marketCapUsd ? fmtUsd(open.marketCapUsd) : `${fmtSol(open.marketCapSol, 1)} SOL`} />
+            <Stat k="Liq" v={`${fmtSol(open.liqSol || open.realSol, 2)} SOL`} />
+            <Stat k="Vol" v={`${fmtSol(open.volSol || 0, 2)} SOL`} />
+            <Stat k="Holders" v={String(open.holders)} />
+          </div>
+          <div className="mt-3 rounded-2xl border border-violet/20 bg-void/40 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <div className="font-mono text-[10px] tracking-[0.22em] text-mute">FULL AUDIT</div>
+              <span
+                className={`rounded-full px-2 py-0.5 font-mono text-[11px] ${
+                  audit.grade === "S" || audit.grade === "A"
+                    ? "bg-acid/20 text-acid"
+                    : audit.grade === "B"
+                      ? "bg-cyan/20 text-cyan"
+                      : audit.vetoed
+                        ? "bg-blood/20 text-blood"
+                        : "bg-white/10 text-mute"
+                }`}
+              >
+                {audit.grade} {audit.score} · {audit.verdict.toUpperCase()}
+              </span>
+            </div>
+            <p className="mt-2 text-sm text-ghost">{audit.why}</p>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {audit.factors
+                .slice()
+                .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
+                .slice(0, 6)
+                .map((f) => (
+                  <span
+                    key={f.id}
+                    className={`rounded-full px-2 py-0.5 font-mono text-[10px] ${f.delta >= 0 ? "bg-acid/10 text-acid" : "bg-blood/10 text-blood"}`}
+                  >
+                    {f.delta >= 0 ? "+" : ""}
+                    {f.delta} {f.label}
+                  </span>
+                ))}
+            </div>
+          </div>
+        </div>
+
+        {hideTrade ? (
+          <div className="min-w-0 rounded-2xl border border-white/10 bg-void/40 p-4">
+            <p className="text-[14px] text-white/55">Buy opens the swap card above with this token loaded.</p>
+          </div>
+        ) : (
+          <SwapWidget
+            owner={owner}
+            defaultMint={open.mint || ""}
+            defaultSymbol={open.symbol || ""}
+            defaultName={open.name || ""}
+            defaultImage={open.image || ""}
+            tokens={
+              open.mint
+                ? [{ mint: open.mint, symbol: open.symbol, name: open.name, image: open.image }]
+                : undefined
+            }
+            onDone={onSwapDone}
+          />
+        )}
+      </div>
+    </section>
+  );
+}
+
+function Stat({ k, v }: { k: string; v: string }) {
+  return (
+    <div className="rounded-2xl border border-violet/15 px-3 py-2">
+      <div className="font-mono text-[10px] text-mute">{k}</div>
+      <div className="stat-num text-lg text-ghost">{v}</div>
+    </div>
+  );
+}

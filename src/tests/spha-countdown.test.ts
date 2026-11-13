@@ -14,6 +14,7 @@ import {
   parseSphaCountdown,
   mergeSphaPublicPack,
   publicSphaCountdown,
+  sealedPublicSphaCountdown,
   sphaInMintWindow,
   sphaMintAt,
   sphaTimedOut,
@@ -25,6 +26,19 @@ import { SPHA_BLURB, SPHA_DEFAULT_IMAGE, SPHA_TELEGRAM, SPHA_TGE_LAUNCH_AT_MS, S
 import { sphaDeskStats } from "../lib/token/sphaDesk";
 
 describe("spha countdown", () => {
+  it("seals the public pack with no CA and no live clock", () => {
+    const c = sealedPublicSphaCountdown(5);
+    assert.equal(c.phase, "soon");
+    assert.equal(c.launchAt, 0);
+    assert.equal(c.remainingMs, 0);
+    const tokenPage = readFileSync(path.join(process.cwd(), "src/app/token/page.tsx"), "utf8");
+    assert.match(tokenPage, /mint: ""/);
+    assert.match(tokenPage, /sealedPublicSphaCountdown/);
+    const desk = readFileSync(path.join(process.cwd(), "src/components/TokenDesk.tsx"), "utf8");
+    assert.equal(desk.includes("CopyCa"), false);
+    assert.equal(desk.includes("Bubble"), false);
+  });
+
   it("stays Coming soon until a launch time is armed", () => {
     const c = emptySphaCountdown();
     const pub = publicSphaCountdown(c, "", 1_000);
@@ -184,11 +198,9 @@ describe("spha countdown", () => {
     assert.match(tokenDesk, /Coming soon|phase/);
     const cd = readFileSync(path.join(process.cwd(), "src/components/SphaCountdown.tsx"), "utf8");
     assert.match(cd, /COMING SOON/);
-    assert.match(cd, /TealConfetti/);
-    assert.match(cd, /CopyCa/);
-    assert.match(cd, /SwapWidget/);
-    assert.match(cd, /spha-tge-swap/);
-    assert.match(cd, /defaultSide="buy"/);
+    assert.equal(cd.includes("CopyCa"), false);
+    assert.equal(cd.includes("SwapWidget"), false);
+    assert.equal(cd.includes("spha-tge-swap"), false);
     assert.match(cd, /formatSphaLaunchWhen/);
     assert.match(cd, /setInterval\(\(\) => setNow\(Date\.now\(\)\), 100\)/);
     const launch = readFileSync(path.join(process.cwd(), "src/components/admin/SphaLaunch.tsx"), "utf8");
@@ -208,8 +220,10 @@ describe("spha countdown", () => {
     const cron = readFileSync(path.join(process.cwd(), "src/app/api/cron/tick/route.ts"), "utf8");
     assert.match(cron, /tickSphaCountdown/);
     const pub = readFileSync(path.join(process.cwd(), "src/app/api/spha/route.ts"), "utf8");
-    assert.match(pub, /publicSphaCountdown/);
+    assert.match(pub, /sealedPublicSphaCountdown/);
+    assert.match(pub, /mint: ""/);
     assert.equal(pub.includes("pendingMint"), false);
+    assert.equal(pub.includes("loadSphaLiveStats"), false);
     assert.match(pub, /SPHA_BLURB/);
     assert.match(pub, /SPHA_WEBSITE/);
     const persist = readFileSync(path.join(process.cwd(), "src/lib/persist.ts"), "utf8");
@@ -226,8 +240,11 @@ describe("spha countdown", () => {
     assert.match(auto, /maybeFirstBuy/);
     assert.match(auto, /MIN_OWNER_SOL/);
     assert.match(auto, /LOCK_TTL_S = 320/);
-    const swapPage = readFileSync(path.join(process.cwd(), "src/app/launch/page.tsx"), "utf8");
+    const swapPage = readFileSync(path.join(process.cwd(), "src/components/LaunchPad.tsx"), "utf8");
     assert.match(swapPage, /setLookedMint\(mint\)/);
+    const desk = readFileSync(path.join(process.cwd(), "src/app/launch/page.tsx"), "utf8");
+    assert.match(desk, /DeskYard/);
+    assert.equal(desk.includes("CopyCa"), false);
     const socials = readFileSync(path.join(process.cwd(), "src/components/SphaSocials.tsx"), "utf8");
     assert.match(socials, /website/);
     assert.match(socials, /SiteMark/);

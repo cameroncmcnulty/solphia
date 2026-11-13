@@ -197,6 +197,17 @@ export function publicSphaCountdown(
   };
 }
 
+/** Public site: no CA, no live clock. Token is not live. */
+export function sealedPublicSphaCountdown(now = Date.now()): SphaPublicCountdown {
+  return {
+    phase: "soon",
+    launchAt: 0,
+    remainingMs: 0,
+    mintLeadMs: SPHA_MINT_LEAD_MS,
+    serverNow: now,
+  };
+}
+
 /** Keep an armed public clock. A stale soon/empty poll must not wipe launchAt. */
 export function mergeSphaPublicPack<T extends {
   phase: SphaPublicPhase;

@@ -23,14 +23,14 @@ export default function Home() {
               SOLPHIA
             </h1>
             <p className="mt-6 max-w-xl text-[22px] font-semibold leading-snug tracking-tight text-white sm:text-[28px]">
-              Launch. Shill. Swap. $SPHA.
+              Shill. Swap. $SPHA.
             </p>
             <p className="mt-4 max-w-lg text-[15px] leading-relaxed text-white/45 sm:text-[17px]">
-              The autonomous desk is in testing. Backtest is live below. Launch pad and Shill Zone are open now.
+              The autonomous desk is in construction. Backtest is live below. Shill Zone is open now.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <Link href="/launch" className="btn-acid inline-flex min-h-[52px] items-center justify-center rounded-full px-8 text-base">
-                Launch
+                Bot
               </Link>
               <Link href="/token" className="btn-ghost inline-flex min-h-[52px] items-center justify-center rounded-full px-8 text-base">
                 $SPHA
@@ -48,7 +48,7 @@ export default function Home() {
           Products that actually run.
         </h2>
         <p className="mt-4 max-w-2xl text-[15px] text-white/45 sm:text-[17px]">
-          Launch pad, Shill Zone, and $SPHA. The trading bot stays in testing until the backtest holds live.
+          Shill Zone and $SPHA. The trading bot is in construction until the book holds live.
         </p>
         <div className="mt-12 grid gap-4 lg:grid-cols-3">
           <Reveal delay={40} from="left"><Eco
@@ -60,10 +60,10 @@ export default function Home() {
           /></Reveal>
           <Reveal delay={120}><Eco
             n="02"
-            t="Launch"
-            d="Launch on the Solphia curve. Creators keep a cut. Invites pay for life."
+            t="Bot"
+            d="Autonomous desk in construction. Signal, risk, and execution are compiling."
             href="/launch"
-            c="Launch"
+            c="Desk"
           /></Reveal>
           <Reveal delay={200} from="right"><Eco
             n="03"
@@ -98,9 +98,9 @@ export default function Home() {
 
       <section className="px-4 pt-6 md:px-12">
         <Reveal>
-          <p className="font-mono text-[11px] tracking-[0.22em] text-acid">AUTONOMOUS DESK · TESTING</p>
+          <p className="font-mono text-[11px] tracking-[0.22em] text-acid">AUTONOMOUS DESK · IN CONSTRUCTION</p>
           <h2 className="mt-2 max-w-3xl text-[28px] font-semibold tracking-tight text-white sm:text-4xl">
-            The bot stays in testing until it is profitable live.
+            The bot stays in construction until it is profitable live.
           </h2>
           <p className="mt-3 max-w-2xl text-[15px] text-white/45 sm:text-[17px]">
             Same rules she will trade with. Fees are already in the line. This is a replay, not a live book.
@@ -136,7 +136,7 @@ export default function Home() {
         <h2 className="mt-3 text-[32px] font-semibold tracking-tight text-white sm:text-5xl">Three steps.</h2>
         <div className="mt-12 grid gap-4 md:grid-cols-3">
           <Reveal delay={40} from="left"><Chip t="01 · Connect" d="Create or import a Solphia wallet. Phrase stays on this device." /></Reveal>
-          <Reveal delay={120}><Chip t="02 · Launch" d="Mint on the Solphia curve. Invites keep a cut for life." /></Reveal>
+          <Reveal delay={120}><Chip t="02 · Swap" d="Swap in the Solphia wallet. The desk stays in construction." /></Reveal>
           <Reveal delay={200} from="right"><Chip t="03 · $SPHA" d="Swaps fund listings, buybacks, and burns." /></Reveal>
         </div>
         </Reveal>
@@ -150,14 +150,14 @@ export default function Home() {
               <SphaMark className="h-5 w-5" />
               $SPHA
             </p>
-            <h2 className="mt-3 text-[32px] font-semibold tracking-tight text-white sm:text-5xl">Launch on Solphia.</h2>
+            <h2 className="mt-3 text-[32px] font-semibold tracking-tight text-white sm:text-5xl">The desk is compiling.</h2>
             <p className="mt-4 max-w-lg text-[15px] text-white/45 sm:text-[17px]">
-              You sign in your Solphia wallet. The trading bot stays in testing.
+              You sign in your Solphia wallet. The trading bot is in construction.
             </p>
           </div>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row md:mt-0">
             <Link href="/launch" className="btn-acid inline-flex min-h-[52px] items-center justify-center rounded-full px-8">
-              Launch
+              Bot
             </Link>
             <Link href="/token" className="btn-ghost inline-flex min-h-[52px] items-center justify-center rounded-full px-8">
               $SPHA

@@ -62,7 +62,7 @@ export function PlanCompare() {
       </div>
       <div className="border-t border-violet/20 p-4 text-right">
         <Link href="/launch" className="text-sm text-acid">
-          Open the pad →
+          Open the desk →
         </Link>
       </div>
     </div>

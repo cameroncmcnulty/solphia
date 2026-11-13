@@ -8,7 +8,7 @@ import { AccountMenu } from "./AccountMenu";
 const LINKS = [
   ["/", "Home"],
   ["/shill", "Shill"],
-  ["/launch", "Launch"],
+  ["/launch", "Bot"],
   ["/swap", "Swap"],
   ["/token", "$SPHA"],
 ] as const;

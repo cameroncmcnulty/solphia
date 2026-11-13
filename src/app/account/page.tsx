@@ -546,7 +546,7 @@ export default function AccountPage() {
             ))}
           </div>
           <Link href="/launch" className="btn-ghost mt-4 inline-flex rounded-full px-5 py-2 text-sm">
-            Open the pad
+            Open the desk
           </Link>
         </section>
       )}

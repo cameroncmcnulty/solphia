@@ -429,7 +429,7 @@ describe("launch create validation", () => {
   });
 
   it("does not use HTML pattern/minLength/accept that Safari reports as pattern mismatch", () => {
-    const src = readFileSync(path.join(process.cwd(), "src/app/launch/page.tsx"), "utf8");
+    const src = readFileSync(path.join(process.cwd(), "src/components/LaunchPad.tsx"), "utf8");
     assert.equal(src.includes("minLength"), false);
     assert.equal(/accept=/.test(src), false);
     assert.equal(/pattern=/.test(src), false);
@@ -661,7 +661,7 @@ describe("launch labels", () => {
 describe("launch confirm wait", () => {
   it("uses the previous signature-then-pool confirm path", () => {
     const route = readFileSync(path.join(process.cwd(), "src/app/api/launch/route.ts"), "utf8");
-    const page = readFileSync(path.join(process.cwd(), "src/app/launch/page.tsx"), "utf8");
+    const page = readFileSync(path.join(process.cwd(), "src/components/LaunchPad.tsx"), "utf8");
     const dbc = readFileSync(path.join(process.cwd(), "src/lib/launch/dbc.ts"), "utf8");
     const conn = readFileSync(path.join(process.cwd(), "src/lib/solana/connection.ts"), "utf8");
     assert.match(route, /waitForSignature\(sig, 45\)/);
@@ -691,7 +691,7 @@ describe("launch confirm wait", () => {
   });
 
   it("does not put a wallet button next to Launch when a wallet is already connected", () => {
-    const page = readFileSync(path.join(process.cwd(), "src/app/launch/page.tsx"), "utf8");
+    const page = readFileSync(path.join(process.cwd(), "src/components/LaunchPad.tsx"), "utf8");
     assert.match(page, /\{!owner \?/);
     assert.match(page, /<WalletConnect \/>/);
     const launchRow = page.slice(page.indexOf("Launch on Solana") - 400, page.indexOf("Launch on Solana") + 80);

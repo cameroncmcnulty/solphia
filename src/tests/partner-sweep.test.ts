@@ -49,7 +49,7 @@ describe("partner fee sweep", () => {
     assert.match(dbc, /firstBuyIncluded/);
     assert.match(dbc, /LEGACY_MAX/);
     assert.equal(dbc.includes("simulateUnsignedB64"), false);
-    const launch = readFileSync(path.join(process.cwd(), "src/app/launch/page.tsx"), "utf8");
+    const launch = readFileSync(path.join(process.cwd(), "src/components/LaunchPad.tsx"), "utf8");
     assert.match(launch, /signDevBuy/);
     assert.match(launch, /Claim owner fees/);
     assert.match(launch, /DEFAULT_OWNER/);

@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { CopyCa } from "@/components/CopyCa";
 import { SphaMark } from "@/components/SphaMark";
 import { SphaSocials } from "@/components/SphaSocials";
 import { SolphiaConstellation } from "@/components/SolphiaConstellation";
@@ -40,8 +39,8 @@ function emptyPack(): SphaPack {
     symbol: desk.symbol,
     phase: "soon",
     countdown: { phase: "soon", launchAt: 0, remainingMs: 0, mintLeadMs: SPHA_MINT_LEAD_MS, serverNow: Date.now() },
-    stats: desk.stats,
-    extra: desk.extra,
+    stats: [],
+    extra: [],
     image: SPHA_DEFAULT_IMAGE,
     blurb: SPHA_BLURB,
     socials: { x: SPHA_X, telegram: SPHA_TELEGRAM, discord: "", website: SPHA_WEBSITE },
@@ -50,32 +49,32 @@ function emptyPack(): SphaPack {
 
 export function TokenDesk({ initial }: { initial?: SphaPack }) {
   const [pack, setPack] = useState<SphaPack>(() => initial || emptyPack());
-  const t = solphiaTokenDesk(pack.mint);
+  const t = solphiaTokenDesk();
   const symbol = pack.symbol || t.symbol;
-  const live = Boolean(pack.mint) || pack.phase === "live";
-  const stats = live && pack.stats?.length ? pack.stats : t.stats;
-  const extra = live && pack.extra?.length ? pack.extra : t.extra;
+  const live = false;
+  const stats = pack.stats || [];
+  const extra = pack.extra || [];
 
   const load = useCallback(() => {
     fetch("/api/spha", { cache: "no-store" })
       .then((r) => r.json())
       .then((j) => {
-        const desk = solphiaTokenDesk(typeof j?.mint === "string" ? j.mint : "");
-        const phase: SphaPublicPhase = j?.phase === "live" || j?.phase === "counting" ? j.phase : "soon";
+        const desk = solphiaTokenDesk();
+        const phase: SphaPublicPhase = "soon";
         const next: SphaPack = {
-          mint: desk.mint,
+          mint: "",
           name: typeof j?.name === "string" && j.name.trim() ? j.name.trim() : desk.name,
           symbol: typeof j?.symbol === "string" && j.symbol.trim() ? j.symbol.trim().replace(/^\$+/, "") : desk.symbol,
           phase,
           countdown: {
-            phase: j?.countdown?.phase === "live" || j?.countdown?.phase === "counting" ? j.countdown.phase : phase,
-            launchAt: Number(j?.countdown?.launchAt) || 0,
-            remainingMs: Number(j?.countdown?.remainingMs) || 0,
+            phase: "soon",
+            launchAt: 0,
+            remainingMs: 0,
             mintLeadMs: Number(j?.countdown?.mintLeadMs) || SPHA_MINT_LEAD_MS,
             serverNow: Number(j?.countdown?.serverNow) || Date.now(),
           },
-          stats: Array.isArray(j?.stats) ? j.stats : desk.stats,
-          extra: Array.isArray(j?.extra) ? j.extra : desk.extra,
+          stats: [],
+          extra: [],
           image: j?.image || SPHA_DEFAULT_IMAGE,
           blurb: j?.blurb || SPHA_BLURB,
           socials: {
@@ -124,15 +123,14 @@ export function TokenDesk({ initial }: { initial?: SphaPack }) {
 
         <div className="mt-8 flex flex-wrap items-center gap-5">
           <SphaSocials x={pack.socials.x} telegram={pack.socials.telegram} discord={pack.socials.discord} website={pack.socials.website} />
-          {live ? <CopyCa ca={pack.mint} /> : null}
         </div>
 
         <SphaCountdown
           pack={{
-            mint: pack.mint,
+            mint: "",
             name: pack.name,
             symbol,
-            phase: pack.phase,
+            phase: "soon",
             countdown: pack.countdown,
             stats,
             extra,
@@ -163,18 +161,6 @@ export function TokenDesk({ initial }: { initial?: SphaPack }) {
           </Reveal>
         </div>
 
-        <div className="mt-10 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {stats.map((s) => (
-            <Bubble key={s.k} k={s.k} v={s.v} hint={s.hint} />
-          ))}
-        </div>
-
-        <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {extra.map((s) => (
-            <Bubble key={s.k} k={s.k} v={s.v} />
-          ))}
-        </div>
-
         <div className="mt-10">
           <Tokenomics />
         </div>
@@ -200,12 +186,4 @@ function Story({ t, d }: { t: string; d: string }) {
   );
 }
 
-function Bubble({ k, v, hint }: { k: string; v: string; hint?: string }) {
-  return (
-    <div className="panel-bubble rounded-3xl px-4 py-4">
-      <div className="font-mono text-[10px] tracking-[0.16em] text-mute">{k}</div>
-      <div className="stat-num mt-1 text-2xl text-ghost sm:text-3xl">{v}</div>
-      {hint && <div className="mt-1 font-mono text-[10px] text-mute">{hint}</div>}
-    </div>
-  );
-}
+

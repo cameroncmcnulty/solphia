@@ -15,7 +15,7 @@ export default function FaqPage() {
         </div>
         <div className="mt-10 flex flex-col gap-3 sm:flex-row">
           <Link href="/launch" className="btn-acid inline-flex min-h-[48px] items-center justify-center rounded-full px-6 py-3 text-center font-mono text-xs">
-            Launch
+            Bot
           </Link>
           <Link href="/token" className="btn-ghost inline-flex min-h-[48px] items-center justify-center rounded-full px-6 py-3 text-center font-mono text-xs">
             $SPHA

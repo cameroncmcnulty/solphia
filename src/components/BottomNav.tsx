@@ -2,12 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ArrowDownUp, Home, Megaphone, Rocket, Sparkles } from "lucide-react";
+import { ArrowDownUp, Bot, Home, Megaphone, Sparkles } from "lucide-react";
 
 const TABS = [
   { href: "/", label: "Home", Icon: Home },
   { href: "/shill", label: "Shill", Icon: Megaphone },
-  { href: "/launch", label: "Launch", Icon: Rocket },
+  { href: "/launch", label: "Bot", Icon: Bot },
   { href: "/swap", label: "Swap", Icon: ArrowDownUp },
   { href: "/token", label: "$SPHA", Icon: Sparkles },
 ] as const;

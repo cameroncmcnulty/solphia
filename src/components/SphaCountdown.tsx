@@ -1,9 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
-import { CopyCa } from "@/components/CopyCa";
-import { TealConfetti } from "@/components/TealConfetti";
-import { SwapWidget } from "@/components/SwapWidget";
 import {
   formatSphaLaunchWhen,
   pad2,
@@ -51,45 +48,32 @@ export function SphaCountdown({
   onNeedRefresh: () => void;
 }) {
   const [now, setNow] = useState(0);
-  const [fire, setFire] = useState(false);
   const [tilt, setTilt] = useState({ x: 0, y: 0 });
   const stage = useRef<HTMLDivElement>(null);
-  const liveOnce = useRef(false);
   const launchAtHold = useRef(Math.max(0, pack.countdown.launchAt));
   if (pack.countdown.launchAt > 0) launchAtHold.current = pack.countdown.launchAt;
 
-  const tradeMint = (pack.mint || "").trim();
-  const live = tradeMint.length >= 32;
   const launchAt = pack.countdown.launchAt > 0 ? pack.countdown.launchAt : launchAtHold.current;
-  const counting = !live && launchAt > 0;
-  const remaining = live ? 0 : remainingOf({ ...pack.countdown, launchAt }, now);
+  const remaining = remainingOf({ ...pack.countdown, launchAt }, now);
+  const counting = launchAt > 0 && remaining > 0;
   const revealSoon = counting && remaining <= 8_000;
   const parts = splitRemaining(counting ? remaining : 0);
   const span = Math.max(pack.countdown.remainingMs, pack.countdown.mintLeadMs, 1);
-  const progress = live ? 1 : counting ? Math.min(1, Math.max(0, 1 - remaining / Math.max(span, remaining, 1))) : 0.12;
-  const ticker = (pack.symbol || "SPHA").replace(/^\$+/, "");
+  const progress = counting ? Math.min(1, Math.max(0, 1 - remaining / Math.max(span, remaining, 1))) : 0.12;
   const whenLabel = formatSphaLaunchWhen(launchAt);
 
   useEffect(() => {
-    if (live) return;
     setNow(Date.now());
     const id = window.setInterval(() => setNow(Date.now()), 100);
     return () => window.clearInterval(id);
-  }, [live]);
+  }, []);
 
   useEffect(() => {
-    if (live && !liveOnce.current) {
-      liveOnce.current = true;
-      setFire(true);
-    }
-  }, [live]);
-
-  useEffect(() => {
-    if (live || !revealSoon) return;
+    if (!revealSoon) return;
     onNeedRefresh();
     const id = window.setInterval(onNeedRefresh, 1_200);
     return () => window.clearInterval(id);
-  }, [live, revealSoon, onNeedRefresh]);
+  }, [revealSoon, onNeedRefresh]);
 
   const cells = useMemo(
     () => [
@@ -112,10 +96,9 @@ export function SphaCountdown({
 
   return (
     <div className="spha-cd-wrap mt-8">
-      <TealConfetti fire={fire} />
       <div
         ref={stage}
-        className={`spha-cd${counting ? " spha-cd-live-tick" : ""}${live ? " spha-cd-open" : ""}`}
+        className={`spha-cd${counting ? " spha-cd-live-tick" : ""}`}
         onPointerMove={onMove}
         onPointerLeave={() => setTilt({ x: 0, y: 0 })}
         style={{
@@ -143,24 +126,9 @@ export function SphaCountdown({
         </svg>
         <div className="spha-cd-core">
           <p className="spha-cd-kicker">
-            {live ? "PROTOCOL LIVE" : counting ? "OFFICIAL $SPHA TGE" : "OFFICIAL LAUNCH"}
+            {counting ? "OFFICIAL $SPHA TGE" : "PROTOCOL TOKEN"}
           </p>
-          {live ? (
-            <div className="spha-cd-live">
-              <div className="spha-cd-live-tag">${ticker} IS LIVE</div>
-              <CopyCa ca={tradeMint} full />
-              <div className="spha-cd-widget">
-                <SwapWidget
-                  defaultMint={tradeMint}
-                  defaultSymbol={ticker}
-                  defaultName={pack.name || "Solphia"}
-                  defaultImage={pack.image}
-                  defaultSide="buy"
-                  widgetId="spha-tge-swap"
-                />
-              </div>
-            </div>
-          ) : counting ? (
+          {counting ? (
             <div className="spha-cd-clock-wrap">
               {whenLabel ? <p className="spha-cd-when">{whenLabel}</p> : null}
               <div className="spha-cd-clock" role="timer" suppressHydrationWarning aria-live="polite" aria-label={`Launch in ${parts.d} days ${parts.h} hours ${parts.m} minutes ${parts.s} seconds`}>
@@ -171,16 +139,12 @@ export function SphaCountdown({
                   </div>
                 ))}
               </div>
-              <p className="spha-cd-sub">
-                {remaining <= 0
-                  ? "Opening the curve. The swap widget lands here in a moment."
-                  : "The clock is live. At T-0 this becomes the $SPHA swap."}
-              </p>
+              <p className="spha-cd-sub">The clock is live. The curve stays sealed until the desk opens it.</p>
             </div>
           ) : (
             <div className="spha-cd-soon">
               <span className="spha-cd-soon-glint">COMING SOON</span>
-              <p className="spha-cd-sub">The official clock arms from the $SPHA launcher. Until then this core stays sealed.</p>
+              <p className="spha-cd-sub">The official clock stays sealed. No public CA. No live book.</p>
             </div>
           )}
         </div>
