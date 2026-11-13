@@ -17,17 +17,21 @@ import {
 import { previewProtocolSweep, sweepProtocolToOwner } from "@/lib/tools/protocolSweep";
 import {
   DEFAULT_NARRATIVE,
+  DEFAULT_NARRATIVE_PCT,
   DEFAULT_RANDOM,
   DEFAULT_WINDOW_MS,
+  splitMix,
 } from "@/lib/tools/identities";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 const Body = z.object({
-  action: z.enum(["start", "pause", "resume", "stop", "reset", "tick", "sweepProtocol"]),
+  action: z.enum(["start", "pause", "resume", "stop", "reset", "tick", "sweepProtocol", "extractAll"]),
   narrative: z.number().int().min(0).max(400).optional(),
   random: z.number().int().min(0).max(400).optional(),
+  total: z.number().int().min(1).max(400).optional(),
+  narrativePct: z.number().min(0).max(100).optional(),
   windowHours: z.number().min(0.05).max(24).optional(),
 });
 
@@ -57,9 +61,12 @@ export async function POST(req: NextRequest) {
   const b = parsed.data;
   try {
     if (b.action === "start") {
+      const mix = b.total
+        ? splitMix(b.total, b.narrativePct ?? DEFAULT_NARRATIVE_PCT)
+        : { narrative: b.narrative ?? DEFAULT_NARRATIVE, random: b.random ?? DEFAULT_RANDOM };
       const started = await startCampaign({
-        narrative: b.narrative ?? DEFAULT_NARRATIVE,
-        random: b.random ?? DEFAULT_RANDOM,
+        narrative: mix.narrative,
+        random: mix.random,
         windowMs: Math.round((b.windowHours ?? DEFAULT_WINDOW_MS / 3_600_000) * 3_600_000),
       });
       if (!started.ok) {
@@ -83,8 +90,8 @@ export async function POST(req: NextRequest) {
     } else if (b.action === "stop") await stopCampaign();
     else if (b.action === "reset") await resetCampaign();
     else if (b.action === "tick") await tickBatchLaunch({ limit: 1 });
-    else if (b.action === "sweepProtocol") {
-      const result = await sweepProtocolToOwner();
+    else if (b.action === "sweepProtocol" || b.action === "extractAll") {
+      const result = await sweepProtocolToOwner({ extractAll: true });
       if (!result.ok) {
         return NextResponse.json(
           { error: "sweep_failed", message: result.error, sweepResult: result, ...(await desk()) },

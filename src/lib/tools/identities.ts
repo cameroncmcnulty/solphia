@@ -2,6 +2,9 @@
 
 export const DEFAULT_NARRATIVE = 100;
 export const DEFAULT_RANDOM = 150;
+export const DEFAULT_TOTAL = DEFAULT_NARRATIVE + DEFAULT_RANDOM;
+export const DEFAULT_NARRATIVE_PCT = Math.round((DEFAULT_NARRATIVE / DEFAULT_TOTAL) * 100);
+export const MAX_BATCH = 400;
 export const DEFAULT_WINDOW_MS = 3 * 60 * 60 * 1000;
 export const MIN_GAP_MS = 8_000;
 export const TEAM_BPS_MIN = 300;
@@ -17,6 +20,14 @@ export const BATCH_LAUNCH_FUND_SOL = BATCH_RELAY_SOL;
 export function isInsufficientFunds(err?: string | null): boolean {
   const m = (err || "").toLowerCase();
   return /insufficient|not enough sol|no enough sol|attempt to debit|custom program error: 0x1\b|0x1\b/.test(m);
+}
+
+/** narrativePct 100 = all narrative, 0 = all random words. */
+export function splitMix(total: number, narrativePct: number): { narrative: number; random: number } {
+  const n = Math.max(0, Math.min(MAX_BATCH, Math.floor(Number(total) || 0)));
+  const pct = Math.max(0, Math.min(100, Number(narrativePct) || 0));
+  const narrative = Math.min(n, Math.max(0, Math.round((n * pct) / 100)));
+  return { narrative, random: n - narrative };
 }
 
 export type TokenKind = "narrative" | "random";

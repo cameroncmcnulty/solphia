@@ -69,8 +69,11 @@ type Sweep = {
   userWalletSol: number;
   protocolSol: number;
   padTvlSol: number;
+  launchSol: number;
   movableSol: number;
   keepRelaySol: number;
+  lockedSol: number;
+  campaignRunning: boolean;
   legs: SweepLeg[];
   note: string;
 };
@@ -140,8 +143,8 @@ export function ToolsSection() {
   const [desk, setDesk] = useState<Desk | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
-  const [narrative, setNarrative] = useState(100);
-  const [random, setRandom] = useState(150);
+  const [total, setTotal] = useState(250);
+  const [narrativePct, setNarrativePct] = useState(40);
   const [hours, setHours] = useState(3);
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState<"all" | "live" | "queued" | "failed" | "narrative" | "random">("all");
@@ -154,8 +157,11 @@ export function ToolsSection() {
     if (!r.ok) throw new Error(j.error || "Could not load the launcher.");
     setDesk(j);
     if (j.campaign?.status === "idle") {
-      setNarrative(j.campaign.narrative || 100);
-      setRandom(j.campaign.random || 150);
+      const n = j.campaign.narrative || 100;
+      const r = j.campaign.random || 150;
+      const t = Math.max(1, n + r);
+      setTotal(t);
+      setNarrativePct(Math.round((n / t) * 100));
     }
   }, []);
 
@@ -206,9 +212,11 @@ export function ToolsSection() {
   const campaign = desk?.campaign;
   const fuel = desk?.fuel || emptyFuel;
   const summary = desk?.summary;
-  const total = Math.max(1, (campaign?.tokens.length || narrative + random) || 1);
+  const mixNarrative = Math.min(total, Math.max(0, Math.round((total * narrativePct) / 100)));
+  const mixRandom = Math.max(0, total - mixNarrative);
+  const planned = Math.max(1, campaign?.tokens.length || total || 1);
   const live = summary?.live || 0;
-  const pct = Math.min(100, Math.round((live / total) * 100));
+  const pct = Math.min(100, Math.round((live / planned) * 100));
   const rows = useMemo(() => {
     const tokens = campaign?.tokens || [];
     const needle = q.trim().toLowerCase();
@@ -243,7 +251,7 @@ export function ToolsSection() {
           <div className="tools-ring" style={{ ["--pct" as string]: `${pct}` }}>
             <div className="tools-ring-hole">
               <div className="stat-num text-2xl text-ghost">{live}</div>
-              <div className="font-mono text-[10px] text-mute">/ {campaign?.tokens.length || narrative + random}</div>
+              <div className="font-mono text-[10px] text-mute">/ {campaign?.tokens.length || total}</div>
             </div>
           </div>
         </div>
@@ -267,28 +275,16 @@ export function ToolsSection() {
       </div>
 
       <Panel kicker="CAMPAIGN CONTROL">
-        <div className="mt-3 grid gap-3 md:grid-cols-3">
+        <div className="mt-3 grid gap-3 md:grid-cols-2">
           <label className="block">
-            <div className="font-mono text-[10px] tracking-[0.2em] text-mute">NARRATIVE</div>
+            <div className="font-mono text-[10px] tracking-[0.2em] text-mute">TOTAL TOKENS</div>
             <input
               type="number"
-              min={0}
+              min={1}
               max={400}
-              value={narrative}
+              value={total}
               disabled={!idle || busy}
-              onChange={(e) => setNarrative(Number(e.target.value) || 0)}
-              className="mt-1 w-full rounded-xl border border-line bg-void/60 px-3 py-2 text-ghost"
-            />
-          </label>
-          <label className="block">
-            <div className="font-mono text-[10px] tracking-[0.2em] text-mute">RANDOM WORDS</div>
-            <input
-              type="number"
-              min={0}
-              max={400}
-              value={random}
-              disabled={!idle || busy}
-              onChange={(e) => setRandom(Number(e.target.value) || 0)}
+              onChange={(e) => setTotal(Math.max(1, Math.min(400, Math.floor(Number(e.target.value) || 1))))}
               className="mt-1 w-full rounded-xl border border-line bg-void/60 px-3 py-2 text-ghost"
             />
           </label>
@@ -305,6 +301,34 @@ export function ToolsSection() {
               className="mt-1 w-full rounded-xl border border-line bg-void/60 px-3 py-2 text-ghost"
             />
           </label>
+        </div>
+        <div className="mt-4">
+          <div className="flex items-end justify-between gap-3">
+            <div>
+              <div className="font-mono text-[10px] tracking-[0.2em] text-acid">NARRATIVE 100%</div>
+              <div className="font-display text-2xl text-ghost">{mixNarrative}</div>
+              <div className="font-mono text-[11px] text-mute">{narrativePct}%</div>
+            </div>
+            <div className="text-right">
+              <div className="font-mono text-[10px] tracking-[0.2em] text-violet">RANDOM WORDS 100%</div>
+              <div className="font-display text-2xl text-ghost">{mixRandom}</div>
+              <div className="font-mono text-[11px] text-mute">{100 - narrativePct}%</div>
+            </div>
+          </div>
+          <input
+            type="range"
+            min={0}
+            max={100}
+            value={narrativePct}
+            disabled={!idle || busy}
+            onChange={(e) => setNarrativePct(Number(e.target.value))}
+            className="tools-mix mt-3"
+            style={{
+              background: `linear-gradient(90deg, #14f195 0%, #14f195 ${narrativePct}%, #9945ff ${narrativePct}%, #9945ff 100%)`,
+            }}
+            aria-label="Narrative versus random mix"
+          />
+          <p className="mt-2 text-center font-mono text-[10px] tracking-[0.2em] text-mute">DRAG EITHER WAY</p>
         </div>
         <p className="mt-3 text-sm text-mute">
           Same hooked Token-2022 curve as official SPHA, with this tester&apos;s 1% going 100% to the owner wallet.
@@ -323,7 +347,7 @@ export function ToolsSection() {
           <button
             type="button"
             disabled={busy || running || !idle}
-            onClick={() => act("start", { narrative, random, windowHours: hours })}
+            onClick={() => act("start", { total, narrativePct, windowHours: hours })}
             className="btn-acid rounded-full px-8 py-3 text-sm tracking-[0.2em]"
           >
             LAUNCH
@@ -351,18 +375,19 @@ export function ToolsSection() {
         </div>
       </Panel>
 
-      <Panel kicker="PROTOCOL SWEEP">
+      <Panel kicker="EXTRACT ALL">
         <p className="mt-3 max-w-2xl text-sm text-mute">
-          The Overview &quot;SOL in wallets&quot; figure is user-held and non-custodial. Pad TVL stays in bonding
-          curves. This button only moves protocol wallets we hold a hot key for (treasury, foundation, airdrop, dev,
-          lp) into the owner wallet. Treasury keeps {fuel.keepSol.toFixed(3)} SOL
-          {desk?.sweep?.keepRelaySol ? ` plus ${desk.sweep.keepRelaySol.toFixed(3)} SOL to seed this launcher` : ""}.
+          Pulls every SOL we can sign into the owner wallet: treasury, foundation, airdrop, dev, lp, and Tools launch
+          wallets. The Overview wallet figure is user-held SOL with no server key, so it cannot move from here. Pad
+          TVL stays in bonding curves. Pause the launcher first if it is running. Refill treasury 0.5 SOL before the
+          next LAUNCH.
         </p>
-        <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+        <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-5">
           <Mini k="User-held" v={solAmt(desk?.sweep?.userWalletSol || 0)} />
           <Mini k="Pad TVL" v={solAmt(desk?.sweep?.padTvlSol || 0)} />
           <Mini k="Protocol" v={solAmt(desk?.sweep?.protocolSol || 0)} />
-          <Mini k="Movable" v={solAmt(desk?.sweep?.movableSol || 0)} />
+          <Mini k="Launch wallets" v={solAmt(desk?.sweep?.launchSol || 0)} />
+          <Mini k="Extractable" v={solAmt(desk?.sweep?.movableSol || 0)} />
         </div>
         <div className="mt-3 overflow-auto">
           <table className="w-full min-w-[520px] text-left text-sm">
@@ -406,22 +431,23 @@ export function ToolsSection() {
         )}
         <button
           type="button"
-          disabled={busy || !(desk?.sweep?.movableSol || 0)}
+          disabled={busy || desk?.sweep?.campaignRunning || !(desk?.sweep?.movableSol || 0)}
           onClick={() => {
             const movable = desk?.sweep?.movableSol || 0;
             const owner = desk?.sweep?.owner || "owner";
+            const locked = desk?.sweep?.lockedSol || 0;
             if (
               !window.confirm(
-                `Send ${movable.toFixed(4)} SOL from protocol wallets to ${owner.slice(0, 4)}…${owner.slice(-4)}? User wallets and pad TVL stay put.`,
+                `EXTRACT ALL ${movable.toFixed(4)} SOL into ${owner.slice(0, 4)}…${owner.slice(-4)}? That is every protocol and Tools launch wallet we can sign. ${locked.toFixed(4)} SOL in user wallets and pad TVL stays.`,
               )
             ) {
               return;
             }
-            void act("sweepProtocol");
+            void act("extractAll");
           }}
-          className="btn-acid mt-4 rounded-full px-6 py-3 text-sm"
+          className="btn-acid mt-4 rounded-full px-8 py-3 text-sm tracking-[0.2em]"
         >
-          Sweep protocol SOL to owner
+          EXTRACT ALL
         </button>
       </Panel>
 

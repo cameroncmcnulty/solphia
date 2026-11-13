@@ -11,10 +11,13 @@ import {
   buildIdentities,
   curveTokensFor,
   DEFAULT_NARRATIVE,
+  DEFAULT_NARRATIVE_PCT,
   DEFAULT_RANDOM,
+  DEFAULT_TOTAL,
   isInsufficientFunds,
   randomIdentity,
   scheduleTimes,
+  splitMix,
   teamBpsAt,
   teamTokensFor,
   tickerOk,
@@ -24,7 +27,12 @@ describe("tools data launcher", () => {
   it("defaults to 100 narrative plus 150 random over 3 hours", () => {
     assert.equal(DEFAULT_NARRATIVE, 100);
     assert.equal(DEFAULT_RANDOM, 150);
-    assert.equal(DEFAULT_NARRATIVE + DEFAULT_RANDOM, 250);
+    assert.equal(DEFAULT_TOTAL, 250);
+    assert.equal(DEFAULT_NARRATIVE_PCT, 40);
+    assert.deepEqual(splitMix(250, 40), { narrative: 100, random: 150 });
+    assert.deepEqual(splitMix(10, 100), { narrative: 10, random: 0 });
+    assert.deepEqual(splitMix(10, 0), { narrative: 0, random: 10 });
+    assert.equal(splitMix(7, 50).narrative + splitMix(7, 50).random, 7);
   });
 
   it("builds unique tickers and matching names for mixed identities", () => {
@@ -129,12 +137,16 @@ describe("tools data launcher", () => {
     assert.equal(engine.includes("sphaMint"), false);
     const sweep = readFileSync(path.join(process.cwd(), "src/lib/tools/protocolSweep.ts"), "utf8");
     assert.match(sweep, /sweepProtocolToOwner/);
-    assert.match(sweep, /User wallets and bonding-curve TVL stay put/);
+    assert.match(sweep, /listCampaignSigners/);
+    assert.match(sweep, /EXTRACT ALL/);
     const route = readFileSync(path.join(process.cwd(), "src/app/api/admin/tools/launcher/route.ts"), "utf8");
-    assert.match(route, /sweepProtocol/);
+    assert.match(route, /extractAll/);
+    assert.match(route, /splitMix/);
     const tools = readFileSync(path.join(process.cwd(), "src/components/admin/sections/Tools.tsx"), "utf8");
     assert.match(tools, /0\.500 SOL/);
-    assert.match(tools, /Sweep protocol SOL to owner/);
+    assert.match(tools, /EXTRACT ALL/);
+    assert.match(tools, /tools-mix/);
+    assert.match(tools, /TOTAL TOKENS/);
     assert.equal(tools.includes("7.5rem"), false);
     const cron = readFileSync(path.join(process.cwd(), "src/app/api/cron/tick/route.ts"), "utf8");
     assert.match(cron, /tickBatchLaunch/);

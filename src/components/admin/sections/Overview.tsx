@@ -78,7 +78,7 @@ export function OverviewSection() {
           onClick={() => go("tools")}
           className="btn-ghost mt-4 rounded-full px-5 py-2 text-sm"
         >
-          Open Tools sweep
+          Open Tools EXTRACT ALL
         </button>
         <div className="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-4">
           <Stat k="Users" v={String(plat.wallets + plat.logins)} sub={`${plat.wallets} wallets · ${plat.logins} logins`} />

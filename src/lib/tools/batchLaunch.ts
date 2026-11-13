@@ -33,6 +33,8 @@ import {
   DEFAULT_NARRATIVE,
   DEFAULT_RANDOM,
   DEFAULT_WINDOW_MS,
+  MAX_BATCH,
+  splitMix,
   buildIdentities,
   curveTokensFor,
   fetchNarratives,
@@ -171,6 +173,22 @@ function walletOf(secret: string): Keypair {
   return Keypair.fromSecretKey(b64ToBytes(secret));
 }
 
+/** Tools launch wallets we hold secrets for. Used by EXTRACT ALL. */
+export async function listCampaignSigners(): Promise<{ pk: string; kp: Keypair }[]> {
+  const pack = await loadKeys();
+  const out: { pk: string; kp: Keypair }[] = [];
+  for (const [pk, secret] of Object.entries(pack)) {
+    if (!pk || !secret) continue;
+    try {
+      const kp = walletOf(secret);
+      if (kp.publicKey.toBase58() === pk) out.push({ pk, kp });
+    } catch {
+      /* skip bad secret */
+    }
+  }
+  return out;
+}
+
 export function publicCampaign(c: Campaign): Campaign {
   return {
     ...c,
@@ -298,8 +316,13 @@ export async function startCampaign(opts?: {
     return { ok: false, error: "A campaign is already running. Pause or stop it first.", fuel: await campaignFuel(live) };
   }
   if (!dbcEnabled()) return { ok: false, error: "The bonding curve is not enabled.", fuel: await campaignFuel(live) };
-  const narrative = Math.max(0, Math.min(400, Math.floor(opts?.narrative ?? DEFAULT_NARRATIVE)));
-  const random = Math.max(0, Math.min(400, Math.floor(opts?.random ?? DEFAULT_RANDOM)));
+  let narrative = Math.max(0, Math.min(MAX_BATCH, Math.floor(opts?.narrative ?? DEFAULT_NARRATIVE)));
+  let random = Math.max(0, Math.min(MAX_BATCH, Math.floor(opts?.random ?? DEFAULT_RANDOM)));
+  if (narrative + random > MAX_BATCH) {
+    const mix = splitMix(MAX_BATCH, ((narrative + random) ? (narrative / (narrative + random)) * 100 : 40));
+    narrative = mix.narrative;
+    random = mix.random;
+  }
   const total = narrative + random;
   if (!(total > 0)) return { ok: false, error: "Set at least one token to launch.", fuel: await campaignFuel(live) };
   const windowMs = Math.max(60_000, Math.floor(opts?.windowMs ?? DEFAULT_WINDOW_MS));
