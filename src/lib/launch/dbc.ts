@@ -146,6 +146,63 @@ export async function sphaCurveConfig() {
   });
 }
 
+/**
+ * Same 1% / 50% creator / DAMM 100 bps as official $SPHA.
+ * Curve supply is the float on the pad; the project slice is minted after.
+ * Never write this config onto the shared pad curve.
+ */
+export async function hookedCurveConfig(curveTokens: number) {
+  const m = sdk();
+  const supply = Math.max(1_000_000, Math.floor(Number(curveTokens) || 0));
+  return m.buildCurveWithMarketCap({
+    token: {
+      tokenType: m.TokenType.Token2022,
+      tokenBaseDecimal: m.TokenDecimal.SIX,
+      tokenQuoteDecimal: m.TokenDecimal.NINE,
+      tokenAuthorityOption: m.TokenAuthorityOption.CreatorUpdateAndMintAuthority,
+      totalTokenSupply: supply,
+      leftover: 0,
+    },
+    fee: {
+      baseFeeParams: {
+        baseFeeMode: m.BaseFeeMode.FeeSchedulerLinear,
+        feeSchedulerParam: {
+          startingFeeBps: 100,
+          endingFeeBps: 100,
+          numberOfPeriod: 0,
+          totalDuration: 0,
+        },
+      },
+      dynamicFeeEnabled: false,
+      collectFeeMode: m.CollectFeeMode.QuoteToken,
+      creatorTradingFeePercentage: 50,
+      poolCreationFee: 0,
+      enableFirstSwapWithMinFee: false,
+    },
+    migration: {
+      migrationOption: m.MigrationOption.MET_DAMM_V2,
+      migrationFeeOption: m.MigrationFeeOption.FixedBps100,
+      migrationFee: { feePercentage: 0, creatorFeePercentage: 0 },
+    },
+    liquidityDistribution: {
+      partnerLiquidityPercentage: 0,
+      partnerPermanentLockedLiquidityPercentage: 100,
+      creatorLiquidityPercentage: 0,
+      creatorPermanentLockedLiquidityPercentage: 0,
+    },
+    lockedVesting: {
+      totalLockedVestingAmount: 0,
+      numberOfVestingPeriod: 0,
+      cliffUnlockAmount: 0,
+      totalVestingDuration: 0,
+      cliffDurationFromMigrationTime: 0,
+    },
+    activationType: m.ActivationType.Timestamp,
+    initialMarketCap: 40,
+    migrationMarketCap: 585,
+  });
+}
+
 export { liveDbcConfig };
 
 export function curveNeedsInstall(bookConfig?: string | null): boolean {
@@ -449,6 +506,59 @@ export async function buildSphaDbcLaunchTx(opts: {
   const tx = await readyTx(asTransaction(raw), payer);
   const encoded = encodeTx(tx);
   if (Buffer.from(encoded, "base64").length > LEGACY_MAX) throw new Error("Could not build the $SPHA launch.");
+  return {
+    transaction: encoded,
+    mint: mint.toBase58(),
+    tokensOut: 0,
+    feeSol: 0,
+    config: configKp.publicKey.toBase58(),
+    configSecret: bytesToB64(configKp.secretKey),
+    firstBuyIncluded: false,
+  };
+}
+
+/** R&D launches: unique Token-2022 hooked config, variable curve supply. Never writes the shared pad curve. */
+export async function buildHookedDbcLaunchTx(opts: {
+  payer: string;
+  mint: string;
+  name: string;
+  symbol: string;
+  uri: string;
+  curveTokens: number;
+}): Promise<{
+  transaction: string;
+  mint: string;
+  tokensOut: number;
+  feeSol: number;
+  config: string;
+  configSecret: string;
+  firstBuyIncluded: boolean;
+}> {
+  if (!dbcEnabled()) throw new Error("DBC config missing.");
+  const payer = new PublicKey(opts.payer);
+  const mint = new PublicKey(opts.mint);
+  const configKp = Keypair.generate();
+  const treasury = new PublicKey(treasuryAddress());
+  const curve = await hookedCurveConfig(opts.curveTokens);
+  const raw = await client().partner.createConfigAndPoolWithTransferHook({
+    ...curve,
+    config: configKp.publicKey,
+    feeClaimer: treasury,
+    leftoverReceiver: treasury,
+    quoteMint: new PublicKey(WSOL),
+    payer,
+    transferHookProgram: new PublicKey(SPHA_TRANSFER_HOOK),
+    preCreatePoolParam: {
+      name: opts.name.slice(0, 32),
+      symbol: opts.symbol.slice(0, 10),
+      uri: opts.uri.slice(0, 255),
+      poolCreator: payer,
+      baseMint: mint,
+    },
+  });
+  const tx = await readyTx(asTransaction(raw), payer);
+  const encoded = encodeTx(tx);
+  if (Buffer.from(encoded, "base64").length > LEGACY_MAX) throw new Error("Could not build the launch.");
   return {
     transaction: encoded,
     mint: mint.toBase58(),

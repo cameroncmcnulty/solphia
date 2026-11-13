@@ -21,6 +21,7 @@ import {
   Mail,
   Megaphone,
   Medal,
+  Wrench,
   X,
 } from "lucide-react";
 import { SphaMark } from "@/components/SphaMark";
@@ -50,6 +51,7 @@ const ICONS: Record<AdminIcon, typeof LayoutDashboard> = {
   mail: Mail,
   shill: Megaphone,
   ranks: Medal,
+  tools: Wrench,
 };
 
 export function AdminShell({ children }: { children: ReactNode }) {

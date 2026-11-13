@@ -830,7 +830,7 @@ export function createCoin(
     venue: opts.venue === "solphia" || opts.venue === "pump" ? opts.venue : undefined,
   };
   book.coins.unshift(coin);
-  if (book.coins.length > 120) book.coins.length = 120;
+  if (book.coins.length > 400) book.coins.length = 400;
   // Pump.fun first buy is on-chain in the same create tx. Do not book tokens here.
   if (coin.venue !== "solphia" && coin.venue !== "pump" && launchBuy >= MIN_TRADE_SOL) {
     const bought = buyCoin(book, { id: coin.id, owner: opts.creator, sol: launchBuy, now, skipSnipe: true });

@@ -15,6 +15,7 @@ import { CircleSection } from "./Circle";
 import { MailSection } from "./Mail";
 import { ShillSection } from "./Shill";
 import { RanksSection } from "./Ranks";
+import { ToolsSection } from "./Tools";
 
 /** Map a nav id to its screen. Add a tool here when you append it in src/lib/admin/nav.ts. */
 export const ADMIN_SECTIONS: Record<AdminSectionId, ComponentType> = {
@@ -30,6 +31,7 @@ export const ADMIN_SECTIONS: Record<AdminSectionId, ComponentType> = {
   mail: MailSection,
   shill: ShillSection,
   ranks: RanksSection,
+  tools: ToolsSection,
 };
 
 export function AdminSection() {

@@ -14,6 +14,7 @@ export const ADMIN_GROUPS = [
   { id: "site", label: "Site", blurb: "Same pages as solphia.io" },
   { id: "people", label: "People", blurb: "Accounts, ranks, mail" },
   { id: "engine", label: "Engine", blurb: "Replay the live book" },
+  { id: "lab", label: "Lab", blurb: "R&D tools and protocol tests" },
 ] as const;
 
 export type AdminGroupId = (typeof ADMIN_GROUPS)[number]["id"];
@@ -32,7 +33,8 @@ export type AdminIcon =
   | "circle"
   | "mail"
   | "shill"
-  | "ranks";
+  | "ranks"
+  | "tools";
 
 export const ADMIN_NAV = [
   {
@@ -123,6 +125,13 @@ export const ADMIN_NAV = [
     label: "Backtest",
     hint: "Replay spot 1× plus SOL 2× / 3×",
     icon: "backtest" as const,
+  },
+  {
+    id: "tools",
+    group: "lab",
+    label: "Tools",
+    hint: "Data launcher and protocol tests",
+    icon: "tools" as const,
   },
 ] as const;
 

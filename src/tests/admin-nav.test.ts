@@ -39,5 +39,13 @@ describe("admin nav", () => {
     assert.ok(ids.includes("launch"));
     assert.ok(ids.includes("shill"));
     assert.ok(ids.includes("circle"));
+    assert.ok(ids.includes("tools"));
+  });
+
+  it("lists the lab tools desk", () => {
+    assert.equal(isAdminSection("tools"), true);
+    assert.equal(resolveAdminSection("tools"), "tools");
+    const lab = filterAdminNav("lab");
+    assert.ok(lab.some((n) => n.id === "tools"));
   });
 });

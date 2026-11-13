@@ -37,6 +37,12 @@ export const KEYS = {
   phjob: (id: string) => `solphia:ph:${id}`,
   /** Last admin snapshot of SOL in known user + protocol wallets. */
   platformOnchain: "solphia:platform-onchain",
+  /** Admin Tools data-driven pad campaign (no secrets). */
+  batchLaunch: "solphia:batch-launch",
+  /** Launch-wallet secrets for the active Tools campaign. Admin-only. Never log. */
+  batchLaunchKeys: "solphia:batch-launch-keys",
+  /** NX lock while one campaign launch is in flight. */
+  batchLaunchLock: "solphia:batch-launch-lock",
 };
 
 const BLOB_PATH = "solphia-state.json";
