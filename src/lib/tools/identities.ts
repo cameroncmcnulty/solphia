@@ -5,8 +5,32 @@ export const DEFAULT_RANDOM = 150;
 export const DEFAULT_TOTAL = DEFAULT_NARRATIVE + DEFAULT_RANDOM;
 export const DEFAULT_NARRATIVE_PCT = Math.round((DEFAULT_NARRATIVE / DEFAULT_TOTAL) * 100);
 export const MAX_BATCH = 400;
-export const DEFAULT_WINDOW_MS = 3 * 60 * 60 * 1000;
+export const DEFAULT_WINDOW_MINUTES = 180;
+export const MIN_WINDOW_MINUTES = 1;
+export const MAX_WINDOW_MINUTES = 1440;
+export const DEFAULT_WINDOW_MS = DEFAULT_WINDOW_MINUTES * 60 * 1000;
 export const MIN_GAP_MS = 8_000;
+
+export function clampWindowMinutes(raw: number): number {
+  const n = Math.floor(Number(raw) || 0);
+  return Math.max(MIN_WINDOW_MINUTES, Math.min(MAX_WINDOW_MINUTES, n));
+}
+
+export function windowMsFromMinutes(minutes: number): number {
+  return clampWindowMinutes(minutes) * 60_000;
+}
+
+/** Prefer minutes. Hours is a fallback for older clients. */
+export function windowMsFromBody(opts: { windowMinutes?: number; windowHours?: number }): number {
+  if (opts.windowMinutes != null && Number.isFinite(Number(opts.windowMinutes))) {
+    return windowMsFromMinutes(Number(opts.windowMinutes));
+  }
+  if (opts.windowHours != null && Number.isFinite(Number(opts.windowHours))) {
+    return windowMsFromMinutes(Math.round(Number(opts.windowHours) * 60));
+  }
+  return DEFAULT_WINDOW_MS;
+}
+
 export const TEAM_BPS_MIN = 300;
 export const TEAM_BPS_MAX = 2000;
 export const BATCH_SUPPLY = 200_000_000;

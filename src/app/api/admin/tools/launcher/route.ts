@@ -19,8 +19,8 @@ import {
   DEFAULT_NARRATIVE,
   DEFAULT_NARRATIVE_PCT,
   DEFAULT_RANDOM,
-  DEFAULT_WINDOW_MS,
   splitMix,
+  windowMsFromBody,
 } from "@/lib/tools/identities";
 
 export const dynamic = "force-dynamic";
@@ -33,6 +33,7 @@ const Body = z.object({
   total: z.number().int().min(1).max(400).optional(),
   narrativePct: z.number().min(0).max(100).optional(),
   windowHours: z.number().min(0.05).max(24).optional(),
+  windowMinutes: z.number().min(1).max(1440).optional(),
 });
 
 async function desk() {
@@ -67,7 +68,7 @@ export async function POST(req: NextRequest) {
       const started = await startCampaign({
         narrative: mix.narrative,
         random: mix.random,
-        windowMs: Math.round((b.windowHours ?? DEFAULT_WINDOW_MS / 3_600_000) * 3_600_000),
+        windowMs: windowMsFromBody({ windowMinutes: b.windowMinutes, windowHours: b.windowHours }),
       });
       if (!started.ok) {
         return NextResponse.json({ error: "start_failed", message: started.error, fuel: started.fuel }, { status: 400 });

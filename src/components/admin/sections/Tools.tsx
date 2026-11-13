@@ -150,7 +150,7 @@ export function ToolsSection() {
   const [err, setErr] = useState("");
   const [total, setTotal] = useState(250);
   const [narrativePct, setNarrativePct] = useState(40);
-  const [hours, setHours] = useState(3);
+  const [minutes, setMinutes] = useState(180);
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState<"all" | "live" | "queued" | "failed" | "narrative" | "random">("all");
   const [copied, setCopied] = useState("");
@@ -294,17 +294,20 @@ export function ToolsSection() {
             />
           </label>
           <label className="block">
-            <div className="font-mono text-[10px] tracking-[0.2em] text-mute">WINDOW HOURS</div>
+            <div className="font-mono text-[10px] tracking-[0.2em] text-mute">WINDOW MINUTES</div>
             <input
               type="number"
-              min={0.05}
-              max={24}
-              step={0.25}
-              value={hours}
+              min={1}
+              max={1440}
+              step={1}
+              value={minutes}
               disabled={!idle || busy}
-              onChange={(e) => setHours(Number(e.target.value) || 3)}
+              onChange={(e) => setMinutes(Math.max(1, Math.min(1440, Math.floor(Number(e.target.value) || 1))))}
               className="mt-1 w-full rounded-xl border border-line bg-void/60 px-3 py-2 text-ghost"
             />
+            <p className="mt-1 font-mono text-[10px] text-mute">
+              1–1440 minutes. 180 is 3 hours. Use 10 for a short test.
+            </p>
           </label>
         </div>
         <div className="mt-4">
@@ -352,7 +355,7 @@ export function ToolsSection() {
           <button
             type="button"
             disabled={busy || running || !idle}
-            onClick={() => act("start", { total, narrativePct, windowHours: hours })}
+            onClick={() => act("start", { total, narrativePct, windowMinutes: minutes })}
             className="btn-acid rounded-full px-8 py-3 text-sm tracking-[0.2em]"
           >
             LAUNCH
