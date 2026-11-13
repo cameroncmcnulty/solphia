@@ -15,7 +15,7 @@ import { LIVE_SIGNER_SECRET } from "../config";
 import { feeVaultKeypair } from "../fees/vault";
 import { listDelegatedSigners } from "../live/signer";
 import { BATCH_RELAY_LAMPORTS } from "./identities";
-import { listCampaignSigners, loadCampaign } from "./batchLaunch";
+import { drainCampaignWalletsToOwner, listCampaignSigners, loadCampaign, pauseCampaign } from "./batchLaunch";
 
 export type SweepLeg = {
   role: string;
@@ -46,7 +46,7 @@ export type SweepPreview = {
   note: string;
 };
 
-const TX_FEE = 15_000;
+const TX_FEE = 2_000_000;
 const CHUNK = 100;
 const MAX_SENDS = 80;
 
@@ -79,18 +79,34 @@ async function balancesOf(pks: string[]): Promise<Map<string, number>> {
 
 async function sendLamports(from: Keypair, to: PublicKey, lamports: number): Promise<string> {
   const conn = connection();
-  const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash("confirmed");
-  const tx = new Transaction().add(
-    ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 50_000 }),
-    SystemProgram.transfer({ fromPubkey: from.publicKey, toPubkey: to, lamports }),
-  );
-  tx.feePayer = from.publicKey;
-  tx.recentBlockhash = blockhash;
-  tx.lastValidBlockHeight = lastValidBlockHeight;
-  tx.sign(from);
-  const sig = await broadcastB64(bytesToB64(tx.serialize()), { skipPreflight: false });
-  await waitForSignature(sig, 20);
-  return sig;
+  const live = await conn.getBalance(from.publicKey, "confirmed");
+  let send = Math.min(lamports, Math.max(0, live - TX_FEE));
+  if (send < 1) throw new Error("dust");
+  const fire = async (amount: number) => {
+    const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash("confirmed");
+    const tx = new Transaction().add(
+      ComputeBudgetProgram.setComputeUnitLimit({ units: 20_000 }),
+      ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 50_000 }),
+      SystemProgram.transfer({ fromPubkey: from.publicKey, toPubkey: to, lamports: amount }),
+    );
+    tx.feePayer = from.publicKey;
+    tx.recentBlockhash = blockhash;
+    tx.lastValidBlockHeight = lastValidBlockHeight;
+    tx.sign(from);
+    const sig = await broadcastB64(bytesToB64(tx.serialize()), { skipPreflight: true });
+    await waitForSignature(sig, 20);
+    return sig;
+  };
+  try {
+    return await fire(send);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "";
+    if (!/insufficient|simulation|debit/i.test(msg)) throw e;
+    const live2 = await conn.getBalance(from.publicKey, "confirmed");
+    send = Math.max(0, live2 - TX_FEE - 1_000_000);
+    if (send < 1) throw e;
+    return await fire(send);
+  }
 }
 
 type Packed = { role: string; pk: string; kp: Keypair | null };
@@ -248,8 +264,58 @@ export async function previewProtocolSweep(opts?: { extractAll?: boolean }): Pro
     campaignRunning,
     remainingSends,
     legs,
-    note: "EXTRACT ALL signs every protocol wallet, Tools launch wallet, delegated live-trading key, and fee vault the server can derive. Seed wallets live in the browser PIN vault and cannot be signed from here. Bonding-curve TVL stays in the pools. Click again if wallets remain.",
+    note: "EXTRACT LAUNCHED WALLETS pauses the launcher if it is running, sells bags worth at least 1 SOL at 99% slippage, then sends leftover SOL from every Tools launch wallet to owner. Click again if wallets remain.",
   };
+}
+
+/** Pause the launcher, dump bags ≥ 1 SOL, then send leftover Tools launch-wallet SOL to owner. */
+export async function extractLaunchedWalletsToOwner(): Promise<{
+  ok: boolean;
+  movedSol: number;
+  signatures: string[];
+  preview: SweepPreview;
+  error?: string;
+}> {
+  try {
+    await pauseCampaign();
+  } catch {
+    /* still drain */
+  }
+  let moved = 0;
+  const signatures: string[] = [];
+  const failures: string[] = [];
+  try {
+    const drained = await drainCampaignWalletsToOwner({ limit: 80 });
+    moved += drained.movedSol || 0;
+  } catch (e) {
+    failures.push(e instanceof Error ? e.message : "launch drain failed");
+  }
+  const owner = ownerAddress();
+  if (isSolanaAddress(owner)) {
+    const to = new PublicKey(owner);
+    const launches = await listCampaignSigners().catch(() => [] as { pk: string; kp: Keypair }[]);
+    let sent = 0;
+    for (const src of launches) {
+      if (!src.kp || src.pk === owner) continue;
+      if (sent >= MAX_SENDS) break;
+      const lamports = await connection().getBalance(src.kp.publicKey, "confirmed").catch(() => 0);
+      const send = Math.max(0, lamports - TX_FEE);
+      if (send < 1) continue;
+      try {
+        const sig = await sendLamports(src.kp, to, send);
+        signatures.push(sig);
+        moved += send / LAMPORTS_PER_SOL;
+        sent += 1;
+      } catch (e) {
+        failures.push(`tools-launch: ${e instanceof Error ? e.message : "send failed"}`);
+      }
+    }
+  }
+  const preview = await previewProtocolSweep({ extractAll: true });
+  if (!(moved > 0) && failures.length) {
+    return { ok: false, movedSol: 0, signatures, preview, error: failures[0] };
+  }
+  return { ok: true, movedSol: moved, signatures, preview };
 }
 
 export async function sweepProtocolToOwner(opts?: { extractAll?: boolean }): Promise<{
@@ -260,30 +326,20 @@ export async function sweepProtocolToOwner(opts?: { extractAll?: boolean }): Pro
   error?: string;
 }> {
   const extractAll = opts?.extractAll !== false;
-  const campaign = await loadCampaign().catch(() => null);
-  if (campaign?.status === "running") {
-    return {
-      ok: false,
-      movedSol: 0,
-      signatures: [],
-      preview: await previewProtocolSweep({ extractAll }),
-      error: "Pause or stop the launcher first.",
-    };
-  }
   const preview = await previewProtocolSweep({ extractAll });
   if (!isSolanaAddress(preview.owner)) {
     return { ok: false, movedSol: 0, signatures: [], preview, error: "Set the owner wallet first." };
   }
   const to = new PublicKey(preview.owner);
   const packed = await packSources();
-  const bals = await balancesOf(packed.map((p) => p.pk));
   const signatures: string[] = [];
   let moved = 0;
   let sent = 0;
+  const failures: string[] = [];
   const minSend = extractAll ? 1 : 1_000_000;
   for (const src of packed) {
     if (!src.kp || src.pk === preview.owner) continue;
-    const lamports = bals.get(src.pk) || 0;
+    const lamports = await connection().getBalance(src.kp.publicKey, "confirmed").catch(() => 0);
     const keep =
       extractAll ? 0 : src.role === "treasury" && preview.keepRelaySol > 0 ? TREASURY_KEEP_LAMPORTS + BATCH_RELAY_LAMPORTS : TREASURY_KEEP_LAMPORTS;
     const send = Math.max(0, lamports - keep - TX_FEE);
@@ -294,9 +350,13 @@ export async function sweepProtocolToOwner(opts?: { extractAll?: boolean }): Pro
       signatures.push(sig);
       moved += send / LAMPORTS_PER_SOL;
       sent += 1;
-    } catch {
-      /* keep going so one failed wallet does not block the rest */
+    } catch (e) {
+      failures.push(`${src.role}: ${e instanceof Error ? e.message : "send failed"}`);
     }
   }
-  return { ok: true, movedSol: moved, signatures, preview: await previewProtocolSweep({ extractAll }) };
+  const next = await previewProtocolSweep({ extractAll });
+  if (!(moved > 0) && failures.length) {
+    return { ok: false, movedSol: 0, signatures, preview: next, error: failures[0] };
+  }
+  return { ok: true, movedSol: moved, signatures, preview: next };
 }

@@ -17,6 +17,8 @@ import {
   DEFAULT_WINDOW_MINUTES,
   DEFAULT_WINDOW_MS,
   DUMP_DELAY_MS,
+  DUMP_MIN_SOL,
+  DUMP_SLIPPAGE_BPS,
   isInsufficientFunds,
   randomIdentity,
   scheduleTimes,
@@ -37,6 +39,8 @@ describe("tools data launcher", () => {
     assert.equal(DEFAULT_WINDOW_MINUTES, 180);
     assert.equal(DEFAULT_WINDOW_MS, 180 * 60_000);
     assert.equal(DUMP_DELAY_MS, 30_000);
+    assert.equal(DUMP_MIN_SOL, 1);
+    assert.equal(DUMP_SLIPPAGE_BPS, 9_900);
     assert.equal(windowMsFromMinutes(10), 10 * 60_000);
     assert.equal(windowMsFromMinutes(1), 60_000);
     assert.equal(windowMsFromMinutes(1440), 1440 * 60_000);
@@ -139,6 +143,8 @@ describe("tools data launcher", () => {
     assert.match(dbc, /creatorPct == null \? 0 : creatorPct/);
     assert.match(dbc, /creatorTradingFeePercentage: 50/);
     assert.equal(dbc.includes("book.dbcConfig"), false);
+    assert.match(dbc, /minOutLamports/);
+    assert.match(dbc, /opts.slippageBps \?\? 100/);
     const engine = readFileSync(path.join(process.cwd(), "src/lib/tools/batchLaunch.ts"), "utf8");
     assert.match(engine, /loadTreasuryKeypair/);
     const withdraw = readFileSync(path.join(process.cwd(), "src/lib/treasury/withdraw.ts"), "utf8");
@@ -152,38 +158,57 @@ describe("tools data launcher", () => {
     assert.match(engine, /dumpAndAdvance/);
     assert.match(engine, /sellAllHoldings/);
     assert.match(engine, /buildDbcTradeTx/);
+    assert.match(engine, /DUMP_MIN_SOL/);
+    assert.match(engine, /DUMP_SLIPPAGE_BPS/);
+    assert.match(engine, /minOutLamports: 1/);
+    assert.match(engine, /drainCampaignWalletsToOwner/);
     assert.match(engine, /returnWalletToOwner/);
     assert.match(engine, /closeOutCampaign/);
     assert.match(engine, /DUMP_DELAY_MS/);
     assert.match(engine, /side: "sell"/);
+    assert.match(engine, /skipPreflight: true/);
+    assert.match(engine, /setComputeUnitLimit/);
     assert.match(engine, /feeClaimer: owner/);
     assert.match(engine, /creatorTradingFeePercentage: 0/);
     assert.match(engine, /token.dumpAt = token.launchedAt \+ DUMP_DELAY_MS/);
     const toolsUi = readFileSync(path.join(process.cwd(), "src/components/admin/sections/Tools.tsx"), "utf8");
     assert.match(toolsUi, /waits 30 seconds/);
-    assert.match(toolsUi, /sells its bag into SOL/);
+    assert.match(toolsUi, /quotes at least 1 SOL/);
+    assert.match(toolsUi, /99% slippage/);
     assert.match(toolsUi, /last leftover goes to owner/);
+    assert.match(toolsUi, /CopyCa/);
+    assert.match(toolsUi, /solscan\.io\/token/);
+    assert.match(toolsUi, /dexscreener\.com\/solana/);
     assert.equal(engine.includes("fundWallet"), false);
     assert.equal(engine.includes("buildSphaDbcLaunchTx"), false);
     assert.equal(engine.includes("sphaMint"), false);
     const sweep = readFileSync(path.join(process.cwd(), "src/lib/tools/protocolSweep.ts"), "utf8");
     assert.match(sweep, /sweepProtocolToOwner/);
+    assert.match(sweep, /extractLaunchedWalletsToOwner/);
     assert.match(sweep, /listCampaignSigners/);
     assert.match(sweep, /listDelegatedSigners/);
     assert.match(sweep, /feeVaultKeypair/);
     assert.match(sweep, /live-trading/);
-    assert.match(sweep, /EXTRACT ALL/);
+    assert.match(sweep, /EXTRACT LAUNCHED WALLETS/);
+    assert.match(sweep, /pauseCampaign/);
+    assert.match(sweep, /drainCampaignWalletsToOwner/);
+    assert.match(sweep, /skipPreflight: true/);
+    assert.equal(sweep.includes("Pause or stop the launcher first"), false);
     const signer = readFileSync(path.join(process.cwd(), "src/lib/live/signer.ts"), "utf8");
     assert.match(signer, /listDelegatedSigners/);
     assert.match(signer, /kvScanKeys/);
     const route = readFileSync(path.join(process.cwd(), "src/app/api/admin/tools/launcher/route.ts"), "utf8");
     assert.match(route, /extractAll/);
+    assert.match(route, /extractLaunched/);
+    assert.match(route, /extractLaunchedWalletsToOwner/);
     assert.match(route, /splitMix/);
     assert.match(route, /windowMinutes/);
     assert.match(route, /windowMsFromBody/);
     const tools = readFileSync(path.join(process.cwd(), "src/components/admin/sections/Tools.tsx"), "utf8");
     assert.match(tools, /0\.500 SOL/);
-    assert.match(tools, /EXTRACT ALL/);
+    assert.match(tools, /EXTRACT LAUNCHED WALLETS/);
+    assert.match(tools, /extractLaunched/);
+    assert.equal(tools.includes("desk?.sweep?.campaignRunning"), false);
     assert.match(tools, /tools-mix/);
     assert.match(tools, /TOTAL TOKENS/);
     assert.match(tools, /WINDOW MINUTES/);

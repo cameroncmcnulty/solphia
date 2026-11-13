@@ -12,6 +12,10 @@ export const DEFAULT_WINDOW_MS = DEFAULT_WINDOW_MINUTES * 60 * 1000;
 export const MIN_GAP_MS = 8_000;
 /** After a launch, wait this long then sell the bag into SOL before the relay hop. */
 export const DUMP_DELAY_MS = 30_000;
+/** Dump the bag when a sell quote is at least this many SOL. */
+export const DUMP_MIN_SOL = 1;
+/** Dump sells use 99% slippage so a fat bag can still land on a thin curve. */
+export const DUMP_SLIPPAGE_BPS = 9_900;
 
 export function clampWindowMinutes(raw: number): number {
   const n = Math.floor(Number(raw) || 0);

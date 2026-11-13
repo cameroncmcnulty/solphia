@@ -14,7 +14,7 @@ import {
   stopCampaign,
   tickBatchLaunch,
 } from "@/lib/tools/batchLaunch";
-import { previewProtocolSweep, sweepProtocolToOwner } from "@/lib/tools/protocolSweep";
+import { extractLaunchedWalletsToOwner, previewProtocolSweep, sweepProtocolToOwner } from "@/lib/tools/protocolSweep";
 import {
   DEFAULT_NARRATIVE,
   DEFAULT_NARRATIVE_PCT,
@@ -27,7 +27,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 const Body = z.object({
-  action: z.enum(["start", "pause", "resume", "stop", "reset", "tick", "sweepProtocol", "extractAll"]),
+  action: z.enum(["start", "pause", "resume", "stop", "reset", "tick", "sweepProtocol", "extractAll", "extractLaunched"]),
   narrative: z.number().int().min(0).max(400).optional(),
   random: z.number().int().min(0).max(400).optional(),
   total: z.number().int().min(1).max(400).optional(),
@@ -91,7 +91,16 @@ export async function POST(req: NextRequest) {
     } else if (b.action === "stop") await stopCampaign();
     else if (b.action === "reset") await resetCampaign();
     else if (b.action === "tick") await tickBatchLaunch({ limit: 1 });
-    else if (b.action === "sweepProtocol" || b.action === "extractAll") {
+    else if (b.action === "extractAll" || b.action === "extractLaunched") {
+      const result = await extractLaunchedWalletsToOwner();
+      if (!result.ok) {
+        return NextResponse.json(
+          { error: "sweep_failed", message: result.error, sweepResult: result, ...(await desk()) },
+          { status: 400 },
+        );
+      }
+      return NextResponse.json({ ok: true, sweepResult: result, ...(await desk()) });
+    } else if (b.action === "sweepProtocol") {
       const result = await sweepProtocolToOwner({ extractAll: true });
       if (!result.ok) {
         return NextResponse.json(

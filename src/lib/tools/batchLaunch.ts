@@ -37,6 +37,8 @@ import {
   DEFAULT_RANDOM,
   DEFAULT_WINDOW_MS,
   DUMP_DELAY_MS,
+  DUMP_MIN_SOL,
+  DUMP_SLIPPAGE_BPS,
   MAX_BATCH,
   splitMix,
   buildIdentities,
@@ -182,7 +184,7 @@ function walletOf(secret: string): Keypair {
   return Keypair.fromSecretKey(b64ToBytes(secret));
 }
 
-/** Tools launch wallets we hold secrets for. Used by EXTRACT ALL. */
+/** Tools launch wallets we hold secrets for. Used by EXTRACT LAUNCHED WALLETS. */
 export async function listCampaignSigners(): Promise<{ pk: string; kp: Keypair }[]> {
   const pack = await loadKeys();
   const out: { pk: string; kp: Keypair }[] = [];
@@ -443,26 +445,42 @@ async function withLaunchLock<T>(fn: () => Promise<T>): Promise<T | { skipped: t
   }
 }
 
-const RELAY_FEE_LAMPORTS = 15_000;
+const RELAY_FEE_LAMPORTS = 2_000_000;
 
 async function sendSol(from: Keypair, to: PublicKey, lamports: number): Promise<string> {
   const conn = connection();
-  const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash("confirmed");
-  const tx = new Transaction().add(
-    ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 50_000 }),
-    SystemProgram.transfer({
-      fromPubkey: from.publicKey,
-      toPubkey: to,
-      lamports,
-    }),
-  );
-  tx.feePayer = from.publicKey;
-  tx.recentBlockhash = blockhash;
-  tx.lastValidBlockHeight = lastValidBlockHeight;
-  tx.sign(from);
-  const sig = await broadcastB64(bytesToB64(tx.serialize()), { skipPreflight: false });
-  await waitForSignature(sig, 24);
-  return sig;
+  const live = await conn.getBalance(from.publicKey, "confirmed");
+  let send = Math.min(lamports, Math.max(0, live - RELAY_FEE_LAMPORTS));
+  if (send < 1) throw new Error("dust");
+  const fire = async (amount: number) => {
+    const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash("confirmed");
+    const tx = new Transaction().add(
+      ComputeBudgetProgram.setComputeUnitLimit({ units: 20_000 }),
+      ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 50_000 }),
+      SystemProgram.transfer({
+        fromPubkey: from.publicKey,
+        toPubkey: to,
+        lamports: amount,
+      }),
+    );
+    tx.feePayer = from.publicKey;
+    tx.recentBlockhash = blockhash;
+    tx.lastValidBlockHeight = lastValidBlockHeight;
+    tx.sign(from);
+    const sig = await broadcastB64(bytesToB64(tx.serialize()), { skipPreflight: true });
+    await waitForSignature(sig, 24);
+    return sig;
+  };
+  try {
+    return await fire(send);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "";
+    if (!/insufficient|simulation|debit/i.test(msg)) throw e;
+    const live2 = await conn.getBalance(from.publicKey, "confirmed");
+    send = Math.max(0, live2 - RELAY_FEE_LAMPORTS - 1_000_000);
+    if (send < 1) throw e;
+    return await fire(send);
+  }
 }
 
 async function relayAll(from: Keypair, to: PublicKey): Promise<{ sig: string; lamports: number }> {
@@ -562,6 +580,17 @@ async function listWalletBags(owner: string): Promise<WalletBag[]> {
   return out;
 }
 
+async function quoteBagSol(mint: string, tokens: number): Promise<number> {
+  if (!(tokens > 0) || !isSolanaAddress(mint)) return 0;
+  try {
+    const dbc = await import("../launch/dbc");
+    const q = await dbc.quoteDbcTrade({ mint, side: "sell", tokens, slippageBps: DUMP_SLIPPAGE_BPS });
+    return q.ok ? Number(q.solOut) || 0 : 0;
+  } catch {
+    return 0;
+  }
+}
+
 async function sellHolding(kp: Keypair, mint: string, tokens: number): Promise<{ sig: string; solOut: number } | null> {
   if (!(tokens > 0) || !isSolanaAddress(mint)) return null;
   const dbc = await import("../launch/dbc");
@@ -570,9 +599,12 @@ async function sellHolding(kp: Keypair, mint: string, tokens: number): Promise<{
     owner: kp.publicKey.toBase58(),
     side: "sell",
     tokens,
+    slippageBps: DUMP_SLIPPAGE_BPS,
+    minOutLamports: 1,
   });
   if (!built.ok) return null;
-  const sig = await signSend(built.transaction, [kp]);
+  const signed = signPackedB64(built.transaction, [kp]);
+  const sig = await broadcastB64(signed, { skipPreflight: true });
   await waitForSignature(sig, 24);
   return { sig, solOut: Number(built.solOut) || 0 };
 }
@@ -605,7 +637,8 @@ async function closeEmptyBags(kp: Keypair, bags: WalletBag[]): Promise<string | 
   return sig;
 }
 
-async function sellAllHoldings(kp: Keypair, token: CampaignToken): Promise<number> {
+async function sellAllHoldings(kp: Keypair, token: CampaignToken, opts?: { minSol?: number }): Promise<number> {
+  const minSol = opts?.minSol ?? DUMP_MIN_SOL;
   let recovered = 0;
   for (let pass = 0; pass < 4; pass++) {
     const bags = await listWalletBags(kp.publicKey.toBase58());
@@ -618,6 +651,8 @@ async function sellAllHoldings(kp: Keypair, token: CampaignToken): Promise<numbe
     let any = false;
     for (const bag of bags) {
       try {
+        const value = await quoteBagSol(bag.mint, bag.amount);
+        if (value < minSol) continue;
         const sold = await sellHolding(kp, bag.mint, bag.amount);
         if (!sold) continue;
         any = true;
@@ -665,40 +700,74 @@ async function dumpAndAdvance(c: Campaign, token: CampaignToken): Promise<void> 
   await relayToNext(c, kp, token, keys);
 }
 
-async function closeOutCampaign(c: Campaign, opts?: { limit?: number }): Promise<void> {
+async function closeOutCampaign(c: Campaign, opts?: { limit?: number; minSol?: number }): Promise<number> {
   const keys = await loadKeys();
   const owner = ownerAddress();
-  if (!isSolanaAddress(owner)) return;
+  if (!isSolanaAddress(owner)) return 0;
   const to = new PublicKey(owner);
-  const limit = Math.max(1, Math.min(12, opts?.limit ?? 8));
+  const limit = Math.max(1, Math.min(80, opts?.limit ?? 8));
   let sent = 0;
-  for (const token of c.tokens) {
+  let moved = 0;
+  const scratch: CampaignToken = {
+    id: "drain",
+    kind: "random",
+    theme: "neon",
+    name: "Launch",
+    symbol: "LAUNCH",
+    blurb: "",
+    website: "",
+    x: "",
+    telegram: "",
+    teamBps: 300,
+    status: "failed",
+    scheduledAt: 0,
+    image: "",
+    uri: "",
+    sigs: [],
+    teamTokens: 0,
+    curveTokens: 0,
+    snipers: emptySnipers(),
+  };
+  for (const [pk, secret] of Object.entries(keys)) {
     if (sent >= limit) break;
-    if (!token.wallet || !keys[token.wallet]) continue;
-    const kp = walletOf(keys[token.wallet]!);
-    if (kp.publicKey.toBase58() === owner) continue;
-    if (!token.dumped && (token.status === "live" || token.mint)) {
-      try {
-        await sellAllHoldings(kp, token);
-      } catch {
-        /* SOL still moves */
-      }
-      token.dumped = true;
+    if (!pk || !secret || pk === owner) continue;
+    let kp: Keypair;
+    try {
+      kp = walletOf(secret);
+      if (kp.publicKey.toBase58() !== pk) continue;
+    } catch {
+      continue;
     }
+    const token = c.tokens.find((t) => t.wallet === pk) || scratch;
+    try {
+      await sellAllHoldings(kp, token, { minSol: opts?.minSol ?? DUMP_MIN_SOL });
+    } catch {
+      /* SOL still moves */
+    }
+    if (token !== scratch) token.dumped = true;
     const bal = await connection().getBalance(kp.publicKey, "confirmed").catch(() => 0);
     if (bal <= RELAY_FEE_LAMPORTS) continue;
     try {
       const relayed = await relayAll(kp, to);
-      if (relayed.sig) token.sigs.push(relayed.sig);
+      if (relayed.sig && token !== scratch) token.sigs.push(relayed.sig);
       const sol = relayed.lamports / LAMPORTS_PER_SOL;
-      token.returnedSol = (token.returnedSol || 0) + sol;
+      if (token !== scratch) token.returnedSol = (token.returnedSol || 0) + sol;
       c.returnedSol = (c.returnedSol || 0) + sol;
+      moved += sol;
       sent += 1;
     } catch {
       /* next wallet */
     }
   }
   await saveCampaign(c);
+  return moved;
+}
+
+/** Pause leftover hops and pull every Tools launch wallet we can sign into owner. */
+export async function drainCampaignWalletsToOwner(opts?: { limit?: number }): Promise<{ movedSol: number }> {
+  const c = await loadCampaign();
+  const movedSol = await closeOutCampaign(c, { limit: opts?.limit ?? 80, minSol: DUMP_MIN_SOL });
+  return { movedSol };
 }
 
 function pendingDump(c: Campaign): CampaignToken | undefined {

@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { CopyCa } from "@/components/CopyCa";
+import { copyText } from "@/lib/copyText";
 import { Mini, Panel, Stat, solAmt } from "../ui";
 
 type Snipers = { buys: number; sells: number; volumeSol: number; snipers: number; curveSol: number };
@@ -212,11 +214,11 @@ export function ToolsSection() {
     }
   }
 
-  async function copy(label: string, value?: string) {
+  function copy(label: string, value?: string) {
     if (!value) return;
-    await navigator.clipboard.writeText(value);
+    if (!copyText(value, `${label} copied`)) return;
     setCopied(label);
-    setTimeout(() => setCopied(""), 1200);
+    setTimeout(() => setCopied(""), 1600);
   }
 
   const campaign = desk?.campaign;
@@ -254,9 +256,10 @@ export function ToolsSection() {
             <h2 className="font-display text-3xl text-ghost">Data launcher</h2>
             <p className="mt-2 max-w-2xl text-sm text-mute">
               First R&amp;D tool. Click LAUNCH and Treasury seeds the first wallet with 0.5 SOL. That wallet launches,
-              waits 30 seconds, sells its bag into SOL for whatever the curve will pay, then hops leftover SOL to the
-              next wallet. The last leftover goes to owner. The desk stops on the first insufficient-funds error and
-              reports how much each launch actually cost. Full 1% swap fees on these tokens go to owner.
+              waits 30 seconds, then if the bag quotes at least 1 SOL it sells the max amount at 99% slippage and hops
+              leftover SOL to the next wallet. The last leftover goes to owner. The desk stops on the first
+              insufficient-funds error and reports how much each launch actually cost. Full 1% swap fees on these tokens
+              go to owner.
             </p>
           </div>
           <div className="tools-ring" style={{ ["--pct" as string]: `${pct}` }}>
@@ -351,8 +354,9 @@ export function ToolsSection() {
         <p className="mt-3 text-sm text-mute">
           Same hooked Token-2022 curve as official SPHA, with this tester&apos;s 1% going 100% to the owner wallet.
           Project mint is a random 3–20% into that token&apos;s launch wallet. Shared pad config is never overwritten.
-          Seed is 0.5 SOL once. 30 seconds after each launch the wallet sells its holdings into SOL, then remainder hops
-          to the next wallet until a launch fails on insufficient funds. End of the path sends leftover SOL to owner.
+          Seed is 0.5 SOL once. 30 seconds after each launch, if the bag quotes at least 1 SOL the wallet sells the max
+          amount at 99% slippage, then remainder hops to the next wallet until a launch fails on insufficient funds. End
+          of the path sends leftover SOL to owner. Live CAs are copyable for Solscan and Dexscreener.
         </p>
         {(fuel.dry || campaign?.dry) && (
           <div className="mt-3 rounded-xl border border-blood/40 bg-blood/10 px-4 py-3 text-sm text-ghost">
@@ -394,22 +398,17 @@ export function ToolsSection() {
         </div>
       </Panel>
 
-      <Panel kicker="EXTRACT ALL">
+      <Panel kicker="EXTRACT LAUNCHED WALLETS">
         <p className="mt-3 max-w-2xl text-sm text-mute">
-          Signs every key the server holds into owner: protocol wallets, Tools launch wallets, delegated live-trading
-          wallets, and every fee vault we can derive. Click again if wallets remain (80 txs per pass). Seed wallets
-          live in the browser PIN vault — those cannot be signed from the server. Pad TVL stays in bonding curves.
-          Pause the launcher first. Refill treasury 0.5 SOL before the next LAUNCH.
+          Pauses the launcher if it is running, sells bags worth at least 1 SOL at 99% slippage, then sends leftover SOL
+          from every Tools launch wallet (this campaign and leftover prior wallets) into owner. Click again if wallets
+          remain (80 txs per pass). Protocol, user, and pad SOL stay. Refill treasury 0.5 SOL before the next LAUNCH.
         </p>
         <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
-          <Mini k="User-held" v={solAmt(desk?.sweep?.userWalletSol || 0)} />
-          <Mini k="Pad TVL" v={solAmt(desk?.sweep?.padTvlSol || 0)} />
-          <Mini k="Protocol" v={solAmt(desk?.sweep?.protocolSol || 0)} />
           <Mini k="Launch wallets" v={solAmt(desk?.sweep?.launchSol || 0)} />
-          <Mini k="Live trading" v={solAmt(desk?.sweep?.liveSol || 0)} />
-          <Mini k="Fee vaults" v={solAmt(desk?.sweep?.vaultSol || 0)} />
-          <Mini k="Extractable" v={solAmt(desk?.sweep?.movableSol || 0)} />
+          <Mini k="Extractable" v={solAmt(desk?.sweep?.legs?.find((l) => l.role === "tools-launch")?.sendSol || desk?.sweep?.launchSol || 0)} />
           <Mini k="This pass" v={String(Math.min(80, desk?.sweep?.remainingSends || 0))} />
+          <Mini k="Owner" v={shortPk(desk?.sweep?.owner)} />
         </div>
         <div className="mt-3 overflow-auto">
           <table className="w-full min-w-[520px] text-left text-sm">
@@ -423,7 +422,9 @@ export function ToolsSection() {
               </tr>
             </thead>
             <tbody>
-              {(desk?.sweep?.legs || []).map((leg) => (
+              {(desk?.sweep?.legs || [])
+                .filter((leg) => leg.role === "tools-launch")
+                .map((leg) => (
                 <tr key={`${leg.role}-${leg.from}`} className="border-t border-line/60">
                   <td className="px-2 py-1 font-mono text-[11px] text-ghost">{leg.role}</td>
                   <td className="px-2 py-1 font-mono text-[11px] text-ghost">{shortPk(leg.from)}</td>
@@ -434,10 +435,10 @@ export function ToolsSection() {
                   </td>
                 </tr>
               ))}
-              {!(desk?.sweep?.legs || []).length && (
+              {!(desk?.sweep?.legs || []).some((leg) => leg.role === "tools-launch") && (
                 <tr>
                   <td colSpan={5} className="px-2 py-3 text-mute">
-                    No protocol wallets loaded.
+                    No Tools launch wallets loaded.
                   </td>
                 </tr>
               )}
@@ -453,23 +454,22 @@ export function ToolsSection() {
         )}
         <button
           type="button"
-          disabled={busy || desk?.sweep?.campaignRunning || !(desk?.sweep?.movableSol || 0)}
+          disabled={busy || !(desk?.sweep?.launchSol || 0)}
           onClick={() => {
-            const movable = desk?.sweep?.movableSol || 0;
+            const movable = desk?.sweep?.launchSol || 0;
             const owner = desk?.sweep?.owner || "owner";
-            const locked = desk?.sweep?.lockedSol || 0;
             if (
               !window.confirm(
-                `EXTRACT ALL ${movable.toFixed(4)} SOL into ${owner.slice(0, 4)}…${owner.slice(-4)}? That is every protocol and Tools launch wallet we can sign. ${locked.toFixed(4)} SOL in user wallets and pad TVL stays.`,
+                `EXTRACT LAUNCHED WALLETS ${movable.toFixed(4)} SOL into ${owner.slice(0, 4)}…${owner.slice(-4)}? This pauses the launcher, sells bags worth at least 1 SOL at 99% slippage, then sends leftover launch-wallet SOL to owner.`,
               )
             ) {
               return;
             }
-            void act("extractAll");
+            void act("extractLaunched");
           }}
           className="btn-acid mt-4 rounded-full px-8 py-3 text-sm tracking-[0.2em]"
         >
-          EXTRACT ALL
+          EXTRACT LAUNCHED WALLETS
         </button>
       </Panel>
 
@@ -477,7 +477,7 @@ export function ToolsSection() {
         <Mini k="Live" v={String(summary?.live || 0)} />
         <Mini k="Queued" v={String(summary?.queued || 0)} />
         <Mini k="Failed" v={String(summary?.failed || 0)} />
-        <Mini k="Copied" v={copied || "mint / wallet"} />
+        <Mini k="Copied" v={copied || "CA / wallet"} />
       </div>
 
       <section className="panel overflow-hidden rounded-2xl p-0">
@@ -486,7 +486,7 @@ export function ToolsSection() {
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Search ticker, mint, wallet"
+            placeholder="Search ticker, CA, wallet"
             className="min-w-[12rem] flex-1 rounded-full border border-line bg-void/50 px-3 py-1.5 text-sm text-ghost"
           />
           {(["all", "live", "queued", "failed", "narrative", "random"] as const).map((k) => (
@@ -506,7 +506,7 @@ export function ToolsSection() {
               <tr>
                 <th className="px-3 py-2">Token</th>
                 <th className="px-3 py-2">Wallet</th>
-                <th className="px-3 py-2">Mint</th>
+                <th className="px-3 py-2">CA</th>
                 <th className="px-3 py-2">Team</th>
                 <th className="px-3 py-2">Snipers</th>
                 <th className="px-3 py-2">Volume</th>
@@ -541,9 +541,31 @@ export function ToolsSection() {
                     </button>
                   </td>
                   <td className="px-3 py-2">
-                    <button type="button" className="font-mono text-[11px] text-ghost" onClick={() => copy("mint", t.mint)}>
-                      {shortPk(t.mint)}
-                    </button>
+                    {t.mint ? (
+                      <div className="flex min-w-[11rem] flex-col items-start gap-1">
+                        <CopyCa ca={t.mint} compact />
+                        <div className="flex flex-wrap gap-2 font-mono text-[10px]">
+                          <a
+                            href={`https://solscan.io/token/${t.mint}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-acid hover:underline"
+                          >
+                            solscan
+                          </a>
+                          <a
+                            href={`https://dexscreener.com/solana/${t.mint}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-acid hover:underline"
+                          >
+                            dex
+                          </a>
+                        </div>
+                      </div>
+                    ) : (
+                      <span className="font-mono text-[11px] text-mute">—</span>
+                    )}
                   </td>
                   <td className="px-3 py-2 font-mono text-[11px] text-ghost">{fmtPct(t.teamBps)}</td>
                   <td className="px-3 py-2 font-mono text-[11px] text-ghost">

@@ -1111,6 +1111,7 @@ export async function quoteDbcTrade(opts: {
   side: "buy" | "sell";
   sol?: number;
   tokens?: number;
+  slippageBps?: number;
 }): Promise<DbcTradeQuote> {
   const { SwapMode } = sdk();
   const found = await resolveDbcPool(opts.mint);
@@ -1142,7 +1143,7 @@ export async function quoteDbcTrade(opts: {
         swapBaseForQuote: !buy,
         swapMode: SwapMode.ExactIn,
         amountIn,
-        slippageBps: 100,
+        slippageBps: Math.max(1, Math.min(9_900, Math.floor(opts.slippageBps ?? 100))),
         hasReferral: false,
         eligibleForFirstSwapWithMinFee: false,
         currentPoint,
@@ -1183,6 +1184,8 @@ export async function buildDbcTradeTx(opts: {
   side: "buy" | "sell";
   sol?: number;
   tokens?: number;
+  slippageBps?: number;
+  minOutLamports?: number;
 }): Promise<{ ok: true; transaction: string; tokensOut?: number; solOut?: number; feeSol: number } | { ok: false; error: string }> {
   const { SwapMode } = sdk();
   const found = await resolveDbcPool(opts.mint);
@@ -1195,9 +1198,13 @@ export async function buildDbcTradeTx(opts: {
   const tokenDec = await mintTokenDecimals(opts.mint);
   const inUi = quoted.inAmount || (buy ? Number(opts.sol) || 0 : Number(opts.tokens) || 0);
   const amountIn = buy ? new BN(Math.round(inUi * 1e9)) : uiToBn(inUi, tokenDec);
-  const minOut = buy
-    ? new BN(Math.floor((quoted.tokensOut || 0) * 10 ** tokenDec * 0.99))
-    : new BN(Math.floor((quoted.solOut || 0) * 1e9 * 0.99));
+  const keepBps = Math.max(0, 10_000 - Math.max(1, Math.min(9_900, Math.floor(opts.slippageBps ?? 100))));
+  const minOut =
+    opts.minOutLamports != null
+      ? new BN(Math.max(1, Math.floor(opts.minOutLamports)))
+      : buy
+        ? new BN(Math.floor((quoted.tokensOut || 0) * 10 ** tokenDec * (keepBps / 10_000)))
+        : new BN(Math.floor((quoted.solOut || 0) * 1e9 * (keepBps / 10_000)));
   const swapArg = {
     owner,
     pool: row.publicKey,
