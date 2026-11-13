@@ -37,6 +37,8 @@ describe("spha countdown", () => {
     const desk = readFileSync(path.join(process.cwd(), "src/components/TokenDesk.tsx"), "utf8");
     assert.equal(desk.includes("CopyCa"), false);
     assert.equal(desk.includes("Bubble"), false);
+    assert.equal(desk.includes("Tokenomics"), false);
+    assert.equal(desk.includes("SphaRoadmap"), false);
   });
 
   it("stays Coming soon until a launch time is armed", () => {

@@ -24,6 +24,12 @@ describe("solphia token desk", () => {
     assert.match(src, /Increased engagement rewards/);
   });
 
+  it("hides tokenomics and roadmap on the public $SPHA desk", () => {
+    const desk = readFileSync(join(process.cwd(), "src/components/TokenDesk.tsx"), "utf8");
+    assert.equal(desk.includes("Tokenomics"), false);
+    assert.equal(desk.includes("SphaRoadmap"), false);
+  });
+
   it("lets admin-stored mint override the empty code default", () => {
     const mint = "So11111111111111111111111111111111111111112";
     assert.equal(sphaMintOf(""), "");

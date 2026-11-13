@@ -24,5 +24,9 @@ describe("public desk yard", () => {
     assert.equal(tabs.includes('label: "Launch"'), false);
     assert.match(home, />\s*Bot\s*</);
     assert.equal(home.includes("Launch pad and Shill Zone are open now"), false);
+    const swap = readFileSync(path.join(process.cwd(), "src/app/swap/page.tsx"), "utf8");
+    assert.match(swap, /LaunchPad/);
+    assert.equal(swap.includes("DeskYard"), false);
+    assert.equal(swap.includes("../launch/page"), false);
   });
 });

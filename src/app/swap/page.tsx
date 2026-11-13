@@ -1,1 +1,1 @@
-export { default } from "../launch/page";
+export { default } from "@/components/LaunchPad";

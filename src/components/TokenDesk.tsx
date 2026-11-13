@@ -6,8 +6,6 @@ import { SphaSocials } from "@/components/SphaSocials";
 import { SolphiaConstellation } from "@/components/SolphiaConstellation";
 import { solphiaTokenDesk, type TokenStat } from "@/lib/token/solphia";
 import { Reveal } from "@/components/Reveal";
-import { Tokenomics } from "@/components/Tokenomics";
-import { SphaRoadmap } from "@/components/SphaRoadmap";
 import { JoinFoundersButton } from "@/components/JoinFoundersButton";
 import { SphaCountdown } from "@/components/SphaCountdown";
 import { SPHA_MINT_LEAD_MS, mergeSphaPublicPack, type SphaPublicCountdown, type SphaPublicPhase } from "@/lib/token/countdown";
@@ -159,14 +157,6 @@ export function TokenDesk({ initial }: { initial?: SphaPack }) {
               d="A share is taken out of supply."
             />
           </Reveal>
-        </div>
-
-        <div className="mt-10">
-          <Tokenomics />
-        </div>
-
-        <div className="mt-16 md:mt-24">
-          <SphaRoadmap />
         </div>
 
         <div className="mt-14">
