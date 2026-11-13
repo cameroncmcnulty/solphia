@@ -21,7 +21,7 @@ import { SOL_MINT } from "../pair/mints";
 import { isTokenMetaUri, pinSphaTokenMeta } from "../token/sphaMeta";
 import { createCoin, emptyLaunchBook } from "../launch/engine";
 import { dbcEnabled } from "../launch/dbcIds";
-import { harvestKeypair } from "../treasury/withdraw";
+import { loadTreasuryKeypair } from "../treasury/withdraw";
 import { TREASURY_KEEP_LAMPORTS } from "../treasury/plan";
 import { treasuryAddress } from "../treasury";
 import { durableConfigured, kvDel, kvGetJson, kvSetJson, kvSetNxEx, KEYS } from "../persist";
@@ -291,7 +291,7 @@ async function signSend(packed: string, signers: Keypair[]): Promise<string> {
 export async function campaignFuel(c?: Campaign): Promise<CampaignFuel> {
   const camp = c || (await loadCampaign());
   const treasury = treasuryAddress();
-  const hot = Boolean(harvestKeypair());
+  const hot = Boolean(await loadTreasuryKeypair());
   const remaining = camp.tokens.filter((t) => t.status === "queued" || t.status === "funding" || t.status === "launching").length
     || (camp.status === "idle" ? camp.narrative + camp.random || DEFAULT_NARRATIVE + DEFAULT_RANDOM : 0);
   const needSol = camp.relayFunded ? 0 : BATCH_RELAY_SOL;
@@ -372,7 +372,11 @@ export async function startCampaign(opts?: {
   };
   const fuel = await campaignFuel(campaign);
   if (!fuel.hot) {
-    return { ok: false, error: "Treasury hot key is not loaded. Set TREASURY_SECRET to the displayed treasury.", fuel };
+    return {
+      ok: false,
+      error: "Treasury cannot sign. Save the treasury project key in Wallets so it matches the displayed treasury.",
+      fuel,
+    };
   }
   if (!fuel.enough) {
     return {
@@ -726,10 +730,10 @@ async function pinMeta(token: CampaignToken): Promise<{ image: string; uri: stri
 }
 
 async function launchOne(c: Campaign, token: CampaignToken): Promise<CampaignToken> {
-  const treasury = harvestKeypair();
+  const treasury = await loadTreasuryKeypair();
   if (!treasury) {
     token.status = "failed";
-    token.error = "Treasury hot key is not loaded.";
+    token.error = "Treasury cannot sign. Save the treasury project key in Wallets.";
     return token;
   }
   const owner = ownerAddress();

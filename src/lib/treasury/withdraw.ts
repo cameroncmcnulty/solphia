@@ -1,5 +1,6 @@
 import { Keypair } from "@solana/web3.js";
 import { treasuryAddress } from "../treasury";
+import { loadProjectServerKeypair } from "../wallet/projectKeys";
 export {
   TREASURY_KEEP_LAMPORTS,
   TREASURY_MIN_SEND_LAMPORTS,
@@ -7,6 +8,12 @@ export {
   type WithdrawKind,
   type WithdrawPlan,
 } from "./plan";
+
+function keypairFromBytes(bytes: Uint8Array): Keypair | null {
+  if (bytes.length === 32) return Keypair.fromSeed(bytes);
+  if (bytes.length === 64) return Keypair.fromSecretKey(bytes);
+  return null;
+}
 
 function keypairFromTreasurySecret(): Keypair | null {
   const raw = (process.env.TREASURY_SECRET || "").trim();
@@ -23,7 +30,7 @@ function keypairFromTreasurySecret(): Keypair | null {
       if (buf.length === 64 || buf.length === 32) bytes = new Uint8Array(buf);
     }
     if (!bytes) return null;
-    return Keypair.fromSecretKey(bytes);
+    return keypairFromBytes(bytes);
   } catch {
     return null;
   }
@@ -45,6 +52,11 @@ export function treasuryKeypair(): Keypair | null {
 /** Same as treasuryKeypair — cron harvest only if the secret is the displayed treasury. */
 export function harvestKeypair(): Keypair | null {
   return treasuryKeypair();
+}
+
+/** Env TREASURY_SECRET, then the saved Wallets project treasury key. Never log this. */
+export async function loadTreasuryKeypair(): Promise<Keypair | null> {
+  return treasuryKeypair() || (await loadProjectServerKeypair("treasury"));
 }
 
 /** Always the treasury they set. Never a different harvest wallet. */

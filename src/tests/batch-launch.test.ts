@@ -140,7 +140,10 @@ describe("tools data launcher", () => {
     assert.match(dbc, /creatorTradingFeePercentage: 50/);
     assert.equal(dbc.includes("book.dbcConfig"), false);
     const engine = readFileSync(path.join(process.cwd(), "src/lib/tools/batchLaunch.ts"), "utf8");
-    assert.match(engine, /harvestKeypair/);
+    assert.match(engine, /loadTreasuryKeypair/);
+    const withdraw = readFileSync(path.join(process.cwd(), "src/lib/treasury/withdraw.ts"), "utf8");
+    assert.match(withdraw, /loadTreasuryKeypair/);
+    assert.match(withdraw, /loadProjectServerKeypair\("treasury"\)/);
     assert.match(engine, /buildHookedDbcLaunchTx/);
     assert.match(engine, /buildProjectSliceMintTx/);
     assert.match(engine, /Keypair.generate/);

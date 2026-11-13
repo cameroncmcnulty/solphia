@@ -269,7 +269,7 @@ export function ToolsSection() {
       </section>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
-        <Stat k="Treasury" v={solAmt(fuel.treasurySol)} sub={fuel.hot ? "hot key ready" : "hot key missing"} good={fuel.hot} />
+        <Stat k="Treasury" v={solAmt(fuel.treasurySol)} sub={fuel.hot ? "hot key ready" : "save treasury key in Wallets"} good={fuel.hot} />
         <Stat k="Relay seed" v="0.500 SOL" sub={campaign?.relayFunded ? "first wallet funded" : "moves once from treasury"} />
         <Stat
           k="Cost / launch"
