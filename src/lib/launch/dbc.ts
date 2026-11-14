@@ -710,7 +710,16 @@ function mintOfPool(row: { publicKey: PublicKey; account: any }): string {
 }
 
 function quoteSolOf(inner: Record<string, unknown>): number {
-  for (const k of ["quoteReserve", "quote_reserve", "quoteReserveAmount", "quote_reserve_amount"]) {
+  for (const k of [
+    "quoteReserve",
+    "quote_reserve",
+    "quoteReserveAmount",
+    "quote_reserve_amount",
+    "realQuoteReserve",
+    "real_quote_reserve",
+    "quoteAmount",
+    "quote_amount",
+  ]) {
     const n = lamportsToSol(inner?.[k] as { toString(): string } | number | null | undefined);
     if (n > 0) return n;
   }

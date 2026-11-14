@@ -9,6 +9,7 @@ import { mergeDesk } from "./ui";
 type AdminContextValue = {
   data: AdminDesk | null;
   authed: boolean;
+  booted: boolean;
   busy: boolean;
   err: string;
   note: string;
@@ -104,6 +105,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
   const [btLev, setBtLev] = useState<1 | 2 | 3>(1);
   const [section, setSection] = useState<AdminSectionId>("overview");
   const [reloadAt, setReloadAt] = useState(0);
+  const [booted, setBooted] = useState(false);
   const owner = useOwner();
 
   const applyHash = useCallback(() => {
@@ -139,6 +141,27 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     setData((prev) => mergeDesk(prev, next));
     if (fields) hydrateFields(next);
   }, [hydrateFields]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const dash = await fetch("/api/admin");
+        if (!dash.ok || cancelled) return;
+        const next = (await dash.json()) as AdminDesk;
+        if (cancelled) return;
+        hydrate(next, true);
+        setAuthed(true);
+      } catch {
+        /* show login */
+      } finally {
+        if (!cancelled) setBooted(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [hydrate]);
 
   const reload = useCallback(async (fields = false) => {
     const dash = await fetch("/api/admin");
@@ -328,6 +351,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     () => ({
       data,
       authed,
+      booted,
       busy,
       err,
       note,
@@ -385,6 +409,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     [
       data,
       authed,
+      booted,
       busy,
       err,
       note,

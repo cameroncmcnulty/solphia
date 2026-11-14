@@ -14,7 +14,14 @@ export default function AdminPage() {
 }
 
 function AdminGate() {
-  const { data } = useAdmin();
+  const { data, booted } = useAdmin();
+  if (!booted) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-void text-mute">
+        Restoring session…
+      </div>
+    );
+  }
   if (!data) return <AdminLogin />;
   return (
     <AdminShell>

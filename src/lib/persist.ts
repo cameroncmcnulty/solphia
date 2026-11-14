@@ -43,6 +43,8 @@ export const KEYS = {
   batchLaunchKeys: "solphia:batch-launch-keys",
   /** NX lock while one campaign launch is in flight. */
   batchLaunchLock: "solphia:batch-launch-lock",
+  /** Tickers already used by Tools launches so the next batch does not repeat them. */
+  batchLaunchTickers: "solphia:batch-launch-tickers",
 };
 
 const BLOB_PATH = "solphia-state.json";

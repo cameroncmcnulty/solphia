@@ -38,7 +38,9 @@ import {
   DEFAULT_WINDOW_MS,
   DUMP_DELAY_MS,
   DUMP_MIN_SOL,
+  DUMP_RETRY_MS,
   DUMP_SLIPPAGE_BPS,
+  DUMP_WATCH_MS,
   MAX_BATCH,
   splitMix,
   buildIdentities,
@@ -70,6 +72,7 @@ export type CampaignToken = TokenIdentity & {
   dumpAt?: number;
   dumped?: boolean;
   dumpSol?: number;
+  bagQuoteSol?: number;
   returnedSol?: number;
 };
 
@@ -113,6 +116,7 @@ type KeyPack = Record<string, string>;
 const LOCK_TTL_S = 180;
 const FILE = path.join(process.cwd(), "data", "batch-launch.json");
 const KEYS_FILE = path.join(process.cwd(), "data", "batch-launch-keys.json");
+const TICKERS_FILE = path.join(process.cwd(), "data", "batch-launch-tickers.json");
 
 function emptyCampaign(): Campaign {
   return {
@@ -178,6 +182,48 @@ async function loadKeys(): Promise<KeyPack> {
 async function saveKeys(pack: KeyPack): Promise<void> {
   if (durableConfigured()) await kvSetJson(KEYS.batchLaunchKeys, pack).catch(() => false);
   await writeJsonFile(KEYS_FILE, pack).catch(() => undefined);
+}
+
+function ingestTickers(used: Set<string>, rows: unknown) {
+  if (!Array.isArray(rows)) return;
+  for (const row of rows) {
+    const sym = String(row || "").replace(/^\$/, "").trim().toUpperCase();
+    if (sym) used.add(sym);
+  }
+}
+
+async function loadUsedTickers(): Promise<Set<string>> {
+  const used = new Set<string>();
+  const prev = await loadCampaign().catch(() => null);
+  for (const t of prev?.tokens || []) {
+    const sym = (t.symbol || "").replace(/^\$/, "").trim().toUpperCase();
+    if (sym) used.add(sym);
+  }
+  try {
+    const s = await readyState();
+    for (const coin of s.launch?.coins || []) {
+      const sym = (coin.symbol || "").replace(/^\$/, "").trim().toUpperCase();
+      if (sym) used.add(sym);
+    }
+  } catch {
+    /* campaign history is enough */
+  }
+  if (durableConfigured()) {
+    ingestTickers(used, await kvGetJson(KEYS.batchLaunchTickers).catch(() => null));
+  }
+  ingestTickers(used, await readJsonFile<unknown>(TICKERS_FILE));
+  return used;
+}
+
+async function rememberTickers(symbols: string[]) {
+  const used = await loadUsedTickers();
+  for (const raw of symbols) {
+    const sym = String(raw || "").replace(/^\$/, "").trim().toUpperCase();
+    if (sym) used.add(sym);
+  }
+  const list = [...used].slice(-2000);
+  if (durableConfigured()) await kvSetJson(KEYS.batchLaunchTickers, list).catch(() => undefined);
+  await writeJsonFile(TICKERS_FILE, list).catch(() => undefined);
 }
 
 function walletOf(secret: string): Keypair {
@@ -271,6 +317,7 @@ function normalizeToken(raw: unknown): CampaignToken {
     dumpAt: Number(o.dumpAt) || undefined,
     dumped: Boolean(o.dumped),
     dumpSol: Number(o.dumpSol) || undefined,
+    bagQuoteSol: Number(o.bagQuoteSol) || undefined,
     returnedSol: Number(o.returnedSol) || undefined,
   };
 }
@@ -344,7 +391,9 @@ export async function startCampaign(opts?: {
   const windowMs = Math.max(60_000, Math.floor(opts?.windowMs ?? DEFAULT_WINDOW_MS));
   const now = Date.now();
   const hits = await fetchNarratives(Math.max(120, narrative));
-  const ids = buildIdentities({ narrative, random, hits });
+  const used = await loadUsedTickers();
+  const ids = buildIdentities({ narrative, random, hits, used });
+  await rememberTickers(ids.map((id) => id.symbol));
   const times = scheduleTimes(ids.length, windowMs, now);
   const tokens: CampaignToken[] = ids.map((id, i) => ({
     ...id,
@@ -674,33 +723,48 @@ async function sellAllHoldings(kp: Keypair, token: CampaignToken, opts?: { minSo
   return recovered;
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function waitForDump(dumpAt: number): Promise<void> {
-  const wait = Math.min(DUMP_DELAY_MS + 5_000, Math.max(0, dumpAt - Date.now()));
-  if (wait > 0) await sleep(wait);
-}
-
 async function dumpAndAdvance(c: Campaign, token: CampaignToken): Promise<void> {
   const keys = await loadKeys();
   if (!token.wallet || !keys[token.wallet]) {
     token.dumped = true;
     return;
   }
+  if ((token.dumpAt || 0) > Date.now()) return;
   const kp = walletOf(keys[token.wallet]!);
-  await waitForDump(token.dumpAt || 0);
+  let recovered = 0;
   try {
-    await sellAllHoldings(kp, token);
+    recovered = await sellAllHoldings(kp, token);
   } catch {
-    /* still hop the leftover SOL */
+    recovered = 0;
+  }
+  const bags = await listWalletBags(kp.publicKey.toBase58()).catch(() => [] as WalletBag[]);
+  let quote = 0;
+  for (const bag of bags) {
+    const value = await quoteBagSol(bag.mint, bag.amount);
+    if (value > quote) quote = value;
+  }
+  token.bagQuoteSol = quote;
+  if (recovered > 0) {
+    token.dumped = true;
+    await relayToNext(c, kp, token, keys);
+    return;
+  }
+  const launchedAt = token.launchedAt || Date.now();
+  if (quote >= DUMP_MIN_SOL && Date.now() < launchedAt + DUMP_WATCH_MS) {
+    token.dumpAt = Date.now() + DUMP_RETRY_MS;
+    token.dumped = false;
+    return;
+  }
+  if (Date.now() < launchedAt + DUMP_WATCH_MS) {
+    token.dumpAt = Date.now() + DUMP_RETRY_MS;
+    token.dumped = false;
+    return;
   }
   token.dumped = true;
   await relayToNext(c, kp, token, keys);
 }
 
-async function closeOutCampaign(c: Campaign, opts?: { limit?: number; minSol?: number }): Promise<number> {
+async function closeOutCampaign(c: Campaign, opts?: { limit?: number; minSol?: number; only?: string[] }): Promise<number> {
   const keys = await loadKeys();
   const owner = ownerAddress();
   if (!isSolanaAddress(owner)) return 0;
@@ -728,9 +792,11 @@ async function closeOutCampaign(c: Campaign, opts?: { limit?: number; minSol?: n
     curveTokens: 0,
     snipers: emptySnipers(),
   };
+  const only = opts?.only?.length ? new Set(opts.only) : null;
   for (const [pk, secret] of Object.entries(keys)) {
     if (sent >= limit) break;
     if (!pk || !secret || pk === owner) continue;
+    if (only && !only.has(pk)) continue;
     let kp: Keypair;
     try {
       kp = walletOf(secret);
@@ -764,9 +830,9 @@ async function closeOutCampaign(c: Campaign, opts?: { limit?: number; minSol?: n
 }
 
 /** Pause leftover hops and pull every Tools launch wallet we can sign into owner. */
-export async function drainCampaignWalletsToOwner(opts?: { limit?: number }): Promise<{ movedSol: number }> {
+export async function drainCampaignWalletsToOwner(opts?: { limit?: number; only?: string[] }): Promise<{ movedSol: number }> {
   const c = await loadCampaign();
-  const movedSol = await closeOutCampaign(c, { limit: opts?.limit ?? 80, minSol: DUMP_MIN_SOL });
+  const movedSol = await closeOutCampaign(c, { limit: opts?.limit ?? 80, minSol: DUMP_MIN_SOL, only: opts?.only });
   return { movedSol };
 }
 
@@ -881,7 +947,15 @@ async function launchOne(c: Campaign, token: CampaignToken): Promise<CampaignTok
       Keypair.fromSecretKey(b64ToBytes(built.configSecret)),
     ]);
     token.sigs.push(launchSig);
-    await waitForSignature(launchSig, 32);
+    const landed = await waitForSignature(launchSig, 32);
+    const pool = await dbc.waitForDbcPool(token.mint, 24);
+    if (!pool) {
+      throw new Error(
+        landed.ok
+          ? "Launch sent but the pair never appeared on-chain."
+          : `Launch did not confirm (${landed.err || "timeout"}).`,
+      );
+    }
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Launch failed.";
     const left = await conn.getBalance(walletKp.publicKey, "confirmed").catch(() => 0);
@@ -996,6 +1070,10 @@ export async function tickBatchLaunch(opts?: { limit?: number }): Promise<{
       if (c.status !== "running") break;
       const dump = pendingDump(c);
       if (dump) {
+        if ((dump.dumpAt || 0) > Date.now()) {
+          await finishTickState(c);
+          break;
+        }
         const idx = c.tokens.findIndex((t) => t.id === dump.id);
         try {
           await dumpAndAdvance(c, dump);
@@ -1023,8 +1101,6 @@ export async function tickBatchLaunch(opts?: { limit?: number }): Promise<{
           ran += 1;
           c.lastLaunchAt = Date.now();
           await saveCampaign(c);
-          await dumpAndAdvance(c, live);
-          if (idx >= 0) c.tokens[idx] = live;
         } else failed += 1;
         c.lastLaunchAt = Date.now();
         await finishTickState(c);
@@ -1060,6 +1136,43 @@ export async function tickBatchLaunch(opts?: { limit?: number }): Promise<{
   return locked;
 }
 
+async function dexPairStats(mint: string): Promise<{ buys: number; sells: number; volumeSol: number } | null> {
+  if (!isSolanaAddress(mint)) return null;
+  try {
+    const r = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mint}`, {
+      cache: "no-store",
+      signal: AbortSignal.timeout(6_000),
+      headers: { accept: "application/json" },
+    });
+    if (!r.ok) return null;
+    const j = (await r.json()) as {
+      pairs?: {
+        chainId?: string;
+        txns?: { h24?: { buys?: number; sells?: number }; m5?: { buys?: number; sells?: number } };
+        volume?: { h24?: number };
+        priceUsd?: string | number;
+        priceNative?: string | number;
+      }[];
+    };
+    const pairs = Array.isArray(j.pairs) ? j.pairs : [];
+    const pair =
+      pairs.find((p) => String(p.chainId || "").toLowerCase().startsWith("sol")) || pairs[0];
+    if (!pair) return null;
+    const tx = pair.txns?.h24 || pair.txns?.m5 || {};
+    const volUsd = Number(pair.volume?.h24) || 0;
+    const priceUsd = Number(pair.priceUsd) || 0;
+    const priceNative = Number(pair.priceNative) || 0;
+    const solUsd = priceNative > 0 && priceUsd > 0 ? priceUsd / priceNative : 0;
+    return {
+      buys: Number(tx.buys) || 0,
+      sells: Number(tx.sells) || 0,
+      volumeSol: solUsd > 0 ? volUsd / solUsd : 0,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export async function refreshSnipers(limit = 12): Promise<number> {
   const c = await loadCampaign();
   const live = c.tokens.filter((t) => t.status === "live" && t.mint);
@@ -1067,23 +1180,48 @@ export async function refreshSnipers(limit = 12): Promise<number> {
   const s = await readyState();
   const book = s.launch;
   const dbc = await import("../launch/dbc").catch(() => null);
-  const slice = live.sort((a, b) => (a.snipers.volumeSol || 0) - (b.snipers.volumeSol || 0)).slice(0, limit);
-  let n = 0;
-  for (const token of slice) {
-    const coin = book?.coins?.find((x) => x.mint === token.mint);
-    let curveSol = token.snipers.curveSol || 0;
-    if (dbc && token.mint) {
-      try {
-        curveSol = await dbc.dbcPoolQuoteSol(token.mint);
-      } catch {
-        /* keep last */
+  const slice = live
+    .slice()
+    .sort((a, b) => (a.snipers.volumeSol || 0) - (b.snipers.volumeSol || 0) || (b.launchedAt || 0) - (a.launchedAt || 0))
+    .slice(0, Math.max(1, Math.min(24, limit)));
+  const keys = await loadKeys().catch(() => ({} as KeyPack));
+  await Promise.all(
+    slice.map(async (token) => {
+      const coin = book?.coins?.find((x) => x.mint === token.mint);
+      let curveSol = token.snipers.curveSol || 0;
+      if (dbc && token.mint) {
+        try {
+          curveSol = await dbc.dbcPoolQuoteSol(token.mint);
+        } catch {
+          /* keep last */
+        }
       }
-    }
-    token.snipers = sniperStats(coin, curveSol);
-    n += 1;
-  }
+      const local = sniperStats(coin, curveSol);
+      const dex = token.mint ? await dexPairStats(token.mint) : null;
+      token.snipers = {
+        buys: Math.max(local.buys, dex?.buys || 0),
+        sells: Math.max(local.sells, dex?.sells || 0),
+        volumeSol: Math.max(local.volumeSol, dex?.volumeSol || 0),
+        snipers: Math.max(local.snipers, (dex?.buys || 0) + (dex?.sells || 0) ? 1 : 0),
+        curveSol,
+      };
+      if (!token.dumped && token.wallet && keys[token.wallet] && token.mint) {
+        try {
+          const bags = await listWalletBags(token.wallet);
+          let quote = 0;
+          for (const bag of bags) {
+            const value = await quoteBagSol(bag.mint, bag.amount);
+            if (value > quote) quote = value;
+          }
+          token.bagQuoteSol = quote;
+        } catch {
+          /* desk still loads */
+        }
+      }
+    }),
+  );
   await saveCampaign(c);
-  return n;
+  return slice.length;
 }
 
 export function campaignSummary(c: Campaign) {

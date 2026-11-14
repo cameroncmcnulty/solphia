@@ -58,6 +58,15 @@ describe("admin otp", () => {
     assert.match(login, /await pullAdminTotp\(s\)/);
     assert.match(login, /await saveAdminTotp\(/);
     assert.match(login, /beginTotp/);
+    const auth = readFileSync(join(process.cwd(), "src/lib/admin/auth.ts"), "utf8");
+    assert.match(auth, /ADMIN_SESSION_SECONDS = 8 \* 60 \* 60/);
+    assert.match(auth, /sameSite: "lax"/);
+    assert.match(auth, /withAdminSession/);
+    const provider = readFileSync(join(process.cwd(), "src/components/admin/AdminProvider.tsx"), "utf8");
+    assert.match(provider, /setAuthed\(true\)/);
+    assert.match(provider, /setBooted\(true\)/);
+    const gate = readFileSync(join(process.cwd(), "src/app/admin/page.tsx"), "utf8");
+    assert.match(gate, /Restoring session/);
     assert.equal(login.includes("queueEmail"), false);
     assert.equal(login.includes("pullAdminOtp"), false);
     assert.match(otp, /function otpSecret\(\)/);

@@ -25,6 +25,7 @@ type TokenRow = {
   dumpAt?: number;
   dumped?: boolean;
   dumpSol?: number;
+  bagQuoteSol?: number;
   returnedSol?: number;
 };
 
@@ -255,10 +256,10 @@ export function ToolsSection() {
           <div>
             <h2 className="font-display text-3xl text-ghost">Data launcher</h2>
             <p className="mt-2 max-w-2xl text-sm text-mute">
-              First R&amp;D tool. Click LAUNCH and Treasury seeds the first wallet with 0.5 SOL. That wallet launches,
-              waits 30 seconds, then if the bag quotes at least 1 SOL it sells the max amount at 99% slippage and hops
-              leftover SOL to the next wallet. The last leftover goes to owner. The desk stops on the first
-              insufficient-funds error and reports how much each launch actually cost. Full 1% swap fees on these tokens
+              First R&amp;D tool. Click LAUNCH and Treasury seeds the first wallet with 0.5 SOL. That wallet launches a
+              unique ticker, waits 30 seconds, then watches the bag. When a sell quotes at least 1 SOL it dumps the max
+              amount at 99% slippage and hops leftover SOL to the next wallet. If nothing hits 1 SOL within 10 minutes it
+              hops leftover so the run can continue. The last leftover goes to owner. Full 1% swap fees on these tokens
               go to owner.
             </p>
           </div>
@@ -354,9 +355,9 @@ export function ToolsSection() {
         <p className="mt-3 text-sm text-mute">
           Same hooked Token-2022 curve as official SPHA, with this tester&apos;s 1% going 100% to the owner wallet.
           Project mint is a random 3–20% into that token&apos;s launch wallet. Shared pad config is never overwritten.
-          Seed is 0.5 SOL once. 30 seconds after each launch, if the bag quotes at least 1 SOL the wallet sells the max
-          amount at 99% slippage, then remainder hops to the next wallet until a launch fails on insufficient funds. End
-          of the path sends leftover SOL to owner. Live CAs are copyable for Solscan and Dexscreener.
+          Seed is 0.5 SOL once. Tickers are unique across batches. After each launch the wallet watches the bag for a 1
+          SOL sell quote, dumps at 99% slippage, then hops leftover SOL to the next wallet. Live CAs are copyable for
+          Solscan and Dexscreener. Stats pull curve SOL plus Dexscreener buys, sells, and volume.
         </p>
         {(fuel.dry || campaign?.dry) && (
           <div className="mt-3 rounded-xl border border-blood/40 bg-blood/10 px-4 py-3 text-sm text-ghost">
@@ -577,10 +578,13 @@ export function ToolsSection() {
                     <div className="text-[10px] text-mute">curve {solAmt(t.snipers.curveSol)}</div>
                   </td>
                   <td className={`px-3 py-2 font-mono text-[11px] ${statusTone(t.status)}`}>
-                    {t.status === "live" && !t.dumped ? "dumping" : t.status}
+                    {t.status === "live" && !t.dumped ? "watching" : t.status}
                     {t.status === "queued" && t.scheduledAt > now ? <div className="text-mute">{eta(t.scheduledAt, now)}</div> : null}
-                    {t.status === "live" && !t.dumped && t.dumpAt && t.dumpAt > now ? (
-                      <div className="text-mute">sell {eta(t.dumpAt, now)}</div>
+                    {t.status === "live" && !t.dumped ? (
+                      <div className="text-mute">
+                        bag {solAmt(t.bagQuoteSol || 0)}
+                        {t.dumpAt && t.dumpAt > now ? ` · check ${eta(t.dumpAt, now)}` : " · dump at 1 SOL"}
+                      </div>
                     ) : null}
                     {t.dumped && t.dumpSol ? <div className="text-mute">sold {solAmt(t.dumpSol)}</div> : null}
                     {t.returnedSol ? <div className="text-mute">to owner {solAmt(t.returnedSol)}</div> : null}

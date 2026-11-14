@@ -18,7 +18,9 @@ import {
   DEFAULT_WINDOW_MS,
   DUMP_DELAY_MS,
   DUMP_MIN_SOL,
+  DUMP_RETRY_MS,
   DUMP_SLIPPAGE_BPS,
+  DUMP_WATCH_MS,
   isInsufficientFunds,
   randomIdentity,
   scheduleTimes,
@@ -39,6 +41,8 @@ describe("tools data launcher", () => {
     assert.equal(DEFAULT_WINDOW_MINUTES, 180);
     assert.equal(DEFAULT_WINDOW_MS, 180 * 60_000);
     assert.equal(DUMP_DELAY_MS, 30_000);
+    assert.equal(DUMP_WATCH_MS, 10 * 60_000);
+    assert.equal(DUMP_RETRY_MS, 20_000);
     assert.equal(DUMP_MIN_SOL, 1);
     assert.equal(DUMP_SLIPPAGE_BPS, 9_900);
     assert.equal(windowMsFromMinutes(10), 10 * 60_000);
@@ -68,6 +72,20 @@ describe("tools data launcher", () => {
     }
     assert.ok(rows.some((r) => r.kind === "narrative"));
     assert.ok(rows.some((r) => r.kind === "random"));
+    const used = new Set(rows.map((r) => r.symbol));
+    const next = buildIdentities({ narrative: 8, random: 12, used });
+    assert.equal(next.length, 20);
+    assert.equal(next.some((r) => used.has(r.symbol)), false);
+    const hits = [
+      { symbol: "PEPE", name: "Pepe", theme: "pepe" },
+      { symbol: "WOJAK", name: "Wojak", theme: "meme" },
+    ];
+    const first = buildIdentities({ narrative: 8, random: 4, hits });
+    const second = buildIdentities({ narrative: 8, random: 4, hits, used: first.map((r) => r.symbol) });
+    const all = [...first, ...second].map((r) => r.symbol);
+    assert.equal(new Set(all).size, all.length);
+    assert.equal(all.includes("PEPE"), false);
+    assert.equal(all.includes("WOJAK"), false);
   });
 
   it("makes random word names like Cat and The World", () => {
@@ -165,6 +183,11 @@ describe("tools data launcher", () => {
     assert.match(engine, /returnWalletToOwner/);
     assert.match(engine, /closeOutCampaign/);
     assert.match(engine, /DUMP_DELAY_MS/);
+    assert.match(engine, /DUMP_WATCH_MS/);
+    assert.match(engine, /waitForDbcPool/);
+    assert.match(engine, /loadUsedTickers/);
+    assert.match(engine, /dexPairStats/);
+    assert.match(engine, /batchLaunchTickers/);
     assert.match(engine, /side: "sell"/);
     assert.match(engine, /skipPreflight: true/);
     assert.match(engine, /setComputeUnitLimit/);
@@ -213,7 +236,7 @@ describe("tools data launcher", () => {
     assert.match(tools, /TOTAL TOKENS/);
     assert.match(tools, /WINDOW MINUTES/);
     assert.match(tools, /windowMinutes: minutes/);
-    assert.match(tools, /dumping/);
+    assert.match(tools, /watching/);
     assert.equal(tools.includes("WINDOW HOURS"), false);
     assert.equal(tools.includes("WindDownHost"), false);
     const shell = readFileSync(path.join(process.cwd(), "src/components/Shell.tsx"), "utf8");

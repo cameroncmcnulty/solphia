@@ -10,8 +10,12 @@ export const MIN_WINDOW_MINUTES = 1;
 export const MAX_WINDOW_MINUTES = 1440;
 export const DEFAULT_WINDOW_MS = DEFAULT_WINDOW_MINUTES * 60 * 1000;
 export const MIN_GAP_MS = 8_000;
-/** After a launch, wait this long then sell the bag into SOL before the relay hop. */
+/** First dump check this long after launch. */
 export const DUMP_DELAY_MS = 30_000;
+/** Keep watching for a 1 SOL bag quote this long before hopping leftover anyway. */
+export const DUMP_WATCH_MS = 10 * 60_000;
+/** Recheck the bag this often while watching for a 1 SOL buy. */
+export const DUMP_RETRY_MS = 20_000;
 /** Dump the bag when a sell quote is at least this many SOL. */
 export const DUMP_MIN_SOL = 1;
 /** Dump sells use 99% slippage so a fat bag can still land on a thin curve. */
@@ -296,17 +300,41 @@ function makeId(kind: TokenKind, theme: string, symbol: string): string {
   return `${k}${th}_${sym}_${hex6()}`;
 }
 
+function shuffle<T>(xs: readonly T[]): T[] {
+  const a = xs.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = randInt(i + 1);
+    const tmp = a[i]!;
+    a[i] = a[j]!;
+    a[j] = tmp;
+  }
+  return a;
+}
+
+function randSuffix(n: number): string {
+  const abc = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let s = "";
+  for (let i = 0; i < n; i++) s += abc[randInt(abc.length)]!;
+  return s;
+}
+
 function uniqueTicker(base: string, used: Set<string>): string {
   let t = base.replace(/[^A-Z0-9]/g, "").toUpperCase().slice(0, 10);
   if (t.length < 2) t = `X${t}X`.slice(0, 10);
-  if (!used.has(t) && tickerOk(t)) return t;
+  const ok = (x: string) => !used.has(x) && tickerOk(x);
+  // Always salt so a later campaign cannot reprint PEPE/WOJAK even if the used set missed a row.
+  for (let i = 0; i < 64; i++) {
+    const salt = randSuffix(i < 32 ? 2 : 3);
+    const next = `${t.slice(0, Math.max(2, 10 - salt.length))}${salt}`;
+    if (ok(next)) return next;
+  }
   for (let i = 2; i <= 99; i++) {
     const cut = t.slice(0, Math.max(2, 10 - String(i).length));
     const next = `${cut}${i}`;
-    if (!used.has(next) && tickerOk(next)) return next;
+    if (ok(next)) return next;
   }
   const fallback = `T${hex6().toUpperCase().slice(0, 8)}`;
-  return used.has(fallback) ? `X${Date.now().toString(36).toUpperCase().slice(-8)}` : fallback;
+  return ok(fallback) ? fallback : `X${Date.now().toString(36).toUpperCase().slice(-8)}`;
 }
 
 function titleCase(word: string): string {
@@ -418,9 +446,12 @@ export function buildIdentities(opts: {
   narrative: number;
   random: number;
   hits?: NarrativeHit[];
+  used?: Iterable<string>;
 }): TokenIdentity[] {
-  const used = new Set<string>();
-  const hits = opts.hits?.length ? opts.hits : SEED_NARRATIVES;
+  const used = new Set(
+    [...(opts.used || [])].map((s) => String(s || "").replace(/^\$/, "").trim().toUpperCase()).filter(Boolean),
+  );
+  const hits = shuffle(opts.hits?.length ? opts.hits : SEED_NARRATIVES);
   const out: TokenIdentity[] = [];
   const nNeed = Math.max(0, Math.floor(opts.narrative));
   const rNeed = Math.max(0, Math.floor(opts.random));
@@ -429,5 +460,5 @@ export function buildIdentities(opts: {
     out.push(narrativeIdentity(hit, used));
   }
   for (let i = 0; i < rNeed; i++) out.push(randomIdentity(used));
-  return out;
+  return shuffle(out);
 }

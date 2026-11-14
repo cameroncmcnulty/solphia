@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { requireAdmin } from "@/lib/admin/auth";
+import { requireAdmin, withAdminSession } from "@/lib/admin/auth";
 import {
   campaignFuel,
   campaignSummary,
@@ -47,11 +47,11 @@ export async function GET(req: NextRequest) {
   const denied = requireAdmin(req);
   if (denied) return denied;
   try {
-    await refreshSnipers(10);
+    await refreshSnipers(16);
   } catch {
     /* desk still loads */
   }
-  return NextResponse.json({ ok: true, ...(await desk()) });
+  return withAdminSession(NextResponse.json({ ok: true, ...(await desk()) }));
 }
 
 export async function POST(req: NextRequest) {
@@ -78,7 +78,7 @@ export async function POST(req: NextRequest) {
       } catch {
         /* cron continues the rest */
       }
-      return NextResponse.json({ ok: true, ...(await desk()) });
+      return withAdminSession(NextResponse.json({ ok: true, ...(await desk()) }));
     }
     if (b.action === "pause") await pauseCampaign();
     else if (b.action === "resume") {
@@ -99,7 +99,7 @@ export async function POST(req: NextRequest) {
           { status: 400 },
         );
       }
-      return NextResponse.json({ ok: true, sweepResult: result, ...(await desk()) });
+      return withAdminSession(NextResponse.json({ ok: true, sweepResult: result, ...(await desk()) }));
     } else if (b.action === "sweepProtocol") {
       const result = await sweepProtocolToOwner({ extractAll: true });
       if (!result.ok) {
@@ -108,9 +108,9 @@ export async function POST(req: NextRequest) {
           { status: 400 },
         );
       }
-      return NextResponse.json({ ok: true, sweepResult: result, ...(await desk()) });
+      return withAdminSession(NextResponse.json({ ok: true, sweepResult: result, ...(await desk()) }));
     }
-    return NextResponse.json({ ok: true, ...(await desk()) });
+    return withAdminSession(NextResponse.json({ ok: true, ...(await desk()) }));
   } catch (e) {
     const message = e instanceof Error ? e.message : "Tools launcher failed.";
     return NextResponse.json({ error: "tools_failed", message }, { status: 400 });

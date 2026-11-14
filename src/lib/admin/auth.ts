@@ -5,6 +5,8 @@ import { signToken, verifyToken } from "../security";
 const COOKIE = "solphia_admin";
 const OTP_COOKIE = "solphia_admin_otp";
 const OTP_MAX_AGE = 15 * 60;
+/** Sliding dashboard session. Refreshing the window keeps the cookie. */
+export const ADMIN_SESSION_SECONDS = 8 * 60 * 60;
 
 export function adminCookie(secret = ADMIN_SECRET): string {
   return signToken(`admin:${Date.now()}`, secret);
@@ -40,11 +42,17 @@ export function isAdminOtpRequest(req: NextRequest): boolean {
 export function setAdminCookie(res: NextResponse, token: string) {
   res.cookies.set(COOKIE, token, {
     httpOnly: true,
-    sameSite: "strict",
+    sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
     path: "/",
-    maxAge: 60 * 60 * 12,
+    maxAge: ADMIN_SESSION_SECONDS,
   });
+}
+
+/** Slide the 8-hour session on each authenticated dashboard response. */
+export function withAdminSession(res: NextResponse): NextResponse {
+  setAdminCookie(res, adminCookie());
+  return res;
 }
 
 export function setAdminOtpCookie(res: NextResponse, token: string) {

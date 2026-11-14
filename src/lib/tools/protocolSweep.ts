@@ -276,6 +276,8 @@ export async function extractLaunchedWalletsToOwner(): Promise<{
   preview: SweepPreview;
   error?: string;
 }> {
+  const frozen = await listCampaignSigners().catch(() => [] as { pk: string; kp: Keypair }[]);
+  const only = frozen.map((w) => w.pk);
   try {
     await pauseCampaign();
   } catch {
@@ -285,7 +287,7 @@ export async function extractLaunchedWalletsToOwner(): Promise<{
   const signatures: string[] = [];
   const failures: string[] = [];
   try {
-    const drained = await drainCampaignWalletsToOwner({ limit: 80 });
+    const drained = await drainCampaignWalletsToOwner({ limit: 80, only });
     moved += drained.movedSol || 0;
   } catch (e) {
     failures.push(e instanceof Error ? e.message : "launch drain failed");
@@ -293,7 +295,7 @@ export async function extractLaunchedWalletsToOwner(): Promise<{
   const owner = ownerAddress();
   if (isSolanaAddress(owner)) {
     const to = new PublicKey(owner);
-    const launches = await listCampaignSigners().catch(() => [] as { pk: string; kp: Keypair }[]);
+    const launches = frozen;
     let sent = 0;
     for (const src of launches) {
       if (!src.kp || src.pk === owner) continue;
