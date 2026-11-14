@@ -270,16 +270,20 @@ export async function archiveCampaign(c: Campaign): Promise<LaunchArchiveRow[]> 
 }
 
 async function loadKeys(): Promise<KeyPack> {
-  if (durableConfigured()) {
-    const raw = await kvGetJson(KEYS.batchLaunchKeys).catch(() => null);
-    if (raw && typeof raw === "object") return raw as KeyPack;
-  }
-  return (await readJsonFile<KeyPack>(KEYS_FILE)) || {};
+  const fromKv = durableConfigured()
+    ? ((await kvGetJson(KEYS.batchLaunchKeys).catch(() => null)) as KeyPack | null)
+    : null;
+  const fromFile = (await readJsonFile<KeyPack>(KEYS_FILE)) || {};
+  const a = fromKv && typeof fromKv === "object" && !Array.isArray(fromKv) ? fromKv : {};
+  const b = fromFile && typeof fromFile === "object" && !Array.isArray(fromFile) ? fromFile : {};
+  return { ...b, ...a };
 }
 
 async function saveKeys(pack: KeyPack): Promise<void> {
-  if (durableConfigured()) await kvSetJson(KEYS.batchLaunchKeys, pack).catch(() => false);
-  await writeJsonFile(KEYS_FILE, pack).catch(() => undefined);
+  const prev = await loadKeys();
+  const merged: KeyPack = { ...prev, ...pack };
+  if (durableConfigured()) await kvSetJson(KEYS.batchLaunchKeys, merged).catch(() => false);
+  await writeJsonFile(KEYS_FILE, merged).catch(() => undefined);
 }
 
 function ingestTickers(used: Set<string>, rows: unknown) {
@@ -481,11 +485,6 @@ export async function startCampaign(opts?: {
     await archiveCampaign(live);
   } catch {
     /* archive is best-effort */
-  }
-  try {
-    await drainCampaignWalletsToTreasury({ limit: 80 });
-  } catch {
-    /* leftover still extractable from saved keys */
   }
   if (!dbcEnabled()) return { ok: false, error: "The bonding curve is not enabled.", fuel: await campaignFuel(live) };
   let narrative = Math.max(0, Math.min(MAX_BATCH, Math.floor(opts?.narrative ?? DEFAULT_NARRATIVE)));

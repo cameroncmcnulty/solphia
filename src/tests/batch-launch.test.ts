@@ -213,7 +213,8 @@ describe("tools data launcher", () => {
       engine.indexOf("export async function startCampaign"),
       engine.indexOf("export async function pauseCampaign"),
     );
-    assert.ok(startFn.indexOf("drainCampaignWalletsToTreasury") < startFn.indexOf("if (!fuel.enough)"));
+    assert.equal(startFn.includes("drainCampaignWalletsToTreasury"), false);
+    assert.match(engine, /const merged: KeyPack = \{ \.\.\.prev, \.\.\.pack \}/);
     const resetFn = engine.slice(engine.indexOf("export async function resetCampaign"));
     assert.equal(resetFn.slice(0, 600).includes("saveKeys({})"), false);
     const launchFn = engine.slice(engine.indexOf("async function launchOne"));

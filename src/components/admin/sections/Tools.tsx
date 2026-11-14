@@ -393,8 +393,8 @@ export function ToolsSection() {
           Same hooked Token-2022 curve as official SPHA, with this tester&apos;s 1% going 100% to the owner wallet.
           Project mint is a random 3–20% into that token&apos;s launch wallet. Shared pad config is never overwritten.
           Seed is 0.5 SOL once from treasury into the first wallet; remainder hops wallet to wallet until a launch fails
-          on insufficient funds. Starting a new run first drains leftover launch wallets into treasury so the 0.5 seed
-          is not demanded while remainder sits stranded. Tickers stay unique across batches with the original mash
+          on insufficient funds. LAUNCH does not drain hop remainder. Use EXTRACT TO TREASURY when you want leftover
+          SOL pulled. Tickers stay unique across batches with the original mash
           (WOJAKD-style). There is no curve buy. The wallet hops leftover SOL in 30 seconds. If sniper buys hit 1 SOL it
           dumps at 99% slippage first. Live CAs are copyable for Solscan, Meteora, and Dexscreener and persist in LAUNCH
           ARCHIVE after Clear table. Stats pull curve SOL plus Dexscreener buys, sells, and volume.
@@ -443,8 +443,8 @@ export function ToolsSection() {
         <p className="mt-3 max-w-2xl text-sm text-mute">
           Pauses the launcher if it is running, sells bags worth at least 1 SOL at 99% slippage, then sends leftover SOL
           from every Tools launch wallet (this campaign and leftover prior wallets) and protocol wallets into treasury.
-          Click again if wallets remain (80 txs per pass). User seed wallets and pad TVL stay. Starting LAUNCH also drains
-          leftover launch wallets into treasury first so a new 0.5 seed is not demanded while remainder sits stranded.
+          Click again if wallets remain (80 txs per pass). User seed wallets and pad TVL stay. LAUNCH leaves hop
+          remainder in the launch wallets so the test can continue.
         </p>
         <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
           <Mini k="Launch wallets" v={solAmt(desk?.sweep?.launchSol || 0)} />
