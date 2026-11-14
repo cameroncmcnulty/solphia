@@ -45,6 +45,8 @@ export const KEYS = {
   batchLaunchLock: "solphia:batch-launch-lock",
   /** Tickers already used by Tools launches so the next batch does not repeat them. */
   batchLaunchTickers: "solphia:batch-launch-tickers",
+  /** Append-only launched CA archive. Survives Clear table / new campaigns. */
+  batchLaunchArchive: "solphia:batch-launch-archive",
 };
 
 const BLOB_PATH = "solphia-state.json";

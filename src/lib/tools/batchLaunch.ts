@@ -49,6 +49,7 @@ import {
   scheduleTimes,
   teamTokensFor,
   type TokenIdentity,
+  type TokenKind,
 } from "./identities";
 
 export type CampaignStatus = "idle" | "running" | "paused" | "done" | "stopped";
@@ -117,6 +118,37 @@ const LOCK_TTL_S = 180;
 const FILE = path.join(process.cwd(), "data", "batch-launch.json");
 const KEYS_FILE = path.join(process.cwd(), "data", "batch-launch-keys.json");
 const TICKERS_FILE = path.join(process.cwd(), "data", "batch-launch-tickers.json");
+const ARCHIVE_FILE = path.join(process.cwd(), "data", "batch-launch-archive.json");
+const ARCHIVE_MAX = 2000;
+
+export type LaunchArchiveRow = {
+  id: string;
+  campaignId: string;
+  kind: TokenKind;
+  theme: string;
+  name: string;
+  symbol: string;
+  mint: string;
+  wallet?: string;
+  pool?: string;
+  config?: string;
+  teamBps: number;
+  launchedAt?: number;
+  snipers: SniperStats;
+  bagQuoteSol?: number;
+  dumpSol?: number;
+  returnedSol?: number;
+  status: TokenStatus;
+  error?: string;
+  image?: string;
+  blurb?: string;
+};
+
+function leftoverDest(): string {
+  const treasury = treasuryAddress();
+  if (isSolanaAddress(treasury)) return treasury;
+  return ownerAddress();
+}
 
 function emptyCampaign(): Campaign {
   return {
@@ -169,6 +201,72 @@ export async function saveCampaign(c: Campaign): Promise<void> {
   const slim = publicCampaign(c);
   if (durableConfigured()) await kvSetJson(KEYS.batchLaunch, slim).catch(() => false);
   await writeJsonFile(FILE, slim).catch(() => undefined);
+  await archiveCampaign(slim).catch(() => undefined);
+}
+
+function archiveRow(c: Campaign, t: CampaignToken): LaunchArchiveRow | null {
+  if (!isSolanaAddress(t.mint || "")) return null;
+  return {
+    id: t.id,
+    campaignId: c.id || "",
+    kind: t.kind,
+    theme: t.theme,
+    name: t.name,
+    symbol: t.symbol,
+    mint: t.mint!,
+    wallet: t.wallet,
+    pool: t.pool,
+    config: t.config,
+    teamBps: t.teamBps,
+    launchedAt: t.launchedAt,
+    snipers: t.snipers || emptySnipers(),
+    bagQuoteSol: t.bagQuoteSol,
+    dumpSol: t.dumpSol,
+    returnedSol: t.returnedSol,
+    status: t.status,
+    error: t.error,
+    image: t.image,
+    blurb: t.blurb,
+  };
+}
+
+export async function loadLaunchArchive(): Promise<LaunchArchiveRow[]> {
+  let rows: LaunchArchiveRow[] = [];
+  if (durableConfigured()) {
+    const raw = await kvGetJson(KEYS.batchLaunchArchive).catch(() => null);
+    if (Array.isArray(raw)) rows = raw as LaunchArchiveRow[];
+  }
+  if (!rows.length) {
+    const file = await readJsonFile<LaunchArchiveRow[]>(ARCHIVE_FILE);
+    if (Array.isArray(file)) rows = file;
+  }
+  return rows.filter((r) => r && isSolanaAddress(r.mint || ""));
+}
+
+async function saveLaunchArchive(rows: LaunchArchiveRow[]): Promise<void> {
+  const slim = rows.slice(0, ARCHIVE_MAX);
+  if (durableConfigured()) await kvSetJson(KEYS.batchLaunchArchive, slim).catch(() => false);
+  await writeJsonFile(ARCHIVE_FILE, slim).catch(() => undefined);
+}
+
+export async function archiveCampaign(c: Campaign): Promise<LaunchArchiveRow[]> {
+  const incoming = (c.tokens || []).map((t) => archiveRow(c, t)).filter((r): r is LaunchArchiveRow => Boolean(r));
+  if (!incoming.length) return loadLaunchArchive();
+  const prev = await loadLaunchArchive();
+  const map = new Map<string, LaunchArchiveRow>();
+  for (const row of prev) map.set(row.mint, row);
+  for (const row of incoming) {
+    const old = map.get(row.mint);
+    map.set(row.mint, {
+      ...old,
+      ...row,
+      snipers: row.snipers?.buys || row.snipers?.volumeSol ? row.snipers : old?.snipers || row.snipers,
+      launchedAt: row.launchedAt || old?.launchedAt,
+    });
+  }
+  const next = [...map.values()].sort((a, b) => (b.launchedAt || 0) - (a.launchedAt || 0)).slice(0, ARCHIVE_MAX);
+  await saveLaunchArchive(next);
+  return next;
 }
 
 async function loadKeys(): Promise<KeyPack> {
@@ -230,7 +328,7 @@ function walletOf(secret: string): Keypair {
   return Keypair.fromSecretKey(b64ToBytes(secret));
 }
 
-/** Tools launch wallets we hold secrets for. Used by EXTRACT LAUNCHED WALLETS. */
+/** Tools launch wallets we hold secrets for. Used by EXTRACT TO TREASURY. */
 export async function listCampaignSigners(): Promise<{ pk: string; kp: Keypair }[]> {
   const pack = await loadKeys();
   const out: { pk: string; kp: Keypair }[] = [];
@@ -379,6 +477,16 @@ export async function startCampaign(opts?: {
   if (live.status === "running") {
     return { ok: false, error: "A campaign is already running. Pause or stop it first.", fuel: await campaignFuel(live) };
   }
+  try {
+    await archiveCampaign(live);
+  } catch {
+    /* archive is best-effort */
+  }
+  try {
+    await drainCampaignWalletsToTreasury({ limit: 80 });
+  } catch {
+    /* leftover still extractable from saved keys */
+  }
   if (!dbcEnabled()) return { ok: false, error: "The bonding curve is not enabled.", fuel: await campaignFuel(live) };
   let narrative = Math.max(0, Math.min(MAX_BATCH, Math.floor(opts?.narrative ?? DEFAULT_NARRATIVE)));
   let random = Math.max(0, Math.min(MAX_BATCH, Math.floor(opts?.random ?? DEFAULT_RANDOM)));
@@ -478,10 +586,13 @@ export async function stopCampaign(): Promise<Campaign> {
 export async function resetCampaign(): Promise<Campaign> {
   const c = await loadCampaign();
   if (c.status === "running") throw new Error("Stop or pause the campaign before resetting.");
+  try {
+    await archiveCampaign(c);
+  } catch {
+    /* keep keys so leftover SOL can still be extracted */
+  }
   const empty = emptyCampaign();
   await saveCampaign(empty);
-  await saveKeys({});
-  if (durableConfigured()) await kvDel(KEYS.batchLaunchKeys).catch(() => undefined);
   return empty;
 }
 
@@ -568,14 +679,14 @@ function markDry(c: Campaign, token: CampaignToken, walletSol: number, message: 
 }
 
 async function returnWalletToOwner(c: Campaign, from: Keypair, token: CampaignToken): Promise<void> {
-  const owner = ownerAddress();
-  if (!isSolanaAddress(owner) || from.publicKey.toBase58() === owner) {
+  const dest = leftoverDest();
+  if (!isSolanaAddress(dest) || from.publicKey.toBase58() === dest) {
     const left = await connection().getBalance(from.publicKey, "confirmed").catch(() => 0);
     measureRelay(c, left / LAMPORTS_PER_SOL);
     return;
   }
   try {
-    const relayed = await relayAll(from, new PublicKey(owner));
+    const relayed = await relayAll(from, new PublicKey(dest));
     if (relayed.sig) token.sigs.push(relayed.sig);
     const sol = relayed.lamports / LAMPORTS_PER_SOL;
     token.returnedSol = (token.returnedSol || 0) + sol;
@@ -778,9 +889,9 @@ async function dumpAndAdvance(c: Campaign, token: CampaignToken): Promise<void> 
 
 async function closeOutCampaign(c: Campaign, opts?: { limit?: number; minSol?: number; only?: string[] }): Promise<number> {
   const keys = await loadKeys();
-  const owner = ownerAddress();
-  if (!isSolanaAddress(owner)) return 0;
-  const to = new PublicKey(owner);
+  const dest = leftoverDest();
+  if (!isSolanaAddress(dest)) return 0;
+  const to = new PublicKey(dest);
   const limit = Math.max(1, Math.min(80, opts?.limit ?? 8));
   let sent = 0;
   let moved = 0;
@@ -807,7 +918,7 @@ async function closeOutCampaign(c: Campaign, opts?: { limit?: number; minSol?: n
   const only = opts?.only?.length ? new Set(opts.only) : null;
   for (const [pk, secret] of Object.entries(keys)) {
     if (sent >= limit) break;
-    if (!pk || !secret || pk === owner) continue;
+    if (!pk || !secret || pk === dest) continue;
     if (only && !only.has(pk)) continue;
     let kp: Keypair;
     try {
@@ -841,12 +952,15 @@ async function closeOutCampaign(c: Campaign, opts?: { limit?: number; minSol?: n
   return moved;
 }
 
-/** Pause leftover hops and pull every Tools launch wallet we can sign into owner. */
-export async function drainCampaignWalletsToOwner(opts?: { limit?: number; only?: string[] }): Promise<{ movedSol: number }> {
+/** Pause leftover hops and pull every Tools launch wallet we can sign into treasury. */
+export async function drainCampaignWalletsToTreasury(opts?: { limit?: number; only?: string[] }): Promise<{ movedSol: number }> {
   const c = await loadCampaign();
   const movedSol = await closeOutCampaign(c, { limit: opts?.limit ?? 80, minSol: DUMP_MIN_SOL, only: opts?.only });
   return { movedSol };
 }
+
+/** @deprecated leftover SOL goes to treasury. */
+export const drainCampaignWalletsToOwner = drainCampaignWalletsToTreasury;
 
 function pendingDump(c: Campaign): CampaignToken | undefined {
   return c.tokens.find((t) => t.status === "live" && !t.dumped && Boolean(t.wallet));
@@ -869,7 +983,6 @@ async function pinMeta(token: CampaignToken): Promise<{ image: string; uri: stri
     website: token.website,
     x: token.x,
     telegram: token.telegram,
-    createdOn: "https://www.meteora.ag",
   });
   const pinnedUri = pinned?.uri || "";
   const uri =

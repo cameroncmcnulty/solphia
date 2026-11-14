@@ -48,8 +48,6 @@ export function windowMsFromBody(opts: { windowMinutes?: number; windowHours?: n
 
 export const TEAM_BPS_MIN = 300;
 export const TEAM_BPS_MAX = 2000;
-/** Narrative / sniper-bait rows stay under typical "dev holding max 5–10%" filters. */
-export const TEAM_BPS_NARRATIVE_MAX = 500;
 export const BATCH_SUPPLY = 200_000_000;
 export const BATCH_DECIMALS = 6;
 /** One seed from Treasury into the first launch wallet. Remainder relays to the next. */
@@ -192,25 +190,6 @@ const SEED_NARRATIVES: NarrativeHit[] = [
   { symbol: "ALIEN", name: "Alien", theme: "alien" },
   { symbol: "DRAGON", name: "Dragon", theme: "dragon" },
   { symbol: "WOLF", name: "Wolf", theme: "wolf" },
-  { symbol: "GTA6", name: "GTA 6", theme: "game" },
-  { symbol: "GTA", name: "GTA", theme: "game" },
-  { symbol: "LEONIDA", name: "Leonida", theme: "game" },
-  { symbol: "GATO", name: "Gato", theme: "cat" },
-  { symbol: "GLITCH", name: "Glitch", theme: "game" },
-  { symbol: "WANTED", name: "Wanted", theme: "game" },
-  { symbol: "GROOT", name: "Groot", theme: "ai" },
-  { symbol: "NVIDIA", name: "Nvidia", theme: "ai" },
-  { symbol: "JENSEN", name: "Jensen", theme: "ai" },
-  { symbol: "PUNCH", name: "Punch", theme: "ape" },
-  { symbol: "PEACE", name: "Peace Frog", theme: "frog" },
-  { symbol: "ANSEM", name: "Ansem", theme: "meme" },
-  { symbol: "MIHAO", name: "Mihao", theme: "cat" },
-  { symbol: "POCKET", name: "Pocket Pepe", theme: "pepe" },
-  { symbol: "ROCKSTAR", name: "Rockstar", theme: "game" },
-  { symbol: "SHARK", name: "Shark", theme: "game" },
-  { symbol: "CHILL", name: "Chill", theme: "meme" },
-  { symbol: "VICE", name: "Vice City", theme: "game" },
-  { symbol: "BIGGUY", name: "Big Guy", theme: "dog" },
 ];
 
 const WORDS = [
@@ -281,18 +260,13 @@ export function themeOf(raw: string): ThemeId {
   if (/moon|lunar/.test(s)) return "moon";
   if (/rocket|elon|mars/.test(s)) return "rocket";
   if (/trump|king|royal/.test(s)) return "king";
-  if (/ape|monkey|pnut|ponke|punch/.test(s)) return "ape";
-  if (/frog|toad|peace/.test(s)) return "frog";
-  if (/gta|leonida|glitch|wanted|rockstar|vice|shark/.test(s)) return "game";
-  if (/nvidia|groot|jensen/.test(s)) return "ai";
-  if (/gato|mihao/.test(s)) return "cat";
-  if (/ansem|chill/.test(s)) return "meme";
+  if (/ape|monkey|pnut|ponke/.test(s)) return "ape";
+  if (/frog|toad/.test(s)) return "frog";
   return "neon";
 }
 
-export function teamBpsAt(n = Math.random(), max = TEAM_BPS_MAX): number {
-  const hi = Math.min(TEAM_BPS_MAX, Math.max(TEAM_BPS_MIN, Math.floor(max)));
-  const span = hi - TEAM_BPS_MIN;
+export function teamBpsAt(n = Math.random()): number {
+  const span = TEAM_BPS_MAX - TEAM_BPS_MIN;
   const t = Math.min(1, Math.max(0, n));
   return TEAM_BPS_MIN + Math.floor(t * span);
 }
@@ -312,7 +286,7 @@ function handleOf(symbol: string): string {
 }
 
 function socials(symbol: string): { website: string; x: string; telegram: string } {
-  const h = `${handleOf(symbol)}${hex6().slice(0, 4)}`.replace(/[^a-z0-9_]/g, "").slice(0, 15) || "solphia";
+  const h = handleOf(symbol);
   return {
     website: `https://solphia.io/c/${h}`,
     x: `https://x.com/${h}`,
@@ -320,22 +294,9 @@ function socials(symbol: string): { website: string; x: string; telegram: string
   };
 }
 
-function withCashTicker(text: string, symbol?: string): string {
-  const body = (text || "").trim().replace(/\s+/g, " ");
-  const cash = (symbol || "").replace(/^\$/, "").toUpperCase();
-  if (!cash) return body.slice(0, 180);
-  if (body.toUpperCase().includes(`$${cash}`)) return body.slice(0, 180);
-  return `$${cash} ${body}`.trim().slice(0, 180);
-}
-
-function blurbOf(name: string, kind: TokenKind, theme: string, extra?: string, symbol?: string, spice?: string): string {
-  const live = (extra || "").trim().replace(/\s+/g, " ").slice(0, 140);
-  if (live.length >= 12) return withCashTicker(live, symbol);
-  const kick = (spice || "").trim();
-  if (kind === "narrative") {
-    return withCashTicker(`${name} community coin. ${theme} meta.${kick ? ` ${kick}.` : ""}`, symbol);
-  }
-  return withCashTicker(`${name} community coin.`, symbol);
+function blurbOf(name: string, kind: TokenKind, theme: string): string {
+  if (kind === "narrative") return `${name} rides the ${theme} meta on Solphia.`;
+  return `${name} on Solphia.`;
 }
 
 function makeId(kind: TokenKind, theme: string, symbol: string): string {
@@ -345,47 +306,17 @@ function makeId(kind: TokenKind, theme: string, symbol: string): string {
   return `${k}${th}_${sym}_${hex6()}`;
 }
 
-function shuffle<T>(xs: readonly T[]): T[] {
-  const a = xs.slice();
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = randInt(i + 1);
-    const tmp = a[i]!;
-    a[i] = a[j]!;
-    a[j] = tmp;
-  }
-  return a;
-}
-
-function randSuffix(n: number): string {
-  const abc = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  let s = "";
-  for (let i = 0; i < n; i++) s += abc[randInt(abc.length)]!;
-  return s;
-}
-
 function uniqueTicker(base: string, used: Set<string>): string {
   let t = base.replace(/[^A-Z0-9]/g, "").toUpperCase().slice(0, 10);
   if (t.length < 2) t = `X${t}X`.slice(0, 10);
-  const ok = (x: string) => !used.has(x) && tickerOk(x);
-  // Exact ticker first so whitelist snipers can hit PEPE/GTA6 once. Used-set + persisted
-  // batchLaunchTickers still block reprints across campaigns.
-  if (ok(t)) return t;
-  for (let i = 0; i < 32; i++) {
-    const next = `${t.slice(0, Math.max(2, 9))}${randSuffix(1)}`;
-    if (ok(next)) return next;
-  }
-  for (let i = 0; i < 64; i++) {
-    const salt = randSuffix(i < 32 ? 2 : 3);
-    const next = `${t.slice(0, Math.max(2, 10 - salt.length))}${salt}`;
-    if (ok(next)) return next;
-  }
+  if (!used.has(t) && tickerOk(t)) return t;
   for (let i = 2; i <= 99; i++) {
     const cut = t.slice(0, Math.max(2, 10 - String(i).length));
     const next = `${cut}${i}`;
-    if (ok(next)) return next;
+    if (!used.has(next) && tickerOk(next)) return next;
   }
   const fallback = `T${hex6().toUpperCase().slice(0, 8)}`;
-  return ok(fallback) ? fallback : `X${Date.now().toString(36).toUpperCase().slice(-8)}`;
+  return used.has(fallback) ? `X${Date.now().toString(36).toUpperCase().slice(-8)}` : fallback;
 }
 
 function titleCase(word: string): string {
@@ -409,7 +340,7 @@ export function randomIdentity(used: Set<string>): TokenIdentity {
     theme,
     name: nameOk(name) ? name : titleCase(symbol),
     symbol,
-    blurb: blurbOf(name, "random", theme, undefined, symbol),
+    blurb: blurbOf(name, "random", theme),
     ...links,
     teamBps: teamBpsAt(),
   };
@@ -417,12 +348,12 @@ export function randomIdentity(used: Set<string>): TokenIdentity {
 
 export function narrativeIdentity(hit: NarrativeHit, used: Set<string>): TokenIdentity {
   const base = (hit.symbol || "MEME").replace(/[^A-Z0-9]/g, "").toUpperCase().slice(0, 10);
-  const theme = themeOf(hit.theme || hit.name || hit.symbol);
-  const spice = pick(THEME_WORDS[theme] || THEME_WORDS.meme);
-  const mashed = uniqueTicker(base, used);
+  const twist = pick(THEME_WORDS[themeOf(hit.theme || hit.symbol)] || THEME_WORDS.meme);
+  const mashed = uniqueTicker(base.length <= 6 ? `${base}${twist[0] || "X"}` : base, used);
   used.add(mashed);
   const rawName = (hit.name || titleCase(base)).trim().slice(0, 24);
   const name = nameOk(rawName) ? rawName : titleCase(mashed);
+  const theme = themeOf(hit.theme || hit.name || mashed);
   const links = socials(mashed);
   return {
     id: makeId("narrative", theme, mashed),
@@ -430,9 +361,9 @@ export function narrativeIdentity(hit: NarrativeHit, used: Set<string>): TokenId
     theme,
     name,
     symbol: mashed,
-    blurb: blurbOf(name, "narrative", theme, hit.blurb, mashed, spice),
+    blurb: blurbOf(name, "narrative", theme),
     ...links,
-    teamBps: teamBpsAt(Math.random(), TEAM_BPS_NARRATIVE_MAX),
+    teamBps: teamBpsAt(),
   };
 }
 
@@ -453,91 +384,42 @@ export function scheduleTimes(count: number, windowMs: number, now = Date.now(),
   return times.map((t, i) => (i === 0 ? now : now + Math.floor(((t - now) * window) / span)));
 }
 
-const SKIP_TICKERS = new Set(["SOL", "WSOL", "USDC", "USDT", "BTC", "ETH", "WETH", "WBTC", "USD"]);
-
-function cashTicker(raw: string): string {
-  const m = (raw || "").toUpperCase().match(/\$([A-Z][A-Z0-9]{1,9})\b/);
-  return m?.[1] || "";
-}
-
 function parseDexRow(row: unknown): NarrativeHit | null {
   if (!row || typeof row !== "object") return null;
   const o = row as Record<string, unknown>;
-  if (o.chainId && String(o.chainId) !== "solana") return null;
   const token = (o.token || o.baseToken || o) as Record<string, unknown>;
-  const desc = String(o.description || token.description || "").trim();
-  let symbol = String(token.symbol || o.symbol || "").replace(/^\$/, "").trim().toUpperCase();
-  if (!tickerOk(symbol.slice(0, 10))) symbol = cashTicker(desc);
-  if (!tickerOk(symbol.slice(0, 10)) || SKIP_TICKERS.has(symbol.slice(0, 10))) return null;
-  const name = String(token.name || o.name || titleCase(symbol)).trim();
-  return {
-    symbol: symbol.slice(0, 10),
-    name: (name || symbol).slice(0, 24),
-    theme: themeOf(`${symbol} ${name} ${desc}`),
-    blurb: desc.replace(/\s+/g, " ").slice(0, 140) || undefined,
-  };
-}
-
-async function fetchDex(url: string): Promise<unknown> {
-  const r = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(8_000), headers: { accept: "application/json" } });
-  if (!r.ok) return null;
-  return r.json();
-}
-
-async function hitsFromTokenAddrs(addrs: string[]): Promise<NarrativeHit[]> {
-  const list = [...new Set(addrs.filter(Boolean))].slice(0, 30);
-  if (!list.length) return [];
-  try {
-    const j = (await fetchDex(`https://api.dexscreener.com/latest/dex/tokens/${list.join(",")}`)) as { pairs?: unknown[] } | null;
-    const pairs = Array.isArray(j?.pairs) ? j!.pairs! : [];
-    const out: NarrativeHit[] = [];
-    for (const row of pairs) {
-      const hit = parseDexRow(row);
-      if (hit) out.push(hit);
-    }
-    return out;
-  } catch {
-    return [];
-  }
+  const symbol = String(token.symbol || o.symbol || "").replace(/^\$/, "").trim().toUpperCase();
+  const name = String(token.name || o.name || symbol).trim();
+  if (!tickerOk(symbol.slice(0, 10))) return null;
+  return { symbol: symbol.slice(0, 10), name: name.slice(0, 24) || symbol, theme: themeOf(`${symbol} ${name}`) };
 }
 
 export async function fetchNarratives(limit = 120): Promise<NarrativeHit[]> {
   const out: NarrativeHit[] = [];
   const seen = new Set<string>();
   const push = (hit: NarrativeHit | null) => {
-    if (!hit || seen.has(hit.symbol) || SKIP_TICKERS.has(hit.symbol)) return;
+    if (!hit || seen.has(hit.symbol)) return;
     seen.add(hit.symbol);
     out.push(hit);
   };
-  const boostAddrs: string[] = [];
   const urls = [
     "https://api.dexscreener.com/token-boosts/top/v1",
     "https://api.dexscreener.com/token-profiles/latest/v1",
-    ...["GTA", "PEPE", "TRUMP", "CAT", "NVIDIA", "PUNCH", "ANSEM", "LEONIDA"].map(
-      (q) => `https://api.dexscreener.com/latest/dex/search?q=${q}`,
-    ),
+    "https://api.dexscreener.com/latest/dex/search?q=solana",
   ];
   await Promise.all(
     urls.map(async (url) => {
       try {
-        const j = await fetchDex(url);
-        if (Array.isArray(j) && j[0] && typeof j[0] === "object" && "tokenAddress" in (j[0] as object)) {
-          for (const row of j.slice(0, 80) as Record<string, unknown>[]) {
-            if (String(row.chainId || "") !== "solana") continue;
-            const addr = String(row.tokenAddress || "");
-            if (addr) boostAddrs.push(addr);
-            push(parseDexRow(row));
-          }
-          return;
-        }
-        const rows = Array.isArray((j as { pairs?: unknown[] } | null)?.pairs) ? (j as { pairs: unknown[] }).pairs : [];
+        const r = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(8_000), headers: { accept: "application/json" } });
+        if (!r.ok) return;
+        const j = (await r.json()) as unknown;
+        const rows = Array.isArray(j) ? j : Array.isArray((j as { pairs?: unknown[] }).pairs) ? (j as { pairs: unknown[] }).pairs : [];
         for (const row of rows.slice(0, 80)) push(parseDexRow(row));
       } catch {
         /* seed list still covers the run */
       }
     }),
   );
-  for (const hit of await hitsFromTokenAddrs(boostAddrs)) push(hit);
   for (const seed of SEED_NARRATIVES) push(seed);
   return out.slice(0, Math.max(limit, 40));
 }
@@ -551,7 +433,7 @@ export function buildIdentities(opts: {
   const used = new Set(
     [...(opts.used || [])].map((s) => String(s || "").replace(/^\$/, "").trim().toUpperCase()).filter(Boolean),
   );
-  const hits = shuffle(opts.hits?.length ? opts.hits : SEED_NARRATIVES);
+  const hits = opts.hits?.length ? opts.hits : SEED_NARRATIVES;
   const out: TokenIdentity[] = [];
   const nNeed = Math.max(0, Math.floor(opts.narrative));
   const rNeed = Math.max(0, Math.floor(opts.random));
@@ -560,5 +442,5 @@ export function buildIdentities(opts: {
     out.push(narrativeIdentity(hit, used));
   }
   for (let i = 0; i < rNeed; i++) out.push(randomIdentity(used));
-  return shuffle(out);
+  return out;
 }

@@ -74,6 +74,7 @@ type SweepLeg = {
 
 type Sweep = {
   owner: string;
+  dest?: string;
   userWalletSol: number;
   protocolSol: number;
   padTvlSol: number;
@@ -89,6 +90,28 @@ type Sweep = {
   remainingSends?: number;
   legs: SweepLeg[];
   note: string;
+};
+
+type ArchiveRow = {
+  id: string;
+  campaignId: string;
+  kind: "narrative" | "random";
+  theme: string;
+  name: string;
+  symbol: string;
+  mint: string;
+  wallet?: string;
+  pool?: string;
+  teamBps: number;
+  launchedAt?: number;
+  snipers: Snipers;
+  bagQuoteSol?: number;
+  dumpSol?: number;
+  returnedSol?: number;
+  status: TokenRow["status"];
+  error?: string;
+  image?: string;
+  blurb?: string;
 };
 
 type Desk = {
@@ -110,6 +133,7 @@ type Desk = {
   };
   sweep?: Sweep | null;
   sweepResult?: { ok: boolean; movedSol: number; signatures: string[]; error?: string };
+  archive?: ArchiveRow[];
 };
 
 const emptyFuel: Fuel = {
@@ -161,6 +185,7 @@ export function ToolsSection() {
   const [narrativePct, setNarrativePct] = useState(40);
   const [minutes, setMinutes] = useState(180);
   const [q, setQ] = useState("");
+  const [archiveQ, setArchiveQ] = useState("");
   const [filter, setFilter] = useState<"all" | "live" | "queued" | "failed" | "narrative" | "random">("all");
   const [copied, setCopied] = useState("");
   const [now, setNow] = useState(Date.now());
@@ -245,6 +270,15 @@ export function ToolsSection() {
     });
   }, [campaign?.tokens, filter, q]);
 
+  const archiveRows = useMemo(() => {
+    const tokens = desk?.archive || [];
+    const needle = archiveQ.trim().toLowerCase();
+    if (!needle) return tokens;
+    return tokens.filter((t) =>
+      `${t.symbol} ${t.name} ${t.mint || ""} ${t.wallet || ""} ${t.theme} ${t.blurb || ""}`.toLowerCase().includes(needle),
+    );
+  }, [desk?.archive, archiveQ]);
+
   const running = campaign?.status === "running";
   const idle = !campaign || campaign.status === "idle";
 
@@ -258,12 +292,12 @@ export function ToolsSection() {
             <h2 className="font-display text-3xl text-ghost">Data launcher</h2>
             <p className="mt-2 max-w-2xl text-sm text-mute">
               First R&amp;D tool. Click LAUNCH and Treasury seeds the first wallet with 0.5 SOL. Tokens launch on the
-              window you set. Narrative coins copy live Dexscreener metas (exact hot ticker when unused, name, $TICKER
-              keywords, twitter.com + telegram + site in metadata, 3–5% team, mint/freeze revoked) so Meteora snipers
-              have something to filter on. No curve buy, so leftover SOL is not stuck in a bag. 30 seconds after each mint,
-              leftover SOL hops to the next wallet. If sniper buys hit 1 SOL it sells the bag at 99% slippage first
-              so leftover tokens do not sit in that wallet, then hops. The last leftover goes to owner. Full 1% swap fees
-              on these tokens go to owner.
+              window you set. Narrative coins mash live Dexscreener tickers the way the original sniped $WOJAKD did
+              (WOJAK + theme letter). Random names like Cat or The World. Team mint is 3–20% for every token. Blurbs stay
+              on Solphia. No curve buy, so leftover SOL is not stuck in a bag. 30 seconds after each mint, leftover SOL
+              hops to the next wallet. If sniper buys hit 1 SOL it sells the bag at 99% slippage first so leftover tokens
+              do not sit in that wallet, then hops. The last leftover goes to treasury. Full 1% swap fees on these tokens
+              go to owner.
             </p>
           </div>
           <div className="tools-ring" style={{ ["--pct" as string]: `${pct}` }}>
@@ -286,7 +320,7 @@ export function ToolsSection() {
         <Stat
           k="Relay left"
           v={solAmt(fuel.relayLeftSol)}
-          sub={`${fuel.remaining} queued${summary?.returnedSol ? ` · ${solAmt(summary.returnedSol)} to owner` : ""}`}
+          sub={`${fuel.remaining} queued${summary?.returnedSol ? ` · ${solAmt(summary.returnedSol)} to treasury` : ""}`}
         />
         <Stat k="Sniper volume" v={solAmt(summary?.volumeSol || 0)} sub={`${summary?.buys || 0} buys · ${summary?.sells || 0} sells`} />
         <Stat
@@ -358,11 +392,12 @@ export function ToolsSection() {
         <p className="mt-3 text-sm text-mute">
           Same hooked Token-2022 curve as official SPHA, with this tester&apos;s 1% going 100% to the owner wallet.
           Project mint is a random 3–20% into that token&apos;s launch wallet. Shared pad config is never overwritten.
-          Seed is 0.5 SOL once. Tickers are unique across batches, with the exact hot ticker used the first time it is
-          free. Narrative rows keep the hot name, on-chain twitter/telegram/site, and a 3–5% team slice so typical
-          sniper filters (keywords, socials, mint/freeze revoked, dev holding) can fire. There is no curve buy. The
-          wallet hops leftover SOL in 30 seconds. If sniper buys hit 1 SOL it dumps at 99% slippage first. Live CAs are
-          copyable for Solscan, Meteora, and Dexscreener. Stats pull curve SOL plus Dexscreener buys, sells, and volume.
+          Seed is 0.5 SOL once from treasury into the first wallet; remainder hops wallet to wallet until a launch fails
+          on insufficient funds. Starting a new run first drains leftover launch wallets into treasury so the 0.5 seed
+          is not demanded while remainder sits stranded. Tickers stay unique across batches with the original mash
+          (WOJAKD-style). There is no curve buy. The wallet hops leftover SOL in 30 seconds. If sniper buys hit 1 SOL it
+          dumps at 99% slippage first. Live CAs are copyable for Solscan, Meteora, and Dexscreener and persist in LAUNCH
+          ARCHIVE after Clear table. Stats pull curve SOL plus Dexscreener buys, sells, and volume.
         </p>
         {(fuel.dry || campaign?.dry) && (
           <div className="mt-3 rounded-xl border border-blood/40 bg-blood/10 px-4 py-3 text-sm text-ghost">
@@ -404,17 +439,18 @@ export function ToolsSection() {
         </div>
       </Panel>
 
-      <Panel kicker="EXTRACT LAUNCHED WALLETS">
+      <Panel kicker="EXTRACT TO TREASURY">
         <p className="mt-3 max-w-2xl text-sm text-mute">
           Pauses the launcher if it is running, sells bags worth at least 1 SOL at 99% slippage, then sends leftover SOL
-          from every Tools launch wallet (this campaign and leftover prior wallets) into owner. Click again if wallets
-          remain (80 txs per pass). Protocol, user, and pad SOL stay. Refill treasury 0.5 SOL before the next LAUNCH.
+          from every Tools launch wallet (this campaign and leftover prior wallets) and protocol wallets into treasury.
+          Click again if wallets remain (80 txs per pass). User seed wallets and pad TVL stay. Starting LAUNCH also drains
+          leftover launch wallets into treasury first so a new 0.5 seed is not demanded while remainder sits stranded.
         </p>
         <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
           <Mini k="Launch wallets" v={solAmt(desk?.sweep?.launchSol || 0)} />
-          <Mini k="Extractable" v={solAmt(desk?.sweep?.legs?.find((l) => l.role === "tools-launch")?.sendSol || desk?.sweep?.launchSol || 0)} />
+          <Mini k="Extractable" v={solAmt(desk?.sweep?.movableSol || desk?.sweep?.launchSol || 0)} />
           <Mini k="This pass" v={String(Math.min(80, desk?.sweep?.remainingSends || 0))} />
-          <Mini k="Owner" v={shortPk(desk?.sweep?.owner)} />
+          <Mini k="Treasury" v={shortPk(desk?.sweep?.dest || fuel.treasury)} />
         </div>
         <div className="mt-3 overflow-auto">
           <table className="w-full min-w-[520px] text-left text-sm">
@@ -428,9 +464,7 @@ export function ToolsSection() {
               </tr>
             </thead>
             <tbody>
-              {(desk?.sweep?.legs || [])
-                .filter((leg) => leg.role === "tools-launch")
-                .map((leg) => (
+              {(desk?.sweep?.legs || []).map((leg) => (
                 <tr key={`${leg.role}-${leg.from}`} className="border-t border-line/60">
                   <td className="px-2 py-1 font-mono text-[11px] text-ghost">{leg.role}</td>
                   <td className="px-2 py-1 font-mono text-[11px] text-ghost">{shortPk(leg.from)}</td>
@@ -441,10 +475,10 @@ export function ToolsSection() {
                   </td>
                 </tr>
               ))}
-              {!(desk?.sweep?.legs || []).some((leg) => leg.role === "tools-launch") && (
+              {!(desk?.sweep?.legs || []).length && (
                 <tr>
                   <td colSpan={5} className="px-2 py-3 text-mute">
-                    No Tools launch wallets loaded.
+                    No recoverable wallets loaded.
                   </td>
                 </tr>
               )}
@@ -454,19 +488,19 @@ export function ToolsSection() {
         {desk?.sweepResult && (
           <p className={`mt-3 text-sm ${desk.sweepResult.ok ? "text-acid" : "text-blood"}`}>
             {desk.sweepResult.ok
-              ? `Moved ${solAmt(desk.sweepResult.movedSol)} to owner${desk.sweepResult.signatures?.length ? ` · ${desk.sweepResult.signatures.length} tx` : ""}.`
+              ? `Moved ${solAmt(desk.sweepResult.movedSol)} to treasury${desk.sweepResult.signatures?.length ? ` · ${desk.sweepResult.signatures.length} tx` : ""}.`
               : desk.sweepResult.error || "Sweep failed."}
           </p>
         )}
         <button
           type="button"
-          disabled={busy || !(desk?.sweep?.launchSol || 0)}
+          disabled={busy || !((desk?.sweep?.movableSol || 0) > 0 || (desk?.sweep?.launchSol || 0) > 0)}
           onClick={() => {
-            const movable = desk?.sweep?.launchSol || 0;
-            const owner = desk?.sweep?.owner || "owner";
+            const movable = desk?.sweep?.movableSol || desk?.sweep?.launchSol || 0;
+            const dest = desk?.sweep?.dest || fuel.treasury || "treasury";
             if (
               !window.confirm(
-                `EXTRACT LAUNCHED WALLETS ${movable.toFixed(4)} SOL into ${owner.slice(0, 4)}…${owner.slice(-4)}? This pauses the launcher, sells bags worth at least 1 SOL at 99% slippage, then sends leftover launch-wallet SOL to owner.`,
+                `EXTRACT TO TREASURY ${movable.toFixed(4)} SOL into ${dest.slice(0, 4)}…${dest.slice(-4)}? This pauses the launcher, sells bags worth at least 1 SOL at 99% slippage, then sends leftover launch-wallet and protocol SOL to treasury. User seed wallets and pad TVL stay.`,
               )
             ) {
               return;
@@ -475,9 +509,125 @@ export function ToolsSection() {
           }}
           className="btn-acid mt-4 rounded-full px-8 py-3 text-sm tracking-[0.2em]"
         >
-          EXTRACT LAUNCHED WALLETS
+          EXTRACT TO TREASURY
         </button>
       </Panel>
+
+      <section className="panel overflow-hidden rounded-2xl p-0">
+        <div className="flex flex-wrap items-center gap-2 border-b border-line px-4 py-3">
+          <div className="font-mono text-[10px] tracking-[0.3em] text-acid">LAUNCH ARCHIVE</div>
+          <div className="font-mono text-[10px] text-mute">{desk?.archive?.length || 0} CAs saved</div>
+          <input
+            value={archiveQ}
+            onChange={(e) => setArchiveQ(e.target.value)}
+            placeholder="Search saved ticker, CA, wallet"
+            className="min-w-[12rem] flex-1 rounded-full border border-line bg-void/50 px-3 py-1.5 text-sm text-ghost"
+          />
+        </div>
+        <p className="border-b border-line px-4 py-2 text-sm text-mute">
+          Every launched CA, launch wallet, pool, team slice, and sniper stats persist here. Clear table and a new
+          campaign keep this list.
+        </p>
+        <div className="max-h-[420px] overflow-auto">
+          <table className="w-full min-w-[860px] text-left text-sm">
+            <thead className="sticky top-0 bg-void/95 font-mono text-[10px] tracking-[0.2em] text-mute">
+              <tr>
+                <th className="px-3 py-2">Token</th>
+                <th className="px-3 py-2">Wallet</th>
+                <th className="px-3 py-2">CA</th>
+                <th className="px-3 py-2">Team</th>
+                <th className="px-3 py-2">Snipers</th>
+                <th className="px-3 py-2">Volume</th>
+                <th className="px-3 py-2">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {archiveRows.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="px-4 py-8 text-center text-mute">
+                    No launched CAs saved yet. Live mints persist here even after Clear table.
+                  </td>
+                </tr>
+              )}
+              {archiveRows.map((t) => (
+                <tr key={`${t.campaignId}-${t.mint}`} className="border-t border-line/60 hover:bg-acid/5">
+                  <td className="px-3 py-2">
+                    <div className="flex items-center gap-3">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      {t.image ? <img src={t.image} alt="" className="h-10 w-10 rounded-xl object-cover" /> : null}
+                      <div className="min-w-0">
+                        <div className="font-display text-ghost">${t.symbol}</div>
+                        <div className="truncate font-mono text-[10px] text-mute">
+                          {t.name} · {t.kind} · {t.theme}
+                        </div>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-3 py-2">
+                    <button type="button" className="font-mono text-[11px] text-ghost" onClick={() => copy("wallet", t.wallet)}>
+                      {shortPk(t.wallet)}
+                    </button>
+                  </td>
+                  <td className="px-3 py-2">
+                    {t.mint ? (
+                      <div className="flex min-w-[11rem] flex-col items-start gap-1">
+                        <CopyCa ca={t.mint} compact />
+                        <div className="flex flex-wrap gap-2 font-mono text-[10px]">
+                          <a
+                            href={`https://solscan.io/token/${t.mint}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-acid hover:underline"
+                          >
+                            solscan
+                          </a>
+                          <a
+                            href={`https://dexscreener.com/solana/${t.pool || t.mint}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-acid hover:underline"
+                          >
+                            dex
+                          </a>
+                          {t.pool ? (
+                            <a
+                              href={`https://www.meteora.ag/pools/${t.pool}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-acid hover:underline"
+                            >
+                              meteora
+                            </a>
+                          ) : null}
+                        </div>
+                      </div>
+                    ) : (
+                      <span className="font-mono text-[11px] text-mute">—</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 font-mono text-[11px] text-ghost">{fmtPct(t.teamBps)}</td>
+                  <td className="px-3 py-2 font-mono text-[11px] text-ghost">
+                    {t.snipers?.buys || 0}/{t.snipers?.sells || 0}
+                    <div className="text-[10px] text-mute">{t.snipers?.snipers || 0} wallets</div>
+                  </td>
+                  <td className="px-3 py-2 font-mono text-[11px] text-ghost">
+                    {solAmt(t.snipers?.volumeSol || 0)}
+                    <div className="text-[10px] text-mute">curve {solAmt(t.snipers?.curveSol || 0)}</div>
+                  </td>
+                  <td className={`px-3 py-2 font-mono text-[11px] ${statusTone(t.status)}`}>
+                    {t.status}
+                    {t.launchedAt ? (
+                      <div className="text-mute">{new Date(t.launchedAt).toLocaleString()}</div>
+                    ) : null}
+                    {t.returnedSol ? <div className="text-mute">to treasury {solAmt(t.returnedSol)}</div> : null}
+                    {t.error ? <div className="max-w-[12rem] truncate text-blood">{t.error}</div> : null}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <Mini k="Live" v={String(summary?.live || 0)} />
@@ -606,7 +756,7 @@ export function ToolsSection() {
                       </div>
                     ) : null}
                     {t.dumped && t.dumpSol ? <div className="text-mute">sold {solAmt(t.dumpSol)}</div> : null}
-                    {t.returnedSol ? <div className="text-mute">to owner {solAmt(t.returnedSol)}</div> : null}
+                    {t.returnedSol ? <div className="text-mute">to treasury {solAmt(t.returnedSol)}</div> : null}
                     {t.error ? <div className="max-w-[12rem] truncate text-blood">{t.error}</div> : null}
                   </td>
                 </tr>

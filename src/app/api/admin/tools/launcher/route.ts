@@ -2,9 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAdmin, withAdminSession } from "@/lib/admin/auth";
 import {
+  archiveCampaign,
   campaignFuel,
   campaignSummary,
   loadCampaign,
+  loadLaunchArchive,
   pauseCampaign,
   publicCampaign,
   refreshSnipers,
@@ -38,9 +40,15 @@ const Body = z.object({
 
 async function desk() {
   const campaign = publicCampaign(await loadCampaign());
+  let archive = await loadLaunchArchive().catch(() => []);
+  try {
+    archive = await archiveCampaign(campaign);
+  } catch {
+    /* persisted archive still loads */
+  }
   const fuel = await campaignFuel(campaign);
   const sweep = await previewProtocolSweep().catch(() => null);
-  return { campaign, fuel, summary: campaignSummary(campaign), sweep };
+  return { campaign, fuel, summary: campaignSummary(campaign), sweep, archive };
 }
 
 export async function GET(req: NextRequest) {

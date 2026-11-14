@@ -15,7 +15,7 @@ import { LIVE_SIGNER_SECRET } from "../config";
 import { feeVaultKeypair } from "../fees/vault";
 import { listDelegatedSigners } from "../live/signer";
 import { BATCH_RELAY_LAMPORTS } from "./identities";
-import { drainCampaignWalletsToOwner, listCampaignSigners, loadCampaign, pauseCampaign } from "./batchLaunch";
+import { drainCampaignWalletsToTreasury, listCampaignSigners, loadCampaign, pauseCampaign } from "./batchLaunch";
 
 export type SweepLeg = {
   role: string;
@@ -27,8 +27,15 @@ export type SweepLeg = {
   skip?: string;
 };
 
+function leftoverDest(): string {
+  const treasury = treasuryAddress();
+  if (isSolanaAddress(treasury)) return treasury;
+  return ownerAddress();
+}
+
 export type SweepPreview = {
   owner: string;
+  dest: string;
   userWalletSol: number;
   protocolSol: number;
   padTvlSol: number;
@@ -174,6 +181,7 @@ export async function previewProtocolSweep(opts?: { extractAll?: boolean }): Pro
   const extractAll = opts?.extractAll !== false;
   const s = await readyState();
   const owner = ownerAddress();
+  const dest = leftoverDest();
   const campaign = await loadCampaign().catch(() => null);
   const campaignRunning = campaign?.status === "running";
   const relayReserved = !extractAll && Boolean(campaign && !campaign.relayFunded && campaign.status !== "done");
@@ -189,9 +197,9 @@ export async function previewProtocolSweep(opts?: { extractAll?: boolean }): Pro
   let remainingSends = 0;
   const minSend = extractAll ? 1 : 1_000_000;
   for (const src of packed) {
-    if (src.pk === owner) {
+    if (src.pk === dest) {
       if (!GROUP_ROLES.has(src.role)) {
-        legs.push({ role: src.role, from: src.pk, sol: 0, keepSol: 0, sendSol: 0, hot: false, skip: "already_owner" });
+        legs.push({ role: src.role, from: src.pk, sol: 0, keepSol: 0, sendSol: 0, hot: false, skip: "already_treasury" });
       }
       continue;
     }
@@ -250,6 +258,7 @@ export async function previewProtocolSweep(opts?: { extractAll?: boolean }): Pro
   const signedUserSol = groups["live-trading"]!.sol + groups["fee-vault"]!.sol;
   return {
     owner,
+    dest,
     userWalletSol,
     protocolSol,
     padTvlSol,
@@ -264,12 +273,12 @@ export async function previewProtocolSweep(opts?: { extractAll?: boolean }): Pro
     campaignRunning,
     remainingSends,
     legs,
-    note: "EXTRACT LAUNCHED WALLETS pauses the launcher if it is running, sells bags worth at least 1 SOL at 99% slippage, then sends leftover SOL from every Tools launch wallet to owner. Click again if wallets remain.",
+    note: "EXTRACT TO TREASURY pauses the launcher if it is running, sells bags worth at least 1 SOL at 99% slippage, then sends leftover SOL from Tools launch wallets and protocol wallets into treasury. User seed wallets and pad TVL stay. Click again if wallets remain.",
   };
 }
 
-/** Pause the launcher, dump bags ≥ 1 SOL, then send leftover Tools launch-wallet SOL to owner. */
-export async function extractLaunchedWalletsToOwner(): Promise<{
+/** Pause the launcher, dump bags ≥ 1 SOL, then send leftover launch + protocol SOL to treasury. */
+export async function extractLaunchedWalletsToTreasury(): Promise<{
   ok: boolean;
   movedSol: number;
   signatures: string[];
@@ -287,18 +296,18 @@ export async function extractLaunchedWalletsToOwner(): Promise<{
   const signatures: string[] = [];
   const failures: string[] = [];
   try {
-    const drained = await drainCampaignWalletsToOwner({ limit: 80, only });
+    const drained = await drainCampaignWalletsToTreasury({ limit: 80, only });
     moved += drained.movedSol || 0;
   } catch (e) {
     failures.push(e instanceof Error ? e.message : "launch drain failed");
   }
-  const owner = ownerAddress();
-  if (isSolanaAddress(owner)) {
-    const to = new PublicKey(owner);
+  const dest = leftoverDest();
+  if (isSolanaAddress(dest)) {
+    const to = new PublicKey(dest);
     const launches = frozen;
     let sent = 0;
     for (const src of launches) {
-      if (!src.kp || src.pk === owner) continue;
+      if (!src.kp || src.pk === dest) continue;
       if (sent >= MAX_SENDS) break;
       const lamports = await connection().getBalance(src.kp.publicKey, "confirmed").catch(() => 0);
       const send = Math.max(0, lamports - TX_FEE);
@@ -313,6 +322,14 @@ export async function extractLaunchedWalletsToOwner(): Promise<{
       }
     }
   }
+  try {
+    const proto = await sweepProtocolToTreasury({ extractAll: true });
+    moved += proto.movedSol || 0;
+    signatures.push(...(proto.signatures || []));
+    if (proto.error) failures.push(proto.error);
+  } catch (e) {
+    failures.push(e instanceof Error ? e.message : "protocol drain failed");
+  }
   const preview = await previewProtocolSweep({ extractAll: true });
   if (!(moved > 0) && failures.length) {
     return { ok: false, movedSol: 0, signatures, preview, error: failures[0] };
@@ -320,7 +337,10 @@ export async function extractLaunchedWalletsToOwner(): Promise<{
   return { ok: true, movedSol: moved, signatures, preview };
 }
 
-export async function sweepProtocolToOwner(opts?: { extractAll?: boolean }): Promise<{
+/** @deprecated leftover SOL goes to treasury. */
+export const extractLaunchedWalletsToOwner = extractLaunchedWalletsToTreasury;
+
+export async function sweepProtocolToTreasury(opts?: { extractAll?: boolean }): Promise<{
   ok: boolean;
   movedSol: number;
   signatures: string[];
@@ -329,10 +349,11 @@ export async function sweepProtocolToOwner(opts?: { extractAll?: boolean }): Pro
 }> {
   const extractAll = opts?.extractAll !== false;
   const preview = await previewProtocolSweep({ extractAll });
-  if (!isSolanaAddress(preview.owner)) {
-    return { ok: false, movedSol: 0, signatures: [], preview, error: "Set the owner wallet first." };
+  const dest = leftoverDest();
+  if (!isSolanaAddress(dest)) {
+    return { ok: false, movedSol: 0, signatures: [], preview, error: "Set the treasury wallet first." };
   }
-  const to = new PublicKey(preview.owner);
+  const to = new PublicKey(dest);
   const packed = await packSources();
   const signatures: string[] = [];
   let moved = 0;
@@ -340,7 +361,7 @@ export async function sweepProtocolToOwner(opts?: { extractAll?: boolean }): Pro
   const failures: string[] = [];
   const minSend = extractAll ? 1 : 1_000_000;
   for (const src of packed) {
-    if (!src.kp || src.pk === preview.owner) continue;
+    if (!src.kp || src.pk === dest) continue;
     const lamports = await connection().getBalance(src.kp.publicKey, "confirmed").catch(() => 0);
     const keep =
       extractAll ? 0 : src.role === "treasury" && preview.keepRelaySol > 0 ? TREASURY_KEEP_LAMPORTS + BATCH_RELAY_LAMPORTS : TREASURY_KEEP_LAMPORTS;
@@ -362,3 +383,6 @@ export async function sweepProtocolToOwner(opts?: { extractAll?: boolean }): Pro
   }
   return { ok: true, movedSol: moved, signatures, preview: next };
 }
+
+/** @deprecated leftover SOL goes to treasury. */
+export const sweepProtocolToOwner = sweepProtocolToTreasury;

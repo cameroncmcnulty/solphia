@@ -24,7 +24,6 @@ import {
   randomIdentity,
   scheduleTimes,
   splitMix,
-  TEAM_BPS_NARRATIVE_MAX,
   teamBpsAt,
   teamTokensFor,
   tickerOk,
@@ -70,15 +69,11 @@ describe("tools data launcher", () => {
       assert.ok(row.telegram.startsWith("https://t.me/"));
       assert.ok(row.website.startsWith("https://solphia.io/c/"));
       assert.ok(row.teamBps >= 300 && row.teamBps <= 2000);
-      if (row.kind === "narrative") assert.ok(row.teamBps <= TEAM_BPS_NARRATIVE_MAX);
       assert.equal(curveTokensFor(row.teamBps) + teamTokensFor(row.teamBps), BATCH_SUPPLY);
-      assert.equal(row.blurb.includes("on Solphia"), false);
-      assert.ok(row.blurb.includes("$"));
-      if (row.kind === "narrative") assert.ok(row.teamBps <= 500);
+      assert.ok(row.blurb.includes("on Solphia"));
     }
     assert.ok(rows.some((r) => r.kind === "narrative"));
     assert.ok(rows.some((r) => r.kind === "random"));
-    assert.ok(rows.filter((r) => r.kind === "narrative").every((r) => r.teamBps <= TEAM_BPS_NARRATIVE_MAX));
     const used = new Set(rows.map((r) => r.symbol));
     const next = buildIdentities({ narrative: 8, random: 12, used });
     assert.equal(next.length, 20);
@@ -88,15 +83,20 @@ describe("tools data launcher", () => {
       { symbol: "WOJAK", name: "Wojak", theme: "meme" },
     ];
     const first = buildIdentities({ narrative: 8, random: 4, hits });
-    assert.equal(first.some((r) => r.symbol === "PEPE"), true);
-    assert.equal(first.some((r) => r.symbol === "WOJAK"), true);
-    const pepe = first.find((r) => r.symbol === "PEPE");
-    assert.ok(pepe?.blurb.includes("$PEPE"));
+    const wojak = first.find((r) => r.name === "Wojak");
+    const pepe = first.find((r) => r.name === "Pepe");
+    assert.ok(wojak);
+    assert.ok(pepe);
+    assert.match(wojak!.symbol, /^WOJAK[MLBD]/);
+    assert.match(pepe!.symbol, /^PEPE[PFRE]/);
+    assert.equal(first.some((r) => r.symbol === "WOJAK"), false);
+    assert.equal(first.some((r) => r.symbol === "PEPE"), false);
+    assert.ok(wojak!.blurb.includes("on Solphia"));
+    assert.ok(pepe!.blurb.includes("on Solphia"));
     const second = buildIdentities({ narrative: 8, random: 4, hits, used: first.map((r) => r.symbol) });
     const all = [...first, ...second].map((r) => r.symbol);
     assert.equal(new Set(all).size, all.length);
-    assert.equal(second.some((r) => r.symbol === "PEPE"), false);
-    assert.equal(second.some((r) => r.symbol === "WOJAK"), false);
+    assert.equal(second.some((r) => first.some((r0) => r0.symbol === r.symbol)), false);
   });
 
   it("makes random word names like Cat and The World", () => {
@@ -162,7 +162,6 @@ describe("tools data launcher", () => {
   it("seeds 0.5 SOL once, relays remainder, and never writes the shared pad curve", () => {
     assert.equal(BATCH_RELAY_LAMPORTS, 500_000_000);
     assert.equal(BATCH_LAUNCH_FUND_LAMPORTS, BATCH_RELAY_LAMPORTS);
-    assert.equal(TEAM_BPS_NARRATIVE_MAX, 500);
     assert.equal(isInsufficientFunds("insufficient funds for rent"), true);
     assert.equal(isInsufficientFunds("custom program error: 0x1"), true);
     assert.equal(isInsufficientFunds("Launch landed"), false);
@@ -192,9 +191,15 @@ describe("tools data launcher", () => {
     assert.match(engine, /DUMP_MIN_SOL/);
     assert.match(engine, /DUMP_SLIPPAGE_BPS/);
     assert.match(engine, /minOutLamports: 1/);
+    assert.match(engine, /drainCampaignWalletsToTreasury/);
     assert.match(engine, /drainCampaignWalletsToOwner/);
     assert.match(engine, /returnWalletToOwner/);
     assert.match(engine, /closeOutCampaign/);
+    assert.match(engine, /leftoverDest/);
+    assert.match(engine, /treasuryAddress/);
+    assert.match(engine, /archiveCampaign/);
+    assert.match(engine, /loadLaunchArchive/);
+    assert.match(engine, /KEYS.batchLaunchArchive/);
     assert.match(engine, /DUMP_DELAY_MS/);
     assert.match(engine, /dumpHot/);
     assert.equal(engine.includes("DUMP_WATCH_MS"), false);
@@ -203,20 +208,29 @@ describe("tools data launcher", () => {
     assert.equal(engine.includes("BATCH_FIRST_BUY_SOL"), false);
     assert.equal(engine.includes('side: "buy"'), false);
     assert.match(engine, /minOutLamports: 1/);
-    assert.match(engine, /createdOn: "https:\/\/www\.meteora\.ag"/);
+    assert.equal(engine.includes('createdOn: "https://www.meteora.ag"'), false);
+    const startFn = engine.slice(
+      engine.indexOf("export async function startCampaign"),
+      engine.indexOf("export async function pauseCampaign"),
+    );
+    assert.ok(startFn.indexOf("drainCampaignWalletsToTreasury") < startFn.indexOf("if (!fuel.enough)"));
+    const resetFn = engine.slice(engine.indexOf("export async function resetCampaign"));
+    assert.equal(resetFn.slice(0, 600).includes("saveKeys({})"), false);
     const launchFn = engine.slice(engine.indexOf("async function launchOne"));
     assert.match(launchFn, /buildProjectSliceMintTx/);
     assert.match(launchFn, /buildDbcPoolMetadataTx/);
     assert.ok(launchFn.indexOf("buildProjectSliceMintTx") < launchFn.indexOf("buildDbcPoolMetadataTx"));
     const ids = readFileSync(path.join(process.cwd(), "src/lib/tools/identities.ts"), "utf8");
-    assert.match(ids, /TEAM_BPS_NARRATIVE_MAX = 500/);
+    assert.equal(ids.includes("TEAM_BPS_NARRATIVE_MAX"), false);
     assert.match(ids, /token-boosts\/top/);
-    assert.match(ids, /hitsFromTokenAddrs/);
-    assert.match(ids, /GTA6/);
-    assert.match(ids, /ANSEM/);
-    assert.match(ids, /community coin/);
-    assert.match(ids, /if \(ok\(t\)\) return t/);
-    assert.match(ids, /search\?q=\$\{q\}/);
+    assert.match(ids, /token-profiles\/latest/);
+    assert.match(ids, /search\?q=solana/);
+    assert.match(ids, /WOJAK/);
+    assert.match(ids, /base.length <= 6 \? `\$\{base\}\$\{twist\[0\]/);
+    assert.match(ids, /rides the \$\{theme\} meta on Solphia/);
+    assert.equal(ids.includes("GTA6"), false);
+    assert.equal(ids.includes("ANSEM"), false);
+    assert.equal(ids.includes("community coin"), false);
     const metaJson = readFileSync(path.join(process.cwd(), "src/lib/token/metadata.ts"), "utf8");
     assert.match(metaJson, /asTwitterUrl/);
     assert.match(metaJson, /twitter\.com/);
@@ -238,14 +252,16 @@ describe("tools data launcher", () => {
     const toolsUi = readFileSync(path.join(process.cwd(), "src/components/admin/sections/Tools.tsx"), "utf8");
     assert.match(toolsUi, /30 seconds after each mint/);
     assert.match(toolsUi, /No curve buy/);
-    assert.match(toolsUi, /exact hot ticker/);
-    assert.match(toolsUi, /3–5% team/);
+    assert.match(toolsUi, /\$WOJAKD/);
+    assert.match(toolsUi, /3–20%/);
     assert.equal(toolsUi.includes("0.01 SOL"), false);
     assert.match(toolsUi, /sniper buys hit 1 SOL/);
     assert.match(toolsUi, /99% slippage/);
-    assert.match(toolsUi, /last leftover goes to owner/);
+    assert.match(toolsUi, /last leftover goes to treasury/);
+    assert.match(toolsUi, /LAUNCH ARCHIVE/);
+    assert.match(toolsUi, /EXTRACT TO TREASURY/);
     const community = readFileSync(path.join(process.cwd(), "src/app/c/[handle]/page.tsx"), "utf8");
-    assert.match(community, /community coin/i);
+    assert.match(community, /on Solphia/);
     assert.match(toolsUi, /CopyCa/);
     assert.match(toolsUi, /solscan\.io\/token/);
     assert.match(toolsUi, /dexscreener\.com\/solana/);
@@ -255,14 +271,17 @@ describe("tools data launcher", () => {
     assert.equal(engine.includes("sphaMint"), false);
     const sweep = readFileSync(path.join(process.cwd(), "src/lib/tools/protocolSweep.ts"), "utf8");
     assert.match(sweep, /sweepProtocolToOwner/);
+    assert.match(sweep, /sweepProtocolToTreasury/);
     assert.match(sweep, /extractLaunchedWalletsToOwner/);
+    assert.match(sweep, /extractLaunchedWalletsToTreasury/);
     assert.match(sweep, /listCampaignSigners/);
     assert.match(sweep, /listDelegatedSigners/);
     assert.match(sweep, /feeVaultKeypair/);
     assert.match(sweep, /live-trading/);
-    assert.match(sweep, /EXTRACT LAUNCHED WALLETS/);
+    assert.match(sweep, /EXTRACT TO TREASURY/);
     assert.match(sweep, /pauseCampaign/);
-    assert.match(sweep, /drainCampaignWalletsToOwner/);
+    assert.match(sweep, /drainCampaignWalletsToTreasury/);
+    assert.match(sweep, /already_treasury/);
     assert.match(sweep, /skipPreflight: true/);
     assert.equal(sweep.includes("Pause or stop the launcher first"), false);
     const signer = readFileSync(path.join(process.cwd(), "src/lib/live/signer.ts"), "utf8");
@@ -272,13 +291,20 @@ describe("tools data launcher", () => {
     assert.match(route, /extractAll/);
     assert.match(route, /extractLaunched/);
     assert.match(route, /extractLaunchedWalletsToOwner/);
+    assert.match(route, /loadLaunchArchive/);
+    assert.match(route, /archiveCampaign/);
     assert.match(route, /splitMix/);
     assert.match(route, /windowMinutes/);
     assert.match(route, /windowMsFromBody/);
+    const persist = readFileSync(path.join(process.cwd(), "src/lib/persist.ts"), "utf8");
+    assert.match(persist, /batchLaunchArchive/);
+    const tokenMeta = readFileSync(path.join(process.cwd(), "src/app/api/tools/token-meta/[id]/route.ts"), "utf8");
+    assert.equal(tokenMeta.includes("www.meteora.ag"), false);
     const tools = readFileSync(path.join(process.cwd(), "src/components/admin/sections/Tools.tsx"), "utf8");
     assert.match(tools, /0\.500 SOL/);
-    assert.match(tools, /EXTRACT LAUNCHED WALLETS/);
+    assert.match(tools, /EXTRACT TO TREASURY/);
     assert.match(tools, /extractLaunched/);
+    assert.match(tools, /LAUNCH ARCHIVE/);
     assert.equal(tools.includes("desk?.sweep?.campaignRunning"), false);
     assert.match(tools, /tools-mix/);
     assert.match(tools, /TOTAL TOKENS/);

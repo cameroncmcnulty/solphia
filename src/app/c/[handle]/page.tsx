@@ -11,9 +11,9 @@ export default async function CommunityHandlePage({
   return (
     <main className="flex min-h-[70vh] items-center justify-center px-6 text-center">
       <div>
-        <div className="font-mono text-[10px] tracking-[0.3em] text-mute">COMMUNITY COIN</div>
+        <div className="font-mono text-[10px] tracking-[0.3em] text-mute">COMMUNITY</div>
         <h1 className="mt-3 font-display text-5xl text-ghost">${ticker}</h1>
-        <p className="mt-3 text-sm text-mute">${ticker} community coin.</p>
+        <p className="mt-3 text-sm text-mute">${ticker} on Solphia.</p>
       </div>
     </main>
   );
