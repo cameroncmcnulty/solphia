@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { SITE_URL } from "@/lib/config";
 import { tokenMetadataJson } from "@/lib/token/metadata";
 import { loadCampaign } from "@/lib/tools/batchLaunch";
+import { loadCampaign as loadCampaignV2 } from "@/lib/tools/batchLaunchV2";
 import { themeOf } from "@/lib/tools/identities";
 
 export const dynamic = "force-dynamic";
@@ -26,13 +27,15 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
   try {
     const c = await loadCampaign();
     const hit = c.tokens.find((t) => t.id === parsed.id);
-    if (hit) {
-      name = hit.name;
-      symbol = hit.symbol;
-      blurb = hit.blurb;
-      website = hit.website;
-      x = hit.x;
-      telegram = hit.telegram;
+    const v2 = hit ? null : (await loadCampaignV2()).tokens.find((t) => t.id === parsed.id);
+    const row = hit || v2;
+    if (row) {
+      name = row.name;
+      symbol = row.symbol;
+      blurb = row.blurb;
+      website = row.website;
+      x = row.x;
+      telegram = row.telegram;
     }
   } catch {
     /* synthesized meta still works */

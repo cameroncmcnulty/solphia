@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { loadCampaign } from "@/lib/tools/batchLaunch";
+import { loadCampaign as loadCampaignV2 } from "@/lib/tools/batchLaunchV2";
 import { renderTokenPng } from "@/lib/tools/tokenArt";
 import { themeOf } from "@/lib/tools/identities";
 
@@ -22,9 +23,11 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
   try {
     const c = await loadCampaign();
     const hit = c.tokens.find((t) => t.id === parsed.id);
-    if (hit) {
-      symbol = hit.symbol;
-      theme = hit.theme;
+    const v2 = hit ? null : (await loadCampaignV2()).tokens.find((t) => t.id === parsed.id);
+    const row = hit || v2;
+    if (row) {
+      symbol = row.symbol;
+      theme = row.theme;
     }
   } catch {
     /* deterministic fallback */

@@ -76,6 +76,14 @@ export async function GET(req: NextRequest) {
   } catch {
     /* tick still counts */
   }
+  let batchLaunchV2 = null;
+  try {
+    const v2 = await import("@/lib/tools/batchLaunchV2");
+    batchLaunchV2 = await v2.tickBatchLaunch({ limit: 2 });
+    await v2.refreshSnipers(8);
+  } catch {
+    /* tick still counts */
+  }
   return NextResponse.json({
     ok: true,
     entries: tick.entries,
@@ -88,6 +96,7 @@ export async function GET(req: NextRequest) {
     partnerSol,
     sphaCountdown,
     batchLaunch,
+    batchLaunchV2,
     lastTickAt: Date.now(),
     liveTrading: tick.liveTrading,
     liveFills: tick.liveFills,

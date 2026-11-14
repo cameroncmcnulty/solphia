@@ -47,6 +47,14 @@ export const KEYS = {
   batchLaunchTickers: "solphia:batch-launch-tickers",
   /** Append-only launched CA archive. Survives Clear table / new campaigns. */
   batchLaunchArchive: "solphia:batch-launch-archive",
+  /** Tools Data Launcher V2 campaign (no secrets). Isolated from V1 so V1 progress cannot be lost. */
+  batchLaunchV2: "solphia:batch-launch-v2",
+  /** Append-only V2 hop + final wallet secrets. Never delete. Incinerator reclaim later. */
+  batchLaunchV2Keys: "solphia:batch-launch-v2-keys",
+  /** NX lock while one V2 launch or hop is in flight. */
+  batchLaunchV2Lock: "solphia:batch-launch-v2-lock",
+  /** Append-only V2 launched CA archive. */
+  batchLaunchV2Archive: "solphia:batch-launch-v2-archive",
 };
 
 const BLOB_PATH = "solphia-state.json";

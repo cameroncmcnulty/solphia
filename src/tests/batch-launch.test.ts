@@ -250,7 +250,7 @@ describe("tools data launcher", () => {
     assert.match(engine, /feeClaimer: owner/);
     assert.match(engine, /creatorTradingFeePercentage: 0/);
     assert.match(engine, /token.dumpAt = token.launchedAt \+ DUMP_DELAY_MS/);
-    const toolsUi = readFileSync(path.join(process.cwd(), "src/components/admin/sections/Tools.tsx"), "utf8");
+    const toolsUi = readFileSync(path.join(process.cwd(), "src/components/admin/sections/DataLauncherV1.tsx"), "utf8");
     assert.match(toolsUi, /30 seconds after each mint/);
     assert.match(toolsUi, /No curve buy/);
     assert.match(toolsUi, /\$WOJAKD/);
@@ -299,9 +299,12 @@ describe("tools data launcher", () => {
     assert.match(route, /windowMsFromBody/);
     const persist = readFileSync(path.join(process.cwd(), "src/lib/persist.ts"), "utf8");
     assert.match(persist, /batchLaunchArchive/);
+    assert.match(persist, /batchLaunchV2/);
+    assert.match(persist, /batchLaunchV2Keys/);
     const tokenMeta = readFileSync(path.join(process.cwd(), "src/app/api/tools/token-meta/[id]/route.ts"), "utf8");
     assert.equal(tokenMeta.includes("www.meteora.ag"), false);
-    const tools = readFileSync(path.join(process.cwd(), "src/components/admin/sections/Tools.tsx"), "utf8");
+    assert.match(tokenMeta, /loadCampaignV2/);
+    const tools = readFileSync(path.join(process.cwd(), "src/components/admin/sections/DataLauncherV1.tsx"), "utf8");
     assert.match(tools, /0\.500 SOL/);
     assert.match(tools, /EXTRACT TO TREASURY/);
     assert.match(tools, /extractLaunched/);
@@ -314,6 +317,11 @@ describe("tools data launcher", () => {
     assert.match(tools, /dump 1 SOL/);
     assert.equal(tools.includes("WINDOW HOURS"), false);
     assert.equal(tools.includes("WindDownHost"), false);
+    const picker = readFileSync(path.join(process.cwd(), "src/components/admin/sections/Tools.tsx"), "utf8");
+    assert.match(picker, /DATA LAUNCHER V1/);
+    assert.match(picker, /DATA LAUNCHER V2/);
+    assert.match(picker, /DataLauncherV1/);
+    assert.match(picker, /DataLauncherV2/);
     const shell = readFileSync(path.join(process.cwd(), "src/components/Shell.tsx"), "utf8");
     assert.equal(shell.includes("WindDownHost"), false);
     assert.equal(tools.includes("7.5rem"), false);
