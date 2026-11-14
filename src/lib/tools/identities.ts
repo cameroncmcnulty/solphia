@@ -10,16 +10,21 @@ export const MIN_WINDOW_MINUTES = 1;
 export const MAX_WINDOW_MINUTES = 1440;
 export const DEFAULT_WINDOW_MS = DEFAULT_WINDOW_MINUTES * 60 * 1000;
 export const MIN_GAP_MS = 8_000;
-/** First dump check this long after launch. */
+/** Hop leftover SOL this long after launch so the scheduled run can continue. */
 export const DUMP_DELAY_MS = 30_000;
-/** Keep watching for a 1 SOL bag quote this long before hopping leftover anyway. */
-export const DUMP_WATCH_MS = 10 * 60_000;
-/** Recheck the bag this often while watching for a 1 SOL buy. */
-export const DUMP_RETRY_MS = 20_000;
-/** Dump the bag when a sell quote is at least this many SOL. */
+/** Swap the bag out when sniper buys / bag quote hit this many SOL. */
 export const DUMP_MIN_SOL = 1;
 /** Dump sells use 99% slippage so a fat bag can still land on a thin curve. */
 export const DUMP_SLIPPAGE_BPS = 9_900;
+
+/** True when sniper inflow or the launch-wallet bag is worth at least 1 SOL. */
+export function dumpHot(opts: { bagQuoteSol?: number; sniperVolumeSol?: number; sniperBuySol?: number }): boolean {
+  return (
+    (Number(opts.bagQuoteSol) || 0) >= DUMP_MIN_SOL ||
+    (Number(opts.sniperVolumeSol) || 0) >= DUMP_MIN_SOL ||
+    (Number(opts.sniperBuySol) || 0) >= DUMP_MIN_SOL
+  );
+}
 
 export function clampWindowMinutes(raw: number): number {
   const n = Math.floor(Number(raw) || 0);

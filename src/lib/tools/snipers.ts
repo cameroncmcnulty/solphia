@@ -4,12 +4,13 @@ export type SniperStats = {
   buys: number;
   sells: number;
   volumeSol: number;
+  buySol: number;
   snipers: number;
   curveSol: number;
 };
 
 export function emptySnipers(): SniperStats {
-  return { buys: 0, sells: 0, volumeSol: 0, snipers: 0, curveSol: 0 };
+  return { buys: 0, sells: 0, volumeSol: 0, buySol: 0, snipers: 0, curveSol: 0 };
 }
 
 export function sniperStats(
@@ -20,10 +21,13 @@ export function sniperStats(
   const fills = Array.isArray(coin?.fills) ? coin!.fills! : [];
   const snipes = fills.filter((f) => f.owner && f.owner !== creator);
   const wallets = new Set(snipes.map((f) => f.owner));
+  const buys = snipes.filter((f) => f.side === "buy");
+  const round = (n: number) => Math.round(n * 1e9) / 1e9;
   return {
-    buys: snipes.filter((f) => f.side === "buy").length,
+    buys: buys.length,
     sells: snipes.filter((f) => f.side === "sell").length,
-    volumeSol: Math.round(snipes.reduce((s, f) => s + (Number(f.sol) || 0), 0) * 1e9) / 1e9,
+    volumeSol: round(snipes.reduce((s, f) => s + (Number(f.sol) || 0), 0)),
+    buySol: round(buys.reduce((s, f) => s + (Number(f.sol) || 0), 0)),
     snipers: wallets.size,
     curveSol: Number(curveSol) || 0,
   };

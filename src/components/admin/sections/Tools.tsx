@@ -5,7 +5,7 @@ import { CopyCa } from "@/components/CopyCa";
 import { copyText } from "@/lib/copyText";
 import { Mini, Panel, Stat, solAmt } from "../ui";
 
-type Snipers = { buys: number; sells: number; volumeSol: number; snipers: number; curveSol: number };
+type Snipers = { buys: number; sells: number; volumeSol: number; buySol?: number; snipers: number; curveSol: number };
 
 type TokenRow = {
   id: string;
@@ -256,11 +256,9 @@ export function ToolsSection() {
           <div>
             <h2 className="font-display text-3xl text-ghost">Data launcher</h2>
             <p className="mt-2 max-w-2xl text-sm text-mute">
-              First R&amp;D tool. Click LAUNCH and Treasury seeds the first wallet with 0.5 SOL. That wallet launches a
-              unique ticker, waits 30 seconds, then watches the bag. When a sell quotes at least 1 SOL it dumps the max
-              amount at 99% slippage and hops leftover SOL to the next wallet. If nothing hits 1 SOL within 10 minutes it
-              hops leftover so the run can continue. The last leftover goes to owner. Full 1% swap fees on these tokens
-              go to owner.
+              First R&amp;D tool. Click LAUNCH and Treasury seeds the first wallet with 0.5 SOL. Tokens launch on the
+              window you set. 30 seconds after each mint, leftover SOL hops to the next wallet. If sniper buys hit 1 SOL
+              it sells the bag at 99% slippage first so leftover tokens do not sit in that wallet, then hops. The last leftover goes to owner. Full 1% swap fees on these tokens go to owner.
             </p>
           </div>
           <div className="tools-ring" style={{ ["--pct" as string]: `${pct}` }}>
@@ -578,12 +576,16 @@ export function ToolsSection() {
                     <div className="text-[10px] text-mute">curve {solAmt(t.snipers.curveSol)}</div>
                   </td>
                   <td className={`px-3 py-2 font-mono text-[11px] ${statusTone(t.status)}`}>
-                    {t.status === "live" && !t.dumped ? "watching" : t.status}
+                    {t.status === "live" && !t.dumped ? "live" : t.status}
                     {t.status === "queued" && t.scheduledAt > now ? <div className="text-mute">{eta(t.scheduledAt, now)}</div> : null}
                     {t.status === "live" && !t.dumped ? (
                       <div className="text-mute">
                         bag {solAmt(t.bagQuoteSol || 0)}
-                        {t.dumpAt && t.dumpAt > now ? ` · check ${eta(t.dumpAt, now)}` : " · dump at 1 SOL"}
+                        {(t.bagQuoteSol || 0) >= 1 || (t.snipers.buySol || 0) >= 1 || (t.snipers.volumeSol || 0) >= 1
+                          ? " · dump 1 SOL"
+                          : t.dumpAt && t.dumpAt > now
+                            ? ` · hop ${eta(t.dumpAt, now)}`
+                            : " · hop soon"}
                       </div>
                     ) : null}
                     {t.dumped && t.dumpSol ? <div className="text-mute">sold {solAmt(t.dumpSol)}</div> : null}

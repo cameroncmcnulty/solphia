@@ -18,9 +18,8 @@ import {
   DEFAULT_WINDOW_MS,
   DUMP_DELAY_MS,
   DUMP_MIN_SOL,
-  DUMP_RETRY_MS,
   DUMP_SLIPPAGE_BPS,
-  DUMP_WATCH_MS,
+  dumpHot,
   isInsufficientFunds,
   randomIdentity,
   scheduleTimes,
@@ -41,10 +40,12 @@ describe("tools data launcher", () => {
     assert.equal(DEFAULT_WINDOW_MINUTES, 180);
     assert.equal(DEFAULT_WINDOW_MS, 180 * 60_000);
     assert.equal(DUMP_DELAY_MS, 30_000);
-    assert.equal(DUMP_WATCH_MS, 10 * 60_000);
-    assert.equal(DUMP_RETRY_MS, 20_000);
     assert.equal(DUMP_MIN_SOL, 1);
     assert.equal(DUMP_SLIPPAGE_BPS, 9_900);
+    assert.equal(dumpHot({ bagQuoteSol: 0.4, sniperBuySol: 0.2 }), false);
+    assert.equal(dumpHot({ sniperBuySol: 1 }), true);
+    assert.equal(dumpHot({ sniperVolumeSol: 1.2 }), true);
+    assert.equal(dumpHot({ bagQuoteSol: 1 }), true);
     assert.equal(windowMsFromMinutes(10), 10 * 60_000);
     assert.equal(windowMsFromMinutes(1), 60_000);
     assert.equal(windowMsFromMinutes(1440), 1440 * 60_000);
@@ -143,6 +144,7 @@ describe("tools data launcher", () => {
     assert.equal(stats.buys, 2);
     assert.equal(stats.sells, 1);
     assert.equal(stats.volumeSol, 0.7);
+    assert.equal(stats.buySol, 0.6);
     assert.equal(stats.snipers, 2);
     assert.equal(stats.curveSol, 1.2);
   });
@@ -183,7 +185,8 @@ describe("tools data launcher", () => {
     assert.match(engine, /returnWalletToOwner/);
     assert.match(engine, /closeOutCampaign/);
     assert.match(engine, /DUMP_DELAY_MS/);
-    assert.match(engine, /DUMP_WATCH_MS/);
+    assert.match(engine, /dumpHot/);
+    assert.equal(engine.includes("DUMP_WATCH_MS"), false);
     assert.match(engine, /waitForDbcPool/);
     assert.match(engine, /loadUsedTickers/);
     assert.match(engine, /dexPairStats/);
@@ -195,8 +198,8 @@ describe("tools data launcher", () => {
     assert.match(engine, /creatorTradingFeePercentage: 0/);
     assert.match(engine, /token.dumpAt = token.launchedAt \+ DUMP_DELAY_MS/);
     const toolsUi = readFileSync(path.join(process.cwd(), "src/components/admin/sections/Tools.tsx"), "utf8");
-    assert.match(toolsUi, /waits 30 seconds/);
-    assert.match(toolsUi, /quotes at least 1 SOL/);
+    assert.match(toolsUi, /30 seconds after each mint/);
+    assert.match(toolsUi, /sniper buys hit 1 SOL/);
     assert.match(toolsUi, /99% slippage/);
     assert.match(toolsUi, /last leftover goes to owner/);
     assert.match(toolsUi, /CopyCa/);
@@ -236,7 +239,7 @@ describe("tools data launcher", () => {
     assert.match(tools, /TOTAL TOKENS/);
     assert.match(tools, /WINDOW MINUTES/);
     assert.match(tools, /windowMinutes: minutes/);
-    assert.match(tools, /watching/);
+    assert.match(tools, /dump 1 SOL/);
     assert.equal(tools.includes("WINDOW HOURS"), false);
     assert.equal(tools.includes("WindDownHost"), false);
     const shell = readFileSync(path.join(process.cwd(), "src/components/Shell.tsx"), "utf8");

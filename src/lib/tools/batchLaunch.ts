@@ -38,9 +38,8 @@ import {
   DEFAULT_WINDOW_MS,
   DUMP_DELAY_MS,
   DUMP_MIN_SOL,
-  DUMP_RETRY_MS,
   DUMP_SLIPPAGE_BPS,
-  DUMP_WATCH_MS,
+  dumpHot,
   MAX_BATCH,
   splitMix,
   buildIdentities,
@@ -723,20 +722,21 @@ async function sellAllHoldings(kp: Keypair, token: CampaignToken, opts?: { minSo
   return recovered;
 }
 
+function tokenDumpHot(token: CampaignToken, quote = token.bagQuoteSol || 0): boolean {
+  return dumpHot({
+    bagQuoteSol: quote,
+    sniperVolumeSol: token.snipers?.volumeSol,
+    sniperBuySol: token.snipers?.buySol,
+  });
+}
+
 async function dumpAndAdvance(c: Campaign, token: CampaignToken): Promise<void> {
   const keys = await loadKeys();
   if (!token.wallet || !keys[token.wallet]) {
     token.dumped = true;
     return;
   }
-  if ((token.dumpAt || 0) > Date.now()) return;
   const kp = walletOf(keys[token.wallet]!);
-  let recovered = 0;
-  try {
-    recovered = await sellAllHoldings(kp, token);
-  } catch {
-    recovered = 0;
-  }
   const bags = await listWalletBags(kp.publicKey.toBase58()).catch(() => [] as WalletBag[]);
   let quote = 0;
   for (const bag of bags) {
@@ -744,21 +744,31 @@ async function dumpAndAdvance(c: Campaign, token: CampaignToken): Promise<void> 
     if (value > quote) quote = value;
   }
   token.bagQuoteSol = quote;
-  if (recovered > 0) {
-    token.dumped = true;
-    await relayToNext(c, kp, token, keys);
-    return;
+  if (token.mint) {
+    try {
+      const dex = await dexPairStats(token.mint);
+      if (dex) {
+        token.snipers = {
+          ...token.snipers,
+          buys: Math.max(token.snipers.buys || 0, dex.buys),
+          sells: Math.max(token.snipers.sells || 0, dex.sells),
+          volumeSol: Math.max(token.snipers.volumeSol || 0, dex.volumeSol),
+          buySol: Math.max(token.snipers.buySol || 0, dex.buySol),
+        };
+      }
+    } catch {
+      /* hop still runs */
+    }
   }
-  const launchedAt = token.launchedAt || Date.now();
-  if (quote >= DUMP_MIN_SOL && Date.now() < launchedAt + DUMP_WATCH_MS) {
-    token.dumpAt = Date.now() + DUMP_RETRY_MS;
-    token.dumped = false;
-    return;
-  }
-  if (Date.now() < launchedAt + DUMP_WATCH_MS) {
-    token.dumpAt = Date.now() + DUMP_RETRY_MS;
-    token.dumped = false;
-    return;
+  const hot = tokenDumpHot(token, quote);
+  const due = (token.dumpAt || 0) <= Date.now();
+  if (!hot && !due) return;
+  if (hot) {
+    try {
+      await sellAllHoldings(kp, token, { minSol: 0 });
+    } catch {
+      /* hop leftover anyway so the scheduled run continues */
+    }
   }
   token.dumped = true;
   await relayToNext(c, kp, token, keys);
@@ -1070,10 +1080,6 @@ export async function tickBatchLaunch(opts?: { limit?: number }): Promise<{
       if (c.status !== "running") break;
       const dump = pendingDump(c);
       if (dump) {
-        if ((dump.dumpAt || 0) > Date.now()) {
-          await finishTickState(c);
-          break;
-        }
         const idx = c.tokens.findIndex((t) => t.id === dump.id);
         try {
           await dumpAndAdvance(c, dump);
@@ -1084,6 +1090,7 @@ export async function tickBatchLaunch(opts?: { limit?: number }): Promise<{
           if (idx >= 0) c.tokens[idx] = dump;
         }
         await finishTickState(c);
+        if (!dump.dumped) break;
         if (c.dry || c.status !== "running") break;
         continue;
       }
@@ -1136,7 +1143,7 @@ export async function tickBatchLaunch(opts?: { limit?: number }): Promise<{
   return locked;
 }
 
-async function dexPairStats(mint: string): Promise<{ buys: number; sells: number; volumeSol: number } | null> {
+async function dexPairStats(mint: string): Promise<{ buys: number; sells: number; volumeSol: number; buySol: number } | null> {
   if (!isSolanaAddress(mint)) return null;
   try {
     const r = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mint}`, {
@@ -1159,14 +1166,19 @@ async function dexPairStats(mint: string): Promise<{ buys: number; sells: number
       pairs.find((p) => String(p.chainId || "").toLowerCase().startsWith("sol")) || pairs[0];
     if (!pair) return null;
     const tx = pair.txns?.h24 || pair.txns?.m5 || {};
+    const buys = Number(tx.buys) || 0;
+    const sells = Number(tx.sells) || 0;
     const volUsd = Number(pair.volume?.h24) || 0;
     const priceUsd = Number(pair.priceUsd) || 0;
     const priceNative = Number(pair.priceNative) || 0;
     const solUsd = priceNative > 0 && priceUsd > 0 ? priceUsd / priceNative : 0;
+    const volumeSol = solUsd > 0 ? volUsd / solUsd : 0;
+    const flow = buys + sells;
     return {
-      buys: Number(tx.buys) || 0,
-      sells: Number(tx.sells) || 0,
-      volumeSol: solUsd > 0 ? volUsd / solUsd : 0,
+      buys,
+      sells,
+      volumeSol,
+      buySol: flow > 0 ? volumeSol * (buys / flow) : volumeSol,
     };
   } catch {
     return null;
@@ -1202,6 +1214,7 @@ export async function refreshSnipers(limit = 12): Promise<number> {
         buys: Math.max(local.buys, dex?.buys || 0),
         sells: Math.max(local.sells, dex?.sells || 0),
         volumeSol: Math.max(local.volumeSol, dex?.volumeSol || 0),
+        buySol: Math.max(local.buySol, dex?.buySol || 0),
         snipers: Math.max(local.snipers, (dex?.buys || 0) + (dex?.sells || 0) ? 1 : 0),
         curveSol,
       };
