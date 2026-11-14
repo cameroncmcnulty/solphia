@@ -666,7 +666,7 @@ describe("launch confirm wait", () => {
     const conn = readFileSync(path.join(process.cwd(), "src/lib/solana/connection.ts"), "utf8");
     assert.match(route, /waitForSignature\(sig, 45\)/);
     assert.match(route, /waitForDbcPool\(b\.mint, 32\)/);
-    assert.match(dbc, /setTimeout\(r, 750\)/);
+    assert.match(dbc, /setTimeout\(r, 500\)/);
     assert.match(conn, /if \(v\?\.err\) return \{ ok: false/);
     assert.match(page, /i < 8 && !r\.ok && j\.error === "curve_missing"/);
     assert.match(page, /setTimeout\(res, 2500\)/);

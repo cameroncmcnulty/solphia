@@ -336,13 +336,35 @@ function estimateLaunchTokens(buySol: number): number {
   return q.ok ? Number(q.tokensOut) || 0 : 0;
 }
 
+type DbcPoolRow = { publicKey: PublicKey; account: any };
+
 export async function dbcPoolByMint(mint: string) {
   if (!dbcEnabled()) return null;
   try {
-    return await client().state.getPoolByBaseMint(mint);
+    const row = await client().state.getPoolByBaseMint(mint);
+    return row?.publicKey ? row : null;
   } catch {
     return null;
   }
+}
+
+/** Direct PDA fetch. Avoids getProgramAccounts lag on a just-created TransferHookPool. */
+export async function dbcPoolByAddress(pool: string): Promise<DbcPoolRow | null> {
+  if (!dbcEnabled() || !pool) return null;
+  try {
+    const pk = new PublicKey(pool);
+    const account = await client().state.getPool(pk);
+    return account ? { publicKey: pk, account } : null;
+  } catch {
+    return null;
+  }
+}
+
+/** PDA for the DBC virtual pool. Works for standard and transfer-hook configs. */
+export function derivedDbcPoolAddress(mint: string, config: string): string {
+  const m = sdk();
+  const pk = m.deriveDbcPoolAddress(new PublicKey(WSOL), new PublicKey(mint), new PublicKey(config));
+  return typeof pk?.toBase58 === "function" ? pk.toBase58() : String(pk);
 }
 
 export async function mintUsesTransferHook(mint: string): Promise<boolean> {
@@ -357,13 +379,19 @@ export async function mintUsesTransferHook(mint: string): Promise<boolean> {
   }
 }
 
-type DbcPoolRow = { publicKey: PublicKey; account: any };
-
-async function resolveDbcPool(mint: string): Promise<
+async function resolveDbcPool(mint: string, pool?: string): Promise<
   | { ok: true; dbc: ReturnType<typeof client>; row: DbcPoolRow }
   | { ok: false; error: string }
 > {
   const dbc = client();
+  if (pool) {
+    try {
+      const row = await dbcPoolByAddress(pool);
+      if (row?.publicKey) return { ok: true as const, dbc, row };
+    } catch {
+      /* fall through to mint lookup */
+    }
+  }
   const load = () => withRpcRetry(() => dbc.state.getPoolByBaseMint(mint) as Promise<DbcPoolRow | null | undefined>);
   try {
     let row = await load();
@@ -382,13 +410,25 @@ async function resolveDbcPool(mint: string): Promise<
   }
 }
 
-export async function waitForDbcPool(mint: string, tries = 24) {
-  let pool = await dbcPoolByMint(mint);
-  for (let i = 0; i < tries && !pool; i++) {
-    await new Promise((r) => setTimeout(r, 750));
-    pool = await dbcPoolByMint(mint);
+export async function waitForDbcPool(mint: string, tries = 24, config?: string) {
+  const derived = config ? (() => {
+    try {
+      return derivedDbcPoolAddress(mint, config);
+    } catch {
+      return "";
+    }
+  })() : "";
+  for (let i = 0; i <= tries; i++) {
+    if (derived) {
+      const row = await dbcPoolByAddress(derived);
+      if (row?.publicKey) return row;
+    }
+    const pool = await dbcPoolByMint(mint);
+    if (pool?.publicKey) return pool;
+    if (i === tries) break;
+    await new Promise((r) => setTimeout(r, 500));
   }
-  return pool;
+  return null;
 }
 
 export async function buildDbcLaunchTx(opts: {
@@ -1121,9 +1161,10 @@ export async function quoteDbcTrade(opts: {
   sol?: number;
   tokens?: number;
   slippageBps?: number;
+  pool?: string;
 }): Promise<DbcTradeQuote> {
   const { SwapMode } = sdk();
-  const found = await resolveDbcPool(opts.mint);
+  const found = await resolveDbcPool(opts.mint, opts.pool);
   if (!found.ok) return found;
   const { dbc, row } = found;
   let cfg: Awaited<ReturnType<typeof dbc.state.getPoolConfig>>;
@@ -1195,15 +1236,41 @@ export async function buildDbcTradeTx(opts: {
   tokens?: number;
   slippageBps?: number;
   minOutLamports?: number;
+  pool?: string;
 }): Promise<{ ok: true; transaction: string; tokensOut?: number; solOut?: number; feeSol: number } | { ok: false; error: string }> {
   const { SwapMode } = sdk();
-  const found = await resolveDbcPool(opts.mint);
-  if (!found.ok) return found;
-  const { dbc, row } = found;
-  const quoted = await quoteDbcTrade(opts);
-  if (!quoted.ok) return quoted;
+  const dbc = client();
   const owner = new PublicKey(opts.owner);
   const buy = opts.side === "buy";
+  /** Indexer poke: derived pool PDA + minOut 1, skip getPoolByBaseMint / quote lag. */
+  if (buy && opts.pool && opts.minOutLamports != null) {
+    const inUi = Number(opts.sol) || 0;
+    const amountIn = new BN(Math.round(inUi * 1e9));
+    if (amountIn.toString() === "0") return { ok: false, error: "too_small" };
+    const swapArg = {
+      owner,
+      pool: new PublicKey(opts.pool),
+      swapBaseForQuote: false,
+      swapMode: SwapMode.ExactIn,
+      amountIn,
+      minimumAmountOut: new BN(Math.max(1, Math.floor(opts.minOutLamports))),
+      referralTokenAccount: null,
+    };
+    try {
+      const raw = (await mintUsesTransferHook(opts.mint))
+        ? await dbc.pool.swap2WithTransferHook(swapArg)
+        : await dbc.pool.swap2(swapArg);
+      const tx = await readyTx(raw, owner);
+      return { ok: true, transaction: encodeTx(tx), tokensOut: 0, feeSol: inUi * 0.01 };
+    } catch (e) {
+      return { ok: false, error: swapBusyReason(e) || (e instanceof Error ? e.message : "Could not build the swap.") };
+    }
+  }
+  const found = await resolveDbcPool(opts.mint, opts.pool);
+  if (!found.ok) return found;
+  const { row } = found;
+  const quoted = await quoteDbcTrade(opts);
+  if (!quoted.ok) return quoted;
   const tokenDec = await mintTokenDecimals(opts.mint);
   const inUi = quoted.inAmount || (buy ? Number(opts.sol) || 0 : Number(opts.tokens) || 0);
   const amountIn = buy ? new BN(Math.round(inUi * 1e9)) : uiToBn(inUi, tokenDec);

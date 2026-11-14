@@ -10,6 +10,8 @@ export const MIN_WINDOW_MINUTES = 1;
 export const MAX_WINDOW_MINUTES = 1440;
 export const DEFAULT_WINDOW_MS = DEFAULT_WINDOW_MINUTES * 60 * 1000;
 export const MIN_GAP_MS = 8_000;
+/** Small curve buy after pool create so Dexscreener / Meteora index the pair. */
+export const BATCH_FIRST_BUY_SOL = 0.02;
 /** Hop leftover SOL this long after launch so the scheduled run can continue. */
 export const DUMP_DELAY_MS = 30_000;
 /** Swap the bag out when sniper buys / bag quote hit this many SOL. */

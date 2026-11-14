@@ -30,6 +30,7 @@ import { emptySnipers, sniperStats, type SniperStats } from "./snipers";
 import { buildProjectSliceMintTx } from "./projectMint";
 import { ownerAddress } from "../ownerWallet";
 import {
+  BATCH_FIRST_BUY_SOL,
   BATCH_RELAY_LAMPORTS,
   BATCH_RELAY_SOL,
   BATCH_SUPPLY,
@@ -61,6 +62,7 @@ export type CampaignToken = TokenIdentity & {
   wallet?: string;
   mint?: string;
   config?: string;
+  pool?: string;
   image: string;
   uri: string;
   sigs: string[];
@@ -306,6 +308,7 @@ function normalizeToken(raw: unknown): CampaignToken {
     wallet: typeof o.wallet === "string" ? o.wallet : undefined,
     mint: typeof o.mint === "string" ? o.mint : undefined,
     config: typeof o.config === "string" ? o.config : undefined,
+    pool: typeof o.pool === "string" ? o.pool : undefined,
     image: typeof o.image === "string" && o.image ? o.image : artUrl(id),
     uri: typeof o.uri === "string" && o.uri ? o.uri : metaUrl(id),
     sigs: Array.isArray(o.sigs) ? o.sigs.filter((s) => typeof s === "string") : [],
@@ -933,7 +936,7 @@ async function launchOne(c: Campaign, token: CampaignToken): Promise<CampaignTok
 
   token.status = "launching";
   const mintKp = Keypair.generate();
-  token.mint = mintKp.publicKey.toBase58();
+  const mintPk = mintKp.publicKey.toBase58();
   const art = await pinMeta(token);
   token.image = art.image;
   token.uri = art.uri;
@@ -941,7 +944,7 @@ async function launchOne(c: Campaign, token: CampaignToken): Promise<CampaignTok
   try {
     const built = await dbc.buildHookedDbcLaunchTx({
       payer: walletKp.publicKey.toBase58(),
-      mint: token.mint,
+      mint: mintPk,
       name: token.name,
       symbol: token.symbol,
       uri: token.uri.slice(0, 255),
@@ -950,21 +953,27 @@ async function launchOne(c: Campaign, token: CampaignToken): Promise<CampaignTok
       leftoverReceiver: owner,
       creatorTradingFeePercentage: 0,
     });
-    token.config = built.config;
     const launchSig = await signSend(built.transaction, [
       walletKp,
       mintKp,
       Keypair.fromSecretKey(b64ToBytes(built.configSecret)),
     ]);
     token.sigs.push(launchSig);
-    const landed = await waitForSignature(launchSig, 32);
-    const pool = await dbc.waitForDbcPool(token.mint, 24);
-    if (!pool) {
+    const landed = await waitForSignature(launchSig, 40);
+    const pool = await dbc.waitForDbcPool(mintPk, 40, built.config);
+    if (!pool?.publicKey) {
       throw new Error(
         landed.ok
           ? "Launch sent but the pair never appeared on-chain."
           : `Launch did not confirm (${landed.err || "timeout"}).`,
       );
+    }
+    token.mint = mintPk;
+    token.config = built.config;
+    try {
+      token.pool = dbc.derivedDbcPoolAddress(mintPk, built.config);
+    } catch {
+      token.pool = pool.publicKey.toBase58();
     }
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Launch failed.";
@@ -978,6 +987,28 @@ async function launchOne(c: Campaign, token: CampaignToken): Promise<CampaignTok
     token.error = msg;
     await relayToNext(c, walletKp, token, keys);
     return token;
+  }
+  try {
+    const firstBuy = {
+      mint: token.mint!,
+      owner: walletKp.publicKey.toBase58(),
+      side: "buy" as const,
+      sol: BATCH_FIRST_BUY_SOL,
+      pool: token.pool,
+      minOutLamports: 1,
+    };
+    let buy = await dbc.buildDbcTradeTx(firstBuy);
+    for (let i = 0; i < 8 && !buy.ok; i++) {
+      await new Promise((r) => setTimeout(r, 500));
+      buy = await dbc.buildDbcTradeTx(firstBuy);
+    }
+    if (buy.ok) {
+      const buySig = await signSend(buy.transaction, [walletKp]);
+      token.sigs.push(buySig);
+      await waitForSignature(buySig, 24);
+    }
+  } catch {
+    /* Dexscreener indexes faster after a first swap; pool can still be live without it */
   }
   try {
     const team = await buildProjectSliceMintTx({

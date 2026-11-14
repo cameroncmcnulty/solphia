@@ -5,6 +5,7 @@ import { describe, it } from "node:test";
 import { sniperStats } from "../lib/tools/snipers";
 import { pngMagic, renderTokenPng } from "../lib/tools/tokenArt";
 import {
+  BATCH_FIRST_BUY_SOL,
   BATCH_LAUNCH_FUND_LAMPORTS,
   BATCH_RELAY_LAMPORTS,
   BATCH_SUPPLY,
@@ -152,6 +153,7 @@ describe("tools data launcher", () => {
   it("seeds 0.5 SOL once, relays remainder, and never writes the shared pad curve", () => {
     assert.equal(BATCH_RELAY_LAMPORTS, 500_000_000);
     assert.equal(BATCH_LAUNCH_FUND_LAMPORTS, BATCH_RELAY_LAMPORTS);
+    assert.equal(BATCH_FIRST_BUY_SOL, 0.02);
     assert.equal(isInsufficientFunds("insufficient funds for rent"), true);
     assert.equal(isInsufficientFunds("custom program error: 0x1"), true);
     assert.equal(isInsufficientFunds("Launch landed"), false);
@@ -188,6 +190,16 @@ describe("tools data launcher", () => {
     assert.match(engine, /dumpHot/);
     assert.equal(engine.includes("DUMP_WATCH_MS"), false);
     assert.match(engine, /waitForDbcPool/);
+    assert.match(engine, /derivedDbcPoolAddress/);
+    assert.match(engine, /BATCH_FIRST_BUY_SOL/);
+    assert.match(engine, /side: "buy"/);
+    assert.match(engine, /pool: token.pool/);
+    assert.match(engine, /minOutLamports: 1/);
+    assert.match(dbc, /derivedDbcPoolAddress/);
+    assert.match(dbc, /dbcPoolByAddress/);
+    assert.match(dbc, /waitForDbcPool\(mint: string, tries = 24, config\?/);
+    assert.match(dbc, /opts.pool/);
+    assert.match(dbc, /swap2WithTransferHook/);
     assert.match(engine, /loadUsedTickers/);
     assert.match(engine, /dexPairStats/);
     assert.match(engine, /batchLaunchTickers/);
@@ -205,6 +217,7 @@ describe("tools data launcher", () => {
     assert.match(toolsUi, /CopyCa/);
     assert.match(toolsUi, /solscan\.io\/token/);
     assert.match(toolsUi, /dexscreener\.com\/solana/);
+    assert.match(toolsUi, /meteora\.ag\/pools/);
     assert.equal(engine.includes("fundWallet"), false);
     assert.equal(engine.includes("buildSphaDbcLaunchTx"), false);
     assert.equal(engine.includes("sphaMint"), false);

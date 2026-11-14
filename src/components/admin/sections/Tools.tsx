@@ -18,6 +18,7 @@ type TokenRow = {
   launchedAt?: number;
   wallet?: string;
   mint?: string;
+  pool?: string;
   image: string;
   teamBps: number;
   error?: string;
@@ -353,9 +354,10 @@ export function ToolsSection() {
         <p className="mt-3 text-sm text-mute">
           Same hooked Token-2022 curve as official SPHA, with this tester&apos;s 1% going 100% to the owner wallet.
           Project mint is a random 3–20% into that token&apos;s launch wallet. Shared pad config is never overwritten.
-          Seed is 0.5 SOL once. Tickers are unique across batches. After each launch the wallet watches the bag for a 1
-          SOL sell quote, dumps at 99% slippage, then hops leftover SOL to the next wallet. Live CAs are copyable for
-          Solscan and Dexscreener. Stats pull curve SOL plus Dexscreener buys, sells, and volume.
+          Seed is 0.5 SOL once. Tickers are unique across batches. After each launch a 0.02 SOL curve buy lands so
+          Dexscreener can index the pair, then the wallet hops leftover SOL in 30 seconds. If sniper buys hit 1 SOL it
+          dumps at 99% slippage first. Live CAs are copyable for Solscan, Meteora, and Dexscreener. Stats pull curve SOL
+          plus Dexscreener buys, sells, and volume.
         </p>
         {(fuel.dry || campaign?.dry) && (
           <div className="mt-3 rounded-xl border border-blood/40 bg-blood/10 px-4 py-3 text-sm text-ghost">
@@ -553,13 +555,23 @@ export function ToolsSection() {
                             solscan
                           </a>
                           <a
-                            href={`https://dexscreener.com/solana/${t.mint}`}
+                            href={`https://dexscreener.com/solana/${t.pool || t.mint}`}
                             target="_blank"
                             rel="noreferrer"
                             className="text-acid hover:underline"
                           >
                             dex
                           </a>
+                          {t.pool ? (
+                            <a
+                              href={`https://www.meteora.ag/pools/${t.pool}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-acid hover:underline"
+                            >
+                              meteora
+                            </a>
+                          ) : null}
                         </div>
                       </div>
                     ) : (
