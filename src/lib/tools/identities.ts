@@ -10,8 +10,8 @@ export const MIN_WINDOW_MINUTES = 1;
 export const MAX_WINDOW_MINUTES = 1440;
 export const DEFAULT_WINDOW_MS = DEFAULT_WINDOW_MINUTES * 60 * 1000;
 export const MIN_GAP_MS = 8_000;
-/** Small curve buy after pool create so Dexscreener / Meteora index the pair. */
-export const BATCH_FIRST_BUY_SOL = 0.02;
+/** Tiny curve buy after pool create so Dexscreener / Meteora index the pair. */
+export const BATCH_FIRST_BUY_SOL = 0.01;
 /** Hop leftover SOL this long after launch so the scheduled run can continue. */
 export const DUMP_DELAY_MS = 30_000;
 /** Swap the bag out when sniper buys / bag quote hit this many SOL. */
@@ -50,6 +50,8 @@ export function windowMsFromBody(opts: { windowMinutes?: number; windowHours?: n
 
 export const TEAM_BPS_MIN = 300;
 export const TEAM_BPS_MAX = 2000;
+/** Narrative / sniper-bait rows stay under typical "dev holding max 10%" filters. */
+export const TEAM_BPS_NARRATIVE_MAX = 800;
 export const BATCH_SUPPLY = 200_000_000;
 export const BATCH_DECIMALS = 6;
 /** One seed from Treasury into the first launch wallet. Remainder relays to the next. */
@@ -90,6 +92,7 @@ export type NarrativeHit = {
   symbol: string;
   name: string;
   theme: string;
+  blurb?: string;
 };
 
 const THEMES = [
@@ -191,6 +194,17 @@ const SEED_NARRATIVES: NarrativeHit[] = [
   { symbol: "ALIEN", name: "Alien", theme: "alien" },
   { symbol: "DRAGON", name: "Dragon", theme: "dragon" },
   { symbol: "WOLF", name: "Wolf", theme: "wolf" },
+  { symbol: "GTA6", name: "GTA 6", theme: "game" },
+  { symbol: "GTA", name: "GTA", theme: "game" },
+  { symbol: "LEONIDA", name: "Leonida", theme: "game" },
+  { symbol: "GATO", name: "Gato", theme: "cat" },
+  { symbol: "GLITCH", name: "Glitch", theme: "game" },
+  { symbol: "WANTED", name: "Wanted", theme: "game" },
+  { symbol: "GROOT", name: "Groot", theme: "ai" },
+  { symbol: "NVIDIA", name: "Nvidia", theme: "ai" },
+  { symbol: "JENSEN", name: "Jensen", theme: "ai" },
+  { symbol: "PUNCH", name: "Punch", theme: "ape" },
+  { symbol: "PEACE", name: "Peace Frog", theme: "frog" },
 ];
 
 const WORDS = [
@@ -261,13 +275,17 @@ export function themeOf(raw: string): ThemeId {
   if (/moon|lunar/.test(s)) return "moon";
   if (/rocket|elon|mars/.test(s)) return "rocket";
   if (/trump|king|royal/.test(s)) return "king";
-  if (/ape|monkey|pnut|ponke/.test(s)) return "ape";
-  if (/frog|toad/.test(s)) return "frog";
+  if (/ape|monkey|pnut|ponke|punch/.test(s)) return "ape";
+  if (/frog|toad|peace/.test(s)) return "frog";
+  if (/gta|leonida|glitch|wanted|rockstar/.test(s)) return "game";
+  if (/nvidia|groot|jensen/.test(s)) return "ai";
+  if (/gato/.test(s)) return "cat";
   return "neon";
 }
 
-export function teamBpsAt(n = Math.random()): number {
-  const span = TEAM_BPS_MAX - TEAM_BPS_MIN;
+export function teamBpsAt(n = Math.random(), max = TEAM_BPS_MAX): number {
+  const hi = Math.min(TEAM_BPS_MAX, Math.max(TEAM_BPS_MIN, Math.floor(max)));
+  const span = hi - TEAM_BPS_MIN;
   const t = Math.min(1, Math.max(0, n));
   return TEAM_BPS_MIN + Math.floor(t * span);
 }
@@ -295,9 +313,11 @@ function socials(symbol: string): { website: string; x: string; telegram: string
   };
 }
 
-function blurbOf(name: string, kind: TokenKind, theme: string): string {
-  if (kind === "narrative") return `${name} rides the ${theme} meta on Solphia.`;
-  return `${name} on Solphia.`;
+function blurbOf(name: string, kind: TokenKind, theme: string, extra?: string): string {
+  const live = (extra || "").trim().replace(/\s+/g, " ").slice(0, 140);
+  if (live.length >= 12) return live;
+  if (kind === "narrative") return `${name} community coin. ${theme} meta.`;
+  return `${name} community coin.`;
 }
 
 function makeId(kind: TokenKind, theme: string, symbol: string): string {
@@ -386,9 +406,9 @@ export function narrativeIdentity(hit: NarrativeHit, used: Set<string>): TokenId
     theme,
     name,
     symbol: mashed,
-    blurb: blurbOf(name, "narrative", theme),
+    blurb: blurbOf(name, "narrative", theme, hit.blurb),
     ...links,
-    teamBps: teamBpsAt(),
+    teamBps: teamBpsAt(Math.random(), TEAM_BPS_NARRATIVE_MAX),
   };
 }
 
@@ -409,42 +429,90 @@ export function scheduleTimes(count: number, windowMs: number, now = Date.now(),
   return times.map((t, i) => (i === 0 ? now : now + Math.floor(((t - now) * window) / span)));
 }
 
+const SKIP_TICKERS = new Set(["SOL", "WSOL", "USDC", "USDT", "BTC", "ETH", "WETH", "WBTC", "USD"]);
+
+function cashTicker(raw: string): string {
+  const m = (raw || "").toUpperCase().match(/\$([A-Z][A-Z0-9]{1,9})\b/);
+  return m?.[1] || "";
+}
+
 function parseDexRow(row: unknown): NarrativeHit | null {
   if (!row || typeof row !== "object") return null;
   const o = row as Record<string, unknown>;
+  if (o.chainId && String(o.chainId) !== "solana") return null;
   const token = (o.token || o.baseToken || o) as Record<string, unknown>;
-  const symbol = String(token.symbol || o.symbol || "").replace(/^\$/, "").trim().toUpperCase();
-  const name = String(token.name || o.name || symbol).trim();
-  if (!tickerOk(symbol.slice(0, 10))) return null;
-  return { symbol: symbol.slice(0, 10), name: name.slice(0, 24) || symbol, theme: themeOf(`${symbol} ${name}`) };
+  const desc = String(o.description || token.description || "").trim();
+  let symbol = String(token.symbol || o.symbol || "").replace(/^\$/, "").trim().toUpperCase();
+  if (!tickerOk(symbol.slice(0, 10))) symbol = cashTicker(desc);
+  if (!tickerOk(symbol.slice(0, 10)) || SKIP_TICKERS.has(symbol.slice(0, 10))) return null;
+  const name = String(token.name || o.name || titleCase(symbol)).trim();
+  return {
+    symbol: symbol.slice(0, 10),
+    name: (name || symbol).slice(0, 24),
+    theme: themeOf(`${symbol} ${name} ${desc}`),
+    blurb: desc.replace(/\s+/g, " ").slice(0, 140) || undefined,
+  };
+}
+
+async function fetchDex(url: string): Promise<unknown> {
+  const r = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(8_000), headers: { accept: "application/json" } });
+  if (!r.ok) return null;
+  return r.json();
+}
+
+async function hitsFromTokenAddrs(addrs: string[]): Promise<NarrativeHit[]> {
+  const list = [...new Set(addrs.filter(Boolean))].slice(0, 30);
+  if (!list.length) return [];
+  try {
+    const j = (await fetchDex(`https://api.dexscreener.com/latest/dex/tokens/${list.join(",")}`)) as { pairs?: unknown[] } | null;
+    const pairs = Array.isArray(j?.pairs) ? j!.pairs! : [];
+    const out: NarrativeHit[] = [];
+    for (const row of pairs) {
+      const hit = parseDexRow(row);
+      if (hit) out.push(hit);
+    }
+    return out;
+  } catch {
+    return [];
+  }
 }
 
 export async function fetchNarratives(limit = 120): Promise<NarrativeHit[]> {
   const out: NarrativeHit[] = [];
   const seen = new Set<string>();
   const push = (hit: NarrativeHit | null) => {
-    if (!hit || seen.has(hit.symbol)) return;
+    if (!hit || seen.has(hit.symbol) || SKIP_TICKERS.has(hit.symbol)) return;
     seen.add(hit.symbol);
     out.push(hit);
   };
+  const boostAddrs: string[] = [];
   const urls = [
     "https://api.dexscreener.com/token-boosts/top/v1",
     "https://api.dexscreener.com/token-profiles/latest/v1",
-    "https://api.dexscreener.com/latest/dex/search?q=solana",
+    "https://api.dexscreener.com/latest/dex/search?q=GTA",
+    "https://api.dexscreener.com/latest/dex/search?q=PEPE",
   ];
   await Promise.all(
     urls.map(async (url) => {
       try {
-        const r = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(8_000), headers: { accept: "application/json" } });
-        if (!r.ok) return;
-        const j = (await r.json()) as unknown;
-        const rows = Array.isArray(j) ? j : Array.isArray((j as { pairs?: unknown[] }).pairs) ? (j as { pairs: unknown[] }).pairs : [];
+        const j = await fetchDex(url);
+        if (Array.isArray(j) && j[0] && typeof j[0] === "object" && "tokenAddress" in (j[0] as object)) {
+          for (const row of j.slice(0, 80) as Record<string, unknown>[]) {
+            if (String(row.chainId || "") !== "solana") continue;
+            const addr = String(row.tokenAddress || "");
+            if (addr) boostAddrs.push(addr);
+            push(parseDexRow(row));
+          }
+          return;
+        }
+        const rows = Array.isArray((j as { pairs?: unknown[] } | null)?.pairs) ? (j as { pairs: unknown[] }).pairs : [];
         for (const row of rows.slice(0, 80)) push(parseDexRow(row));
       } catch {
         /* seed list still covers the run */
       }
     }),
   );
+  for (const hit of await hitsFromTokenAddrs(boostAddrs)) push(hit);
   for (const seed of SEED_NARRATIVES) push(seed);
   return out.slice(0, Math.max(limit, 40));
 }

@@ -47,6 +47,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     x,
     telegram,
     mime: "image/png",
+    createdOn: "https://www.meteora.ag",
   });
   const body = JSON.stringify(json);
   if (req.nextUrl.searchParams.get("ext") === "json" || raw.endsWith(".json")) {

@@ -25,6 +25,7 @@ import {
   randomIdentity,
   scheduleTimes,
   splitMix,
+  TEAM_BPS_NARRATIVE_MAX,
   teamBpsAt,
   teamTokensFor,
   tickerOk,
@@ -70,10 +71,13 @@ describe("tools data launcher", () => {
       assert.ok(row.telegram.startsWith("https://t.me/"));
       assert.ok(row.website.startsWith("https://solphia.io/c/"));
       assert.ok(row.teamBps >= 300 && row.teamBps <= 2000);
+      if (row.kind === "narrative") assert.ok(row.teamBps <= TEAM_BPS_NARRATIVE_MAX);
       assert.equal(curveTokensFor(row.teamBps) + teamTokensFor(row.teamBps), BATCH_SUPPLY);
+      assert.equal(row.blurb.includes("on Solphia"), false);
     }
     assert.ok(rows.some((r) => r.kind === "narrative"));
     assert.ok(rows.some((r) => r.kind === "random"));
+    assert.ok(rows.filter((r) => r.kind === "narrative").every((r) => r.teamBps <= TEAM_BPS_NARRATIVE_MAX));
     const used = new Set(rows.map((r) => r.symbol));
     const next = buildIdentities({ narrative: 8, random: 12, used });
     assert.equal(next.length, 20);
@@ -153,7 +157,7 @@ describe("tools data launcher", () => {
   it("seeds 0.5 SOL once, relays remainder, and never writes the shared pad curve", () => {
     assert.equal(BATCH_RELAY_LAMPORTS, 500_000_000);
     assert.equal(BATCH_LAUNCH_FUND_LAMPORTS, BATCH_RELAY_LAMPORTS);
-    assert.equal(BATCH_FIRST_BUY_SOL, 0.02);
+    assert.equal(BATCH_FIRST_BUY_SOL, 0.01);
     assert.equal(isInsufficientFunds("insufficient funds for rent"), true);
     assert.equal(isInsufficientFunds("custom program error: 0x1"), true);
     assert.equal(isInsufficientFunds("Launch landed"), false);
@@ -195,6 +199,15 @@ describe("tools data launcher", () => {
     assert.match(engine, /side: "buy"/);
     assert.match(engine, /pool: token.pool/);
     assert.match(engine, /minOutLamports: 1/);
+    assert.match(engine, /createdOn: "https:\/\/www\.meteora\.ag"/);
+    const launchFn = engine.slice(engine.indexOf("async function launchOne"));
+    assert.ok(launchFn.indexOf("buildProjectSliceMintTx") < launchFn.indexOf("BATCH_FIRST_BUY_SOL"));
+    const ids = readFileSync(path.join(process.cwd(), "src/lib/tools/identities.ts"), "utf8");
+    assert.match(ids, /TEAM_BPS_NARRATIVE_MAX/);
+    assert.match(ids, /token-boosts\/top/);
+    assert.match(ids, /hitsFromTokenAddrs/);
+    assert.match(ids, /GTA6/);
+    assert.match(ids, /community coin/);
     assert.match(dbc, /derivedDbcPoolAddress/);
     assert.match(dbc, /dbcPoolByAddress/);
     assert.match(dbc, /waitForDbcPool\(mint: string, tries = 24, config\?/);
@@ -211,6 +224,7 @@ describe("tools data launcher", () => {
     assert.match(engine, /token.dumpAt = token.launchedAt \+ DUMP_DELAY_MS/);
     const toolsUi = readFileSync(path.join(process.cwd(), "src/components/admin/sections/Tools.tsx"), "utf8");
     assert.match(toolsUi, /30 seconds after each mint/);
+    assert.match(toolsUi, /0\.01 SOL/);
     assert.match(toolsUi, /sniper buys hit 1 SOL/);
     assert.match(toolsUi, /99% slippage/);
     assert.match(toolsUi, /last leftover goes to owner/);

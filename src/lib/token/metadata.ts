@@ -131,6 +131,7 @@ export function tokenMetadataJson(opts: {
   telegram?: string;
   discord?: string;
   mime?: string;
+  createdOn?: string;
 }): Record<string, unknown> {
   const ext = imageExt(opts.image, opts.mime);
   const image = withImageExt(opts.image, opts.mime);
@@ -143,7 +144,7 @@ export function tokenMetadataJson(opts: {
     description: opts.description || `${opts.name} on Solphia`,
     image,
     showName: true,
-    createdOn: "https://solphia.io",
+    createdOn: opts.createdOn || "https://solphia.io",
     external_url: site,
     website: site,
     twitter: opts.x || undefined,

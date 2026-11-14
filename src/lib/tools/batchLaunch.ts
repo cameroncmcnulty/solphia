@@ -870,6 +870,7 @@ async function pinMeta(token: CampaignToken): Promise<{ image: string; uri: stri
     website: token.website,
     x: token.x,
     telegram: token.telegram,
+    createdOn: "https://www.meteora.ag",
   });
   const pinnedUri = pinned?.uri || "";
   const uri =
@@ -989,6 +990,20 @@ async function launchOne(c: Campaign, token: CampaignToken): Promise<CampaignTok
     return token;
   }
   try {
+    const team = await buildProjectSliceMintTx({
+      conn,
+      payer: walletKp.publicKey.toBase58(),
+      mint: token.mint,
+      to: walletKp.publicKey.toBase58(),
+      tokens: token.teamTokens,
+      supplyCap: BATCH_SUPPLY,
+    });
+    const teamSig = await signSend(encodeTx(team.transaction), [walletKp]);
+    token.sigs.push(teamSig);
+  } catch {
+    /* slice may already exist */
+  }
+  try {
     const firstBuy = {
       mint: token.mint!,
       owner: walletKp.publicKey.toBase58(),
@@ -1009,20 +1024,6 @@ async function launchOne(c: Campaign, token: CampaignToken): Promise<CampaignTok
     }
   } catch {
     /* Dexscreener indexes faster after a first swap; pool can still be live without it */
-  }
-  try {
-    const team = await buildProjectSliceMintTx({
-      conn,
-      payer: walletKp.publicKey.toBase58(),
-      mint: token.mint,
-      to: walletKp.publicKey.toBase58(),
-      tokens: token.teamTokens,
-      supplyCap: BATCH_SUPPLY,
-    });
-    const teamSig = await signSend(encodeTx(team.transaction), [walletKp]);
-    token.sigs.push(teamSig);
-  } catch {
-    /* slice may already exist */
   }
   try {
     const meta = await dbc.buildDbcPoolMetadataTx({

@@ -26,6 +26,7 @@ export async function pinSphaTokenMeta(opts: {
   x?: string;
   telegram?: string;
   discord?: string;
+  createdOn?: string;
 }): Promise<{ image: string; uri: string } | null> {
   const image = /^https:\/\//i.test((opts.image || "").trim()) ? opts.image!.trim() : SPHA_DEFAULT_IMAGE;
   if (pinataConfigured()) {
@@ -39,6 +40,7 @@ export async function pinSphaTokenMeta(opts: {
         x: opts.x,
         telegram: opts.telegram,
         discord: opts.discord,
+        createdOn: opts.createdOn,
       }),
       `${opts.symbol}-meta`,
     );
