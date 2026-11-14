@@ -121,6 +121,12 @@ export function withImageExt(url: string, mime?: string): string {
   }
 }
 
+function asTwitterUrl(raw?: string): string | undefined {
+  const u = (raw || "").trim();
+  if (!u) return undefined;
+  return u.replace(/^https:\/\/(www\.)?x\.com\//i, "https://twitter.com/");
+}
+
 export function tokenMetadataJson(opts: {
   name: string;
   symbol: string;
@@ -137,6 +143,17 @@ export function tokenMetadataJson(opts: {
   const image = withImageExt(opts.image, opts.mime);
   const type = imageMime(ext);
   const site = opts.website || "https://solphia.io";
+  const xUrl = (opts.x || "").trim() || undefined;
+  const twitter = asTwitterUrl(xUrl) || xUrl;
+  const telegram = (opts.telegram || "").trim() || undefined;
+  const discord = (opts.discord || "").trim() || undefined;
+  const links = [
+    twitter ? { type: "twitter", url: twitter } : null,
+    xUrl && xUrl !== twitter ? { type: "x", url: xUrl } : null,
+    telegram ? { type: "telegram", url: telegram } : null,
+    discord ? { type: "discord", url: discord } : null,
+    site ? { type: "website", url: site } : null,
+  ].filter(Boolean);
   /** Same shape Pump.fun uses for fungibles. NFT fields (attributes, seller fee) make scanners treat a mint like spam. */
   return {
     name: opts.name,
@@ -147,9 +164,16 @@ export function tokenMetadataJson(opts: {
     createdOn: opts.createdOn || "https://solphia.io",
     external_url: site,
     website: site,
-    twitter: opts.x || undefined,
-    telegram: opts.telegram || undefined,
-    discord: opts.discord || undefined,
+    twitter,
+    telegram,
+    discord,
+    extensions: {
+      twitter,
+      telegram,
+      website: site,
+      discord,
+    },
+    links,
     properties: {
       files: image ? [{ uri: image, type }] : [],
       category: "image",

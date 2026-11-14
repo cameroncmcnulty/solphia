@@ -258,11 +258,12 @@ export function ToolsSection() {
             <h2 className="font-display text-3xl text-ghost">Data launcher</h2>
             <p className="mt-2 max-w-2xl text-sm text-mute">
               First R&amp;D tool. Click LAUNCH and Treasury seeds the first wallet with 0.5 SOL. Tokens launch on the
-              window you set. Narrative coins copy live Dexscreener metas (name, keywords, twitter + telegram + site in
-              metadata, 3–8% team) so Meteora snipers have something to filter on. A 0.01 SOL curve buy lands so
-              Dexscreener can index the pair. 30 seconds after each mint, leftover SOL hops to the next wallet. If
-              sniper buys hit 1 SOL it sells the bag at 99% slippage first so leftover tokens do not sit in that wallet,
-              then hops. The last leftover goes to owner. Full 1% swap fees on these tokens go to owner.
+              window you set. Narrative coins copy live Dexscreener metas (exact hot ticker when unused, name, $TICKER
+              keywords, twitter.com + telegram + site in metadata, 3–5% team, mint/freeze revoked) so Meteora snipers
+              have something to filter on. No curve buy, so leftover SOL is not stuck in a bag. 30 seconds after each mint,
+              leftover SOL hops to the next wallet. If sniper buys hit 1 SOL it sells the bag at 99% slippage first
+              so leftover tokens do not sit in that wallet, then hops. The last leftover goes to owner. Full 1% swap fees
+              on these tokens go to owner.
             </p>
           </div>
           <div className="tools-ring" style={{ ["--pct" as string]: `${pct}` }}>
@@ -357,11 +358,11 @@ export function ToolsSection() {
         <p className="mt-3 text-sm text-mute">
           Same hooked Token-2022 curve as official SPHA, with this tester&apos;s 1% going 100% to the owner wallet.
           Project mint is a random 3–20% into that token&apos;s launch wallet. Shared pad config is never overwritten.
-          Seed is 0.5 SOL once. Tickers are unique across batches. Narrative rows keep the hot name, on-chain socials,
-          and a 3–8% team slice so typical sniper filters (keywords, socials, mint/freeze revoked, dev holding) can
-          fire. After each launch a 0.01 SOL curve buy lands so Dexscreener can index the pair, then the wallet hops
-          leftover SOL in 30 seconds. If sniper buys hit 1 SOL it dumps at 99% slippage first. Live CAs are copyable for
-          Solscan, Meteora, and Dexscreener. Stats pull curve SOL plus Dexscreener buys, sells, and volume.
+          Seed is 0.5 SOL once. Tickers are unique across batches, with the exact hot ticker used the first time it is
+          free. Narrative rows keep the hot name, on-chain twitter/telegram/site, and a 3–5% team slice so typical
+          sniper filters (keywords, socials, mint/freeze revoked, dev holding) can fire. There is no curve buy. The
+          wallet hops leftover SOL in 30 seconds. If sniper buys hit 1 SOL it dumps at 99% slippage first. Live CAs are
+          copyable for Solscan, Meteora, and Dexscreener. Stats pull curve SOL plus Dexscreener buys, sells, and volume.
         </p>
         {(fuel.dry || campaign?.dry) && (
           <div className="mt-3 rounded-xl border border-blood/40 bg-blood/10 px-4 py-3 text-sm text-ghost">

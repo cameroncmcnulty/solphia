@@ -31,6 +31,22 @@ describe("spha metadata", () => {
     assert.equal(j.createdOn, "https://solphia.io");
     assert.equal("attributes" in j, false);
     assert.equal("seller_fee_basis_points" in j, false);
+    const social = tokenMetadataJson({
+      name: "Pepe",
+      symbol: "PEPE",
+      description: "$PEPE community coin.",
+      image: "https://example.com/pepe.png",
+      website: "https://solphia.io/c/pepe",
+      x: "https://x.com/pepe",
+      telegram: "https://t.me/pepe",
+    });
+    assert.equal(social.twitter, "https://twitter.com/pepe");
+    assert.equal(social.telegram, "https://t.me/pepe");
+    assert.equal((social.extensions as { twitter?: string }).twitter, "https://twitter.com/pepe");
+    const socialLinks = social.links as { type: string; url: string }[];
+    assert.ok(socialLinks.some((l) => l.type === "twitter" && l.url.includes("twitter.com")));
+    assert.ok(socialLinks.some((l) => l.type === "telegram"));
+    assert.ok(socialLinks.some((l) => l.type === "website"));
     const files = (j.properties as { files: { uri: string; type: string; cdn?: boolean }[] }).files;
     assert.equal(files[0].type, "image/jpeg");
     assert.equal(files[0].uri, "https://example.com/spha.jpg?ext=jpg");

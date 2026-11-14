@@ -30,7 +30,6 @@ import { emptySnipers, sniperStats, type SniperStats } from "./snipers";
 import { buildProjectSliceMintTx } from "./projectMint";
 import { ownerAddress } from "../ownerWallet";
 import {
-  BATCH_FIRST_BUY_SOL,
   BATCH_RELAY_LAMPORTS,
   BATCH_RELAY_SOL,
   BATCH_SUPPLY,
@@ -1002,28 +1001,6 @@ async function launchOne(c: Campaign, token: CampaignToken): Promise<CampaignTok
     token.sigs.push(teamSig);
   } catch {
     /* slice may already exist */
-  }
-  try {
-    const firstBuy = {
-      mint: token.mint!,
-      owner: walletKp.publicKey.toBase58(),
-      side: "buy" as const,
-      sol: BATCH_FIRST_BUY_SOL,
-      pool: token.pool,
-      minOutLamports: 1,
-    };
-    let buy = await dbc.buildDbcTradeTx(firstBuy);
-    for (let i = 0; i < 8 && !buy.ok; i++) {
-      await new Promise((r) => setTimeout(r, 500));
-      buy = await dbc.buildDbcTradeTx(firstBuy);
-    }
-    if (buy.ok) {
-      const buySig = await signSend(buy.transaction, [walletKp]);
-      token.sigs.push(buySig);
-      await waitForSignature(buySig, 24);
-    }
-  } catch {
-    /* Dexscreener indexes faster after a first swap; pool can still be live without it */
   }
   try {
     const meta = await dbc.buildDbcPoolMetadataTx({

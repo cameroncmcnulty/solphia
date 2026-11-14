@@ -10,8 +10,6 @@ export const MIN_WINDOW_MINUTES = 1;
 export const MAX_WINDOW_MINUTES = 1440;
 export const DEFAULT_WINDOW_MS = DEFAULT_WINDOW_MINUTES * 60 * 1000;
 export const MIN_GAP_MS = 8_000;
-/** Tiny curve buy after pool create so Dexscreener / Meteora index the pair. */
-export const BATCH_FIRST_BUY_SOL = 0.01;
 /** Hop leftover SOL this long after launch so the scheduled run can continue. */
 export const DUMP_DELAY_MS = 30_000;
 /** Swap the bag out when sniper buys / bag quote hit this many SOL. */
@@ -50,8 +48,8 @@ export function windowMsFromBody(opts: { windowMinutes?: number; windowHours?: n
 
 export const TEAM_BPS_MIN = 300;
 export const TEAM_BPS_MAX = 2000;
-/** Narrative / sniper-bait rows stay under typical "dev holding max 10%" filters. */
-export const TEAM_BPS_NARRATIVE_MAX = 800;
+/** Narrative / sniper-bait rows stay under typical "dev holding max 5–10%" filters. */
+export const TEAM_BPS_NARRATIVE_MAX = 500;
 export const BATCH_SUPPLY = 200_000_000;
 export const BATCH_DECIMALS = 6;
 /** One seed from Treasury into the first launch wallet. Remainder relays to the next. */
@@ -205,6 +203,14 @@ const SEED_NARRATIVES: NarrativeHit[] = [
   { symbol: "JENSEN", name: "Jensen", theme: "ai" },
   { symbol: "PUNCH", name: "Punch", theme: "ape" },
   { symbol: "PEACE", name: "Peace Frog", theme: "frog" },
+  { symbol: "ANSEM", name: "Ansem", theme: "meme" },
+  { symbol: "MIHAO", name: "Mihao", theme: "cat" },
+  { symbol: "POCKET", name: "Pocket Pepe", theme: "pepe" },
+  { symbol: "ROCKSTAR", name: "Rockstar", theme: "game" },
+  { symbol: "SHARK", name: "Shark", theme: "game" },
+  { symbol: "CHILL", name: "Chill", theme: "meme" },
+  { symbol: "VICE", name: "Vice City", theme: "game" },
+  { symbol: "BIGGUY", name: "Big Guy", theme: "dog" },
 ];
 
 const WORDS = [
@@ -277,9 +283,10 @@ export function themeOf(raw: string): ThemeId {
   if (/trump|king|royal/.test(s)) return "king";
   if (/ape|monkey|pnut|ponke|punch/.test(s)) return "ape";
   if (/frog|toad|peace/.test(s)) return "frog";
-  if (/gta|leonida|glitch|wanted|rockstar/.test(s)) return "game";
+  if (/gta|leonida|glitch|wanted|rockstar|vice|shark/.test(s)) return "game";
   if (/nvidia|groot|jensen/.test(s)) return "ai";
-  if (/gato/.test(s)) return "cat";
+  if (/gato|mihao/.test(s)) return "cat";
+  if (/ansem|chill/.test(s)) return "meme";
   return "neon";
 }
 
@@ -305,7 +312,7 @@ function handleOf(symbol: string): string {
 }
 
 function socials(symbol: string): { website: string; x: string; telegram: string } {
-  const h = handleOf(symbol);
+  const h = `${handleOf(symbol)}${hex6().slice(0, 4)}`.replace(/[^a-z0-9_]/g, "").slice(0, 15) || "solphia";
   return {
     website: `https://solphia.io/c/${h}`,
     x: `https://x.com/${h}`,
@@ -313,11 +320,22 @@ function socials(symbol: string): { website: string; x: string; telegram: string
   };
 }
 
-function blurbOf(name: string, kind: TokenKind, theme: string, extra?: string): string {
+function withCashTicker(text: string, symbol?: string): string {
+  const body = (text || "").trim().replace(/\s+/g, " ");
+  const cash = (symbol || "").replace(/^\$/, "").toUpperCase();
+  if (!cash) return body.slice(0, 180);
+  if (body.toUpperCase().includes(`$${cash}`)) return body.slice(0, 180);
+  return `$${cash} ${body}`.trim().slice(0, 180);
+}
+
+function blurbOf(name: string, kind: TokenKind, theme: string, extra?: string, symbol?: string, spice?: string): string {
   const live = (extra || "").trim().replace(/\s+/g, " ").slice(0, 140);
-  if (live.length >= 12) return live;
-  if (kind === "narrative") return `${name} community coin. ${theme} meta.`;
-  return `${name} community coin.`;
+  if (live.length >= 12) return withCashTicker(live, symbol);
+  const kick = (spice || "").trim();
+  if (kind === "narrative") {
+    return withCashTicker(`${name} community coin. ${theme} meta.${kick ? ` ${kick}.` : ""}`, symbol);
+  }
+  return withCashTicker(`${name} community coin.`, symbol);
 }
 
 function makeId(kind: TokenKind, theme: string, symbol: string): string {
@@ -349,7 +367,13 @@ function uniqueTicker(base: string, used: Set<string>): string {
   let t = base.replace(/[^A-Z0-9]/g, "").toUpperCase().slice(0, 10);
   if (t.length < 2) t = `X${t}X`.slice(0, 10);
   const ok = (x: string) => !used.has(x) && tickerOk(x);
-  // Always salt so a later campaign cannot reprint PEPE/WOJAK even if the used set missed a row.
+  // Exact ticker first so whitelist snipers can hit PEPE/GTA6 once. Used-set + persisted
+  // batchLaunchTickers still block reprints across campaigns.
+  if (ok(t)) return t;
+  for (let i = 0; i < 32; i++) {
+    const next = `${t.slice(0, Math.max(2, 9))}${randSuffix(1)}`;
+    if (ok(next)) return next;
+  }
   for (let i = 0; i < 64; i++) {
     const salt = randSuffix(i < 32 ? 2 : 3);
     const next = `${t.slice(0, Math.max(2, 10 - salt.length))}${salt}`;
@@ -385,7 +409,7 @@ export function randomIdentity(used: Set<string>): TokenIdentity {
     theme,
     name: nameOk(name) ? name : titleCase(symbol),
     symbol,
-    blurb: blurbOf(name, "random", theme),
+    blurb: blurbOf(name, "random", theme, undefined, symbol),
     ...links,
     teamBps: teamBpsAt(),
   };
@@ -393,12 +417,12 @@ export function randomIdentity(used: Set<string>): TokenIdentity {
 
 export function narrativeIdentity(hit: NarrativeHit, used: Set<string>): TokenIdentity {
   const base = (hit.symbol || "MEME").replace(/[^A-Z0-9]/g, "").toUpperCase().slice(0, 10);
-  const twist = pick(THEME_WORDS[themeOf(hit.theme || hit.symbol)] || THEME_WORDS.meme);
-  const mashed = uniqueTicker(base.length <= 6 ? `${base}${twist[0] || "X"}` : base, used);
+  const theme = themeOf(hit.theme || hit.name || hit.symbol);
+  const spice = pick(THEME_WORDS[theme] || THEME_WORDS.meme);
+  const mashed = uniqueTicker(base, used);
   used.add(mashed);
   const rawName = (hit.name || titleCase(base)).trim().slice(0, 24);
   const name = nameOk(rawName) ? rawName : titleCase(mashed);
-  const theme = themeOf(hit.theme || hit.name || mashed);
   const links = socials(mashed);
   return {
     id: makeId("narrative", theme, mashed),
@@ -406,7 +430,7 @@ export function narrativeIdentity(hit: NarrativeHit, used: Set<string>): TokenId
     theme,
     name,
     symbol: mashed,
-    blurb: blurbOf(name, "narrative", theme, hit.blurb),
+    blurb: blurbOf(name, "narrative", theme, hit.blurb, mashed, spice),
     ...links,
     teamBps: teamBpsAt(Math.random(), TEAM_BPS_NARRATIVE_MAX),
   };
@@ -489,8 +513,9 @@ export async function fetchNarratives(limit = 120): Promise<NarrativeHit[]> {
   const urls = [
     "https://api.dexscreener.com/token-boosts/top/v1",
     "https://api.dexscreener.com/token-profiles/latest/v1",
-    "https://api.dexscreener.com/latest/dex/search?q=GTA",
-    "https://api.dexscreener.com/latest/dex/search?q=PEPE",
+    ...["GTA", "PEPE", "TRUMP", "CAT", "NVIDIA", "PUNCH", "ANSEM", "LEONIDA"].map(
+      (q) => `https://api.dexscreener.com/latest/dex/search?q=${q}`,
+    ),
   ];
   await Promise.all(
     urls.map(async (url) => {
