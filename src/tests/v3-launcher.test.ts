@@ -5,6 +5,7 @@ import { describe, it } from "node:test";
 import { buildV3Brand, buildV3Tokenomics, V3_SUPPLIES } from "../lib/tools/v3/idea";
 import { buildV3SiteKit, V3_LAYOUTS } from "../lib/tools/v3/site";
 import { isReservedV3Host, v3HandleOf, v3HostFromHeader, v3WebsiteOf } from "../lib/tools/v3/host";
+import { detectWorldId, dressSitePack, looksWarmBrown, worldOf } from "../lib/tools/v3/world";
 import { SNIPER_CREATED_ON } from "../lib/tools/identities";
 import { SPHA_MINT_LEAD_MS } from "../lib/token/countdown";
 
@@ -30,7 +31,8 @@ describe("data launcher V3 SPHA replica", () => {
     assert.equal(brand.symbol, "WIF");
     assert.equal(brand.website, "https://wif.solphia.io");
     assert.equal(brand.handle, "wif");
-    assert.match(brand.blurb, /WIF/);
+    assert.ok(brand.blurb.length > 10);
+    assert.equal(brand.blurb.toLowerCase().includes("a dogwifhat called"), false);
     assert.ok(brand.about.length > 20);
     assert.equal(brand.roadmap.length, 3);
     const kit = buildV3SiteKit(brand);
@@ -217,7 +219,64 @@ describe("data launcher V3 SPHA replica", () => {
     assert.match(mw, /\/m\/\$\{sub\}/);
     const shell = read("src/components/Shell.tsx");
     assert.match(shell, /isMeme/);
+    assert.match(shell, /memeHost/);
+    assert.match(shell, /v3HostFromHeader/);
+    const layoutSrc = read("src/app/layout.tsx");
+    assert.match(layoutSrc, /v3HostFromHeader/);
+    assert.match(layoutSrc, /memeHost/);
     const page = read("src/app/m/[ticker]/page.tsx");
     assert.match(page, /MemeCoinSite/);
+  });
+
+  it("plans a Vice City GTA world instead of echoing the prompt as brown/orange copy", () => {
+    assert.equal(detectWorldId("Grand Theft Auto 6"), "vice");
+    assert.equal(detectWorldId("gta 6 theme memecoin"), "vice");
+    const world = worldOf("Grand Theft Auto 6 theme", "VICE", "VICE");
+    assert.equal(world.id, "vice");
+    assert.equal(world.layout, "neon");
+    assert.equal(world.colors.accent.toLowerCase(), "#ff2ea6");
+    assert.equal(world.colors.glow.toLowerCase(), "#2ef5e0");
+    assert.equal(looksWarmBrown(world.colors), false);
+    const brand = buildV3Brand("Grand Theft Auto 6 theme");
+    assert.equal(brand.name, "VICE");
+    assert.equal(brand.symbol, "VICE");
+    assert.equal(brand.colors.accent.toLowerCase(), "#ff2ea6");
+    const kit = buildV3SiteKit(brand);
+    const blob = `${kit.tagline} ${kit.manifesto} ${kit.lore} ${kit.faq.map((f) => f.a).join(" ")}`.toLowerCase();
+    assert.equal(blob.includes("started as a raw idea"), false);
+    assert.equal(blob.includes("grand theft auto"), false);
+    assert.equal(kit.layout, "neon");
+    assert.equal(kit.worldId, "vice");
+    assert.equal(kit.colors.accent.toLowerCase(), "#ff2ea6");
+    const dressed = dressSitePack({
+      idea: "Grand Theft Auto 6 theme",
+      name: "Grand Theft Auto 6",
+      symbol: "GRAND",
+      blurb: "Grand Theft Auto 6 ($GRAND) — Grand Theft Auto 6 theme",
+      about: "Grand Theft Auto 6 started as a raw idea: Grand Theft Auto 6 theme",
+      howToBuy: "buy it",
+      roadmap: [],
+      colors: { bg: "#140e0a", ink: "#fff6e8", accent: "#ff7a18", muted: "#c9a88a", card: "#22180f", glow: "#ff7a18", line: "#4a3220" },
+      layout: "cinema",
+      motion: "aurora",
+      tagline: "Grand Theft Auto 6 theme",
+      manifesto: "Grand Theft Auto 6 started as a raw idea: Grand Theft Auto 6 theme",
+    });
+    assert.equal(dressed.name, "VICE");
+    assert.equal(dressed.layout, "neon");
+    assert.equal(dressed.colors.accent.toLowerCase(), "#ff2ea6");
+    assert.equal((dressed.manifesto || "").toLowerCase().includes("raw idea"), false);
+    assert.equal((dressed.manifesto || "").toLowerCase().includes("grand theft auto"), false);
+    const site = read("src/components/MemeCoinSite.tsx");
+    assert.match(site, /labels\.kicker/);
+    assert.equal(site.includes("{tick} · {layout}"), false);
+    assert.match(site, /mc-world-/);
+    assert.match(site, /mc-hud/);
+    assert.match(site, /mc-specs/);
+    const css = read("src/components/meme-site.css");
+    assert.match(css, /mc-world-vice/);
+    assert.match(css, /mc-hud-stars/);
+    const project = read("src/lib/tools/v3/project.ts");
+    assert.match(project, /dressSitePack/);
   });
 });

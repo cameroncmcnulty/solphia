@@ -1,8 +1,10 @@
 import type { Metadata, Viewport } from "next";
+import { headers } from "next/headers";
 import { Syne, IBM_Plex_Mono, Cormorant_Garamond } from "next/font/google";
 import "./globals.css";
 import { Shell } from "@/components/Shell";
 import { OWNER_HYDRATE_SCRIPT } from "@/lib/wallet/owner";
+import { isReservedV3Host, v3HostFromHeader } from "@/lib/tools/v3/host";
 
 const syne = Syne({ subsets: ["latin"], variable: "--font-syne" });
 const plex = IBM_Plex_Mono({ subsets: ["latin"], weight: ["400", "500", "600", "700"], variable: "--font-plex" });
@@ -55,14 +57,17 @@ export const metadata: Metadata = {
   manifest: "/site.webmanifest",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const host = (await headers()).get("host") || "";
+  const sub = v3HostFromHeader(host);
+  const memeHost = Boolean(sub && !isReservedV3Host(sub) && !sub.includes("."));
   return (
     <html lang="en">
       <head>
         <script dangerouslySetInnerHTML={{ __html: OWNER_HYDRATE_SCRIPT }} />
       </head>
       <body className={`${syne.variable} ${plex.variable} ${cormorant.variable} font-sans antialiased`}>
-        <Shell>{children}</Shell>
+        <Shell memeHost={memeHost}>{children}</Shell>
       </body>
     </html>
   );

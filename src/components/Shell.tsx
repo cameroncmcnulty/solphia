@@ -14,11 +14,19 @@ import { TosGate } from "./TosGate";
 import { SiteFooter } from "./SiteFooter";
 import { NoticeHost } from "./NoticeHost";
 import { clearScrollLock, lockPageScroll } from "@/lib/scrollLock";
+import { isReservedV3Host, v3HostFromHeader } from "@/lib/tools/v3/host";
 
-export function Shell({ children }: { children: React.ReactNode }) {
+function hostIsMeme(memeHost: boolean): boolean {
+  if (memeHost) return true;
+  if (typeof window === "undefined") return false;
+  const sub = v3HostFromHeader(window.location.host);
+  return Boolean(sub && !isReservedV3Host(sub) && !sub.includes("."));
+}
+
+export function Shell({ children, memeHost = false }: { children: React.ReactNode; memeHost?: boolean }) {
   const path = usePathname();
   const isAdmin = path.startsWith("/admin");
-  const isMeme = path === "/m" || path.startsWith("/m/");
+  const isMeme = hostIsMeme(memeHost) || path === "/m" || path.startsWith("/m/");
   const isShill = path === "/shill" || path.startsWith("/shill/");
   useEffect(() => {
     if (isShill) {

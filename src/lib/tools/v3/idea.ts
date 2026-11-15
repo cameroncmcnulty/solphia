@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
-import { tickerLooksReal, tickerOk, themeOf, type ThemeId } from "../identities";
+import { tickerLooksReal, tickerOk, type ThemeId } from "../identities";
 import { v3HandleOf, v3WebsiteOf } from "./host";
+import { worldOf, type WorldLabels, type WorldTheme } from "./world";
 
 export const V3_SUPPLIES = [100_000_000, 200_000_000, 420_000_000, 690_000_000, 1_000_000_000] as const;
 export const V3_DECIMALS = 6;
@@ -16,15 +17,7 @@ export type V3Slice = {
   note: string;
 };
 
-export type V3Theme = {
-  bg: string;
-  ink: string;
-  accent: string;
-  muted: string;
-  card: string;
-  glow?: string;
-  line?: string;
-};
+export type V3Theme = WorldTheme;
 
 export type V3Brand = {
   idea: string;
@@ -36,6 +29,8 @@ export type V3Brand = {
   howToBuy: string;
   roadmap: { title: string; body: string }[];
   themeId: ThemeId;
+  worldId: string;
+  labels: WorldLabels;
   colors: V3Theme;
   website: string;
   supply: number;
@@ -151,26 +146,12 @@ export function buildV3Tokenomics(seed: string): { supply: number; slices: V3Sli
   return { supply, slices, curveTokens, teamTokens };
 }
 
-function hueOf(theme: ThemeId, b: number): number {
-  const map: Record<string, number> = {
-    pepe: 120, frog: 130, cat: 28, dog: 32, ai: 195, robot: 210, space: 250,
-    moon: 220, rocket: 12, king: 48, coin: 46, fire: 14, ice: 198, ocean: 205,
-    food: 22, anime: 320, game: 280, skull: 0, alien: 110, wolf: 210, bull: 8,
-    bear: 24, world: 160, gold: 44, neon: 300, meme: 95, bird: 200, fish: 188,
-    dragon: 5, ape: 38,
-  };
-  return ((map[theme] ?? 280) + (b % 24) - 12 + 360) % 360;
-}
-
-function colorsOf(theme: ThemeId, seed: string): V3Theme {
-  const h = hueOf(theme, hash(seed)[0]!);
-  return {
-    bg: `hsl(${h} 28% 6%)`,
-    ink: `hsl(${h} 20% 96%)`,
-    accent: `hsl(${(h + 18) % 360} 80% 58%)`,
-    muted: `hsl(${h} 12% 64%)`,
-    card: `hsl(${h} 22% 10%)`,
-  };
+function pickWorldTicker(worldTickers: string[], used: Set<string>): string {
+  for (const t of worldTickers) {
+    const s = compactAlpha(t).slice(0, 10);
+    if (tickerOk(s) && !used.has(s)) return s;
+  }
+  return "";
 }
 
 export function buildV3Brand(idea: string, used?: Iterable<string>): V3Brand {
@@ -178,36 +159,34 @@ export function buildV3Brand(idea: string, used?: Iterable<string>): V3Brand {
   const usedSet = new Set(
     [...(used || [])].map((s) => String(s || "").replace(/^\$/, "").trim().toUpperCase()).filter(Boolean),
   );
-  const { symbol, name: tickName } = pickTicker(raw || "MEME", usedSet);
+  const draftWorld = worldOf(raw);
+  const dollar = raw.match(/\$([A-Za-z0-9]{2,10})\b/);
+  const dollarTick = dollar ? compactAlpha(dollar[1] || "").slice(0, 10) : "";
+  const worldTick = pickWorldTicker(draftWorld.tickers, usedSet);
+  const picked = pickTicker(raw || "MEME", usedSet);
+  const symbol =
+    (dollarTick && tickerOk(dollarTick) && !usedSet.has(dollarTick) && dollarTick) ||
+    worldTick ||
+    picked.symbol;
   const handle = v3HandleOf(symbol);
-  const themeId = themeOf(raw || symbol);
-  const name = raw
-    .replace(/\$[A-Za-z]{2,10}\b/g, "")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, 24) || tickName;
-  const displayName = name.length >= 2 ? name : tickName;
+  const tickName = draftWorld.brandName || picked.name || symbol;
+  const displayName = (draftWorld.brandName || tickName).slice(0, 32);
+  const world = worldOf(raw, displayName, symbol);
   const omics = buildV3Tokenomics(`${raw}:${symbol}`);
-  const blurb = raw
-    ? `${displayName} ($${symbol}) — ${raw.slice(0, 160)}`
-    : `${displayName} is a community token on Solana.`;
+  const themeId = (world.themeId as ThemeId) || "neon";
   return {
     idea: raw,
-    name: displayName.slice(0, 32),
+    name: displayName,
     symbol,
     handle,
-    blurb: blurb.slice(0, 220),
-    about: raw
-      ? `${displayName} started as a raw idea: ${raw} The community owns the float on a public Solana bonding curve. Team slices publish on-chain at launch and match this site.`
-      : `${displayName} is a Solana memecoin with a live curve and public tokenomics.`,
-    howToBuy: `At T-0 the contract address goes live on this site. Open a Solana wallet, fund it with SOL, and swap into $${symbol} on the bonding curve.`,
-    roadmap: [
-      { title: "Ignition", body: "Mint, unique curve config, team slices, metadata, and a 0.05 SOL opening buy." },
-      { title: "Public T-0", body: "The contract address publishes on this website and community trading opens." },
-      { title: "Afterglow", body: "1% fee through graduate. Partner LP permanently locked." },
-    ],
+    blurb: world.blurb.slice(0, 220),
+    about: world.about,
+    howToBuy: world.howToBuy,
+    roadmap: world.roadmap,
     themeId,
-    colors: colorsOf(themeId, `${symbol}:${raw}`),
+    worldId: world.id,
+    labels: world.labels,
+    colors: world.colors,
     website: v3WebsiteOf(symbol),
     supply: omics.supply,
     decimals: V3_DECIMALS,

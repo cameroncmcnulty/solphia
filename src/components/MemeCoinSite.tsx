@@ -13,7 +13,7 @@ export type MemePack = {
   about: string;
   howToBuy: string;
   roadmap: { title: string; body: string }[];
-  colors: { bg: string; ink: string; accent: string; muted: string; card: string; glow?: string; line?: string };
+  colors: { bg: string; ink: string; accent: string; muted: string; card: string; glow?: string; line?: string; glow2?: string };
   website: string;
   x: string;
   telegram: string;
@@ -31,6 +31,8 @@ export type MemePack = {
   faq?: { q: string; a: string }[];
   buySteps?: { n: string; title: string; body: string }[];
   stats?: { k: string; v: string }[];
+  labels?: { story: string; split: string; buy: string; path: string; faq: string; lore: string; join: string; kicker: string };
+  worldId?: string;
   supply: number;
   slices: { id: string; label: string; pct: string; bps: number; tokens: number; note: string }[];
   mint: string;
@@ -41,15 +43,15 @@ export type MemePack = {
 const LAYOUTS = ["cinema", "terminal", "studio", "neon", "glass", "brutal", "orbital", "pulse"] as const;
 type Layout = (typeof LAYOUTS)[number];
 
-const LABELS: Record<Layout, { story: string; split: string; buy: string; path: string; faq: string; lore: string; join: string }> = {
-  cinema: { story: "The Picture", split: "The Split", buy: "Get In", path: "The Reels", faq: "Notes", lore: "Origin Story", join: "The House" },
-  terminal: { story: "MANIFEST", split: "ALLOC", buy: "ACQUIRE", path: "TIMELINE", faq: "FAQ", lore: "LOG", join: "NET" },
-  studio: { story: "Editor's Note", split: "The Ledger", buy: "Acquisition", path: "Issue Map", faq: "Q&A", lore: "Backstory", join: "Salon" },
-  neon: { story: "Signal", split: "Circuit", buy: "Jack In", path: "Waypoints", faq: "Ping", lore: "Origin", join: "Uplink" },
-  glass: { story: "Atelier", split: "Composition", buy: "Collect", path: "Sequence", faq: "Studio Notes", lore: "Lore", join: "Circle" },
-  brutal: { story: "STATEMENT", split: "TOKENOMICS", buy: "HOW TO BUY", path: "ROADMAP", faq: "FAQ", lore: "LORE", join: "JOIN" },
-  orbital: { story: "Core", split: "Mass", buy: "Dock", path: "Flight Plan", faq: "Briefing", lore: "Myth", join: "Crew" },
-  pulse: { story: "The Drop", split: "The Cut", buy: "How to buy", path: "The Run", faq: "Wait what", lore: "Why it hits", join: "Squad" },
+const LABELS: Record<Layout, { story: string; split: string; buy: string; path: string; faq: string; lore: string; join: string; kicker: string }> = {
+  cinema: { story: "The Picture", split: "The Split", buy: "Get In", path: "The Reels", faq: "Notes", lore: "Origin Story", join: "The House", kicker: "FEATURE PRESENTATION" },
+  terminal: { story: "MANIFEST", split: "ALLOC", buy: "ACQUIRE", path: "TIMELINE", faq: "FAQ", lore: "LOG", join: "NET", kicker: "SYS · ONLINE" },
+  studio: { story: "Editor's Note", split: "The Ledger", buy: "Acquisition", path: "Issue Map", faq: "Q&A", lore: "Backstory", join: "Salon", kicker: "LIMITED ISSUE" },
+  neon: { story: "Signal", split: "Circuit", buy: "Jack In", path: "Waypoints", faq: "Ping", lore: "Origin", join: "Uplink", kicker: "NIGHT OPS · PUBLIC MINT" },
+  glass: { story: "Atelier", split: "Composition", buy: "Collect", path: "Sequence", faq: "Studio Notes", lore: "Lore", join: "Circle", kicker: "ATELIER · PUBLIC MINT" },
+  brutal: { story: "STATEMENT", split: "TOKENOMICS", buy: "HOW TO BUY", path: "ROADMAP", faq: "FAQ", lore: "LORE", join: "JOIN", kicker: "SIGNAL · PUBLIC MINT" },
+  orbital: { story: "Core", split: "Mass", buy: "Dock", path: "Flight Plan", faq: "Briefing", lore: "Myth", join: "Crew", kicker: "ORBIT · PUBLIC BURN" },
+  pulse: { story: "The Drop", split: "The Cut", buy: "How to buy", path: "The Run", faq: "Wait what", lore: "Why it hits", join: "Squad", kicker: "THE DROP · T-0" },
 };
 
 function hexRgb(hex: string): string {
@@ -234,11 +236,13 @@ export function MemeCoinSite({ initial, ticker }: { initial: MemePack; ticker: s
   const parts = splitRemaining(remaining);
   const c = pack.colors;
   const glow = c.glow || c.accent;
+  const glow2 = c.glow2 || c.accent;
   const line = c.line || "#222";
   const tick = pack.symbol ? `$${pack.symbol}` : "";
   const layout = asLayout(pack.layout);
   const motion = pack.motion || "aurora";
-  const labels = LABELS[layout];
+  const worldId = pack.worldId || "generic";
+  const labels = pack.labels || LABELS[layout];
   const fonts = pack.fonts || { display: "Syne", body: "DM Sans", mono: "IBM Plex Mono", href: "" };
   const hero = artOf(pack, "hero");
   const logo = artOf(pack, "art");
@@ -282,14 +286,16 @@ export function MemeCoinSite({ initial, ticker }: { initial: MemePack; ticker: s
         "--mc-muted": c.muted,
         "--mc-card": c.card,
         "--mc-glow": glow,
+        "--mc-glow2": glow2,
         "--mc-line": line,
         "--mc-display": `"${fonts.display}"`,
         "--mc-body": `"${fonts.body}"`,
         "--mc-mono": `"${fonts.mono}"`,
         "--mc-accent-rgb": hexRgb(c.accent),
         "--mc-glow-rgb": hexRgb(glow),
+        "--mc-glow2-rgb": hexRgb(glow2),
       }) as CSSProperties,
-    [c.bg, c.ink, c.accent, c.muted, c.card, glow, line, fonts.display, fonts.body, fonts.mono],
+    [c.bg, c.ink, c.accent, c.muted, c.card, glow, glow2, line, fonts.display, fonts.body, fonts.mono],
   );
 
   function copy(label: string, value: string) {
@@ -318,11 +324,24 @@ export function MemeCoinSite({ initial, ticker }: { initial: MemePack; ticker: s
   ] as const;
 
   return (
-    <div ref={root} className={`mc mc-${layout} mc-motion-${motion}`} style={vars}>
+    <div ref={root} className={`mc mc-${layout} mc-world-${worldId} mc-motion-${motion}`} style={vars}>
       <div className="mc-motion">
         <MotionLayer motion={motion} accent={c.accent} />
       </div>
       <div className="mc-cursor" aria-hidden />
+      {worldId === "vice" ? (
+        <div className="mc-hud" aria-hidden>
+          <div className="mc-hud-stars">
+            <span /><span /><span /><span /><span />
+          </div>
+          <div className="mc-radar" />
+          <div className="mc-hud-bars">
+            <i className="mc-hp" />
+            <i className="mc-ap" />
+          </div>
+          <div className="mc-coords mc-mono">25.7617°N 80.1918°W</div>
+        </div>
+      ) : null}
       <div className="mc-shell">
         <header className="mc-nav">
           <a href="#top" className="mc-brand">
@@ -359,7 +378,7 @@ export function MemeCoinSite({ initial, ticker }: { initial: MemePack; ticker: s
             <div className="mc-hero-shade" />
           </div>
           <div className="mc-hero-copy">
-            <div className="mc-kicker">{tick} · {layout}</div>
+            <div className="mc-kicker">{labels.kicker || tick}</div>
             <h1 className="mc-title">{pack.name}</h1>
             <p className="mc-tag">{tagline}</p>
             <div className="mc-hero-actions">
@@ -425,6 +444,13 @@ export function MemeCoinSite({ initial, ticker }: { initial: MemePack; ticker: s
           </div>
         </section>
 
+        <div className="mc-specs" aria-hidden>
+          {stats.map((s) => (
+            <span key={s.k} className="mc-mono">
+              <em>{s.k}</em> {s.v}
+            </span>
+          ))}
+        </div>
         <div className="mc-marquee" aria-hidden>
           <div className="mc-marquee-track">
             {[...stats, ...stats, ...stats].map((s, i) => (
@@ -577,7 +603,7 @@ export function MemeCoinSite({ initial, ticker }: { initial: MemePack; ticker: s
 
         <footer className="mc-foot">
           <span className="mc-mono">
-            {tick} · {pack.name}
+            {tick} · {pack.name} · SOLANA · METEORA DBC
           </span>
           <span>{warning}</span>
         </footer>

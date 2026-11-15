@@ -9,9 +9,10 @@ import { emptySnipers, type SniperStats } from "../snipers";
 import { SNIPER_CREATED_ON } from "../identities";
 import { SPHA_MINT_LEAD_MS } from "../../token/countdown";
 import { buildV3Brand, type V3Brand, type V3Slice, type V3Theme } from "./idea";
-import { buildV3SiteKit, enrichSiteKit, type V3Fonts, type V3Layout, type V3Motion, type V3SiteKit } from "./site";
+import { buildV3SiteKit, enrichSiteKit, V3_FONTS, type V3Fonts, type V3Layout, type V3Motion, type V3SiteKit } from "./site";
 import { generateV3Art } from "./imagine";
 import { v3HandleOf, v3WebsiteOf } from "./host";
+import { dressSitePack, type WorldLabels } from "./world";
 
 const FILE = path.join(process.cwd(), "data", "batch-launch-v3.json");
 const KEYS_FILE = path.join(process.cwd(), "data", "batch-launch-v3-keys.json");
@@ -65,6 +66,8 @@ export type V3Project = {
   faq: { q: string; a: string }[];
   buySteps: { n: string; title: string; body: string }[];
   stats: { k: string; v: string }[];
+  labels: WorldLabels;
+  worldId: string;
   artPrompt: string;
   heroPrompt: string;
   launchAt: number;
@@ -130,7 +133,11 @@ export function metaUrl(handle: string): string {
 }
 
 function emptyColors(): V3Theme {
-  return { bg: "#0a0a0c", ink: "#f5f5f0", accent: "#e8ff47", muted: "#9a9a90", card: "#141418", glow: "#e8ff47", line: "#2a2a28" };
+  return { bg: "#07070c", ink: "#f4f4f8", accent: "#7c5cff", muted: "#9aa0b8", card: "#12121a", glow: "#5ce1ff", line: "#2a2a38", glow2: "#7c5cff" };
+}
+
+function emptyLabels(): WorldLabels {
+  return { story: "Manifest", split: "Allocation", buy: "Acquire", path: "Timeline", faq: "FAQ", lore: "Lore", join: "Crew", kicker: "PUBLIC MINT · T-0" };
 }
 
 function emptyFonts(): V3Fonts {
@@ -156,6 +163,8 @@ function emptyKit(): Pick<
   | "faq"
   | "buySteps"
   | "stats"
+  | "labels"
+  | "worldId"
   | "artPrompt"
   | "heroPrompt"
   | "heroImage"
@@ -173,6 +182,8 @@ function emptyKit(): Pick<
     faq: [],
     buySteps: [],
     stats: [],
+    labels: emptyLabels(),
+    worldId: "generic",
     artPrompt: "",
     heroPrompt: "",
     heroImage: "",
@@ -291,6 +302,7 @@ export function normalizeProject(raw: unknown): V3Project {
       card: str(colors.card) || emptyColors().card,
       glow: str(colors.glow) || str(colors.accent) || emptyColors().glow,
       line: str(colors.line) || emptyColors().line,
+      glow2: str(colors.glow2) || undefined,
     },
     website: str(o.website) || (symbol ? v3WebsiteOf(symbol) : ""),
     x: str(o.x),
@@ -352,6 +364,19 @@ export function normalizeProject(raw: unknown): V3Project {
           .map((f) => ({ k: str((f as { k?: string }).k).slice(0, 24), v: str((f as { v?: string }).v).slice(0, 32) }))
           .slice(0, 8)
       : [],
+    labels: o.labels && typeof o.labels === "object"
+      ? {
+          story: str((o.labels as WorldLabels).story) || emptyLabels().story,
+          split: str((o.labels as WorldLabels).split) || emptyLabels().split,
+          buy: str((o.labels as WorldLabels).buy) || emptyLabels().buy,
+          path: str((o.labels as WorldLabels).path) || emptyLabels().path,
+          faq: str((o.labels as WorldLabels).faq) || emptyLabels().faq,
+          lore: str((o.labels as WorldLabels).lore) || emptyLabels().lore,
+          join: str((o.labels as WorldLabels).join) || emptyLabels().join,
+          kicker: str((o.labels as WorldLabels).kicker) || emptyLabels().kicker,
+        }
+      : emptyLabels(),
+    worldId: str(o.worldId) || "generic",
     artPrompt: str(o.artPrompt).slice(0, 500),
     heroPrompt: str(o.heroPrompt).slice(0, 500),
     launchAt: num(o.launchAt),
@@ -634,6 +659,8 @@ function applyBrand(
     faq: kit.faq,
     buySteps: kit.buySteps,
     stats: kit.stats,
+    labels: kit.labels,
+    worldId: kit.worldId,
     artPrompt: kit.artPrompt,
     heroPrompt: kit.heroPrompt,
     status: "drafted",
@@ -711,23 +738,17 @@ export function publicSitePack(p: V3Project, now = Date.now()) {
   const launchAt = p.launchAt > 0 ? p.launchAt : 0;
   const remainingMs = live ? 0 : launchAt > 0 ? Math.max(0, launchAt - now) : 0;
   const phase: "live" | "counting" | "soon" = live ? "live" : launchAt > 0 ? "counting" : "soon";
-  return {
+  const dressed = dressSitePack({
+    idea: p.idea,
     name: p.name,
     symbol: p.symbol,
-    handle: p.handle,
     blurb: p.blurb,
     about: p.about,
     howToBuy: p.howToBuy,
     roadmap: p.roadmap,
     colors: p.colors,
-    website: p.website,
-    x: p.x,
-    telegram: p.telegram,
-    image: p.image,
-    heroImage: p.heroImage,
     layout: p.layout,
     motion: p.motion,
-    fonts: p.fonts,
     tagline: p.tagline,
     manifesto: p.manifesto,
     lore: p.lore,
@@ -736,7 +757,37 @@ export function publicSitePack(p: V3Project, now = Date.now()) {
     features: p.features,
     faq: p.faq,
     buySteps: p.buySteps,
+    labels: p.labels,
+    worldId: p.worldId,
+  });
+  return {
+    name: dressed.name,
+    symbol: p.symbol,
+    handle: p.handle,
+    blurb: dressed.blurb,
+    about: dressed.about,
+    howToBuy: dressed.howToBuy,
+    roadmap: dressed.roadmap,
+    colors: dressed.colors,
+    website: p.website,
+    x: p.x,
+    telegram: p.telegram,
+    image: p.image,
+    heroImage: p.heroImage,
+    layout: dressed.layout,
+    motion: dressed.motion,
+    fonts: V3_FONTS[(["cinema", "terminal", "studio", "neon", "glass", "brutal", "orbital", "pulse"].includes(dressed.layout) ? dressed.layout : p.layout) as V3Layout] || p.fonts,
+    tagline: dressed.tagline,
+    manifesto: dressed.manifesto,
+    lore: dressed.lore,
+    community: dressed.community,
+    warning: dressed.warning,
+    features: dressed.features,
+    faq: dressed.faq,
+    buySteps: dressed.buySteps,
     stats: p.stats,
+    labels: dressed.labels,
+    worldId: dressed.worldId,
     supply: p.supply,
     slices: p.slices.map((s) => ({
       id: s.id,
