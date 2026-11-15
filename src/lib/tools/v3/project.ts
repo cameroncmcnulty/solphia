@@ -453,13 +453,23 @@ export async function openSite(id: string): Promise<V3Project> {
   return book.sites[id]!;
 }
 
+function tombstoneOf(p: V3Project): V3Project {
+  return {
+    ...emptyProject(),
+    id: p.id,
+    launchWallet: p.launchWallet,
+    slices: p.slices.map((s) => ({ ...s, label: "", note: "", pct: "0%", tokens: 0, bps: 0 })),
+    status: "deleted",
+    createdAt: p.createdAt,
+    at: Date.now(),
+  };
+}
+
 export async function deleteSite(id: string): Promise<{ ok: boolean; project: V3Project; error?: string }> {
   const book = await loadBook();
   const p = book.sites[id];
   if (!p) return { ok: false, project: book.sites[livingId(book.sites, book.activeId)] || emptyProject(), error: "Site not found." };
-  p.status = "deleted";
-  p.at = Date.now();
-  book.sites[id] = p;
+  book.sites[id] = tombstoneOf(p);
   book.activeId = livingId(book.sites, book.activeId === id ? "" : book.activeId);
   await writeBook(book);
   const rows = (await loadArchive().catch(() => [])) as V3ArchiveRow[];
@@ -501,7 +511,9 @@ export async function saveProject(p: V3Project): Promise<void> {
   slim.at = Date.now();
   const book = await loadBook();
   if (slim.id) {
-    book.sites[slim.id] = slim;
+    const prev = book.sites[slim.id];
+    if (prev?.status === "deleted" && slim.status !== "deleted") return;
+    book.sites[slim.id] = slim.status === "deleted" ? tombstoneOf(slim) : slim;
     book.activeId = livingId(book.sites, slim.status === "deleted" ? book.activeId : slim.id || book.activeId);
   }
   await writeBook(book);

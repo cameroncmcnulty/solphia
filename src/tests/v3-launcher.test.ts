@@ -152,9 +152,11 @@ describe("data launcher V3 SPHA replica", () => {
     assert.match(project, /export async function listSites/);
     assert.match(project, /export async function openSite/);
     assert.match(project, /export async function deleteSite/);
-    assert.match(project, /p\.status = "deleted"/);
+    assert.match(project, /function tombstoneOf/);
+    assert.match(project, /status: "deleted"/);
     assert.match(project, /function livingId/);
     assert.match(project, /if \(!p \|\| p.status === "deleted"\) return emptyProject/);
+    assert.match(project, /prev\?\.status === "deleted" && slim.status !== "deleted"\) return/);
     assert.match(project, /rows.filter\(\(r\) => r.id !== id\)/);
     assert.equal(project.includes("saveKeys({})"), false);
     assert.match(project, /findProjectByHandle/);
@@ -169,6 +171,9 @@ describe("data launcher V3 SPHA replica", () => {
     assert.match(ui, /action: "open"|act\("open"/);
     assert.match(ui, /act\("delete"/);
     assert.match(ui, /status !== "deleted"/);
+    assert.match(ui, /sites.some\(\(s\) => s.id === desk.project.id\)/);
+    assert.match(ui, /sites.some\(\(s\) => s.id === p.id\)/);
+    assert.match(route, /sitesList.some\(\(s\) => s.id === project.id\)/);
     assert.match(ui, /Launch wallet keys stay saved|keys stay saved/i);
   });
 

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAdmin, withAdminSession } from "@/lib/admin/auth";
 import { isSolanaAddress } from "@/lib/security";
-import { deleteSite, draftProject, listSites, loadArchive, loadProject, openSite, patchSocials, publicProject } from "@/lib/tools/v3/project";
+import { deleteSite, draftProject, emptyProject, listSites, loadArchive, loadProject, openSite, patchSocials, publicProject } from "@/lib/tools/v3/project";
 import {
   adminDeskShape,
   armCountdown,
@@ -31,7 +31,11 @@ const Body = z.object({
 });
 
 async function desk() {
-  const project = publicProject(await loadProject());
+  const sitesList = await listSites().catch(() => []);
+  let project = publicProject(await loadProject());
+  if (!project.id || project.status === "deleted" || !sitesList.some((s) => s.id === project.id)) {
+    project = emptyProject();
+  }
   const fuel = await launchFuel(project).catch(() => ({
     wallet: project.launchWallet,
     sol: 0,
@@ -39,8 +43,8 @@ async function desk() {
     enough: false,
     hot: false,
   }));
-  let archive = (await loadArchive().catch(() => [])).filter((r) => r.status !== "deleted");
-  const sites = (await listSites().catch(() => [])).map((s) => ({
+  const archive = (await loadArchive().catch(() => [])).filter((r) => r.status !== "deleted");
+  const sites = sitesList.map((s) => ({
     id: s.id,
     name: s.name,
     symbol: s.symbol,

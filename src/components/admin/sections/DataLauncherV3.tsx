@@ -111,6 +111,26 @@ export function DataLauncherV3() {
   async function act(action: string, extra?: Record<string, unknown>) {
     setBusy(true);
     setErr("");
+    const deleteId = action === "delete" ? String(extra?.id || "") : "";
+    if (deleteId) {
+      const gone = desk?.project?.id === deleteId;
+      setDesk((prev) => {
+        if (!prev) return prev;
+        const nextSites = (prev.sites || []).filter((s) => s.id !== deleteId);
+        return {
+          ...prev,
+          sites: nextSites,
+          project: gone
+            ? { ...prev.project, id: "", name: "", symbol: "", handle: "", website: "", image: "", heroImage: "", status: "idle", launchWallet: "", slices: [] }
+            : prev.project,
+        };
+      });
+      if (gone) {
+        setX("");
+        setTelegram("");
+        setWhen("");
+      }
+    }
     try {
       const r = await fetch("/api/admin/tools/launcher-v3", {
         method: "POST",
@@ -134,10 +154,13 @@ export function DataLauncherV3() {
     setTimeout(() => setCopied(""), 1600);
   }
 
-  const p = desk?.project?.id && desk.project.status !== "deleted" ? desk.project : undefined;
+  const sites = (desk?.sites || []).filter((s) => s.id && s.status !== "deleted");
+  const p =
+    desk?.project?.id && desk.project.status !== "deleted" && sites.some((s) => s.id === desk.project.id)
+      ? desk.project
+      : undefined;
   const fuel = desk?.fuel;
   const cd = desk?.countdown;
-  const sites = (desk?.sites || []).filter((s) => s.status !== "deleted");
   const parts = splitRemaining(cd?.remainingMs || 0);
   const ca = p?.mint || p?.pendingMint || "";
   const live = p?.status === "live";
@@ -251,7 +274,7 @@ export function DataLauncherV3() {
         </button>
       </Panel>
 
-      {p?.id ? (
+      {p?.id && sites.some((s) => s.id === p.id) ? (
         <>
           <Panel kicker="2 · WEBSITE">
             <div className="mt-4 grid gap-4 md:grid-cols-[auto_1fr]">
