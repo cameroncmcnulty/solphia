@@ -39,7 +39,7 @@ async function desk() {
     enough: false,
     hot: false,
   }));
-  let archive = await loadArchive().catch(() => []);
+  let archive = (await loadArchive().catch(() => [])).filter((r) => r.status !== "deleted");
   const sites = (await listSites().catch(() => [])).map((s) => ({
     id: s.id,
     name: s.name,

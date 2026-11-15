@@ -97,11 +97,16 @@ export function DataLauncherV3() {
   }, [load]);
 
   useEffect(() => {
-    if (!desk?.project?.id) return;
+    if (!desk?.project?.id || desk.project.status === "deleted") {
+      setX("");
+      setTelegram("");
+      setWhen("");
+      return;
+    }
     setX(desk.project.x || "");
     setTelegram(desk.project.telegram || "");
     setWhen(desk.countdown?.launchAt ? toDatetimeLocalValue(desk.countdown.launchAt) : "");
-  }, [desk?.project?.id, desk?.countdown?.launchAt, desk?.project?.x, desk?.project?.telegram]);
+  }, [desk?.project?.id, desk?.project?.status, desk?.countdown?.launchAt, desk?.project?.x, desk?.project?.telegram]);
 
   async function act(action: string, extra?: Record<string, unknown>) {
     setBusy(true);
@@ -129,14 +134,14 @@ export function DataLauncherV3() {
     setTimeout(() => setCopied(""), 1600);
   }
 
-  const p = desk?.project;
+  const p = desk?.project?.id && desk.project.status !== "deleted" ? desk.project : undefined;
   const fuel = desk?.fuel;
   const cd = desk?.countdown;
-  const sites = desk?.sites || [];
+  const sites = (desk?.sites || []).filter((s) => s.status !== "deleted");
   const parts = splitRemaining(cd?.remainingMs || 0);
   const ca = p?.mint || p?.pendingMint || "";
   const live = p?.status === "live";
-  const armed = Boolean(p?.launchAt && p.status !== "live" && p.status !== "stopped" && p.status !== "idle" && p.status !== "deleted");
+  const armed = Boolean(p?.launchAt && p.status !== "live" && p.status !== "stopped" && p.status !== "idle");
   const launched = Boolean(p?.id && p.launchWallet);
 
   async function signLaunchSwap(transaction: string) {

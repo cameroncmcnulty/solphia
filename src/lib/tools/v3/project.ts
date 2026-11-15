@@ -379,6 +379,12 @@ export function publicProject(p: V3Project): V3Project {
   return normalizeProject(p);
 }
 
+function livingId(sites: Record<string, V3Project>, preferred = ""): string {
+  if (preferred && sites[preferred] && sites[preferred]!.status !== "deleted") return preferred;
+  const next = Object.values(sites).find((p) => p.id && p.status !== "deleted");
+  return next?.id || "";
+}
+
 function asBook(raw: unknown): V3Book {
   if (raw && typeof raw === "object") {
     const o = raw as Record<string, unknown>;
@@ -389,12 +395,12 @@ function asBook(raw: unknown): V3Book {
         if (p.id) sites[p.id] = p;
         else if (k) sites[k] = p;
       }
-      const activeId = str(o.activeId);
-      return { activeId: sites[activeId] ? activeId : Object.keys(sites)[0] || "", sites };
+      return { activeId: livingId(sites, str(o.activeId)), sites };
     }
     if (str(o.id) || str(o.symbol)) {
       const p = normalizeProject(raw);
-      if (p.id) return { activeId: p.id, sites: { [p.id]: p } };
+      if (p.id && p.status !== "deleted") return { activeId: p.id, sites: { [p.id]: p } };
+      if (p.id) return { activeId: "", sites: { [p.id]: p } };
     }
   }
   return { activeId: "", sites: {} };
@@ -417,7 +423,9 @@ async function writeBook(book: V3Book): Promise<void> {
 
 export async function loadProject(): Promise<V3Project> {
   const book = await loadBook();
-  return book.sites[book.activeId] || emptyProject();
+  const p = book.sites[book.activeId];
+  if (!p || p.status === "deleted") return emptyProject();
+  return p;
 }
 
 export async function listSites(): Promise<V3Project[]> {
@@ -436,7 +444,10 @@ export async function listTickableSites(): Promise<V3Project[]> {
 
 export async function openSite(id: string): Promise<V3Project> {
   const book = await loadBook();
-  if (!book.sites[id] || book.sites[id]!.status === "deleted") return book.sites[book.activeId] || emptyProject();
+  if (!book.sites[id] || book.sites[id]!.status === "deleted") {
+    const live = book.sites[livingId(book.sites, book.activeId)];
+    return live && live.status !== "deleted" ? live : emptyProject();
+  }
   book.activeId = id;
   await writeBook(book);
   return book.sites[id]!;
@@ -445,16 +456,18 @@ export async function openSite(id: string): Promise<V3Project> {
 export async function deleteSite(id: string): Promise<{ ok: boolean; project: V3Project; error?: string }> {
   const book = await loadBook();
   const p = book.sites[id];
-  if (!p) return { ok: false, project: book.sites[book.activeId] || emptyProject(), error: "Site not found." };
+  if (!p) return { ok: false, project: book.sites[livingId(book.sites, book.activeId)] || emptyProject(), error: "Site not found." };
   p.status = "deleted";
   p.at = Date.now();
   book.sites[id] = p;
-  if (book.activeId === id) {
-    const next = Object.values(book.sites).find((s) => s.id !== id && s.status !== "deleted");
-    book.activeId = next?.id || "";
-  }
+  book.activeId = livingId(book.sites, book.activeId === id ? "" : book.activeId);
   await writeBook(book);
-  return { ok: true, project: book.sites[book.activeId] || emptyProject() };
+  const rows = (await loadArchive().catch(() => [])) as V3ArchiveRow[];
+  const next = rows.filter((r) => r.id !== id);
+  if (durableConfigured()) await kvSetJson(KEYS.batchLaunchV3Archive, next).catch(() => false);
+  await writeJsonFile(ARCHIVE_FILE, next).catch(() => undefined);
+  const live = book.sites[book.activeId];
+  return { ok: true, project: live && live.status !== "deleted" ? live : emptyProject() };
 }
 
 export async function withActiveId<T>(id: string, fn: () => Promise<T>): Promise<T> {
@@ -489,7 +502,7 @@ export async function saveProject(p: V3Project): Promise<void> {
   const book = await loadBook();
   if (slim.id) {
     book.sites[slim.id] = slim;
-    if (!book.activeId || book.activeId === slim.id) book.activeId = slim.id;
+    book.activeId = livingId(book.sites, slim.status === "deleted" ? book.activeId : slim.id || book.activeId);
   }
   await writeBook(book);
   await archiveProject(slim).catch(() => undefined);
@@ -537,8 +550,13 @@ export async function loadArchive(): Promise<V3ArchiveRow[]> {
 }
 
 export async function archiveProject(p: V3Project): Promise<V3ArchiveRow[]> {
-  if (!p.id) return loadArchive();
   const rows = await loadArchive();
+  if (!p.id || p.status === "deleted") {
+    const next = rows.filter((r) => r.id !== p.id);
+    if (durableConfigured()) await kvSetJson(KEYS.batchLaunchV3Archive, next).catch(() => false);
+    await writeJsonFile(ARCHIVE_FILE, next).catch(() => undefined);
+    return next;
+  }
   const row: V3ArchiveRow = {
     id: p.id,
     name: p.name,
