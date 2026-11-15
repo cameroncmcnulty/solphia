@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAdmin, withAdminSession } from "@/lib/admin/auth";
 import { isSolanaAddress } from "@/lib/security";
-import { draftProject, loadArchive, loadProject, patchSocials, publicProject } from "@/lib/tools/v3/project";
+import { deleteSite, draftProject, listSites, loadArchive, loadProject, openSite, patchSocials, publicProject } from "@/lib/tools/v3/project";
 import {
   adminDeskShape,
   armCountdown,
@@ -19,8 +19,9 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 const Body = z.object({
-  action: z.enum(["draft", "socials", "arm", "clearCountdown", "tick", "stop", "send", "sign"]),
+  action: z.enum(["draft", "socials", "arm", "clearCountdown", "tick", "stop", "send", "sign", "open", "delete"]),
   idea: z.string().min(2).max(280).optional(),
+  id: z.string().max(80).optional(),
   x: z.string().max(120).optional(),
   telegram: z.string().max(120).optional(),
   launchAt: z.number().optional(),
@@ -39,7 +40,21 @@ async function desk() {
     hot: false,
   }));
   let archive = await loadArchive().catch(() => []);
-  return { ...adminDeskShape(project, fuel), archive, version: "v3" as const };
+  const sites = (await listSites().catch(() => [])).map((s) => ({
+    id: s.id,
+    name: s.name,
+    symbol: s.symbol,
+    handle: s.handle,
+    website: s.website,
+    image: s.image,
+    heroImage: s.heroImage,
+    status: s.status,
+    launchWallet: s.launchWallet,
+    mint: s.mint || s.pendingMint,
+    launchAt: s.launchAt,
+    layout: s.layout,
+  }));
+  return { ...adminDeskShape(project, fuel), archive, sites, version: "v3" as const };
 }
 
 export async function GET(req: NextRequest) {
@@ -107,6 +122,21 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "send_failed", message: sent.error, sendResult: sent, ...(await desk()) }, { status: 400 });
       }
       return withAdminSession(NextResponse.json({ ok: true, sendResult: sent, ...(await desk()) }));
+    }
+    if (b.action === "open") {
+      const id = (b.id || "").trim();
+      if (!id) return NextResponse.json({ error: "bad_id" }, { status: 400 });
+      await openSite(id);
+      return withAdminSession(NextResponse.json({ ok: true, ...(await desk()) }));
+    }
+    if (b.action === "delete") {
+      const id = (b.id || "").trim();
+      if (!id) return NextResponse.json({ error: "bad_id" }, { status: 400 });
+      const gone = await deleteSite(id);
+      if (!gone.ok) {
+        return NextResponse.json({ error: "delete_failed", message: gone.error, ...(await desk()) }, { status: 400 });
+      }
+      return withAdminSession(NextResponse.json({ ok: true, ...(await desk()) }));
     }
     if (b.action === "sign") {
       const packed = (b.transaction || "").trim();

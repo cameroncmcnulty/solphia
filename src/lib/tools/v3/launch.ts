@@ -34,11 +34,13 @@ import { DUMP_SLIPPAGE_BPS } from "../identities";
 import { emptySnipers } from "../snipers";
 import {
   allWalletsOf,
+  listTickableSites,
   loadKeys,
   loadProject,
   metaUrl,
   saveKeys,
   saveProject,
+  withActiveId,
   V3_FIRST_BUY_SOL,
   V3_KEEP_LAMPORTS,
   V3_MIN_LAUNCH_SOL,
@@ -472,7 +474,7 @@ export async function revealLive(now = Date.now()): Promise<{ ok: boolean; revea
   return { ok: true, revealed: true, mint: pending };
 }
 
-export async function tickV3(now = Date.now()): Promise<{
+async function tickActive(now = Date.now()): Promise<{
   ok: boolean;
   phase: string;
   minted: boolean;
@@ -481,7 +483,7 @@ export async function tickV3(now = Date.now()): Promise<{
   error?: string;
 }> {
   const p = await loadProject();
-  if (!p.id || p.status === "idle" || p.status === "stopped") {
+  if (!p.id || p.status === "idle" || p.status === "stopped" || p.status === "deleted") {
     return { ok: true, phase: p.status || "idle", minted: false, revealed: false, mint: p.mint || "" };
   }
   if (p.status === "live" && p.mint) {
@@ -526,6 +528,29 @@ export async function tickV3(now = Date.now()): Promise<{
           ? "counting"
           : after.status;
   return { ok: true, phase, minted, revealed, mint: after.mint || mint, error: after.error || error };
+}
+
+export async function tickV3(now = Date.now()): Promise<{
+  ok: boolean;
+  phase: string;
+  minted: boolean;
+  revealed: boolean;
+  mint: string;
+  error?: string;
+}> {
+  const sites = await listTickableSites().catch(() => []);
+  if (!sites.length) return tickActive(now);
+  let last: Awaited<ReturnType<typeof tickActive>> = {
+    ok: true,
+    phase: "idle",
+    minted: false,
+    revealed: false,
+    mint: "",
+  };
+  for (const site of sites) {
+    last = await withActiveId(site.id, () => tickActive(now));
+  }
+  return last;
 }
 
 type WalletBag = { mint: string; amount: number; account: PublicKey; program: PublicKey };

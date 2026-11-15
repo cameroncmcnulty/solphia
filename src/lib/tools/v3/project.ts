@@ -9,6 +9,8 @@ import { emptySnipers, type SniperStats } from "../snipers";
 import { SNIPER_CREATED_ON } from "../identities";
 import { SPHA_MINT_LEAD_MS } from "../../token/countdown";
 import { buildV3Brand, type V3Brand, type V3Slice, type V3Theme } from "./idea";
+import { buildV3SiteKit, enrichSiteKit, type V3Fonts, type V3Layout, type V3Motion, type V3SiteKit } from "./site";
+import { generateV3Art } from "./imagine";
 import { v3HandleOf, v3WebsiteOf } from "./host";
 
 const FILE = path.join(process.cwd(), "data", "batch-launch-v3.json");
@@ -20,7 +22,7 @@ export const V3_MIN_LAUNCH_SOL = 0.2;
 export const V3_KEEP_LAMPORTS = 2_000_000;
 export const V3_MINT_LEAD_MS = SPHA_MINT_LEAD_MS;
 
-export type V3Status = "idle" | "drafted" | "armed" | "minting" | "minted" | "live" | "stopped" | "failed";
+export type V3Status = "idle" | "drafted" | "armed" | "minting" | "minted" | "live" | "stopped" | "failed" | "deleted";
 
 export type V3SliceRow = V3Slice & { wallet: string };
 
@@ -47,7 +49,24 @@ export type V3Project = {
   teamTokens: number;
   launchWallet: string;
   image: string;
+  heroImage: string;
+  artCid?: string;
+  heroCid?: string;
   uri: string;
+  layout: V3Layout;
+  motion: V3Motion;
+  fonts: V3Fonts;
+  tagline: string;
+  manifesto: string;
+  lore: string;
+  community: string;
+  warning: string;
+  features: { title: string; body: string }[];
+  faq: { q: string; a: string }[];
+  buySteps: { n: string; title: string; body: string }[];
+  stats: { k: string; v: string }[];
+  artPrompt: string;
+  heroPrompt: string;
   launchAt: number;
   mintLeadMs: number;
   armedAt: number;
@@ -111,8 +130,56 @@ export function metaUrl(handle: string): string {
 }
 
 function emptyColors(): V3Theme {
-  return { bg: "#0a0a0c", ink: "#f5f5f0", accent: "#e8ff47", muted: "#9a9a90", card: "#141418" };
+  return { bg: "#0a0a0c", ink: "#f5f5f0", accent: "#e8ff47", muted: "#9a9a90", card: "#141418", glow: "#e8ff47", line: "#2a2a28" };
 }
+
+function emptyFonts(): V3Fonts {
+  return {
+    display: "Syne",
+    body: "DM Sans",
+    mono: "IBM Plex Mono",
+    href: "https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;600;800&family=IBM+Plex+Mono:wght@400;600&family=Syne:wght@500;700;800&display=swap",
+  };
+}
+
+function emptyKit(): Pick<
+  V3Project,
+  | "layout"
+  | "motion"
+  | "fonts"
+  | "tagline"
+  | "manifesto"
+  | "lore"
+  | "community"
+  | "warning"
+  | "features"
+  | "faq"
+  | "buySteps"
+  | "stats"
+  | "artPrompt"
+  | "heroPrompt"
+  | "heroImage"
+> {
+  return {
+    layout: "glass",
+    motion: "aurora",
+    fonts: emptyFonts(),
+    tagline: "",
+    manifesto: "",
+    lore: "",
+    community: "",
+    warning: "Memecoins can go to zero. This is not financial advice.",
+    features: [],
+    faq: [],
+    buySteps: [],
+    stats: [],
+    artPrompt: "",
+    heroPrompt: "",
+    heroImage: "",
+  };
+}
+
+export type V3Book = { activeId: string; sites: Record<string, V3Project> };
 
 export function emptyProject(): V3Project {
   return {
@@ -139,6 +206,7 @@ export function emptyProject(): V3Project {
     launchWallet: "",
     image: "",
     uri: "",
+    ...emptyKit(),
     launchAt: 0,
     mintLeadMs: V3_MINT_LEAD_MS,
     armedAt: 0,
@@ -168,7 +236,8 @@ function statusOf(v: unknown): V3Status {
     v === "minted" ||
     v === "live" ||
     v === "stopped" ||
-    v === "failed"
+    v === "failed" ||
+    v === "deleted"
   ) {
     return v;
   }
@@ -220,6 +289,8 @@ export function normalizeProject(raw: unknown): V3Project {
       accent: str(colors.accent) || emptyColors().accent,
       muted: str(colors.muted) || emptyColors().muted,
       card: str(colors.card) || emptyColors().card,
+      glow: str(colors.glow) || str(colors.accent) || emptyColors().glow,
+      line: str(colors.line) || emptyColors().line,
     },
     website: str(o.website) || (symbol ? v3WebsiteOf(symbol) : ""),
     x: str(o.x),
@@ -232,7 +303,57 @@ export function normalizeProject(raw: unknown): V3Project {
     teamTokens: Math.max(0, Math.floor(num(o.teamTokens))),
     launchWallet: str(o.launchWallet),
     image: str(o.image) || (handle ? artUrl(handle) : ""),
+    heroImage: str(o.heroImage),
+    artCid: str(o.artCid) || undefined,
+    heroCid: str(o.heroCid) || undefined,
     uri: str(o.uri) || (handle ? metaUrl(handle) : ""),
+    layout: (["cinema", "terminal", "studio", "neon", "glass", "brutal", "orbital", "pulse"].includes(str(o.layout))
+      ? str(o.layout)
+      : "glass") as V3Layout,
+    motion: (["particles", "grid", "aurora", "orbit", "scan", "wave"].includes(str(o.motion)) ? str(o.motion) : "aurora") as V3Motion,
+    fonts: o.fonts && typeof o.fonts === "object"
+      ? {
+          display: str((o.fonts as V3Fonts).display) || emptyFonts().display,
+          body: str((o.fonts as V3Fonts).body) || emptyFonts().body,
+          mono: str((o.fonts as V3Fonts).mono) || emptyFonts().mono,
+          href: str((o.fonts as V3Fonts).href) || emptyFonts().href,
+        }
+      : emptyFonts(),
+    tagline: str(o.tagline).slice(0, 160),
+    manifesto: str(o.manifesto).slice(0, 1200),
+    lore: str(o.lore).slice(0, 1200),
+    community: str(o.community).slice(0, 700),
+    warning: str(o.warning).slice(0, 280) || emptyKit().warning,
+    features: Array.isArray(o.features)
+      ? o.features
+          .filter((f) => f && typeof f === "object")
+          .map((f) => ({ title: str((f as { title?: string }).title).slice(0, 48), body: str((f as { body?: string }).body).slice(0, 280) }))
+          .slice(0, 8)
+      : [],
+    faq: Array.isArray(o.faq)
+      ? o.faq
+          .filter((f) => f && typeof f === "object")
+          .map((f) => ({ q: str((f as { q?: string }).q).slice(0, 100), a: str((f as { a?: string }).a).slice(0, 400) }))
+          .slice(0, 10)
+      : [],
+    buySteps: Array.isArray(o.buySteps)
+      ? o.buySteps
+          .filter((f) => f && typeof f === "object")
+          .map((f) => ({
+            n: str((f as { n?: string }).n).slice(0, 4),
+            title: str((f as { title?: string }).title).slice(0, 40),
+            body: str((f as { body?: string }).body).slice(0, 220),
+          }))
+          .slice(0, 6)
+      : [],
+    stats: Array.isArray(o.stats)
+      ? o.stats
+          .filter((f) => f && typeof f === "object")
+          .map((f) => ({ k: str((f as { k?: string }).k).slice(0, 24), v: str((f as { v?: string }).v).slice(0, 32) }))
+          .slice(0, 8)
+      : [],
+    artPrompt: str(o.artPrompt).slice(0, 500),
+    heroPrompt: str(o.heroPrompt).slice(0, 500),
     launchAt: num(o.launchAt),
     mintLeadMs: num(o.mintLeadMs) || V3_MINT_LEAD_MS,
     armedAt: num(o.armedAt),
@@ -258,23 +379,105 @@ export function publicProject(p: V3Project): V3Project {
   return normalizeProject(p);
 }
 
-export async function loadProject(): Promise<V3Project> {
-  if (durableConfigured()) {
-    const raw = await kvGetJson(KEYS.batchLaunchV3).catch(() => null);
-    if (raw && typeof raw === "object") return normalizeProject(raw);
+function asBook(raw: unknown): V3Book {
+  if (raw && typeof raw === "object") {
+    const o = raw as Record<string, unknown>;
+    if (o.sites && typeof o.sites === "object" && !Array.isArray(o.sites)) {
+      const sites: Record<string, V3Project> = {};
+      for (const [k, v] of Object.entries(o.sites as Record<string, unknown>)) {
+        const p = normalizeProject(v);
+        if (p.id) sites[p.id] = p;
+        else if (k) sites[k] = p;
+      }
+      const activeId = str(o.activeId);
+      return { activeId: sites[activeId] ? activeId : Object.keys(sites)[0] || "", sites };
+    }
+    if (str(o.id) || str(o.symbol)) {
+      const p = normalizeProject(raw);
+      if (p.id) return { activeId: p.id, sites: { [p.id]: p } };
+    }
   }
-  const file = await readJsonFile<V3Project>(FILE);
-  if (file) return normalizeProject(file);
-  return emptyProject();
+  return { activeId: "", sites: {} };
 }
 
-/** True when this pubkey is the isolated V3 launch wallet. Skip house 1% so swaps do not skim into protocol. */
+export async function loadBook(): Promise<V3Book> {
+  if (durableConfigured()) {
+    const raw = await kvGetJson(KEYS.batchLaunchV3).catch(() => null);
+    if (raw && typeof raw === "object") return asBook(raw);
+  }
+  const file = await readJsonFile<unknown>(FILE);
+  if (file) return asBook(file);
+  return { activeId: "", sites: {} };
+}
+
+async function writeBook(book: V3Book): Promise<void> {
+  if (durableConfigured()) await kvSetJson(KEYS.batchLaunchV3, book).catch(() => false);
+  await writeJsonFile(FILE, book).catch(() => undefined);
+}
+
+export async function loadProject(): Promise<V3Project> {
+  const book = await loadBook();
+  return book.sites[book.activeId] || emptyProject();
+}
+
+export async function listSites(): Promise<V3Project[]> {
+  const book = await loadBook();
+  return Object.values(book.sites)
+    .filter((p) => p.id && p.status !== "deleted")
+    .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+}
+
+export async function listTickableSites(): Promise<V3Project[]> {
+  const book = await loadBook();
+  return Object.values(book.sites).filter(
+    (p) => p.id && p.status !== "deleted" && p.status !== "idle" && (p.launchAt > 0 || p.status === "live" || p.status === "armed" || p.status === "minting" || p.status === "minted"),
+  );
+}
+
+export async function openSite(id: string): Promise<V3Project> {
+  const book = await loadBook();
+  if (!book.sites[id] || book.sites[id]!.status === "deleted") return book.sites[book.activeId] || emptyProject();
+  book.activeId = id;
+  await writeBook(book);
+  return book.sites[id]!;
+}
+
+export async function deleteSite(id: string): Promise<{ ok: boolean; project: V3Project; error?: string }> {
+  const book = await loadBook();
+  const p = book.sites[id];
+  if (!p) return { ok: false, project: book.sites[book.activeId] || emptyProject(), error: "Site not found." };
+  p.status = "deleted";
+  p.at = Date.now();
+  book.sites[id] = p;
+  if (book.activeId === id) {
+    const next = Object.values(book.sites).find((s) => s.id !== id && s.status !== "deleted");
+    book.activeId = next?.id || "";
+  }
+  await writeBook(book);
+  return { ok: true, project: book.sites[book.activeId] || emptyProject() };
+}
+
+export async function withActiveId<T>(id: string, fn: () => Promise<T>): Promise<T> {
+  const book = await loadBook();
+  const prev = book.activeId;
+  book.activeId = id;
+  await writeBook(book);
+  try {
+    return await fn();
+  } finally {
+    const after = await loadBook();
+    if (after.sites[prev] && after.sites[prev]!.status !== "deleted") after.activeId = prev;
+    await writeBook(after);
+  }
+}
+
+/** True when this pubkey is an isolated V3 launch wallet. Skip house 1% so swaps do not skim into protocol. */
 export async function isV3LaunchWallet(pk: string): Promise<boolean> {
   const clean = (pk || "").trim();
   if (!isSolanaAddress(clean)) return false;
   try {
-    const p = await loadProject();
-    return p.launchWallet === clean;
+    const book = await loadBook();
+    return Object.values(book.sites).some((p) => p.launchWallet === clean && p.status !== "deleted");
   } catch {
     return false;
   }
@@ -283,8 +486,12 @@ export async function isV3LaunchWallet(pk: string): Promise<boolean> {
 export async function saveProject(p: V3Project): Promise<void> {
   const slim = publicProject(p);
   slim.at = Date.now();
-  if (durableConfigured()) await kvSetJson(KEYS.batchLaunchV3, slim).catch(() => false);
-  await writeJsonFile(FILE, slim).catch(() => undefined);
+  const book = await loadBook();
+  if (slim.id) {
+    book.sites[slim.id] = slim;
+    if (!book.activeId || book.activeId === slim.id) book.activeId = slim.id;
+  }
+  await writeBook(book);
   await archiveProject(slim).catch(() => undefined);
 }
 
@@ -351,7 +558,13 @@ export async function archiveProject(p: V3Project): Promise<V3ArchiveRow[]> {
   return next;
 }
 
-function applyBrand(p: V3Project, brand: V3Brand, launchPk: string, team: Record<Exclude<V3Slice["id"], "lp">, string>): V3Project {
+function applyBrand(
+  p: V3Project,
+  brand: V3Brand,
+  kit: V3SiteKit,
+  launchPk: string,
+  team: Record<Exclude<V3Slice["id"], "lp">, string>,
+): V3Project {
   const slices: V3SliceRow[] = brand.slices.map((s) => ({
     ...s,
     wallet: s.id === "lp" ? "" : team[s.id as Exclude<V3Slice["id"], "lp">] || launchPk,
@@ -363,11 +576,11 @@ function applyBrand(p: V3Project, brand: V3Brand, launchPk: string, team: Record
     symbol: brand.symbol,
     handle: brand.handle,
     blurb: brand.blurb,
-    about: brand.about,
+    about: kit.manifesto || brand.about,
     howToBuy: brand.howToBuy,
     roadmap: brand.roadmap,
     themeId: brand.themeId,
-    colors: brand.colors,
+    colors: kit.colors,
     website: brand.website,
     createdOn: SNIPER_CREATED_ON,
     supply: brand.supply,
@@ -377,27 +590,41 @@ function applyBrand(p: V3Project, brand: V3Brand, launchPk: string, team: Record
     teamTokens: brand.teamTokens,
     launchWallet: launchPk,
     image: artUrl(brand.handle),
+    heroImage: "",
     uri: metaUrl(brand.handle),
+    layout: kit.layout,
+    motion: kit.motion,
+    fonts: kit.fonts,
+    tagline: kit.tagline,
+    manifesto: kit.manifesto,
+    lore: kit.lore,
+    community: kit.community,
+    warning: kit.warning,
+    features: kit.features,
+    faq: kit.faq,
+    buySteps: kit.buySteps,
+    stats: kit.stats,
+    artPrompt: kit.artPrompt,
+    heroPrompt: kit.heroPrompt,
     status: "drafted",
     error: undefined,
   };
 }
 
 export async function draftProject(idea: string): Promise<{ ok: true; project: V3Project } | { ok: false; error: string; project: V3Project }> {
-  const live = await loadProject();
-  if (live.status === "armed" || live.status === "minting" || live.status === "minted") {
-    return { ok: false, error: "A countdown is already armed. Stop or wait for T-0 before drafting a new site.", project: live };
-  }
-  if (live.status === "live") {
-    return { ok: false, error: "This launch is live. STOP it first, then draft a new site.", project: live };
-  }
-  const brand = buildV3Brand(idea, live.symbol ? [live.symbol] : []);
+  const book = await loadBook();
+  const used = Object.values(book.sites)
+    .filter((s) => s.status !== "deleted")
+    .map((s) => s.symbol);
+  const brand = buildV3Brand(idea, used);
+  let kit = buildV3SiteKit(brand);
+  kit = await enrichSiteKit(brand, kit).catch(() => kit);
   const launch = freshWallet();
   const dev = freshWallet();
   const community = freshWallet();
   const treasury = freshWallet();
   const now = Date.now();
-  const project: V3Project = applyBrand(
+  let project: V3Project = applyBrand(
     {
       ...emptyProject(),
       id: `v3_${now.toString(36)}_${hexId()}`,
@@ -405,6 +632,7 @@ export async function draftProject(idea: string): Promise<{ ok: true; project: V
       at: now,
     },
     brand,
+    kit,
     launch.pk,
     { dev: dev.pk, community: community.pk, treasury: treasury.pk },
   );
@@ -414,7 +642,21 @@ export async function draftProject(idea: string): Promise<{ ok: true; project: V
     [community.pk]: community.secret,
     [treasury.pk]: treasury.secret,
   });
-  await saveProject(project);
+  const art = await generateV3Art({ artPrompt: kit.artPrompt, heroPrompt: kit.heroPrompt, handle: brand.handle }).catch(
+    () => ({ image: "", heroImage: "" as string, artCid: undefined as string | undefined, heroCid: undefined as string | undefined }),
+  );
+  if (art.image) {
+    project.image = art.image;
+    project.artCid = art.artCid;
+  }
+  if (art.heroImage) {
+    project.heroImage = art.heroImage;
+    project.heroCid = art.heroCid;
+  }
+  book.sites[project.id] = project;
+  book.activeId = project.id;
+  await writeBook(book);
+  await archiveProject(project).catch(() => undefined);
   return { ok: true, project };
 }
 
@@ -452,6 +694,19 @@ export function publicSitePack(p: V3Project, now = Date.now()) {
     x: p.x,
     telegram: p.telegram,
     image: p.image,
+    heroImage: p.heroImage,
+    layout: p.layout,
+    motion: p.motion,
+    fonts: p.fonts,
+    tagline: p.tagline,
+    manifesto: p.manifesto,
+    lore: p.lore,
+    community: p.community,
+    warning: p.warning,
+    features: p.features,
+    faq: p.faq,
+    buySteps: p.buySteps,
+    stats: p.stats,
     supply: p.supply,
     slices: p.slices.map((s) => ({
       id: s.id,
@@ -476,11 +731,9 @@ export function publicSitePack(p: V3Project, now = Date.now()) {
 export async function findProjectByHandle(handle: string): Promise<V3Project | null> {
   const h = v3HandleOf(handle);
   if (!h) return null;
-  const live = await loadProject();
-  if (live.handle === h || live.symbol.toLowerCase() === h) return live;
-  const archive = await loadArchive();
-  const hit = archive.find((r) => v3HandleOf(r.symbol) === h);
-  if (!hit) return null;
-  if (live.id === hit.id) return live;
-  return null;
+  const book = await loadBook();
+  const hit = Object.values(book.sites).find(
+    (p) => p.status !== "deleted" && (p.handle === h || p.symbol.toLowerCase() === h),
+  );
+  return hit || null;
 }

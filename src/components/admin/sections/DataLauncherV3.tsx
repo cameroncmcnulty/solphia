@@ -26,6 +26,8 @@ type Project = {
   teamTokens: number;
   launchWallet: string;
   image: string;
+  heroImage?: string;
+  layout?: string;
   launchAt: number;
   status: string;
   pendingMint?: string;
@@ -36,11 +38,27 @@ type Project = {
   returnedSol?: number;
 };
 
+type SiteRow = {
+  id: string;
+  name: string;
+  symbol: string;
+  handle: string;
+  website: string;
+  image: string;
+  heroImage?: string;
+  status: string;
+  launchWallet: string;
+  mint?: string;
+  launchAt: number;
+  layout?: string;
+};
+
 type Desk = {
   project: Project;
   fuel: { wallet: string; sol: number; needSol: number; enough: boolean; hot: boolean };
   countdown: { launchAt: number; mintAt: number; remainingMs: number; inMintWindow: boolean; timedOut: boolean };
   archive?: { id: string; symbol: string; mint?: string; status: string; snipers: Snipers }[];
+  sites?: SiteRow[];
 };
 
 function fmtSupply(n: number) {
@@ -79,12 +97,11 @@ export function DataLauncherV3() {
   }, [load]);
 
   useEffect(() => {
-    if (!desk?.project) return;
-    if (desk.project.x) setX(desk.project.x);
-    if (desk.project.telegram) setTelegram(desk.project.telegram);
-    if (desk.project.idea) setIdea((prev) => prev || desk.project.idea);
-    if (desk.countdown?.launchAt) setWhen((prev) => prev || toDatetimeLocalValue(desk.countdown.launchAt));
-  }, [desk]);
+    if (!desk?.project?.id) return;
+    setX(desk.project.x || "");
+    setTelegram(desk.project.telegram || "");
+    setWhen(desk.countdown?.launchAt ? toDatetimeLocalValue(desk.countdown.launchAt) : "");
+  }, [desk?.project?.id, desk?.countdown?.launchAt, desk?.project?.x, desk?.project?.telegram]);
 
   async function act(action: string, extra?: Record<string, unknown>) {
     setBusy(true);
@@ -115,10 +132,11 @@ export function DataLauncherV3() {
   const p = desk?.project;
   const fuel = desk?.fuel;
   const cd = desk?.countdown;
+  const sites = desk?.sites || [];
   const parts = splitRemaining(cd?.remainingMs || 0);
   const ca = p?.mint || p?.pendingMint || "";
   const live = p?.status === "live";
-  const armed = Boolean(p?.launchAt && p.status !== "live" && p.status !== "stopped" && p.status !== "idle");
+  const armed = Boolean(p?.launchAt && p.status !== "live" && p.status !== "stopped" && p.status !== "idle" && p.status !== "deleted");
   const launched = Boolean(p?.id && p.launchWallet);
 
   async function signLaunchSwap(transaction: string) {
@@ -138,17 +156,79 @@ export function DataLauncherV3() {
       <section className="panel relative overflow-hidden rounded-2xl p-6">
         <div className="tools-scan" aria-hidden />
         <div className="font-mono text-[10px] tracking-[0.3em] text-acid">DATA LAUNCHER V3 · SPHA REPLICA</div>
-        <h2 className="mt-1 font-display text-3xl text-ghost">Idea → site → isolated $SPHA-path launch</h2>
+        <h2 className="mt-1 font-display text-3xl text-ghost">Idea → unique site → isolated $SPHA-path launch</h2>
         <p className="mt-2 max-w-3xl text-sm text-mute">
-          Enter a token idea. V3 builds a full memecoin website at ticker.solphia.io, randomizes supply and team slices
-          (tokenomics page matches the mint), and uses the same T-30 Token-2022 hooked DBC path as official $SPHA: unique
-          config, metadata, team mint, then 0.05 SOL opening buy. Launch wallet is a fresh key with no treasury/owner hop.
-          Fund it from a CEX. CA stays admin-only until T-0. STOP sells every bag; SOL stays in that wallet until you send
-          it.
+          Enter a token idea. Grok Imagine generates a niche mascot and cinematic hero, then V3 builds a unique
+          high-tech memecoin website (randomized layout, type, motion, copy) at ticker.solphia.io. Tokenomics match the
+          mint. Launch path is the official $SPHA T-30 replica on an isolated wallet. Open any site dashboard or
+          unpublish it. Keys stay saved.
         </p>
       </section>
 
-      <Panel kicker="1 · TOKEN IDEA">
+      <Panel kicker="SITES · OPEN DASHBOARD OR DELETE">
+        <p className="mt-3 text-sm text-mute">
+          Every drafted website lives here. OPEN DASHBOARD loads its wallet, countdown, and swap widget. DELETE
+          unpublishes the public site. Launch wallet keys are never wiped.
+        </p>
+        {sites.length ? (
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            {sites.map((s) => {
+              const on = s.id === p?.id;
+              return (
+                <div
+                  key={s.id}
+                  className={`rounded-2xl border px-4 py-3 ${on ? "border-acid/60 bg-acid/5" : "border-line bg-void/40"}`}
+                >
+                  <div className="flex gap-3">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={s.image} alt="" className="h-14 w-14 rounded-xl object-cover" />
+                    <div className="min-w-0 flex-1">
+                      <div className="font-display text-lg text-ghost">
+                        {s.name} <span className="text-acid">${s.symbol}</span>
+                      </div>
+                      <div className="font-mono text-[11px] text-mute">
+                        {s.status} · {s.layout || "site"} · {s.handle}.solphia.io
+                      </div>
+                      <a href={s.website} target="_blank" rel="noreferrer" className="font-mono text-[11px] text-acid">
+                        {s.website}
+                      </a>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      disabled={busy || on}
+                      onClick={() => void act("open", { id: s.id })}
+                      className="btn-acid rounded-full px-4 py-1.5 text-[11px] tracking-[0.14em] disabled:opacity-40"
+                    >
+                      {on ? "DASHBOARD OPEN" : "OPEN DASHBOARD"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => {
+                        if (!window.confirm(`Unpublish ${s.name} ($${s.symbol})? The public site 404s. Launch wallet keys stay saved.`)) return;
+                        void act("delete", { id: s.id });
+                      }}
+                      className="btn-ghost rounded-full px-4 py-1.5 text-[11px]"
+                    >
+                      DELETE
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="mt-3 font-mono text-[12px] text-mute">No sites yet. Build one below.</p>
+        )}
+      </Panel>
+
+      <Panel kicker="NEW SITE · GROK IMAGINE + UNIQUE UI">
+        <p className="mt-3 text-sm text-mute">
+          Does not stop a live site. Imagine paints the mascot and hero for this niche, then a random professional
+          layout is generated from scratch.
+        </p>
         <textarea
           value={idea}
           onChange={(e) => setIdea(e.target.value.slice(0, 280))}
@@ -162,7 +242,7 @@ export function DataLauncherV3() {
           onClick={() => void act("draft", { idea: idea.trim() })}
           className="btn-acid mt-3 rounded-full px-8 py-3 text-sm tracking-[0.2em] disabled:opacity-40"
         >
-          {busy ? "Building…" : "BUILD SITE + WALLET"}
+          {busy ? "Imagine is painting the mascot…" : "BUILD SITE + WALLET"}
         </button>
       </Panel>
 
@@ -170,13 +250,20 @@ export function DataLauncherV3() {
         <>
           <Panel kicker="2 · WEBSITE">
             <div className="mt-4 grid gap-4 md:grid-cols-[auto_1fr]">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={p.image} alt="" className="h-20 w-20 rounded-2xl object-cover" />
+              <div className="flex gap-2">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={p.image} alt="" className="h-20 w-20 rounded-2xl object-cover" />
+                {p.heroImage ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={p.heroImage} alt="" className="h-20 w-32 rounded-2xl object-cover" />
+                ) : null}
+              </div>
               <div>
                 <div className="font-display text-2xl text-ghost">
                   {p.name} <span className="text-acid">${p.symbol}</span>
                 </div>
                 <p className="mt-1 text-sm text-mute">{p.blurb}</p>
+                <div className="mt-1 font-mono text-[11px] text-mute">layout {p.layout || "glass"} · Imagine mascot + hero</div>
                 <a href={p.website} target="_blank" rel="noreferrer" className="mt-2 inline-block font-mono text-[12px] text-acid">
                   {p.website}
                 </a>

@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, it } from "node:test";
 import { buildV3Brand, buildV3Tokenomics, V3_SUPPLIES } from "../lib/tools/v3/idea";
+import { buildV3SiteKit, V3_LAYOUTS } from "../lib/tools/v3/site";
 import { isReservedV3Host, v3HandleOf, v3HostFromHeader, v3WebsiteOf } from "../lib/tools/v3/host";
 import { SNIPER_CREATED_ON } from "../lib/tools/identities";
 import { SPHA_MINT_LEAD_MS } from "../lib/token/countdown";
@@ -32,6 +33,16 @@ describe("data launcher V3 SPHA replica", () => {
     assert.match(brand.blurb, /WIF/);
     assert.ok(brand.about.length > 20);
     assert.equal(brand.roadmap.length, 3);
+    const kit = buildV3SiteKit(brand);
+    assert.equal(V3_LAYOUTS.includes(kit.layout), true);
+    assert.ok(kit.faq.length >= 3);
+    assert.ok(kit.features.length >= 3);
+    assert.ok(kit.buySteps.length >= 3);
+    assert.ok(kit.artPrompt.length > 40);
+    assert.ok(kit.heroPrompt.length > 40);
+    const blob = JSON.stringify(kit).toLowerCase();
+    assert.equal(blob.includes("phantom"), false);
+    assert.equal(blob.includes("solphia"), false);
   });
 
   it("reserves protocol hosts so www.solphia.io is not a meme site", () => {
@@ -98,9 +109,63 @@ describe("data launcher V3 SPHA replica", () => {
     assert.match(site, /TOKENOMICS|Tokenomics/);
     assert.match(site, /How to buy/);
     assert.equal(site.toLowerCase().includes("phantom"), false);
+    assert.equal(site.toLowerCase().includes("solphia"), false);
     const meta = read("src/app/api/m/[ticker]/meta/route.ts");
     assert.match(meta, /SNIPER_CREATED_ON/);
     assert.match(meta, /createdOn/);
+  });
+
+  it("builds unique high-tech layouts with Imagine art instead of a Solphia clone", () => {
+    const site = read("src/components/MemeCoinSite.tsx");
+    const css = read("src/components/meme-site.css");
+    const dna = read("src/lib/tools/v3/site.ts");
+    const imagine = read("src/lib/tools/v3/imagine.ts");
+    const project = read("src/lib/tools/v3/project.ts");
+    for (const layout of ["cinema", "terminal", "studio", "neon", "glass", "brutal", "orbital", "pulse"]) {
+      assert.match(site, new RegExp(layout));
+      assert.match(css, new RegExp(`mc-${layout}`));
+      assert.match(dna, new RegExp(layout));
+    }
+    assert.match(site, /mc-cta/);
+    assert.match(site, /mc-faq/);
+    assert.match(site, /mc-marquee/);
+    assert.match(site, /pointermove/);
+    assert.match(css, /mc-cursor/);
+    assert.equal(site.includes("font-display"), false);
+    assert.equal(site.includes("text-acid"), false);
+    assert.equal(site.includes("pump-card"), false);
+    assert.match(imagine, /grok-imagine-image-2\.0/);
+    assert.match(imagine, /response_format: "b64_json"/);
+    assert.match(imagine, /quality: "medium"/);
+    assert.match(project, /generateV3Art/);
+    assert.match(project, /buildV3SiteKit/);
+    assert.match(project, /enrichSiteKit/);
+    assert.match(dna, /Never mention Solphia, Phantom/);
+  });
+
+  it("manages many sites: list, open dashboard, delete without wiping keys, tick every armed site", () => {
+    const project = read("src/lib/tools/v3/project.ts");
+    const launch = read("src/lib/tools/v3/launch.ts");
+    const route = read("src/app/api/admin/tools/launcher-v3/route.ts");
+    const ui = read("src/components/admin/sections/DataLauncherV3.tsx");
+    assert.match(project, /export type V3Book/);
+    assert.match(project, /export async function listSites/);
+    assert.match(project, /export async function openSite/);
+    assert.match(project, /export async function deleteSite/);
+    assert.match(project, /p\.status = "deleted"/);
+    assert.equal(project.includes("saveKeys({})"), false);
+    assert.match(project, /findProjectByHandle/);
+    assert.match(project, /status !== "deleted"/);
+    assert.match(launch, /listTickableSites/);
+    assert.match(launch, /withActiveId/);
+    assert.match(route, /"open", "delete"/);
+    assert.match(route, /openSite/);
+    assert.match(route, /deleteSite/);
+    assert.match(ui, /OPEN DASHBOARD/);
+    assert.match(ui, /DELETE/);
+    assert.match(ui, /action: "open"|act\("open"/);
+    assert.match(ui, /act\("delete"/);
+    assert.match(ui, /Launch wallet keys stay saved|keys stay saved/i);
   });
 
   it("wires Tools V3, cron, host rewrite, and the dashboard STOP/SEND", () => {

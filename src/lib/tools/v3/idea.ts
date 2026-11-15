@@ -22,6 +22,8 @@ export type V3Theme = {
   accent: string;
   muted: string;
   card: string;
+  glow?: string;
+  line?: string;
 };
 
 export type V3Brand = {
@@ -196,13 +198,13 @@ export function buildV3Brand(idea: string, used?: Iterable<string>): V3Brand {
     handle,
     blurb: blurb.slice(0, 220),
     about: raw
-      ? `${displayName} started as a simple idea: ${raw} The community owns the float on a Meteora dynamic bonding curve. Team slices are published on-chain at launch and match this site.`
-      : `${displayName} is a Solana memecoin with a live Meteora curve and public tokenomics.`,
+      ? `${displayName} started as a raw idea: ${raw} The community owns the float on a public Solana bonding curve. Team slices publish on-chain at launch and match this site.`
+      : `${displayName} is a Solana memecoin with a live curve and public tokenomics.`,
     howToBuy: `At T-0 the contract address goes live on this site. Open a Solana wallet, fund it with SOL, and swap into $${symbol} on the bonding curve.`,
     roadmap: [
-      { title: "T-30", body: "Token-2022 mint, unique Meteora DBC config, team slices, metadata, 0.05 SOL opening buy." },
-      { title: "T-0", body: "Public CA, this website flips live, community trading opens on the curve." },
-      { title: "After", body: "Same 1% fee through DAMM v2 graduate at 585 MC. LP permanently locked." },
+      { title: "Ignition", body: "Mint, unique curve config, team slices, metadata, and a 0.05 SOL opening buy." },
+      { title: "Public T-0", body: "The contract address publishes on this website and community trading opens." },
+      { title: "Afterglow", body: "1% fee through graduate. Partner LP permanently locked." },
     ],
     themeId,
     colors: colorsOf(themeId, `${symbol}:${raw}`),
