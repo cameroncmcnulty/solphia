@@ -853,13 +853,19 @@ export type Dressable = {
   buySteps?: { n: string; title: string; body: string }[];
   labels?: WorldLabels;
   worldId?: string;
+  identityLocked?: boolean;
 };
 
 export function dressSitePack<T extends Dressable>(pack: T): T {
   const idea = pack.idea || pack.name || "";
   const seed = worldOf(idea);
-  const badName = nameLooksLikePrompt(pack.name, idea);
-  const displayName = seed.brandName && (badName || !pack.name) ? seed.brandName : pack.name || seed.brandName;
+  const locked = Boolean(pack.identityLocked);
+  const badName = !locked && nameLooksLikePrompt(pack.name, idea);
+  const displayName = locked
+    ? pack.name || seed.brandName
+    : seed.brandName && (badName || !pack.name)
+      ? seed.brandName
+      : pack.name || seed.brandName;
   const world = worldOf(idea, displayName, pack.symbol);
   const copy = [pack.manifesto, pack.about, pack.blurb, pack.tagline, pack.lore, JSON.stringify(pack.faq || [])].join("\n");
   const badCopy = echoesIdea(copy, idea);
@@ -873,7 +879,7 @@ export function dressSitePack<T extends Dressable>(pack: T): T {
     next.layout = world.layout;
     next.motion = world.motion;
   }
-  if (badName && world.brandName) next.name = world.brandName;
+  if (badName && world.brandName && !locked) next.name = world.brandName;
   if (badCopy) {
     next.tagline = world.tagline;
     next.manifesto = world.manifesto;

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAdmin, withAdminSession } from "@/lib/admin/auth";
 import { isSolanaAddress } from "@/lib/security";
-import { deleteSite, draftProject, emptyProject, listSites, loadArchive, loadProject, openSite, patchSocials, publicProject } from "@/lib/tools/v3/project";
+import { deleteSite, draftProject, emptyProject, listSites, loadArchive, loadProject, openSite, patchBrand, publicProject } from "@/lib/tools/v3/project";
 import {
   adminDeskShape,
   armCountdown,
@@ -19,9 +19,12 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 const Body = z.object({
-  action: z.enum(["draft", "socials", "arm", "clearCountdown", "tick", "stop", "send", "sign", "open", "delete"]),
+  action: z.enum(["draft", "socials", "brand", "arm", "clearCountdown", "tick", "stop", "send", "sign", "open", "delete"]),
   idea: z.string().min(2).max(280).optional(),
   id: z.string().max(80).optional(),
+  name: z.string().max(32).optional(),
+  symbol: z.string().max(12).optional(),
+  image: z.string().max(2400).optional(),
   x: z.string().max(120).optional(),
   telegram: z.string().max(120).optional(),
   launchAt: z.number().optional(),
@@ -91,8 +94,11 @@ export async function POST(req: NextRequest) {
       }
       return withAdminSession(NextResponse.json({ ok: true, ...(await desk()) }));
     }
-    if (b.action === "socials") {
-      await patchSocials({ x: b.x, telegram: b.telegram });
+    if (b.action === "socials" || b.action === "brand") {
+      const patched = await patchBrand({ name: b.name, symbol: b.symbol, x: b.x, telegram: b.telegram, image: b.image });
+      if (!patched.ok) {
+        return NextResponse.json({ error: patched.error, message: patched.error, ...(await desk()) }, { status: 400 });
+      }
       return withAdminSession(NextResponse.json({ ok: true, ...(await desk()) }));
     }
     if (b.action === "arm") {

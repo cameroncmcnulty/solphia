@@ -2,20 +2,28 @@ import { NextRequest, NextResponse } from "next/server";
 import { isReservedV3Host, v3HostFromHeader } from "@/lib/tools/v3/host";
 
 export function middleware(req: NextRequest) {
-  const host = req.headers.get("host") || "";
+  const host = req.headers.get("x-forwarded-host") || req.headers.get("host") || "";
   const sub = v3HostFromHeader(host);
-  if (sub && !isReservedV3Host(sub) && !sub.includes(".")) {
-    const path = req.nextUrl.pathname;
-    if (!path.startsWith("/api/") && !path.startsWith("/_next") && !path.startsWith("/m/")) {
-      const url = req.nextUrl.clone();
-      url.pathname = path === "/" ? `/m/${sub}` : `/m/${sub}${path}`;
-      const rewrite = NextResponse.rewrite(url);
-      rewrite.headers.set("X-Robots-Tag", "noindex");
-      return rewrite;
-    }
+  const meme = Boolean(sub && !isReservedV3Host(sub) && !sub.includes("."));
+  const path = req.nextUrl.pathname;
+
+  if (meme && !path.startsWith("/api/") && !path.startsWith("/_next") && !path.startsWith("/m/")) {
+    const url = req.nextUrl.clone();
+    url.pathname = path === "/" ? `/m/${sub}` : `/m/${sub}${path}`;
+    const requestHeaders = new Headers(req.headers);
+    requestHeaders.set("x-v3-handle", sub);
+    const rewrite = NextResponse.rewrite(url, { request: { headers: requestHeaders } });
+    rewrite.headers.set("X-Robots-Tag", "noindex");
+    return rewrite;
   }
 
-  const res = NextResponse.next();
+  const requestHeaders = new Headers(req.headers);
+  if (meme) requestHeaders.set("x-v3-handle", sub);
+  else if (path.startsWith("/m/")) {
+    const handle = path.split("/").filter(Boolean)[1] || "";
+    if (handle && !isReservedV3Host(handle) && !handle.includes(".")) requestHeaders.set("x-v3-handle", handle);
+  }
+  const res = NextResponse.next({ request: { headers: requestHeaders } });
   res.headers.set("X-Robots-Tag", "noindex");
   if (req.nextUrl.pathname.startsWith("/api/")) {
     const origin = req.headers.get("origin");

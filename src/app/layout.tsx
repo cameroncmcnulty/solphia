@@ -19,7 +19,7 @@ export const viewport: Viewport = {
   interactiveWidget: "resizes-content",
 };
 
-export const metadata: Metadata = {
+const SOLPHIA_METADATA: Metadata = {
   metadataBase: new URL("https://solphia.io"),
   title: {
     default: "SOLPHIA",
@@ -57,17 +57,41 @@ export const metadata: Metadata = {
   manifest: "/site.webmanifest",
 };
 
-export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const host = (await headers()).get("host") || "";
-  const sub = v3HostFromHeader(host);
+export async function generateMetadata(): Promise<Metadata> {
+  const h = await headers();
+  const marked = (h.get("x-v3-handle") || "").trim().toLowerCase();
+  const host = h.get("x-forwarded-host") || h.get("host") || "";
+  const sub = marked || v3HostFromHeader(host);
   const memeHost = Boolean(sub && !isReservedV3Host(sub) && !sub.includes("."));
+  if (memeHost) {
+    return {
+      metadataBase: new URL("https://solphia.io"),
+      robots: { index: false, follow: false },
+    };
+  }
+  return SOLPHIA_METADATA;
+}
+
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const h = await headers();
+  const marked = (h.get("x-v3-handle") || "").trim().toLowerCase();
+  const host = h.get("x-forwarded-host") || h.get("host") || "";
+  const sub = marked || v3HostFromHeader(host);
+  const memeHost = Boolean(sub && !isReservedV3Host(sub) && !sub.includes("."));
+  if (memeHost) {
+    return (
+      <html lang="en">
+        <body className="antialiased">{children}</body>
+      </html>
+    );
+  }
   return (
     <html lang="en">
       <head>
         <script dangerouslySetInnerHTML={{ __html: OWNER_HYDRATE_SCRIPT }} />
       </head>
       <body className={`${syne.variable} ${plex.variable} ${cormorant.variable} font-sans antialiased`}>
-        <Shell memeHost={memeHost}>{children}</Shell>
+        <Shell memeHost={false}>{children}</Shell>
       </body>
     </html>
   );

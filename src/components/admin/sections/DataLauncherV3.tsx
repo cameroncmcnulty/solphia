@@ -70,6 +70,8 @@ function fmtSupply(n: number) {
 export function DataLauncherV3() {
   const [desk, setDesk] = useState<Desk | null>(null);
   const [idea, setIdea] = useState("");
+  const [name, setName] = useState("");
+  const [symbol, setSymbol] = useState("");
   const [x, setX] = useState("");
   const [telegram, setTelegram] = useState("");
   const [when, setWhen] = useState("");
@@ -98,15 +100,22 @@ export function DataLauncherV3() {
 
   useEffect(() => {
     if (!desk?.project?.id || desk.project.status === "deleted") {
+      setName("");
+      setSymbol("");
       setX("");
       setTelegram("");
       setWhen("");
       return;
     }
+    setName(desk.project.name || "");
+    setSymbol(desk.project.symbol || "");
     setX(desk.project.x || "");
     setTelegram(desk.project.telegram || "");
-    setWhen(desk.countdown?.launchAt ? toDatetimeLocalValue(desk.countdown.launchAt) : "");
-  }, [desk?.project?.id, desk?.project?.status, desk?.countdown?.launchAt, desk?.project?.x, desk?.project?.telegram]);
+  }, [desk?.project?.id, desk?.project?.status]);
+
+  useEffect(() => {
+    setWhen(desk?.countdown?.launchAt ? toDatetimeLocalValue(desk.countdown.launchAt) : "");
+  }, [desk?.countdown?.launchAt, desk?.project?.id]);
 
   async function act(action: string, extra?: Record<string, unknown>) {
     setBusy(true);
@@ -126,6 +135,8 @@ export function DataLauncherV3() {
         };
       });
       if (gone) {
+        setName("");
+        setSymbol("");
         setX("");
         setTelegram("");
         setWhen("");
@@ -276,35 +287,69 @@ export function DataLauncherV3() {
 
       {p?.id && sites.some((s) => s.id === p.id) ? (
         <>
-          <Panel kicker="2 · WEBSITE">
-            <div className="mt-4 grid gap-4 md:grid-cols-[auto_1fr]">
-              <div className="flex gap-2">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={p.image} alt="" className="h-20 w-20 rounded-2xl object-cover" />
-                {p.heroImage ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={p.heroImage} alt="" className="h-20 w-32 rounded-2xl object-cover" />
-                ) : null}
-              </div>
-              <div>
-                <div className="font-display text-2xl text-ghost">
-                  {p.name} <span className="text-acid">${p.symbol}</span>
-                </div>
-                <p className="mt-1 text-sm text-mute">{p.blurb}</p>
-                <div className="mt-1 font-mono text-[11px] text-mute">layout {p.layout || "glass"} · Imagine mascot + hero</div>
-                <a href={p.website} target="_blank" rel="noreferrer" className="mt-2 inline-block font-mono text-[12px] text-acid">
-                  {p.website}
-                </a>
-                <span className="ml-3 font-mono text-[11px] text-mute">also /m/{p.handle}</span>
-              </div>
-            </div>
+          <Panel kicker="2 · WEBSITE · IDENTITY + METADATA">
             <p className="mt-3 text-sm text-mute">
-              Add a wildcard DNS record for *.solphia.io on Vercel so ticker.solphia.io serves this site. Path /m/{p.handle}{" "}
-              already works on solphia.io.
+              Name, ticker, logo, and socials write through the live site, the tab title, and the token metadata JSON
+              the mint uses. Same fields as the $SPHA launcher.
             </p>
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={p.image} alt="" className="h-20 w-20 rounded-2xl object-cover" />
+              {p.heroImage ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={p.heroImage} alt="" className="h-20 w-32 rounded-2xl object-cover" />
+              ) : null}
+              <label className="btn-ghost cursor-pointer rounded-full px-4 py-2 text-sm">
+                {busy ? "Saving logo…" : "Replace logo"}
+                <input
+                  type="file"
+                  accept="image/*"
+                  hidden
+                  disabled={busy}
+                  onChange={async (e) => {
+                    const f = e.target.files?.[0];
+                    e.target.value = "";
+                    if (!f) return;
+                    setBusy(true);
+                    setErr("");
+                    try {
+                      const fd = new FormData();
+                      fd.append("file", f, "logo.png");
+                      const r = await fetch("/api/admin/tools/launcher-v3/art", { method: "POST", body: fd });
+                      const j = await r.json();
+                      if (!r.ok) throw new Error(j.message || j.error || "Logo failed.");
+                      await load();
+                    } catch (er) {
+                      setErr(er instanceof Error ? er.message : "Logo failed.");
+                    } finally {
+                      setBusy(false);
+                    }
+                  }}
+                />
+              </label>
+            </div>
             <div className="mt-4 grid gap-3 md:grid-cols-2">
               <label className="block">
-                <span className="font-mono text-[10px] tracking-[0.16em] text-mute">X URL (live 200)</span>
+                <span className="font-mono text-[10px] tracking-[0.16em] text-mute">NAME</span>
+                <input
+                  value={name}
+                  onChange={(e) => setName(e.target.value.slice(0, 32))}
+                  placeholder="VICE"
+                  className="mt-1 w-full rounded-full border border-line bg-void px-4 py-2 text-sm text-ghost outline-none"
+                />
+              </label>
+              <label className="block">
+                <span className="font-mono text-[10px] tracking-[0.16em] text-mute">TICKER</span>
+                <input
+                  value={symbol}
+                  onChange={(e) => setSymbol(e.target.value.replace(/^\$/, "").slice(0, 10).toUpperCase())}
+                  placeholder="VICE"
+                  disabled={Boolean(p.mint || p.pendingMint)}
+                  className="mt-1 w-full rounded-full border border-line bg-void px-4 py-2 text-sm text-ghost outline-none disabled:opacity-50"
+                />
+              </label>
+              <label className="block">
+                <span className="font-mono text-[10px] tracking-[0.16em] text-mute">X URL</span>
                 <input
                   value={x}
                   onChange={(e) => setX(e.target.value)}
@@ -313,7 +358,7 @@ export function DataLauncherV3() {
                 />
               </label>
               <label className="block">
-                <span className="font-mono text-[10px] tracking-[0.16em] text-mute">TELEGRAM URL (live 200)</span>
+                <span className="font-mono text-[10px] tracking-[0.16em] text-mute">TELEGRAM URL</span>
                 <input
                   value={telegram}
                   onChange={(e) => setTelegram(e.target.value)}
@@ -322,14 +367,20 @@ export function DataLauncherV3() {
                 />
               </label>
             </div>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => void act("socials", { x, telegram })}
-              className="btn-ghost mt-3 rounded-full px-5 py-2 text-sm"
-            >
-              Save socials
-            </button>
+            <a href={p.website} target="_blank" rel="noreferrer" className="mt-3 inline-block font-mono text-[12px] text-acid">
+              {p.website}
+            </a>
+            <span className="ml-3 font-mono text-[11px] text-mute">/m/{p.handle}</span>
+            <div>
+              <button
+                type="button"
+                disabled={busy || name.trim().length < 2 || symbol.trim().length < 2}
+                onClick={() => void act("brand", { name: name.trim(), symbol: symbol.trim(), x, telegram })}
+                className="btn-acid mt-3 rounded-full px-5 py-2 text-sm tracking-[0.16em] disabled:opacity-40"
+              >
+                Save identity
+              </button>
+            </div>
           </Panel>
 
           <Panel kicker="TOKENOMICS · MATCHES THE MINT">

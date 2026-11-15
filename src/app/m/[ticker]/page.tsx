@@ -22,6 +22,11 @@ export async function generateMetadata({ params }: { params: Promise<{ ticker: s
     title: { absolute: title },
     description,
     applicationName: name,
+    icons: {
+      icon: [{ url: image, type: "image/png" }],
+      apple: [{ url: image }],
+      shortcut: image,
+    },
     openGraph: {
       title,
       description,

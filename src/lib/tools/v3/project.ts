@@ -6,12 +6,12 @@ import { SITE_URL } from "../../config";
 import { durableConfigured, kvGetJson, kvSetJson, KEYS } from "../../persist";
 import { bytesToB64, b64ToBytes } from "../../solana/wire";
 import { emptySnipers, type SniperStats } from "../snipers";
-import { SNIPER_CREATED_ON } from "../identities";
+import { SNIPER_CREATED_ON, nameOk, tickerOk } from "../identities";
 import { SPHA_MINT_LEAD_MS } from "../../token/countdown";
 import { buildV3Brand, type V3Brand, type V3Slice, type V3Theme } from "./idea";
 import { buildV3SiteKit, enrichSiteKit, V3_FONTS, type V3Fonts, type V3Layout, type V3Motion, type V3SiteKit } from "./site";
 import { generateV3Art } from "./imagine";
-import { v3HandleOf, v3WebsiteOf } from "./host";
+import { isReservedV3Host, v3HandleOf, v3WebsiteOf } from "./host";
 import { dressSitePack, type WorldLabels } from "./world";
 
 const FILE = path.join(process.cwd(), "data", "batch-launch-v3.json");
@@ -68,6 +68,7 @@ export type V3Project = {
   stats: { k: string; v: string }[];
   labels: WorldLabels;
   worldId: string;
+  identityLocked?: boolean;
   artPrompt: string;
   heroPrompt: string;
   launchAt: number;
@@ -377,6 +378,7 @@ export function normalizeProject(raw: unknown): V3Project {
         }
       : emptyLabels(),
     worldId: str(o.worldId) || "generic",
+    identityLocked: Boolean(o.identityLocked),
     artPrompt: str(o.artPrompt).slice(0, 500),
     heroPrompt: str(o.heroPrompt).slice(0, 500),
     launchAt: num(o.launchAt),
@@ -718,11 +720,80 @@ export async function draftProject(idea: string): Promise<{ ok: true; project: V
 }
 
 export async function patchSocials(opts: { x?: string; telegram?: string }): Promise<V3Project> {
+  const out = await patchBrand(opts);
+  return out.project;
+}
+
+function rewriteIdentity(text: string, fromName: string, fromTick: string, toName: string, toTick: string): string {
+  let s = text || "";
+  if (fromTick && fromTick !== toTick) {
+    s = s.split(`$${fromTick}`).join(`$${toTick}`);
+    s = s.replace(new RegExp(`\\b${fromTick}\\b`, "g"), toTick);
+  }
+  if (fromName && fromName !== toName) s = s.split(fromName).join(toName);
+  return s;
+}
+
+export async function patchBrand(opts: {
+  name?: string;
+  symbol?: string;
+  x?: string;
+  telegram?: string;
+  image?: string;
+}): Promise<{ ok: true; project: V3Project } | { ok: false; error: string; project: V3Project }> {
   const p = await loadProject();
+  if (!p.id || p.status === "deleted") return { ok: false, error: "no_project", project: p };
+  const prevName = p.name;
+  const prevSym = p.symbol;
+  if (opts.name != null) {
+    const n = String(opts.name).trim().slice(0, 32);
+    if (!nameOk(n)) return { ok: false, error: "bad_name", project: p };
+    p.name = n;
+  }
+  if (opts.symbol != null) {
+    const minted = Boolean(p.mint || p.pendingMint);
+    if (minted && opts.symbol.replace(/^\$/, "").trim().toUpperCase() !== p.symbol) {
+      return { ok: false, error: "ticker_locked", project: p };
+    }
+    const s = String(opts.symbol).replace(/^\$/, "").trim().toUpperCase().slice(0, 10);
+    if (!tickerOk(s)) return { ok: false, error: "bad_ticker", project: p };
+    const handle = v3HandleOf(s);
+    if (isReservedV3Host(handle)) return { ok: false, error: "reserved_host", project: p };
+    const book = await loadBook();
+    const taken = Object.values(book.sites).some(
+      (row) => row.id !== p.id && row.status !== "deleted" && (row.handle === handle || row.symbol === s),
+    );
+    if (taken) return { ok: false, error: "ticker_taken", project: p };
+    p.symbol = s;
+    p.handle = handle;
+    p.website = v3WebsiteOf(s);
+    p.uri = metaUrl(handle);
+  }
+  if (prevName !== p.name || prevSym !== p.symbol) {
+    const swap = (s: string) => rewriteIdentity(s, prevName, prevSym, p.name, p.symbol);
+    p.blurb = swap(p.blurb);
+    p.about = swap(p.about);
+    p.tagline = swap(p.tagline);
+    p.manifesto = swap(p.manifesto);
+    p.lore = swap(p.lore);
+    p.community = swap(p.community);
+    p.howToBuy = swap(p.howToBuy);
+    p.features = p.features.map((f) => ({ title: swap(f.title), body: swap(f.body) }));
+    p.faq = p.faq.map((f) => ({ q: swap(f.q), a: swap(f.a) }));
+    p.buySteps = p.buySteps.map((f) => ({ ...f, title: swap(f.title), body: swap(f.body) }));
+    p.roadmap = p.roadmap.map((f) => ({ title: swap(f.title), body: swap(f.body) }));
+  }
   if (opts.x != null) p.x = String(opts.x).trim().slice(0, 120);
   if (opts.telegram != null) p.telegram = String(opts.telegram).trim().slice(0, 120);
+  if (opts.image != null) {
+    const img = String(opts.image).trim();
+    if (img && (img.startsWith("http") || img.startsWith("data:image") || img.startsWith("/"))) {
+      p.image = img.slice(0, 2400);
+    }
+  }
+  p.identityLocked = true;
   await saveProject(p);
-  return p;
+  return { ok: true, project: p };
 }
 
 export function teamWalletsOf(p: V3Project): string[] {
@@ -759,6 +830,7 @@ export function publicSitePack(p: V3Project, now = Date.now()) {
     buySteps: p.buySteps,
     labels: p.labels,
     worldId: p.worldId,
+    identityLocked: p.identityLocked,
   });
   return {
     name: dressed.name,

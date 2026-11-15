@@ -217,6 +217,7 @@ describe("data launcher V3 SPHA replica", () => {
     const mw = read("src/middleware.ts");
     assert.match(mw, /v3HostFromHeader/);
     assert.match(mw, /\/m\/\$\{sub\}/);
+    assert.match(mw, /x-v3-handle/);
     const shell = read("src/components/Shell.tsx");
     assert.match(shell, /isMeme/);
     assert.match(shell, /memeHost/);
@@ -224,6 +225,10 @@ describe("data launcher V3 SPHA replica", () => {
     const layoutSrc = read("src/app/layout.tsx");
     assert.match(layoutSrc, /v3HostFromHeader/);
     assert.match(layoutSrc, /memeHost/);
+    assert.match(layoutSrc, /x-v3-handle/);
+    assert.match(layoutSrc, /if \(memeHost\)/);
+    assert.match(layoutSrc, /export async function generateMetadata/);
+    assert.match(layoutSrc, /SOLPHIA_METADATA/);
     const page = read("src/app/m/[ticker]/page.tsx");
     assert.match(page, /MemeCoinSite/);
   });
@@ -278,5 +283,15 @@ describe("data launcher V3 SPHA replica", () => {
     assert.match(css, /mc-hud-stars/);
     const project = read("src/lib/tools/v3/project.ts");
     assert.match(project, /dressSitePack/);
+    assert.match(project, /export async function patchBrand/);
+    assert.match(project, /identityLocked/);
+    const ui = read("src/components/admin/sections/DataLauncherV3.tsx");
+    assert.match(ui, /Save identity/);
+    assert.match(ui, /Replace logo/);
+    assert.match(ui, /act\("brand"/);
+    const meta = read("src/app/api/m/[ticker]/meta/route.ts");
+    assert.match(meta, /findProjectByHandle/);
+    const art = read("src/app/api/admin/tools/launcher-v3/art/route.ts");
+    assert.match(art, /patchBrand/);
   });
 });
