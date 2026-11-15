@@ -8,14 +8,13 @@ import {
   SystemProgram,
   Transaction,
 } from "@solana/web3.js";
-import { createCloseAccountInstruction, TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID } from "@solana/spl-token";
+import { createBurnInstruction, createCloseAccountInstruction, TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID } from "@solana/spl-token";
 import { isSolanaAddress } from "../security";
 import { SITE_URL } from "../config";
 import { connection, waitForSignature } from "../solana/connection";
 import { signPackedB64 } from "../solana/extraSign";
 import { broadcastB64 } from "../solana/broadcast";
 import { b64ToBytes, bytesToB64 } from "../solana/wire";
-import { encodeTx } from "../token/mint";
 import { TOKEN_2022_PROGRAM, TOKEN_PROGRAM } from "../solana/tokenBalance";
 import { SOL_MINT } from "../pair/mints";
 import { isTokenMetaUri, pinSphaTokenMeta } from "../token/sphaMeta";
@@ -27,27 +26,25 @@ import { treasuryAddress } from "../treasury";
 import { durableConfigured, kvDel, kvGetJson, kvSetJson, kvSetNxEx, KEYS } from "../persist";
 import { audit, pushBounded, readyState, withLaunch } from "../store";
 import { emptySnipers, sniperStats, type SniperStats } from "./snipers";
-import { buildProjectSliceMintTx } from "./projectMint";
 import { ownerAddress } from "../ownerWallet";
 import {
   BATCH_RELAY_LAMPORTS,
   BATCH_RELAY_SOL,
-  BATCH_SUPPLY,
   DEFAULT_NARRATIVE,
   DEFAULT_RANDOM,
   DEFAULT_WINDOW_MS,
   DUMP_DELAY_MS,
   DUMP_MIN_SOL,
   DUMP_SLIPPAGE_BPS,
-  dumpHot,
   MAX_BATCH,
   splitMix,
-  buildIdentities,
+  buildSniperIdentities,
   curveTokensFor,
   fetchNarratives,
   isInsufficientFunds,
   scheduleTimes,
-  teamTokensFor,
+  SNIPER_CREATED_ON,
+  SNIPER_CREATOR_BUY_SOL,
   type TokenIdentity,
   type TokenKind,
 } from "./identities";
@@ -63,6 +60,7 @@ import {
   warmupCycles,
   warmupSol,
   WARMUP_KEEP_SOL,
+  INCINERATOR_URL,
   type ScramblerOpts,
   type WalletVault,
 } from "./scrambler";
@@ -138,6 +136,8 @@ export type Campaign = {
   lastLaunchAt?: number;
   error?: string;
   returnedSol?: number;
+  /** Set by campaign STOP so cron keeps selling bags and sending SOL to treasury. */
+  liquidating?: boolean;
   tokens: CampaignToken[];
   scrambler?: ScramblerOpts;
 };
@@ -205,6 +205,7 @@ function emptyCampaign(): Campaign {
     fundLamports: BATCH_RELAY_LAMPORTS,
     relayFunded: false,
     dry: false,
+    liquidating: false,
     tokens: [],
     scrambler: DEFAULT_SCRAMBLER,
   };
@@ -485,6 +486,7 @@ function normalizeCampaign(raw: unknown): Campaign {
     lastLaunchAt: Number(o.lastLaunchAt) || undefined,
     error: typeof o.error === "string" ? o.error : undefined,
     returnedSol: Number(o.returnedSol) || undefined,
+    liquidating: Boolean(o.liquidating),
     tokens,
     scrambler: normalizeScrambler(o.scrambler),
   };
@@ -518,7 +520,7 @@ function normalizeToken(raw: unknown): CampaignToken {
     image: typeof o.image === "string" && o.image ? o.image : artUrl(id),
     uri: typeof o.uri === "string" && o.uri ? o.uri : metaUrl(id),
     sigs: Array.isArray(o.sigs) ? o.sigs.filter((s) => typeof s === "string") : [],
-    teamTokens: Number(o.teamTokens) || teamTokensFor(Number(o.teamBps) || 300),
+    teamTokens: Number(o.teamTokens) || 0,
     curveTokens: Number(o.curveTokens) || curveTokensFor(Number(o.teamBps) || 300),
     error: typeof o.error === "string" ? o.error : undefined,
     snipers: o.snipers || emptySnipers(),
@@ -647,7 +649,7 @@ export async function startCampaign(opts?: {
   const now = Date.now();
   const hits = await fetchNarratives(Math.max(120, narrative));
   const used = await loadUsedTickers();
-  const ids = buildIdentities({ narrative, random, hits, used });
+  const ids = buildSniperIdentities({ narrative, random, hits, used });
   await rememberTickers(ids.map((id) => id.symbol));
   const times = scheduleTimes(ids.length, windowMs, now);
   const tokens: CampaignToken[] = ids.map((id, i) => ({
@@ -657,7 +659,7 @@ export async function startCampaign(opts?: {
     image: artUrl(id.id),
     uri: metaUrl(id.id),
     sigs: [],
-    teamTokens: teamTokensFor(id.teamBps),
+    teamTokens: 0,
     curveTokens: curveTokensFor(id.teamBps),
     snipers: emptySnipers(),
   }));
@@ -720,11 +722,12 @@ export async function stopCampaign(): Promise<Campaign> {
   const c = await loadCampaign();
   if (c.status === "running" || c.status === "paused") {
     c.status = "stopped";
+    c.liquidating = true;
     await saveCampaign(c);
     try {
-      await closeOutCampaign(c, { limit: 8 });
+      await closeOutCampaign(c, { limit: 80, minSol: 0 });
     } catch {
-      /* cron finishes leftover hops */
+      /* cron finishes leftover wallets */
     }
   }
   return loadCampaign();
@@ -754,6 +757,8 @@ async function withLaunchLock<T>(fn: () => Promise<T>): Promise<T | { skipped: t
 }
 
 const RELAY_FEE_LAMPORTS = 2_000_000;
+/** Leave this in a live launch wallet after leftover hop so STOP can still sell bags. */
+const KEEP_FOR_STOP_LAMPORTS = Math.floor(WARMUP_KEEP_SOL * LAMPORTS_PER_SOL) + RELAY_FEE_LAMPORTS;
 
 async function sendSol(from: Keypair, to: PublicKey, lamports: number): Promise<string> {
   const conn = connection();
@@ -882,10 +887,15 @@ async function armScramble(c: Campaign, token: CampaignToken, keys: KeyPack): Pr
   return scramble;
 }
 
-async function hopTransfer(from: Keypair, to: PublicKey, used: Set<number>): Promise<{ sig: string; lamports: number }> {
+async function hopTransfer(
+  from: Keypair,
+  to: PublicKey,
+  used: Set<number>,
+  keepLamports = RELAY_FEE_LAMPORTS,
+): Promise<{ sig: string; lamports: number }> {
   const bal = await connection().getBalance(from.publicKey, "confirmed");
-  const maxSend = bal - RELAY_FEE_LAMPORTS;
-  if (maxSend < 1) return { sig: "", lamports: Math.max(0, bal) };
+  const maxSend = bal - keepLamports;
+  if (maxSend < 1) return { sig: "", lamports: 0 };
   let amount = Math.min(maxSend, jitterLamports(maxSend, { used }));
   if (amount < 1) amount = maxSend;
   const sig = await sendSol(from, to, amount);
@@ -906,7 +916,7 @@ async function sourceForHop(
           t.wallet &&
           t.wallet !== token.wallet &&
           keys[t.wallet] &&
-          (t.status === "live" || t.status === "failed" || t.status === "stopped") &&
+          (t.status === "failed" || t.status === "stopped") &&
           t.dumped,
       );
       for (const prev of [...prevs].reverse()) {
@@ -1011,10 +1021,9 @@ function markDry(c: Campaign, token: CampaignToken, walletSol: number, message: 
   token.status = "failed";
   token.error = message;
   c.dry = true;
-  c.status = "stopped";
   measureRelay(c, walletSol);
   const live = c.tokens.filter((t) => t.status === "live").length;
-  c.error = `Stopped on insufficient funds after ${live} live launch${live === 1 ? "" : "es"}. Seed was ${BATCH_RELAY_SOL} SOL. About ${(c.measuredCostSol || 0).toFixed(4)} SOL used per launch. ${walletSol.toFixed(4)} SOL left in the last wallet. ${message}`;
+  c.error = `Relay ran dry after ${live} live launch${live === 1 ? "" : "es"}. Seed was ${BATCH_RELAY_SOL} SOL. About ${(c.measuredCostSol || 0).toFixed(4)} SOL used per launch. ${walletSol.toFixed(4)} SOL left in the last wallet. Live bags stay until STOP. ${message}`;
 }
 
 async function returnWalletToOwner(c: Campaign, from: Keypair, token: CampaignToken): Promise<void> {
@@ -1045,19 +1054,21 @@ async function relayToNext(c: Campaign, from: Keypair, token: CampaignToken, key
       !t.stopped,
   );
   if (!next) {
-    await returnWalletToOwner(c, from, token);
+    const left = await connection().getBalance(from.publicKey, "confirmed").catch(() => 0);
+    measureRelay(c, left / LAMPORTS_PER_SOL);
     return;
   }
   await armScramble(c, next, keys);
   const first = next.scramble?.hops[0];
   const destPk = first?.pk || next.wallet;
   if (!destPk || destPk === from.publicKey.toBase58()) {
-    await returnWalletToOwner(c, from, token);
+    const left = await connection().getBalance(from.publicKey, "confirmed").catch(() => 0);
+    measureRelay(c, left / LAMPORTS_PER_SOL);
     return;
   }
   try {
     const used = usedLamportsOf(token);
-    const relayed = await hopTransfer(from, new PublicKey(destPk), used);
+    const relayed = await hopTransfer(from, new PublicKey(destPk), used, KEEP_FOR_STOP_LAMPORTS);
     if (relayed.sig) token.sigs.push(relayed.sig);
     if (first) {
       first.sig = relayed.sig;
@@ -1133,6 +1144,177 @@ async function sellHolding(kp: Keypair, mint: string, tokens: number): Promise<{
   return { sig, solOut: Number(built.solOut) || 0 };
 }
 
+type TokenAccountRow = { mint: string; account: PublicKey; program: PublicKey; amount: bigint };
+
+async function listAllTokenAccounts(owner: string): Promise<TokenAccountRow[]> {
+  const conn = connection();
+  const ownerPk = new PublicKey(owner);
+  const [legacy, t22] = await Promise.all([
+    conn.getParsedTokenAccountsByOwner(ownerPk, { programId: new PublicKey(TOKEN_PROGRAM) }),
+    conn.getParsedTokenAccountsByOwner(ownerPk, { programId: new PublicKey(TOKEN_2022_PROGRAM) }),
+  ]);
+  const out: TokenAccountRow[] = [];
+  const push = (row: { pubkey: PublicKey; account: { data: unknown } }, program: PublicKey) => {
+    const data = row.account.data as {
+      parsed?: { info?: { mint?: string; tokenAmount?: { amount?: string } } };
+    };
+    const mint = data?.parsed?.info?.mint || "";
+    if (!isSolanaAddress(mint)) return;
+    let amount = 0n;
+    try {
+      amount = BigInt(data?.parsed?.info?.tokenAmount?.amount || "0");
+    } catch {
+      amount = 0n;
+    }
+    out.push({ mint, account: row.pubkey, program, amount });
+  };
+  for (const row of legacy.value) push(row, TOKEN_PROGRAM_ID);
+  for (const row of t22.value) push(row, TOKEN_2022_PROGRAM_ID);
+  return out;
+}
+
+/** Burn leftover tokens and close ATAs so mint rent returns as SOL, the way Sol Incinerator does. */
+async function incinerateTokenAccounts(kp: Keypair): Promise<string[]> {
+  const rows = await listAllTokenAccounts(kp.publicKey.toBase58());
+  const sigs: string[] = [];
+  const conn = connection();
+  for (let i = 0; i < rows.length; i += 4) {
+    const chunk = rows.slice(i, i + 4);
+    const ixs = [];
+    for (const row of chunk) {
+      if (row.mint === SOL_MINT) {
+        if (row.amount === 0n) {
+          ixs.push(createCloseAccountInstruction(row.account, kp.publicKey, kp.publicKey, [], row.program));
+        }
+        continue;
+      }
+      if (row.amount > 0n) {
+        ixs.push(
+          createBurnInstruction(row.account, new PublicKey(row.mint), kp.publicKey, row.amount, [], row.program),
+        );
+      }
+      ixs.push(createCloseAccountInstruction(row.account, kp.publicKey, kp.publicKey, [], row.program));
+    }
+    if (!ixs.length) continue;
+    try {
+      const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash("confirmed");
+      const tx = new Transaction().add(
+        ComputeBudgetProgram.setComputeUnitLimit({ units: 200_000 }),
+        ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 50_000 }),
+        ...ixs,
+      );
+      tx.feePayer = kp.publicKey;
+      tx.recentBlockhash = blockhash;
+      tx.lastValidBlockHeight = lastValidBlockHeight;
+      tx.sign(kp);
+      const sig = await broadcastB64(bytesToB64(tx.serialize()), { skipPreflight: true });
+      await waitForSignature(sig, 20);
+      sigs.push(sig);
+    } catch {
+      /* next chunk */
+    }
+  }
+  return sigs;
+}
+
+export type OldWalletRow = {
+  pk: string;
+  role: "hop" | "final";
+  tokenId?: string;
+  hopIndex: number;
+  createdAt: number;
+  live: boolean;
+};
+
+export async function listOldWallets(): Promise<{
+  count: number;
+  reclaimable: number;
+  incinerator: string;
+  rows: OldWalletRow[];
+}> {
+  const vault = await loadVault();
+  const c = await loadCampaign();
+  const livePks = new Set(
+    c.tokens.filter((t) => t.status === "live" && !t.stopped && t.wallet).map((t) => t.wallet as string),
+  );
+  const rows: OldWalletRow[] = Object.entries(vault)
+    .filter(([pk, row]) => pk && row?.secret)
+    .map(([pk, row]) => ({
+      pk,
+      role: row.role === "hop" ? ("hop" as const) : ("final" as const),
+      tokenId: row.tokenId,
+      hopIndex: Number(row.hopIndex) || 0,
+      createdAt: Number(row.createdAt) || 0,
+      live: livePks.has(pk),
+    }))
+    .sort((a, b) => b.createdAt - a.createdAt);
+  return {
+    count: rows.length,
+    reclaimable: rows.filter((r) => !r.live).length,
+    incinerator: INCINERATOR_URL,
+    rows: rows.slice(0, 120),
+  };
+}
+
+/** Burn leftover tokens on old hop/final wallets, close ATAs, send SOL to treasury. Live bags stay. */
+export async function reclaimOldWalletsToTreasury(opts?: { limit?: number }): Promise<{
+  ok: boolean;
+  closed: number;
+  movedSol: number;
+  skippedLive: number;
+  signatures: string[];
+  error?: string;
+}> {
+  const dest = leftoverDest();
+  if (!isSolanaAddress(dest)) return { ok: false, closed: 0, movedSol: 0, skippedLive: 0, signatures: [], error: "Treasury address missing." };
+  const vault = await loadVault();
+  const c = await loadCampaign();
+  const livePks = new Set(
+    c.tokens.filter((t) => t.status === "live" && !t.stopped && t.wallet).map((t) => t.wallet as string),
+  );
+  const to = new PublicKey(dest);
+  const limit = Math.max(1, Math.min(40, opts?.limit ?? 20));
+  let closed = 0;
+  let movedSol = 0;
+  let skippedLive = 0;
+  const signatures: string[] = [];
+  const entries = Object.entries(vault).filter(([pk, row]) => pk && row?.secret && pk !== dest);
+  for (const [pk, row] of entries) {
+    if (closed >= limit) break;
+    if (livePks.has(pk)) {
+      skippedLive += 1;
+      continue;
+    }
+    let kp: Keypair;
+    try {
+      kp = walletOf(row.secret);
+      if (kp.publicKey.toBase58() !== pk) continue;
+    } catch {
+      continue;
+    }
+    try {
+      const burned = await incinerateTokenAccounts(kp);
+      signatures.push(...burned);
+    } catch {
+      /* SOL still moves */
+    }
+    const bal = await connection().getBalance(kp.publicKey, "confirmed").catch(() => 0);
+    if (bal <= RELAY_FEE_LAMPORTS) {
+      closed += 1;
+      continue;
+    }
+    try {
+      const relayed = await relayAll(kp, to);
+      if (relayed.sig) signatures.push(relayed.sig);
+      movedSol += relayed.lamports / LAMPORTS_PER_SOL;
+      closed += 1;
+    } catch {
+      closed += 1;
+    }
+  }
+  return { ok: true, closed, movedSol, skippedLive, signatures };
+}
+
 async function closeEmptyBags(kp: Keypair, bags: WalletBag[]): Promise<string | null> {
   if (!bags.length) return null;
   const conn = connection();
@@ -1198,14 +1380,6 @@ async function sellAllHoldings(kp: Keypair, token: CampaignToken, opts?: { minSo
   return recovered;
 }
 
-function tokenDumpHot(token: CampaignToken, quote = token.bagQuoteSol || 0): boolean {
-  return dumpHot({
-    bagQuoteSol: quote,
-    sniperVolumeSol: token.snipers?.volumeSol,
-    sniperBuySol: token.snipers?.buySol,
-  });
-}
-
 async function dumpAndAdvance(c: Campaign, token: CampaignToken): Promise<void> {
   const keys = await loadKeys();
   if (!token.wallet || !keys[token.wallet]) {
@@ -1236,16 +1410,8 @@ async function dumpAndAdvance(c: Campaign, token: CampaignToken): Promise<void> 
       /* hop still runs */
     }
   }
-  const hot = tokenDumpHot(token, quote);
   const due = (token.dumpAt || 0) <= Date.now();
-  if (!hot && !due) return;
-  if (hot) {
-    try {
-      await sellAllHoldings(kp, token, { minSol: 0 });
-    } catch {
-      /* hop leftover anyway so the scheduled run continues */
-    }
-  }
+  if (!due) return;
   token.dumped = true;
   await relayToNext(c, kp, token, keys);
 }
@@ -1476,6 +1642,7 @@ async function pinMeta(token: CampaignToken): Promise<{ image: string; uri: stri
     website: token.website,
     x: token.x,
     telegram: token.telegram,
+    createdOn: SNIPER_CREATED_ON,
   });
   const pinnedUri = pinned?.uri || "";
   const uri =
@@ -1521,7 +1688,7 @@ async function launchOne(c: Campaign, token: CampaignToken): Promise<CampaignTok
   token.uri = art.uri;
   const dbc = await import("../launch/dbc");
   try {
-    const built = await dbc.buildHookedDbcLaunchTx({
+    const built = await dbc.buildSniperDbcLaunchTx({
       payer: walletKp.publicKey.toBase58(),
       mint: mintPk,
       name: token.name,
@@ -1568,20 +1735,6 @@ async function launchOne(c: Campaign, token: CampaignToken): Promise<CampaignTok
     return token;
   }
   try {
-    const team = await buildProjectSliceMintTx({
-      conn,
-      payer: walletKp.publicKey.toBase58(),
-      mint: token.mint,
-      to: walletKp.publicKey.toBase58(),
-      tokens: token.teamTokens,
-      supplyCap: BATCH_SUPPLY,
-    });
-    const teamSig = await signSend(encodeTx(team.transaction), [walletKp]);
-    token.sigs.push(teamSig);
-  } catch {
-    /* slice may already exist */
-  }
-  try {
     const meta = await dbc.buildDbcPoolMetadataTx({
       payer: walletKp.publicKey.toBase58(),
       mint: token.mint,
@@ -1593,6 +1746,23 @@ async function launchOne(c: Campaign, token: CampaignToken): Promise<CampaignTok
     token.sigs.push(metaSig);
   } catch {
     /* pool meta pending */
+  }
+  try {
+    const buy = await dbc.buildDbcTradeTx({
+      mint: token.mint,
+      owner: walletKp.publicKey.toBase58(),
+      side: "buy",
+      sol: SNIPER_CREATOR_BUY_SOL,
+      slippageBps: 800,
+      minOutLamports: 1,
+      pool: token.pool,
+    });
+    if (buy.ok) {
+      const buySig = await signSend(buy.transaction, [walletKp]);
+      token.sigs.push(buySig);
+    }
+  } catch {
+    /* snipers already have a live pool; bag is optional */
   }
   if (isSolanaAddress(token.wallet || "") && isSolanaAddress(token.mint || "")) {
     await withLaunch((st) => {
@@ -1649,10 +1819,7 @@ async function finishTickState(c: Campaign) {
   const dump = pendingDump(c);
   c.nextAt = nextWorkAt(c);
   if (!next && !dump && c.status === "running") {
-    c.status = "done";
     c.nextAt = undefined;
-    await closeOutCampaign(c, { limit: 8 });
-    return;
   }
   await saveCampaign(c);
 }
@@ -1665,11 +1832,13 @@ export async function tickBatchLaunch(opts?: { limit?: number }): Promise<{
 }> {
   const c0 = await loadCampaign();
   if (c0.status !== "running") {
-    if (c0.status === "stopped" || c0.status === "done") {
+    if (c0.status === "stopped" && c0.liquidating) {
       try {
         await withLaunchLock(async () => {
           const c = await loadCampaign();
-          await closeOutCampaign(c, { limit: 6 });
+          if (c.status === "stopped" && c.liquidating) {
+            await closeOutCampaign(c, { limit: 6, minSol: 0 });
+          }
         });
       } catch {
         /* desk still loads */
@@ -1717,7 +1886,7 @@ export async function tickBatchLaunch(opts?: { limit?: number }): Promise<{
         continue;
       }
       const token = nextQueued(c, now);
-      if (!token) {
+      if (!token || c.dry) {
         await finishTickState(c);
         break;
       }

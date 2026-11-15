@@ -4,6 +4,7 @@ import { clientIp, isSolanaAddress, rateLimit } from "@/lib/security";
 import { SOL_MINT } from "@/lib/pair/mints";
 import { quoteAnySwap } from "@/lib/swap/open";
 import { isProjectProtocolWallet } from "@/lib/projectDest";
+import { isV3LaunchWallet } from "@/lib/tools/v3/project";
 import { readyState } from "@/lib/store";
 import { RPC_BUSY_SWAP } from "@/lib/solana/connection";
 
@@ -35,7 +36,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "same_mint", message: "Pick two different tokens." }, { status: 400 });
   }
   await readyState();
-  const skipHouse = Boolean(b.owner && isSolanaAddress(b.owner) && isProjectProtocolWallet(b.owner));
+  const skipHouse = Boolean(
+    b.owner && isSolanaAddress(b.owner) && (isProjectProtocolWallet(b.owner) || (await isV3LaunchWallet(b.owner))),
+  );
   const q = await quoteAnySwap({
     inputMint,
     outputMint,

@@ -48,13 +48,22 @@ export function windowMsFromBody(opts: { windowMinutes?: number; windowHours?: n
 
 export const TEAM_BPS_MIN = 300;
 export const TEAM_BPS_MAX = 2000;
+/** V2 sniper launches keep the displayed team slice at 3–5% so dev-hold filters pass. */
+export const SNIPER_TEAM_BPS_MAX = 500;
+/** Chain snipers classify origin from this field. Fake twitter/telegram 404s fail CHECK_SOCIAL. */
+export const SNIPER_CREATED_ON = "https://www.meteora.ag";
+export const SNIPER_X = "https://x.com/solphiaio";
+export const SNIPER_TELEGRAM = "https://t.me/solphiaio";
+/** Same size as official $SPHA first buy. Later slot so the launch tx is not a same-block bundle. */
+export const SNIPER_CREATOR_BUY_SOL = 0.05;
 export const BATCH_SUPPLY = 200_000_000;
 export const BATCH_DECIMALS = 6;
-/** One seed from Treasury into the first launch wallet. Remainder relays to the next. */
+/** V2 seeds the first hop wallet once. Remainder relays to the next. */
 export const BATCH_RELAY_LAMPORTS = 500_000_000;
 export const BATCH_RELAY_SOL = BATCH_RELAY_LAMPORTS / 1_000_000_000;
-export const BATCH_LAUNCH_FUND_LAMPORTS = BATCH_RELAY_LAMPORTS;
-export const BATCH_LAUNCH_FUND_SOL = BATCH_RELAY_SOL;
+/** V1 original: unique Token-2022 config + pool + mint + metadata + project slice + fees. */
+export const BATCH_LAUNCH_FUND_LAMPORTS = 110_000_000;
+export const BATCH_LAUNCH_FUND_SOL = BATCH_LAUNCH_FUND_LAMPORTS / 1_000_000_000;
 
 export function isInsufficientFunds(err?: string | null): boolean {
   const m = (err || "").toLowerCase();
@@ -248,6 +257,120 @@ export function nameOk(raw: string): boolean {
   return t.length >= 2 && t.length <= 24;
 }
 
+const FILLER_TICKERS = new Set(["THE", "ONE", "TRUE", "REAL", "ONLY", "LAST", "FIRST", "NEXT", "NEW", "OLD", "NPC"]);
+
+export function tickerHandle(symbol: string): string {
+  return handleOf(symbol);
+}
+
+function compactAlpha(raw: string): string {
+  return (raw || "").replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
+}
+
+/** Copy-looking tickers (PEPE2, BONK69) fail sniper name/symbol checks. */
+export function tickerLooksReal(raw: string): boolean {
+  const t = compactAlpha(raw).slice(0, 10);
+  if (!tickerOk(t) || FILLER_TICKERS.has(t)) return false;
+  if (/^[A-Z]{2,8}\d{1,3}$/.test(t)) return false;
+  return true;
+}
+
+/** True when name and ticker read as the same coin (Pepe/PEPE, Baby Ape/APE, dogwifhat/WIF, MEW/Cat in a dogs world). */
+export function nameLinesUp(symbol: string, name: string): boolean {
+  const tick = compactAlpha(symbol);
+  const compact = compactAlpha(name);
+  if (!tick || !compact) return false;
+  if (compact === tick) return true;
+  if (compact.startsWith(tick) || tick.startsWith(compact)) return true;
+  if (name.toLowerCase().includes(tick.toLowerCase())) return true;
+  const want = (name || "").trim().toLowerCase();
+  return SEED_NARRATIVES.some((h) => compactAlpha(h.symbol) === tick && (h.name || "").trim().toLowerCase() === want);
+}
+
+function titleFromTicker(symbol: string): string {
+  const tick = compactAlpha(symbol);
+  const words = [...WORDS].sort((a, b) => b.length - a.length);
+  const parts: string[] = [];
+  let rest = tick;
+  while (rest.length) {
+    const hit = words.find((w) => w.length >= 2 && rest.startsWith(w));
+    if (!hit) break;
+    parts.push(titleCase(hit));
+    rest = rest.slice(hit.length);
+  }
+  if (!rest && parts.length) return parts.join(" ").slice(0, 24);
+  return titleCase(tick);
+}
+
+function alignName(symbol: string, preferred: string, tickerChanged: boolean): string {
+  const pref = (preferred || "").trim().slice(0, 24);
+  if (nameOk(pref) && compactAlpha(pref) === compactAlpha(symbol)) return pref;
+  if (!tickerChanged && nameOk(pref)) return pref;
+  const fromTick = titleFromTicker(symbol);
+  return nameOk(fromTick) ? fromTick : nameOk(pref) ? pref : symbol.slice(0, 24);
+}
+
+function trySniperTicker(raw: string, used: Set<string>): string | null {
+  const t = compactAlpha(raw).slice(0, 10);
+  if (!tickerLooksReal(t) || used.has(t)) return null;
+  return t;
+}
+
+function uniqueLetterTicker(used: Set<string>): string {
+  for (let n = 0; n < 400; n++) {
+    let s = "";
+    const len = 4 + (n % 5);
+    for (let i = 0; i < len; i++) s += String.fromCharCode(65 + ((Math.floor(Math.random() * 26) + n + i) % 26));
+    const hit = trySniperTicker(s, used);
+    if (hit) return hit;
+  }
+  const last = `Z${Date.now().toString(36).replace(/[0-9]/g, "Z").toUpperCase()}`.slice(0, 10);
+  return trySniperTicker(last, used) || last;
+}
+
+/** Exact hot ticker first. Never PEPE2. Next unused real word / theme mash instead. */
+function uniqueSniperTicker(base: string, used: Set<string>, theme?: string): string {
+  const t = compactAlpha(base).slice(0, 10);
+  const hit = trySniperTicker(t.length >= 2 ? t : "MEME", used);
+  if (hit) return hit;
+  const themeWords = THEME_WORDS[themeOf(theme || t)] || THEME_WORDS.meme;
+  for (const w of themeWords) {
+    const exact = trySniperTicker(w, used);
+    if (exact) return exact;
+    if (t.length >= 2 && t.length + w.length <= 10) {
+      const mash = trySniperTicker(t + w, used);
+      if (mash) return mash;
+    }
+  }
+  for (const seed of SEED_NARRATIVES) {
+    const next = trySniperTicker(seed.symbol, used);
+    if (next) return next;
+  }
+  for (const w of WORDS) {
+    const next = trySniperTicker(w, used);
+    if (next) return next;
+  }
+  return uniqueLetterTicker(used);
+}
+
+function sniperHitPool(hits: NarrativeHit[], used: Set<string>): NarrativeHit[] {
+  const seen = new Set<string>();
+  const out: NarrativeHit[] = [];
+  const push = (h: NarrativeHit) => {
+    const symbol = compactAlpha(h.symbol).slice(0, 10);
+    if (!tickerLooksReal(symbol) || seen.has(symbol) || used.has(symbol)) return;
+    seen.add(symbol);
+    out.push({
+      symbol,
+      name: (h.name || titleCase(symbol)).trim().slice(0, 24) || symbol,
+      theme: h.theme || themeOf(`${symbol} ${h.name || ""}`),
+    });
+  };
+  for (const h of hits) push(h);
+  for (const h of SEED_NARRATIVES) push(h);
+  return out;
+}
+
 export function themeOf(raw: string): ThemeId {
   const s = (raw || "").toLowerCase();
   for (const t of THEMES) {
@@ -267,6 +390,12 @@ export function themeOf(raw: string): ThemeId {
 
 export function teamBpsAt(n = Math.random()): number {
   const span = TEAM_BPS_MAX - TEAM_BPS_MIN;
+  const t = Math.min(1, Math.max(0, n));
+  return TEAM_BPS_MIN + Math.floor(t * span);
+}
+
+export function sniperTeamBpsAt(n = Math.random()): number {
+  const span = SNIPER_TEAM_BPS_MAX - TEAM_BPS_MIN;
   const t = Math.min(1, Math.max(0, n));
   return TEAM_BPS_MIN + Math.floor(t * span);
 }
@@ -294,15 +423,34 @@ function socials(symbol: string): { website: string; x: string; telegram: string
   };
 }
 
+/** Live X/TG that HTTP 200. Unique /c/handle website so sniper social checks pass. */
+function sniperSocials(symbol: string): { website: string; x: string; telegram: string } {
+  const h = handleOf(symbol);
+  return {
+    website: `https://solphia.io/c/${h}`,
+    x: SNIPER_X,
+    telegram: SNIPER_TELEGRAM,
+  };
+}
+
 function blurbOf(name: string, kind: TokenKind, theme: string): string {
   if (kind === "narrative") return `${name} rides the ${theme} meta on Solphia.`;
   return `${name} on Solphia.`;
 }
 
+function sniperBlurbOf(symbol: string, name: string, kind: TokenKind, theme: string): string {
+  const tick = `$${compactAlpha(symbol)}`;
+  const same = compactAlpha(name) === compactAlpha(symbol);
+  if (kind === "narrative") {
+    return same ? `${tick} rides the ${theme} meta.` : `${tick} ${name} rides the ${theme} meta.`;
+  }
+  return same ? `${tick} on Solphia.` : `${tick} ${name} on Solphia.`;
+}
+
 function makeId(kind: TokenKind, theme: string, symbol: string): string {
   const k = kind === "narrative" ? "n" : "r";
   const th = (theme || "neon").replace(/[^a-z0-9]/g, "").slice(0, 4) || "neon";
-  const sym = symbol.replace(/[^A-Z0-9]/g, "").slice(0, 8) || "COIN";
+  const sym = symbol.replace(/[^A-Z0-9]/g, "").slice(0, 10) || "COIN";
   return `${k}${th}_${sym}_${hex6()}`;
 }
 
@@ -442,5 +590,78 @@ export function buildIdentities(opts: {
     out.push(narrativeIdentity(hit, used));
   }
   for (let i = 0; i < rNeed; i++) out.push(randomIdentity(used));
+  return out;
+}
+
+/** Exact hot ticker first (PEPE, not PEPE2). Name, blurb, and /c/handle follow the ticker. V2 only. */
+export function sniperNarrativeIdentity(hit: NarrativeHit, used: Set<string>): TokenIdentity {
+  const base = compactAlpha(hit.symbol || "MEME").slice(0, 10);
+  const symbol = uniqueSniperTicker(base.length >= 2 ? base : "MEME", used, hit.theme);
+  used.add(symbol);
+  const name = alignName(symbol, hit.name || titleCase(base), symbol !== base);
+  const theme = themeOf(hit.theme || hit.name || symbol);
+  return {
+    id: makeId("narrative", theme, symbol),
+    kind: "narrative",
+    theme,
+    name,
+    symbol,
+    blurb: sniperBlurbOf(symbol, name, "narrative", theme),
+    ...sniperSocials(symbol),
+    teamBps: sniperTeamBpsAt(),
+  };
+}
+
+export function sniperRandomIdentity(used: Set<string>): TokenIdentity {
+  const pool = WORDS.filter((w) => !FILLER_TICKERS.has(w) && w.length >= 3);
+  const a = pick(pool);
+  const b = pick(pool.filter((w) => w !== a));
+  const concat = `${a}${b}`;
+  let symbol: string;
+  let preferred: string;
+  let base: string;
+  if (concat.length <= 10 && Math.random() >= 0.45) {
+    base = concat;
+    symbol = uniqueSniperTicker(concat, used, themeOf(`${a} ${b}`));
+    preferred = `${titleCase(a)} ${titleCase(b)}`.slice(0, 24);
+  } else {
+    base = a;
+    symbol = uniqueSniperTicker(a, used, themeOf(a));
+    preferred = titleCase(a);
+  }
+  used.add(symbol);
+  const name = alignName(symbol, preferred, symbol !== base);
+  const theme = themeOf(`${a} ${b} ${name} ${symbol}`);
+  return {
+    id: makeId("random", theme, symbol),
+    kind: "random",
+    theme,
+    name,
+    symbol,
+    blurb: sniperBlurbOf(symbol, name, "random", theme),
+    ...sniperSocials(symbol),
+    teamBps: sniperTeamBpsAt(),
+  };
+}
+
+export function buildSniperIdentities(opts: {
+  narrative: number;
+  random: number;
+  hits?: NarrativeHit[];
+  used?: Iterable<string>;
+}): TokenIdentity[] {
+  const used = new Set(
+    [...(opts.used || [])].map((s) => compactAlpha(String(s || "")).slice(0, 10)).filter((s) => tickerOk(s)),
+  );
+  const hits = opts.hits?.length ? opts.hits : SEED_NARRATIVES;
+  const pool = sniperHitPool(hits, used);
+  const out: TokenIdentity[] = [];
+  const nNeed = Math.max(0, Math.floor(opts.narrative));
+  const rNeed = Math.max(0, Math.floor(opts.random));
+  for (let i = 0; i < nNeed; i++) {
+    if (i < pool.length) out.push(sniperNarrativeIdentity(pool[i]!, used));
+    else out.push(sniperRandomIdentity(used));
+  }
+  for (let i = 0; i < rNeed; i++) out.push(sniperRandomIdentity(used));
   return out;
 }

@@ -19,6 +19,8 @@ export const WARMUP_SOL_MIN = 0.01;
 export const WARMUP_SOL_MAX = 0.05;
 /** Keep this much SOL in the final wallet so launch rent cannot be eaten by warmup. */
 export const WARMUP_KEEP_SOL = 0.05;
+/** Old hop/final wallets reclaim mint-account rent here, then EXTRACT sends SOL to treasury. */
+export const INCINERATOR_URL = "https://sol-incinerator.com/tools";
 export const WARMUP_DELAY_MS_MIN = 8_000;
 export const WARMUP_DELAY_MS_MAX = 45_000;
 

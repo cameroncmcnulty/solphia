@@ -165,7 +165,14 @@ type Desk = {
   };
   sweep?: Sweep | null;
   sweepResult?: { ok: boolean; movedSol: number; signatures: string[]; error?: string };
+  reclaimResult?: { ok: boolean; closed: number; movedSol: number; skippedLive: number; signatures?: string[]; error?: string };
   archive?: ArchiveRow[];
+  oldWallets?: {
+    count: number;
+    reclaimable: number;
+    incinerator: string;
+    rows: { pk: string; role: "hop" | "final"; tokenId?: string; hopIndex: number; createdAt: number; live: boolean }[];
+  };
 };
 
 const emptyFuel: Fuel = {
@@ -213,9 +220,9 @@ export function DataLauncherV2() {
   const [desk, setDesk] = useState<Desk | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
-  const [total, setTotal] = useState(250);
-  const [narrativePct, setNarrativePct] = useState(40);
-  const [minutes, setMinutes] = useState(180);
+  const [total, setTotal] = useState(10);
+  const [narrativePct, setNarrativePct] = useState(100);
+  const [minutes, setMinutes] = useState(10);
   const [hopsMin, setHopsMin] = useState(4);
   const [hopsMax, setHopsMax] = useState(7);
   const [delayMinSec, setDelayMinSec] = useState(10);
@@ -234,7 +241,7 @@ export function DataLauncherV2() {
     const j = (await r.json()) as Desk & { error?: string };
     if (!r.ok) throw new Error(j.error || "Could not load the launcher.");
     setDesk(j);
-    if (j.campaign?.status === "idle") {
+    if (j.campaign?.status === "idle" && j.campaign.id) {
       const n = j.campaign.narrative || 100;
       const r = j.campaign.random || 150;
       const t = Math.max(1, n + r);
@@ -350,9 +357,11 @@ export function DataLauncherV2() {
               Same launcher as V1 plus the scrambler. Treasury seeds a jittered ~0.5 SOL into a fresh hop chain (4–7
               ephemeral wallets by default, linear or branched). Amounts vary ±5–15% and never land on round numbers.
               Delays jitter between hops. Each hop key is saved forever for the incinerator. Optional warmup buy/sell is
-              off unless you turn it on. STOP on a token slot dumps that bag at 99% slippage and sends every hop plus the
-              final wallet to treasury. If sniper buys hit 1 SOL the bag dumps and SOL scrambles to the next token. Keys
-              are never wiped.
+              off unless you turn it on. Bags stay live until you click STOP. Campaign STOP sells every bag at 99%
+              slippage and sends hop + final SOL to treasury. STOP on a token slot does the same for that wallet only.
+              Leftover SOL hops to the next token after 30s so the run continues. Keys are never wiped. This path copies
+              the official $SPHA sniper surface: vanilla SPL, mint/freeze revoked, no hook, createdOn meteora.ag, live
+              X/Telegram, /c/handle 200, exact hot ticker, 0.05 SOL creator buy in a later slot, 3–5% team, flat 1%.
             </p>
           </div>
           <div className="tools-ring" style={{ ["--pct" as string]: `${pct}` }}>
@@ -384,6 +393,41 @@ export function DataLauncherV2() {
           sub={running ? "randomized over the window" : fuel.dry ? "stopped dry" : "waiting"}
         />
       </div>
+
+      <Panel kicker="SNIPER MATCH · $SPHA T-30">
+        <p className="mt-3 max-w-3xl text-sm text-mute">
+          Official $SPHA drew 14 sniper wallets and 8.12 SOL in the first 3 seconds because Meteora DBC watchers saw a
+          live pool with working socials. V2 now emits that same surface. Pump.fun-only bots still will not fire.
+        </p>
+        <ol className="mt-3 max-w-3xl list-decimal space-y-1 pl-5 text-sm text-ghost">
+          <li>Leave mix at 100% narrative and window at 10 minutes so hot tickers land in a burst.</li>
+          <li>Warmup stays off. Hops 4–7 stay on so the fund path is not a straight treasury transfer.</li>
+          <li>Treasury hot key ready with at least 0.5 SOL plus keep. Then LAUNCH.</li>
+          <li>The second a row goes live, copy the CA and post it on the Solphia X and Telegram.</li>
+          <li>Optional: Dexscreener boost on that CA. Watch sniper wallets and volume on the row.</li>
+          <li>Click STOP when you want every bag sold and SOL sent to treasury.</li>
+        </ol>
+        {idle && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => {
+              setTotal(10);
+              setNarrativePct(100);
+              setMinutes(10);
+              setWarmup(false);
+              setHopsMin(4);
+              setHopsMax(7);
+              setDelayMinSec(10);
+              setDelayMaxSec(600);
+              setBranch(true);
+            }}
+            className="btn-ghost mt-4 rounded-full px-5 py-2 font-mono text-[10px] tracking-[0.2em]"
+          >
+            LOAD $SPHA MATCH DEFAULTS
+          </button>
+        )}
+      </Panel>
 
       <Panel kicker="CAMPAIGN CONTROL">
         <div className="mt-3 grid gap-3 md:grid-cols-2">
@@ -525,13 +569,13 @@ export function DataLauncherV2() {
           </p>
         </div>
         <p className="mt-3 text-sm text-mute">
-          Same hooked Token-2022 curve as official SPHA, with this tester&apos;s 1% going 100% to the owner wallet.
-          Project mint is a random 3–20% into that token&apos;s launch wallet. Shared pad config is never overwritten.
-          Seed is a jittered ~0.5 SOL from treasury into hop 1; remainder scrambles to the next wallet until a launch
-          fails on insufficient funds. LAUNCH does not drain hop remainder. Use EXTRACT TO TREASURY or STOP on a token
-          slot when you want leftover SOL pulled. Tickers stay unique across batches with the original mash
-          (WOJAKD-style). There is no curve buy. If sniper buys hit 1 SOL it dumps at 99% slippage first then scrambles
-          to the next token. Live CAs persist in LAUNCH ARCHIVE. Clear table never wipes keys.
+          V2 launches vanilla SPL on Meteora DBC so sniper bots can actually buy: no Token-2022, no transfer hook,
+          mint and freeze revoked at init, flat 1% (100% to owner), createdOn meteora.ag, live X/Telegram that resolve,
+          unique /c/handle website, exact hot ticker first. Shared pad config is never overwritten. A 0.05 SOL creator
+          buy lands in a later slot so the launch itself is not a same-block bundle. Seed is a jittered ~0.5 SOL from
+          treasury into hop 1; remainder scrambles to the next wallet until a launch fails on insufficient funds. LAUNCH
+          does not drain hop remainder. The bot keeps running until you click STOP, which sells every bag and sends SOL
+          to treasury. Live CAs persist in LAUNCH ARCHIVE. Clear table never wipes keys.
         </p>
         {(fuel.dry || campaign?.dry) && (
           <div className="mt-3 rounded-xl border border-blood/40 bg-blood/10 px-4 py-3 text-sm text-ghost">
@@ -577,7 +621,21 @@ export function DataLauncherV2() {
             </button>
           )}
           {(running || campaign?.status === "paused") && (
-            <button type="button" disabled={busy} onClick={() => act("stop")} className="btn-ghost rounded-full px-5 py-3 text-sm">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => {
+                if (
+                  !window.confirm(
+                    "STOP the campaign? This sells every bag at 99% slippage and sends hop + final SOL to treasury. Secrets stay saved.",
+                  )
+                ) {
+                  return;
+                }
+                void act("stop");
+              }}
+              className="btn-ghost rounded-full px-5 py-3 text-sm"
+            >
               Stop
             </button>
           )}
@@ -591,9 +649,10 @@ export function DataLauncherV2() {
 
       <Panel kicker="EXTRACT TO TREASURY">
         <p className="mt-3 max-w-2xl text-sm text-mute">
-          Pauses V2 if it is running, sells every bag at 99% slippage, then sends leftover SOL from every V2 hop and
-          final wallet into treasury. Click again if wallets remain (80 txs per pass). V1 wallets, user seed wallets, and
-          pad TVL stay. Secrets stay saved. Use STOP on a live token slot to liquidate that token only.
+          Pauses V2 if it is running, sells bags worth at least 1 SOL at 99% slippage, then sends leftover SOL from every
+          V2 hop and final wallet into treasury. Click again if wallets remain (80 txs per pass). V1 wallets, user seed
+          wallets, and pad TVL stay. Secrets stay saved. Campaign STOP sells every bag then sends SOL to treasury. STOP
+          on a live token slot liquidates that token only.
         </p>
         <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
           <Mini k="Launch wallets" v={solAmt(desk?.sweep?.launchSol || 0)} />
@@ -912,11 +971,7 @@ export function DataLauncherV2() {
                     ) : null}
                     {t.status === "live" && !t.dumped && !t.stopped ? (
                       <div className="text-mute">
-                        {(t.bagQuoteSol || 0) >= 1 || (t.snipers.buySol || 0) >= 1 || (t.snipers.volumeSol || 0) >= 1
-                          ? "dump 1 SOL"
-                          : t.dumpAt && t.dumpAt > now
-                            ? `hop ${eta(t.dumpAt, now)}`
-                            : "hop soon"}
+                        {t.dumpAt && t.dumpAt > now ? `hop ${eta(t.dumpAt, now)}` : "hop soon"}
                       </div>
                     ) : null}
                     {t.dumped && t.dumpSol ? <div className="text-mute">sold {solAmt(t.dumpSol)}</div> : null}

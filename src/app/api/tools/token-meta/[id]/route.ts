@@ -3,7 +3,7 @@ import { SITE_URL } from "@/lib/config";
 import { tokenMetadataJson } from "@/lib/token/metadata";
 import { loadCampaign } from "@/lib/tools/batchLaunch";
 import { loadCampaign as loadCampaignV2 } from "@/lib/tools/batchLaunchV2";
-import { themeOf } from "@/lib/tools/identities";
+import { SNIPER_CREATED_ON, SNIPER_TELEGRAM, SNIPER_X, themeOf, tickerHandle } from "@/lib/tools/identities";
 
 export const dynamic = "force-dynamic";
 
@@ -24,11 +24,13 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
   let website = "https://solphia.io";
   let x: string | undefined;
   let telegram: string | undefined;
+  let fromV2 = false;
   try {
     const c = await loadCampaign();
     const hit = c.tokens.find((t) => t.id === parsed.id);
     const v2 = hit ? null : (await loadCampaignV2()).tokens.find((t) => t.id === parsed.id);
     const row = hit || v2;
+    fromV2 = Boolean(v2);
     if (row) {
       name = row.name;
       symbol = row.symbol;
@@ -40,6 +42,12 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
   } catch {
     /* synthesized meta still works */
   }
+  if (fromV2) {
+    website = website && website !== "https://solphia.io" ? website : `https://solphia.io/c/${tickerHandle(symbol)}`;
+    x = x || SNIPER_X;
+    telegram = telegram || SNIPER_TELEGRAM;
+    if (!blurb.startsWith("$")) blurb = `$${symbol} ${blurb}`;
+  }
   const image = `${SITE_URL.replace(/\/$/, "")}/api/tools/token-art/${encodeURIComponent(parsed.id)}`;
   const json = tokenMetadataJson({
     name,
@@ -50,6 +58,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     x,
     telegram,
     mime: "image/png",
+    createdOn: fromV2 ? SNIPER_CREATED_ON : undefined,
   });
   const body = JSON.stringify(json);
   if (req.nextUrl.searchParams.get("ext") === "json" || raw.endsWith(".json")) {

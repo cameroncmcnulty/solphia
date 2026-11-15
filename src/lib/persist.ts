@@ -55,6 +55,16 @@ export const KEYS = {
   batchLaunchV2Lock: "solphia:batch-launch-v2-lock",
   /** Append-only V2 launched CA archive. */
   batchLaunchV2Archive: "solphia:batch-launch-v2-archive",
+  /** Tools Data Launcher V3 project (no secrets). Isolated from V1/V2 and official $SPHA. */
+  batchLaunchV3: "solphia:batch-launch-v3",
+  /** Append-only V3 launch + team wallet secrets. Never delete. Never mix with V1/V2/treasury. */
+  batchLaunchV3Keys: "solphia:batch-launch-v3-keys",
+  /** NX lock while a V3 T-30 mint is in flight. */
+  batchLaunchV3Lock: "solphia:batch-launch-v3-lock",
+  /** Append-only V3 launched CA archive. */
+  batchLaunchV3Archive: "solphia:batch-launch-v3-archive",
+  /** Reserved V3 mint keypair so a crashed T-30 send cannot mint a second CA. */
+  batchLaunchV3MintInflight: "solphia:batch-launch-v3-mint-inflight",
 };
 
 const BLOB_PATH = "solphia-state.json";

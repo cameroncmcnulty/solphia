@@ -18,6 +18,7 @@ import { clearScrollLock, lockPageScroll } from "@/lib/scrollLock";
 export function Shell({ children }: { children: React.ReactNode }) {
   const path = usePathname();
   const isAdmin = path.startsWith("/admin");
+  const isMeme = path === "/m" || path.startsWith("/m/");
   const isShill = path === "/shill" || path.startsWith("/shill/");
   useEffect(() => {
     if (isShill) {
@@ -38,6 +39,15 @@ export function Shell({ children }: { children: React.ReactNode }) {
       <NoticeHost />
     </>
   );
+
+  if (isMeme) {
+    return (
+      <div className="relative min-h-screen overflow-x-hidden">
+        {children}
+        <NoticeHost />
+      </div>
+    );
+  }
 
   if (isShill) {
     return (

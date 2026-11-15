@@ -206,6 +206,64 @@ export async function hookedCurveConfig(curveTokens: number, opts?: { creatorTra
   });
 }
 
+/**
+ * V2 sniper-visible curve. Legacy SPL, mint/freeze revoked at init, no transfer hook,
+ * flat 1% (no anti-snipe scheduler). Unique config so the shared pad is never written.
+ * 1% goes to feeClaimer (owner on the Tools launcher).
+ */
+export async function sniperCurveConfig(curveTokens: number, opts?: { creatorTradingFeePercentage?: number }) {
+  const m = sdk();
+  const supply = Math.max(1_000_000, Math.floor(Number(curveTokens) || 0));
+  const creatorPct = opts?.creatorTradingFeePercentage;
+  return m.buildCurveWithMarketCap({
+    token: {
+      tokenType: m.TokenType.SPLToken,
+      tokenBaseDecimal: m.TokenDecimal.SIX,
+      tokenQuoteDecimal: m.TokenDecimal.NINE,
+      tokenAuthorityOption: m.TokenAuthorityOption.Immutable,
+      totalTokenSupply: supply,
+      leftover: 0,
+    },
+    fee: {
+      baseFeeParams: {
+        baseFeeMode: m.BaseFeeMode.FeeSchedulerLinear,
+        feeSchedulerParam: {
+          startingFeeBps: 100,
+          endingFeeBps: 100,
+          numberOfPeriod: 0,
+          totalDuration: 0,
+        },
+      },
+      dynamicFeeEnabled: false,
+      collectFeeMode: m.CollectFeeMode.QuoteToken,
+      creatorTradingFeePercentage: creatorPct == null ? 0 : creatorPct,
+      poolCreationFee: 0,
+      enableFirstSwapWithMinFee: false,
+    },
+    migration: {
+      migrationOption: m.MigrationOption.MET_DAMM_V2,
+      migrationFeeOption: m.MigrationFeeOption.FixedBps100,
+      migrationFee: { feePercentage: 0, creatorFeePercentage: 0 },
+    },
+    liquidityDistribution: {
+      partnerLiquidityPercentage: 0,
+      partnerPermanentLockedLiquidityPercentage: 100,
+      creatorLiquidityPercentage: 0,
+      creatorPermanentLockedLiquidityPercentage: 0,
+    },
+    lockedVesting: {
+      totalLockedVestingAmount: 0,
+      numberOfVestingPeriod: 0,
+      cliffUnlockAmount: 0,
+      totalVestingDuration: 0,
+      cliffDurationFromMigrationTime: 0,
+    },
+    activationType: m.ActivationType.Timestamp,
+    initialMarketCap: 40,
+    migrationMarketCap: 585,
+  });
+}
+
 export { liveDbcConfig };
 
 export function curveNeedsInstall(bookConfig?: string | null): boolean {
@@ -560,6 +618,119 @@ export async function buildSphaDbcLaunchTx(opts: {
   };
 }
 
+/**
+ * V3 isolated replica of official $SPHA DBC create.
+ * Same Token-2022 hook, 1% / 50% creator, 40→585 MC, unique config.
+ * feeClaimer is the isolated launch wallet so fees are not traced to protocol treasury.
+ * Never writes the shared pad dbcConfig.
+ */
+export async function buildV3SphaDbcLaunchTx(opts: {
+  payer: string;
+  mint: string;
+  name: string;
+  symbol: string;
+  uri: string;
+  feeClaimer: string;
+  leftoverReceiver?: string;
+  curveTokens: number;
+}): Promise<{
+  transaction: string;
+  mint: string;
+  tokensOut: number;
+  feeSol: number;
+  config: string;
+  configSecret: string;
+  firstBuyIncluded: boolean;
+}> {
+  if (!dbcEnabled()) throw new Error("DBC config missing.");
+  const payer = new PublicKey(opts.payer);
+  const mint = new PublicKey(opts.mint);
+  const configKp = Keypair.generate();
+  const claimer = new PublicKey(opts.feeClaimer);
+  const leftover = new PublicKey(opts.leftoverReceiver || opts.feeClaimer);
+  const curve = await v3SphaCurveConfig(opts.curveTokens);
+  const raw = await client().partner.createConfigAndPoolWithTransferHook({
+    ...curve,
+    config: configKp.publicKey,
+    feeClaimer: claimer,
+    leftoverReceiver: leftover,
+    quoteMint: new PublicKey(WSOL),
+    payer,
+    transferHookProgram: new PublicKey(SPHA_TRANSFER_HOOK),
+    preCreatePoolParam: {
+      name: opts.name.slice(0, 32),
+      symbol: opts.symbol.slice(0, 10),
+      uri: opts.uri.slice(0, 255),
+      poolCreator: payer,
+      baseMint: mint,
+    },
+  });
+  const tx = await readyTx(asTransaction(raw), payer);
+  const encoded = encodeTx(tx);
+  if (Buffer.from(encoded, "base64").length > LEGACY_MAX) throw new Error("Could not build the launch.");
+  return {
+    transaction: encoded,
+    mint: mint.toBase58(),
+    tokensOut: 0,
+    feeSol: 0,
+    config: configKp.publicKey.toBase58(),
+    configSecret: bytesToB64(configKp.secretKey),
+    firstBuyIncluded: false,
+  };
+}
+
+async function v3SphaCurveConfig(curveTokens: number) {
+  const m = sdk();
+  const supply = Math.max(1_000_000, Math.floor(Number(curveTokens) || sphaCurveTokens()));
+  return m.buildCurveWithMarketCap({
+    token: {
+      tokenType: m.TokenType.Token2022,
+      tokenBaseDecimal: m.TokenDecimal.SIX,
+      tokenQuoteDecimal: m.TokenDecimal.NINE,
+      tokenAuthorityOption: m.TokenAuthorityOption.CreatorUpdateAndMintAuthority,
+      totalTokenSupply: supply,
+      leftover: 0,
+    },
+    fee: {
+      baseFeeParams: {
+        baseFeeMode: m.BaseFeeMode.FeeSchedulerLinear,
+        feeSchedulerParam: {
+          startingFeeBps: 100,
+          endingFeeBps: 100,
+          numberOfPeriod: 0,
+          totalDuration: 0,
+        },
+      },
+      dynamicFeeEnabled: false,
+      collectFeeMode: m.CollectFeeMode.QuoteToken,
+      creatorTradingFeePercentage: 50,
+      poolCreationFee: 0,
+      enableFirstSwapWithMinFee: false,
+    },
+    migration: {
+      migrationOption: m.MigrationOption.MET_DAMM_V2,
+      migrationFeeOption: m.MigrationFeeOption.FixedBps100,
+      migrationFee: { feePercentage: 0, creatorFeePercentage: 0 },
+    },
+    liquidityDistribution: {
+      partnerLiquidityPercentage: 0,
+      partnerPermanentLockedLiquidityPercentage: 100,
+      creatorLiquidityPercentage: 0,
+      creatorPermanentLockedLiquidityPercentage: 0,
+    },
+    lockedVesting: {
+      totalLockedVestingAmount: 0,
+      numberOfVestingPeriod: 0,
+      cliffUnlockAmount: 0,
+      totalVestingDuration: 0,
+      cliffDurationFromMigrationTime: 0,
+    },
+    activationType: m.ActivationType.Timestamp,
+    initialMarketCap: 40,
+    migrationMarketCap: 585,
+  });
+}
+
 /** R&D launches: unique Token-2022 hooked config, variable curve supply. Never writes the shared pad curve. */
 export async function buildHookedDbcLaunchTx(opts: {
   payer: string;
@@ -597,6 +768,64 @@ export async function buildHookedDbcLaunchTx(opts: {
     quoteMint: new PublicKey(WSOL),
     payer,
     transferHookProgram: new PublicKey(SPHA_TRANSFER_HOOK),
+    preCreatePoolParam: {
+      name: opts.name.slice(0, 32),
+      symbol: opts.symbol.slice(0, 10),
+      uri: opts.uri.slice(0, 255),
+      poolCreator: payer,
+      baseMint: mint,
+    },
+  });
+  const tx = await readyTx(asTransaction(raw), payer);
+  const encoded = encodeTx(tx);
+  if (Buffer.from(encoded, "base64").length > LEGACY_MAX) throw new Error("Could not build the launch.");
+  return {
+    transaction: encoded,
+    mint: mint.toBase58(),
+    tokensOut: 0,
+    feeSol: 0,
+    config: configKp.publicKey.toBase58(),
+    configSecret: bytesToB64(configKp.secretKey),
+    firstBuyIncluded: false,
+  };
+}
+
+/** V2 data launches: unique SPL config, no hook, mint/freeze revoked. Never writes the shared pad curve. */
+export async function buildSniperDbcLaunchTx(opts: {
+  payer: string;
+  mint: string;
+  name: string;
+  symbol: string;
+  uri: string;
+  curveTokens: number;
+  feeClaimer?: string;
+  leftoverReceiver?: string;
+  creatorTradingFeePercentage?: number;
+}): Promise<{
+  transaction: string;
+  mint: string;
+  tokensOut: number;
+  feeSol: number;
+  config: string;
+  configSecret: string;
+  firstBuyIncluded: boolean;
+}> {
+  if (!dbcEnabled()) throw new Error("DBC config missing.");
+  const payer = new PublicKey(opts.payer);
+  const mint = new PublicKey(opts.mint);
+  const configKp = Keypair.generate();
+  const claimer = new PublicKey(opts.feeClaimer || ownerAddress());
+  const leftover = new PublicKey(opts.leftoverReceiver || claimer.toBase58());
+  const curve = await sniperCurveConfig(opts.curveTokens, {
+    creatorTradingFeePercentage: opts.creatorTradingFeePercentage ?? 0,
+  });
+  const raw = await client().partner.createConfigAndPool({
+    ...curve,
+    config: configKp.publicKey,
+    feeClaimer: claimer,
+    leftoverReceiver: leftover,
+    quoteMint: new PublicKey(WSOL),
+    payer,
     preCreatePoolParam: {
       name: opts.name.slice(0, 32),
       symbol: opts.symbol.slice(0, 10),

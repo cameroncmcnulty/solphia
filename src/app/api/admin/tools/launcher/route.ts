@@ -7,8 +7,10 @@ import {
   campaignSummary,
   loadCampaign,
   loadLaunchArchive,
+  listOldWallets,
   pauseCampaign,
   publicCampaign,
+  reclaimOldWalletsToTreasury,
   refreshSnipers,
   resetCampaign,
   resumeCampaign,
@@ -19,17 +21,15 @@ import {
 import { extractLaunchedWalletsToOwner, previewProtocolSweep, sweepProtocolToOwner } from "@/lib/tools/protocolSweep";
 import {
   DEFAULT_NARRATIVE,
-  DEFAULT_NARRATIVE_PCT,
   DEFAULT_RANDOM,
-  splitMix,
-  windowMsFromBody,
+  DEFAULT_WINDOW_MS,
 } from "@/lib/tools/identities";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 const Body = z.object({
-  action: z.enum(["start", "pause", "resume", "stop", "reset", "tick", "sweepProtocol", "extractAll", "extractLaunched"]),
+  action: z.enum(["start", "pause", "resume", "stop", "reset", "tick", "sweepProtocol", "extractAll", "extractLaunched", "reclaimOldWallets"]),
   narrative: z.number().int().min(0).max(400).optional(),
   random: z.number().int().min(0).max(400).optional(),
   total: z.number().int().min(1).max(400).optional(),
@@ -48,7 +48,13 @@ async function desk() {
   }
   const fuel = await campaignFuel(campaign);
   const sweep = await previewProtocolSweep().catch(() => null);
-  return { campaign, fuel, summary: campaignSummary(campaign), sweep, archive };
+  const oldWallets = await listOldWallets().catch(() => ({
+    count: 0,
+    reclaimable: 0,
+    incinerator: "https://sol-incinerator.com/tools",
+    rows: [],
+  }));
+  return { campaign, fuel, summary: campaignSummary(campaign), sweep, archive, oldWallets };
 }
 
 export async function GET(req: NextRequest) {
@@ -70,13 +76,10 @@ export async function POST(req: NextRequest) {
   const b = parsed.data;
   try {
     if (b.action === "start") {
-      const mix = b.total
-        ? splitMix(b.total, b.narrativePct ?? DEFAULT_NARRATIVE_PCT)
-        : { narrative: b.narrative ?? DEFAULT_NARRATIVE, random: b.random ?? DEFAULT_RANDOM };
       const started = await startCampaign({
-        narrative: mix.narrative,
-        random: mix.random,
-        windowMs: windowMsFromBody({ windowMinutes: b.windowMinutes, windowHours: b.windowHours }),
+        narrative: b.narrative ?? DEFAULT_NARRATIVE,
+        random: b.random ?? DEFAULT_RANDOM,
+        windowMs: Math.round((b.windowHours ?? DEFAULT_WINDOW_MS / 3_600_000) * 3_600_000),
       });
       if (!started.ok) {
         return NextResponse.json({ error: "start_failed", message: started.error, fuel: started.fuel }, { status: 400 });
@@ -108,6 +111,15 @@ export async function POST(req: NextRequest) {
         );
       }
       return withAdminSession(NextResponse.json({ ok: true, sweepResult: result, ...(await desk()) }));
+    } else if (b.action === "reclaimOldWallets") {
+      const result = await reclaimOldWalletsToTreasury({ limit: 20 });
+      if (!result.ok) {
+        return NextResponse.json(
+          { error: "reclaim_failed", message: result.error, reclaimResult: result, ...(await desk()) },
+          { status: 400 },
+        );
+      }
+      return withAdminSession(NextResponse.json({ ok: true, reclaimResult: result, ...(await desk()) }));
     } else if (b.action === "sweepProtocol") {
       const result = await sweepProtocolToOwner({ extractAll: true });
       if (!result.ok) {

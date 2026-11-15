@@ -4,6 +4,7 @@ import { clientIp, isSolanaAddress, rateLimit } from "@/lib/security";
 import { SOL_MINT } from "@/lib/pair/mints";
 import { buildAnySwapTx } from "@/lib/swap/open";
 import { isProjectProtocolWallet } from "@/lib/projectDest";
+import { isV3LaunchWallet } from "@/lib/tools/v3/project";
 import { readyState, withLaunch } from "@/lib/store";
 import { emptyLaunchBook } from "@/lib/launch/engine";
 import { creditRank } from "@/lib/rank/engine";
@@ -42,7 +43,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "same_mint", message: "Pick two different tokens." }, { status: 400 });
   }
   await readyState();
-  const skipHouse = isProjectProtocolWallet(b.owner);
+  const skipHouse = isProjectProtocolWallet(b.owner) || (await isV3LaunchWallet(b.owner));
   const tx = await buildAnySwapTx({
     owner: b.owner,
     inputMint,

@@ -8,9 +8,11 @@ import {
   extractV2ToTreasury,
   loadCampaign,
   loadLaunchArchive,
+  listOldWallets,
   pauseCampaign,
   previewV2Extract,
   publicCampaign,
+  reclaimOldWalletsToTreasury,
   refreshSnipers,
   resetCampaign,
   resumeCampaign,
@@ -32,7 +34,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 const Body = z.object({
-  action: z.enum(["start", "pause", "resume", "stop", "reset", "tick", "extractLaunched", "stopToken"]),
+  action: z.enum(["start", "pause", "resume", "stop", "reset", "tick", "extractLaunched", "stopToken", "reclaimOldWallets"]),
   tokenId: z.string().min(1).max(80).optional(),
   narrative: z.number().int().min(0).max(400).optional(),
   random: z.number().int().min(0).max(400).optional(),
@@ -59,7 +61,13 @@ async function desk() {
   }
   const fuel = await campaignFuel(campaign);
   const sweep = await previewV2Extract().catch(() => null);
-  return { campaign, fuel, summary: campaignSummary(campaign), sweep, archive, version: "v2" as const };
+  const oldWallets = await listOldWallets().catch(() => ({
+    count: 0,
+    reclaimable: 0,
+    incinerator: "https://sol-incinerator.com/tools",
+    rows: [],
+  }));
+  return { campaign, fuel, summary: campaignSummary(campaign), sweep, archive, oldWallets, version: "v2" as const };
 }
 
 export async function GET(req: NextRequest) {
@@ -131,6 +139,15 @@ export async function POST(req: NextRequest) {
         );
       }
       return withAdminSession(NextResponse.json({ ok: true, sweepResult: result, ...(await desk()) }));
+    } else if (b.action === "reclaimOldWallets") {
+      const result = await reclaimOldWalletsToTreasury({ limit: 20 });
+      if (!result.ok) {
+        return NextResponse.json(
+          { error: "reclaim_failed", message: result.error, reclaimResult: result, ...(await desk()) },
+          { status: 400 },
+        );
+      }
+      return withAdminSession(NextResponse.json({ ok: true, reclaimResult: result, ...(await desk()) }));
     }
     return withAdminSession(NextResponse.json({ ok: true, ...(await desk()) }));
   } catch (e) {

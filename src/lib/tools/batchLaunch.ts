@@ -8,7 +8,7 @@ import {
   SystemProgram,
   Transaction,
 } from "@solana/web3.js";
-import { createCloseAccountInstruction, TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID } from "@solana/spl-token";
+import { createBurnInstruction, createCloseAccountInstruction, TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID } from "@solana/spl-token";
 import { isSolanaAddress } from "../security";
 import { SITE_URL } from "../config";
 import { connection, waitForSignature } from "../solana/connection";
@@ -28,24 +28,21 @@ import { durableConfigured, kvDel, kvGetJson, kvSetJson, kvSetNxEx, KEYS } from 
 import { audit, pushBounded, readyState, withLaunch } from "../store";
 import { emptySnipers, sniperStats, type SniperStats } from "./snipers";
 import { buildProjectSliceMintTx } from "./projectMint";
+import { INCINERATOR_URL } from "./scrambler";
 import { ownerAddress } from "../ownerWallet";
 import {
-  BATCH_RELAY_LAMPORTS,
-  BATCH_RELAY_SOL,
+  BATCH_LAUNCH_FUND_LAMPORTS,
+  BATCH_LAUNCH_FUND_SOL,
   BATCH_SUPPLY,
   DEFAULT_NARRATIVE,
   DEFAULT_RANDOM,
   DEFAULT_WINDOW_MS,
-  DUMP_DELAY_MS,
   DUMP_MIN_SOL,
   DUMP_SLIPPAGE_BPS,
-  dumpHot,
   MAX_BATCH,
-  splitMix,
   buildIdentities,
   curveTokensFor,
   fetchNarratives,
-  isInsufficientFunds,
   scheduleTimes,
   teamTokensFor,
   type TokenIdentity,
@@ -158,7 +155,7 @@ function emptyCampaign(): Campaign {
     windowMs: DEFAULT_WINDOW_MS,
     narrative: DEFAULT_NARRATIVE,
     random: DEFAULT_RANDOM,
-    fundLamports: BATCH_RELAY_LAMPORTS,
+    fundLamports: BATCH_LAUNCH_FUND_LAMPORTS,
     relayFunded: false,
     dry: false,
     tokens: [],
@@ -374,7 +371,7 @@ function normalizeCampaign(raw: unknown): Campaign {
     windowMs: Number(o.windowMs) || DEFAULT_WINDOW_MS,
     narrative: Number(o.narrative) || 0,
     random: Number(o.random) || 0,
-    fundLamports: Number(o.fundLamports) || BATCH_RELAY_LAMPORTS,
+    fundLamports: Number(o.fundLamports) || BATCH_LAUNCH_FUND_LAMPORTS,
     relayFunded: Boolean(o.relayFunded),
     dry: Boolean(o.dry),
     measuredCostSol: Number(o.measuredCostSol) || undefined,
@@ -446,7 +443,7 @@ export async function campaignFuel(c?: Campaign): Promise<CampaignFuel> {
   const hot = Boolean(await loadTreasuryKeypair());
   const remaining = camp.tokens.filter((t) => t.status === "queued" || t.status === "funding" || t.status === "launching").length
     || (camp.status === "idle" ? camp.narrative + camp.random || DEFAULT_NARRATIVE + DEFAULT_RANDOM : 0);
-  const needSol = camp.relayFunded ? 0 : BATCH_RELAY_SOL;
+  const needSol = (remaining * camp.fundLamports) / LAMPORTS_PER_SOL;
   let treasurySol = 0;
   if (treasury && isSolanaAddress(treasury)) {
     try {
@@ -456,19 +453,18 @@ export async function campaignFuel(c?: Campaign): Promise<CampaignFuel> {
     }
   }
   const keepSol = TREASURY_KEEP_LAMPORTS / LAMPORTS_PER_SOL;
-  const live = camp.tokens.filter((t) => t.status === "live").length;
   return {
     treasury,
     treasurySol,
     hot,
-    fundSol: camp.measuredCostSol || 0,
+    fundSol: camp.fundLamports / LAMPORTS_PER_SOL,
     remaining,
     needSol,
     keepSol,
-    enough: hot && (camp.relayFunded || treasurySol >= needSol + keepSol),
-    relayLeftSol: Number(camp.relayLeftSol) || 0,
-    measuredCostSol: live && camp.measuredCostSol ? camp.measuredCostSol : Number(camp.measuredCostSol) || 0,
-    dry: Boolean(camp.dry),
+    enough: hot && treasurySol >= needSol + keepSol,
+    relayLeftSol: 0,
+    measuredCostSol: 0,
+    dry: false,
   };
 }
 
@@ -487,21 +483,14 @@ export async function startCampaign(opts?: {
     /* archive is best-effort */
   }
   if (!dbcEnabled()) return { ok: false, error: "The bonding curve is not enabled.", fuel: await campaignFuel(live) };
-  let narrative = Math.max(0, Math.min(MAX_BATCH, Math.floor(opts?.narrative ?? DEFAULT_NARRATIVE)));
-  let random = Math.max(0, Math.min(MAX_BATCH, Math.floor(opts?.random ?? DEFAULT_RANDOM)));
-  if (narrative + random > MAX_BATCH) {
-    const mix = splitMix(MAX_BATCH, ((narrative + random) ? (narrative / (narrative + random)) * 100 : 40));
-    narrative = mix.narrative;
-    random = mix.random;
-  }
+  const narrative = Math.max(0, Math.min(MAX_BATCH, Math.floor(opts?.narrative ?? DEFAULT_NARRATIVE)));
+  const random = Math.max(0, Math.min(MAX_BATCH, Math.floor(opts?.random ?? DEFAULT_RANDOM)));
   const total = narrative + random;
   if (!(total > 0)) return { ok: false, error: "Set at least one token to launch.", fuel: await campaignFuel(live) };
   const windowMs = Math.max(60_000, Math.floor(opts?.windowMs ?? DEFAULT_WINDOW_MS));
   const now = Date.now();
   const hits = await fetchNarratives(Math.max(120, narrative));
-  const used = await loadUsedTickers();
-  const ids = buildIdentities({ narrative, random, hits, used });
-  await rememberTickers(ids.map((id) => id.symbol));
+  const ids = buildIdentities({ narrative, random, hits });
   const times = scheduleTimes(ids.length, windowMs, now);
   const tokens: CampaignToken[] = ids.map((id, i) => ({
     ...id,
@@ -523,9 +512,7 @@ export async function startCampaign(opts?: {
     windowMs,
     narrative,
     random,
-    fundLamports: BATCH_RELAY_LAMPORTS,
-    relayFunded: false,
-    dry: false,
+    fundLamports: BATCH_LAUNCH_FUND_LAMPORTS,
     nextAt: tokens[0]?.scheduledAt || now,
     tokens,
   };
@@ -540,7 +527,7 @@ export async function startCampaign(opts?: {
   if (!fuel.enough) {
     return {
       ok: false,
-      error: `Treasury needs ${BATCH_RELAY_SOL.toFixed(3)} SOL plus ${fuel.keepSol.toFixed(3)} SOL kept to seed the first launch wallet. It holds ${fuel.treasurySol.toFixed(3)} SOL. Remainder relays to the next wallet until a launch fails on insufficient funds.`,
+      error: `Treasury needs ${fuel.needSol.toFixed(3)} SOL plus ${fuel.keepSol.toFixed(3)} SOL kept. It holds ${fuel.treasurySol.toFixed(3)} SOL. Each launch funds a fresh wallet with ${BATCH_LAUNCH_FUND_SOL.toFixed(3)} SOL.`,
       fuel,
     };
   }
@@ -561,7 +548,8 @@ export async function resumeCampaign(): Promise<Campaign> {
   const c = await loadCampaign();
   if (c.status === "paused") {
     c.status = "running";
-    c.nextAt = nextWorkAt(c) || Date.now();
+    const next = c.tokens.find((t) => t.status === "queued" || t.status === "funding" || t.status === "launching");
+    c.nextAt = next?.scheduledAt || Date.now();
     c.error = undefined;
     await saveCampaign(c);
   }
@@ -573,13 +561,8 @@ export async function stopCampaign(): Promise<Campaign> {
   if (c.status === "running" || c.status === "paused") {
     c.status = "stopped";
     await saveCampaign(c);
-    try {
-      await closeOutCampaign(c, { limit: 8 });
-    } catch {
-      /* cron finishes leftover hops */
-    }
   }
-  return loadCampaign();
+  return c;
 }
 
 export async function resetCampaign(): Promise<Campaign> {
@@ -658,62 +641,6 @@ async function ensureWallet(token: CampaignToken, keys: KeyPack): Promise<Keypai
   keys[token.wallet] = bytesToB64(kp.secretKey);
   await saveKeys(keys);
   return kp;
-}
-
-function measureRelay(c: Campaign, leftSol: number) {
-  c.relayLeftSol = Math.max(0, leftSol);
-  const live = c.tokens.filter((t) => t.status === "live").length;
-  const spent = Math.max(0, BATCH_RELAY_SOL - c.relayLeftSol);
-  c.measuredCostSol = live > 0 ? spent / live : spent;
-}
-
-function markDry(c: Campaign, token: CampaignToken, walletSol: number, message: string) {
-  token.status = "failed";
-  token.error = message;
-  c.dry = true;
-  c.status = "stopped";
-  measureRelay(c, walletSol);
-  const live = c.tokens.filter((t) => t.status === "live").length;
-  c.error = `Stopped on insufficient funds after ${live} live launch${live === 1 ? "" : "es"}. Seed was ${BATCH_RELAY_SOL} SOL. About ${(c.measuredCostSol || 0).toFixed(4)} SOL used per launch. ${walletSol.toFixed(4)} SOL left in the last wallet. ${message}`;
-}
-
-async function returnWalletToOwner(c: Campaign, from: Keypair, token: CampaignToken): Promise<void> {
-  const dest = leftoverDest();
-  if (!isSolanaAddress(dest) || from.publicKey.toBase58() === dest) {
-    const left = await connection().getBalance(from.publicKey, "confirmed").catch(() => 0);
-    measureRelay(c, left / LAMPORTS_PER_SOL);
-    return;
-  }
-  try {
-    const relayed = await relayAll(from, new PublicKey(dest));
-    if (relayed.sig) token.sigs.push(relayed.sig);
-    const sol = relayed.lamports / LAMPORTS_PER_SOL;
-    token.returnedSol = (token.returnedSol || 0) + sol;
-    c.returnedSol = (c.returnedSol || 0) + sol;
-    measureRelay(c, 0);
-  } catch {
-    const left = await connection().getBalance(from.publicKey, "confirmed").catch(() => 0);
-    measureRelay(c, left / LAMPORTS_PER_SOL);
-  }
-}
-
-async function relayToNext(c: Campaign, from: Keypair, token: CampaignToken, keys: KeyPack): Promise<void> {
-  const next = c.tokens.find((t) => (t.status === "queued" || t.status === "funding") && t.id !== token.id);
-  if (!next) {
-    await returnWalletToOwner(c, from, token);
-    return;
-  }
-  const nextKp = await ensureWallet(next, keys);
-  try {
-    const relayed = await relayAll(from, nextKp.publicKey);
-    if (relayed.sig) token.sigs.push(relayed.sig);
-    measureRelay(c, relayed.lamports / LAMPORTS_PER_SOL);
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : "Relay failed.";
-    const left = await connection().getBalance(from.publicKey, "confirmed").catch(() => 0);
-    if (isInsufficientFunds(msg) && token.status !== "live") markDry(c, token, left / LAMPORTS_PER_SOL, msg);
-    else measureRelay(c, left / LAMPORTS_PER_SOL);
-  }
 }
 
 type WalletBag = { mint: string; amount: number; account: PublicKey; program: PublicKey };
@@ -834,58 +761,6 @@ async function sellAllHoldings(kp: Keypair, token: CampaignToken, opts?: { minSo
   return recovered;
 }
 
-function tokenDumpHot(token: CampaignToken, quote = token.bagQuoteSol || 0): boolean {
-  return dumpHot({
-    bagQuoteSol: quote,
-    sniperVolumeSol: token.snipers?.volumeSol,
-    sniperBuySol: token.snipers?.buySol,
-  });
-}
-
-async function dumpAndAdvance(c: Campaign, token: CampaignToken): Promise<void> {
-  const keys = await loadKeys();
-  if (!token.wallet || !keys[token.wallet]) {
-    token.dumped = true;
-    return;
-  }
-  const kp = walletOf(keys[token.wallet]!);
-  const bags = await listWalletBags(kp.publicKey.toBase58()).catch(() => [] as WalletBag[]);
-  let quote = 0;
-  for (const bag of bags) {
-    const value = await quoteBagSol(bag.mint, bag.amount);
-    if (value > quote) quote = value;
-  }
-  token.bagQuoteSol = quote;
-  if (token.mint) {
-    try {
-      const dex = await dexPairStats(token.mint);
-      if (dex) {
-        token.snipers = {
-          ...token.snipers,
-          buys: Math.max(token.snipers.buys || 0, dex.buys),
-          sells: Math.max(token.snipers.sells || 0, dex.sells),
-          volumeSol: Math.max(token.snipers.volumeSol || 0, dex.volumeSol),
-          buySol: Math.max(token.snipers.buySol || 0, dex.buySol),
-        };
-      }
-    } catch {
-      /* hop still runs */
-    }
-  }
-  const hot = tokenDumpHot(token, quote);
-  const due = (token.dumpAt || 0) <= Date.now();
-  if (!hot && !due) return;
-  if (hot) {
-    try {
-      await sellAllHoldings(kp, token, { minSol: 0 });
-    } catch {
-      /* hop leftover anyway so the scheduled run continues */
-    }
-  }
-  token.dumped = true;
-  await relayToNext(c, kp, token, keys);
-}
-
 async function closeOutCampaign(c: Campaign, opts?: { limit?: number; minSol?: number; only?: string[] }): Promise<number> {
   const keys = await loadKeys();
   const dest = leftoverDest();
@@ -961,15 +836,172 @@ export async function drainCampaignWalletsToTreasury(opts?: { limit?: number; on
 /** @deprecated leftover SOL goes to treasury. */
 export const drainCampaignWalletsToOwner = drainCampaignWalletsToTreasury;
 
-function pendingDump(c: Campaign): CampaignToken | undefined {
-  return c.tokens.find((t) => t.status === "live" && !t.dumped && Boolean(t.wallet));
+type TokenAccountRow = { mint: string; account: PublicKey; program: PublicKey; amount: bigint };
+
+async function listAllTokenAccounts(owner: string): Promise<TokenAccountRow[]> {
+  const conn = connection();
+  const ownerPk = new PublicKey(owner);
+  const [legacy, t22] = await Promise.all([
+    conn.getParsedTokenAccountsByOwner(ownerPk, { programId: new PublicKey(TOKEN_PROGRAM) }),
+    conn.getParsedTokenAccountsByOwner(ownerPk, { programId: new PublicKey(TOKEN_2022_PROGRAM) }),
+  ]);
+  const out: TokenAccountRow[] = [];
+  const push = (row: { pubkey: PublicKey; account: { data: unknown } }, program: PublicKey) => {
+    const data = row.account.data as {
+      parsed?: { info?: { mint?: string; tokenAmount?: { amount?: string } } };
+    };
+    const mint = data?.parsed?.info?.mint || "";
+    if (!isSolanaAddress(mint)) return;
+    let amount = 0n;
+    try {
+      amount = BigInt(data?.parsed?.info?.tokenAmount?.amount || "0");
+    } catch {
+      amount = 0n;
+    }
+    out.push({ mint, account: row.pubkey, program, amount });
+  };
+  for (const row of legacy.value) push(row, TOKEN_PROGRAM_ID);
+  for (const row of t22.value) push(row, TOKEN_2022_PROGRAM_ID);
+  return out;
 }
 
-function nextWorkAt(c: Campaign): number | undefined {
-  const dump = pendingDump(c);
-  const next = c.tokens.find((t) => t.status === "queued" || t.status === "funding" || t.status === "launching");
-  const times = [dump?.dumpAt, next?.scheduledAt].filter((n): n is number => Boolean(n));
-  return times.length ? Math.min(...times) : undefined;
+async function incinerateTokenAccounts(kp: Keypair): Promise<string[]> {
+  const rows = await listAllTokenAccounts(kp.publicKey.toBase58());
+  const sigs: string[] = [];
+  const conn = connection();
+  for (let i = 0; i < rows.length; i += 4) {
+    const chunk = rows.slice(i, i + 4);
+    const ixs = [];
+    for (const row of chunk) {
+      if (row.mint === SOL_MINT) {
+        if (row.amount === 0n) {
+          ixs.push(createCloseAccountInstruction(row.account, kp.publicKey, kp.publicKey, [], row.program));
+        }
+        continue;
+      }
+      if (row.amount > 0n) {
+        ixs.push(createBurnInstruction(row.account, new PublicKey(row.mint), kp.publicKey, row.amount, [], row.program));
+      }
+      ixs.push(createCloseAccountInstruction(row.account, kp.publicKey, kp.publicKey, [], row.program));
+    }
+    if (!ixs.length) continue;
+    try {
+      const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash("confirmed");
+      const tx = new Transaction().add(
+        ComputeBudgetProgram.setComputeUnitLimit({ units: 200_000 }),
+        ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 50_000 }),
+        ...ixs,
+      );
+      tx.feePayer = kp.publicKey;
+      tx.recentBlockhash = blockhash;
+      tx.lastValidBlockHeight = lastValidBlockHeight;
+      tx.sign(kp);
+      const sig = await broadcastB64(bytesToB64(tx.serialize()), { skipPreflight: true });
+      await waitForSignature(sig, 20);
+      sigs.push(sig);
+    } catch {
+      /* next chunk */
+    }
+  }
+  return sigs;
+}
+
+export type OldWalletRow = {
+  pk: string;
+  role: "hop" | "final";
+  tokenId?: string;
+  hopIndex: number;
+  createdAt: number;
+  live: boolean;
+};
+
+export async function listOldWallets(): Promise<{
+  count: number;
+  reclaimable: number;
+  incinerator: string;
+  rows: OldWalletRow[];
+}> {
+  const keys = await loadKeys();
+  const c = await loadCampaign();
+  const livePks = new Set(c.tokens.filter((t) => t.status === "live" && t.wallet).map((t) => t.wallet as string));
+  const rows: OldWalletRow[] = Object.entries(keys)
+    .filter(([pk, secret]) => pk && secret)
+    .map(([pk]) => {
+      const token = c.tokens.find((t) => t.wallet === pk);
+      return {
+        pk,
+        role: "final" as const,
+        tokenId: token?.id,
+        hopIndex: 0,
+        createdAt: Number(token?.launchedAt) || 0,
+        live: livePks.has(pk),
+      };
+    })
+    .sort((a, b) => b.createdAt - a.createdAt);
+  return {
+    count: rows.length,
+    reclaimable: rows.filter((r) => !r.live).length,
+    incinerator: INCINERATOR_URL,
+    rows: rows.slice(0, 120),
+  };
+}
+
+export async function reclaimOldWalletsToTreasury(opts?: { limit?: number }): Promise<{
+  ok: boolean;
+  closed: number;
+  movedSol: number;
+  skippedLive: number;
+  signatures: string[];
+  error?: string;
+}> {
+  const dest = leftoverDest();
+  if (!isSolanaAddress(dest)) {
+    return { ok: false, closed: 0, movedSol: 0, skippedLive: 0, signatures: [], error: "Treasury address missing." };
+  }
+  const keys = await loadKeys();
+  const c = await loadCampaign();
+  const livePks = new Set(c.tokens.filter((t) => t.status === "live" && t.wallet).map((t) => t.wallet as string));
+  const to = new PublicKey(dest);
+  const limit = Math.max(1, Math.min(40, opts?.limit ?? 20));
+  let closed = 0;
+  let movedSol = 0;
+  let skippedLive = 0;
+  const signatures: string[] = [];
+  for (const [pk, secret] of Object.entries(keys)) {
+    if (closed >= limit) break;
+    if (!pk || !secret || pk === dest) continue;
+    if (livePks.has(pk)) {
+      skippedLive += 1;
+      continue;
+    }
+    let kp: Keypair;
+    try {
+      kp = walletOf(secret);
+      if (kp.publicKey.toBase58() !== pk) continue;
+    } catch {
+      continue;
+    }
+    try {
+      const burned = await incinerateTokenAccounts(kp);
+      signatures.push(...burned);
+    } catch {
+      /* SOL still moves */
+    }
+    const bal = await connection().getBalance(kp.publicKey, "confirmed").catch(() => 0);
+    if (bal <= RELAY_FEE_LAMPORTS) {
+      closed += 1;
+      continue;
+    }
+    try {
+      const relayed = await relayAll(kp, to);
+      if (relayed.sig) signatures.push(relayed.sig);
+      movedSol += relayed.lamports / LAMPORTS_PER_SOL;
+      closed += 1;
+    } catch {
+      closed += 1;
+    }
+  }
+  return { ok: true, closed, movedSol, skippedLive, signatures };
 }
 
 async function pinMeta(token: CampaignToken): Promise<{ image: string; uri: string }> {
@@ -996,56 +1028,23 @@ async function launchOne(c: Campaign, token: CampaignToken): Promise<CampaignTok
     token.error = "Treasury cannot sign. Save the treasury project key in Wallets.";
     return token;
   }
-  const owner = ownerAddress();
-  if (!isSolanaAddress(owner)) {
-    token.status = "failed";
-    token.error = "Set the owner wallet so this launcher can send the 1% swap fee to owner.";
-    return token;
-  }
   const conn = connection();
   const keys = await loadKeys();
   const walletKp = await ensureWallet(token, keys);
   token.status = "funding";
-  try {
-    if (!c.relayFunded) {
-      const treasBal = await conn.getBalance(treasury.publicKey, "confirmed");
-      if (treasBal < BATCH_RELAY_LAMPORTS + TREASURY_KEEP_LAMPORTS + RELAY_FEE_LAMPORTS) {
-        markDry(c, token, treasBal / LAMPORTS_PER_SOL, "Treasury cannot seed the 0.5 SOL relay.");
-        return token;
-      }
-      const sig = await sendSol(treasury, walletKp.publicKey, BATCH_RELAY_LAMPORTS);
-      token.sigs.push(sig);
-      c.relayFunded = true;
-    } else {
-      const bal = await conn.getBalance(walletKp.publicKey, "confirmed");
-      if (bal < 20_000_000) {
-        const prevs = c.tokens.filter(
-          (t) => t.wallet && t.wallet !== token.wallet && keys[t.wallet] && (t.status === "live" || t.status === "failed"),
-        );
-        for (const prev of [...prevs].reverse()) {
-          const prevKp = walletOf(keys[prev.wallet!]!);
-          const prevBal = await conn.getBalance(prevKp.publicKey, "confirmed");
-          if (prevBal > RELAY_FEE_LAMPORTS + 1_000_000) {
-            const relayed = await relayAll(prevKp, walletKp.publicKey);
-            if (relayed.sig) token.sigs.push(relayed.sig);
-            break;
-          }
-        }
-      }
-    }
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : "Funding failed.";
-    const left = await conn.getBalance(walletKp.publicKey, "confirmed").catch(() => 0);
-    if (isInsufficientFunds(msg)) {
-      markDry(c, token, left / LAMPORTS_PER_SOL, msg);
-      await returnWalletToOwner(c, walletKp, token);
+  const bal = await conn.getBalance(walletKp.publicKey, "confirmed");
+  if (bal < c.fundLamports - 20_000) {
+    const treasBal = await conn.getBalance(treasury.publicKey, "confirmed");
+    if (treasBal < c.fundLamports + TREASURY_KEEP_LAMPORTS) {
+      token.status = "failed";
+      token.error = "Treasury ran dry mid-campaign.";
+      c.status = "paused";
+      c.error = token.error;
       return token;
     }
-    token.status = "failed";
-    token.error = msg;
-    return token;
+    const sig = await sendSol(treasury, walletKp.publicKey, c.fundLamports);
+    token.sigs.push(sig);
   }
-
   token.status = "launching";
   const mintKp = Keypair.generate();
   const mintPk = mintKp.publicKey.toBase58();
@@ -1053,52 +1052,27 @@ async function launchOne(c: Campaign, token: CampaignToken): Promise<CampaignTok
   token.image = art.image;
   token.uri = art.uri;
   const dbc = await import("../launch/dbc");
+  const built = await dbc.buildHookedDbcLaunchTx({
+    payer: walletKp.publicKey.toBase58(),
+    mint: mintPk,
+    name: token.name,
+    symbol: token.symbol,
+    uri: token.uri.slice(0, 255),
+    curveTokens: token.curveTokens,
+  });
+  const launchSig = await signSend(built.transaction, [
+    walletKp,
+    mintKp,
+    Keypair.fromSecretKey(b64ToBytes(built.configSecret)),
+  ]);
+  token.sigs.push(launchSig);
+  await waitForSignature(launchSig, 32);
+  token.mint = mintPk;
+  token.config = built.config;
   try {
-    const built = await dbc.buildHookedDbcLaunchTx({
-      payer: walletKp.publicKey.toBase58(),
-      mint: mintPk,
-      name: token.name,
-      symbol: token.symbol,
-      uri: token.uri.slice(0, 255),
-      curveTokens: token.curveTokens,
-      feeClaimer: owner,
-      leftoverReceiver: owner,
-      creatorTradingFeePercentage: 0,
-    });
-    const launchSig = await signSend(built.transaction, [
-      walletKp,
-      mintKp,
-      Keypair.fromSecretKey(b64ToBytes(built.configSecret)),
-    ]);
-    token.sigs.push(launchSig);
-    const landed = await waitForSignature(launchSig, 40);
-    const pool = await dbc.waitForDbcPool(mintPk, 40, built.config);
-    if (!pool?.publicKey) {
-      throw new Error(
-        landed.ok
-          ? "Launch sent but the pair never appeared on-chain."
-          : `Launch did not confirm (${landed.err || "timeout"}).`,
-      );
-    }
-    token.mint = mintPk;
-    token.config = built.config;
-    try {
-      token.pool = dbc.derivedDbcPoolAddress(mintPk, built.config);
-    } catch {
-      token.pool = pool.publicKey.toBase58();
-    }
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : "Launch failed.";
-    const left = await conn.getBalance(walletKp.publicKey, "confirmed").catch(() => 0);
-    if (isInsufficientFunds(msg)) {
-      markDry(c, token, left / LAMPORTS_PER_SOL, msg);
-      await returnWalletToOwner(c, walletKp, token);
-      return token;
-    }
-    token.status = "failed";
-    token.error = msg;
-    await relayToNext(c, walletKp, token, keys);
-    return token;
+    token.pool = dbc.derivedDbcPoolAddress(mintPk, built.config);
+  } catch {
+    /* pool lands with the launch */
   }
   try {
     const team = await buildProjectSliceMintTx({
@@ -1147,8 +1121,6 @@ async function launchOne(c: Campaign, token: CampaignToken): Promise<CampaignTok
   }
   token.status = "live";
   token.launchedAt = Date.now();
-  token.dumpAt = token.launchedAt + DUMP_DELAY_MS;
-  token.dumped = false;
   token.error = undefined;
   return token;
 }
@@ -1159,19 +1131,6 @@ function nextQueued(c: Campaign, now: number): CampaignToken | undefined {
     .sort((a, b) => a.scheduledAt - b.scheduledAt)[0];
 }
 
-async function finishTickState(c: Campaign) {
-  const next = c.tokens.find((t) => t.status === "queued" || t.status === "funding" || t.status === "launching");
-  const dump = pendingDump(c);
-  c.nextAt = nextWorkAt(c);
-  if (!next && !dump && c.status === "running") {
-    c.status = "done";
-    c.nextAt = undefined;
-    await closeOutCampaign(c, { limit: 8 });
-    return;
-  }
-  await saveCampaign(c);
-}
-
 export async function tickBatchLaunch(opts?: { limit?: number }): Promise<{
   ran: number;
   failed: number;
@@ -1179,19 +1138,7 @@ export async function tickBatchLaunch(opts?: { limit?: number }): Promise<{
   nextAt?: number;
 }> {
   const c0 = await loadCampaign();
-  if (c0.status !== "running") {
-    if (c0.status === "stopped" || c0.status === "done") {
-      try {
-        await withLaunchLock(async () => {
-          const c = await loadCampaign();
-          await closeOutCampaign(c, { limit: 6 });
-        });
-      } catch {
-        /* desk still loads */
-      }
-    }
-    return { ran: 0, failed: 0, status: c0.status, nextAt: c0.nextAt };
-  }
+  if (c0.status !== "running") return { ran: 0, failed: 0, status: c0.status, nextAt: c0.nextAt };
   const locked = await withLaunchLock(async () => {
     let ran = 0;
     let failed = 0;
@@ -1199,60 +1146,39 @@ export async function tickBatchLaunch(opts?: { limit?: number }): Promise<{
     for (let i = 0; i < limit; i++) {
       const c = await loadCampaign();
       if (c.status !== "running") break;
-      const dump = pendingDump(c);
-      if (dump) {
-        const idx = c.tokens.findIndex((t) => t.id === dump.id);
-        try {
-          await dumpAndAdvance(c, dump);
-          if (idx >= 0) c.tokens[idx] = dump;
-        } catch (e) {
-          dump.error = e instanceof Error ? e.message : "Dump failed.";
-          dump.dumped = true;
-          if (idx >= 0) c.tokens[idx] = dump;
-        }
-        await finishTickState(c);
-        if (!dump.dumped) break;
-        if (c.dry || c.status !== "running") break;
-        continue;
-      }
       const now = Date.now();
       const token = nextQueued(c, now);
       if (!token) {
-        await finishTickState(c);
+        const pending = c.tokens.find((t) => t.status === "queued" || t.status === "funding" || t.status === "launching");
+        if (!pending) {
+          c.status = "done";
+          c.nextAt = undefined;
+          await saveCampaign(c);
+        } else {
+          c.nextAt = pending.scheduledAt;
+          await saveCampaign(c);
+        }
         break;
       }
       const idx = c.tokens.findIndex((t) => t.id === token.id);
       try {
         const live = await launchOne(c, token);
         if (idx >= 0) c.tokens[idx] = live;
-        if (live.status === "live") {
-          ran += 1;
-          c.lastLaunchAt = Date.now();
-          await saveCampaign(c);
-        } else failed += 1;
+        if (live.status === "live") ran += 1;
+        else failed += 1;
         c.lastLaunchAt = Date.now();
-        await finishTickState(c);
-        if (c.dry || c.status !== "running") break;
+        const next = c.tokens.find((t) => t.status === "queued" || t.status === "funding" || t.status === "launching");
+        c.nextAt = next?.scheduledAt;
+        if (!next) c.status = "done";
+        await saveCampaign(c);
+        if (c.status !== "running") break;
       } catch (e) {
-        const msg = e instanceof Error ? e.message : "Launch failed.";
-        let walletSol = 0;
-        try {
-          if (token.wallet) {
-            walletSol = (await connection().getBalance(new PublicKey(token.wallet), "confirmed")) / LAMPORTS_PER_SOL;
-          }
-        } catch {
-          walletSol = 0;
-        }
-        if (isInsufficientFunds(msg)) markDry(c, token, walletSol, msg);
-        else {
-          token.status = "failed";
-          token.error = msg;
-        }
+        token.status = "failed";
+        token.error = e instanceof Error ? e.message : "Launch failed.";
         if (idx >= 0) c.tokens[idx] = token;
         failed += 1;
         c.lastLaunchAt = Date.now();
         await saveCampaign(c);
-        if (c.dry || c.status !== "running") break;
       }
     }
     const c = await loadCampaign();
