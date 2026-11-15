@@ -90,7 +90,7 @@ describe("data launcher V3 SPHA replica", () => {
   it("seals the public CA until T-0 and uses createdOn meteora.ag", () => {
     const project = read("src/lib/tools/v3/project.ts");
     assert.match(project, /SNIPER_CREATED_ON/);
-    assert.match(project, /mint: live \? p\.mint : ""/);
+    assert.match(project, /mint: live && p\.mint \? p\.mint : ""/);
     assert.equal(SPHA_MINT_LEAD_MS, 30 * 60_000);
     assert.equal(SNIPER_CREATED_ON, "https://www.meteora.ag");
     const site = read("src/components/MemeCoinSite.tsx");

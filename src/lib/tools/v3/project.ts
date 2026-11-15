@@ -438,7 +438,7 @@ export function publicSitePack(p: V3Project, now = Date.now()) {
   const live = p.status === "live" && isSolanaAddress(p.mint || "");
   const launchAt = p.launchAt > 0 ? p.launchAt : 0;
   const remainingMs = live ? 0 : launchAt > 0 ? Math.max(0, launchAt - now) : 0;
-  const phase = live ? "live" : launchAt > 0 ? "counting" : "soon";
+  const phase: "live" | "counting" | "soon" = live ? "live" : launchAt > 0 ? "counting" : "soon";
   return {
     name: p.name,
     symbol: p.symbol,
@@ -461,7 +461,7 @@ export function publicSitePack(p: V3Project, now = Date.now()) {
       tokens: s.tokens,
       note: s.note,
     })),
-    mint: live ? p.mint : "",
+    mint: live && p.mint ? p.mint : "",
     phase,
     countdown: {
       phase,
