@@ -229,6 +229,7 @@ describe("data launcher V3 SPHA replica", () => {
     assert.match(layoutSrc, /if \(memeHost\)/);
     assert.match(layoutSrc, /export async function generateMetadata/);
     assert.match(layoutSrc, /SOLPHIA_METADATA/);
+    assert.match(layoutSrc, /mc-doc/);
     const page = read("src/app/m/[ticker]/page.tsx");
     assert.match(page, /MemeCoinSite/);
   });
@@ -278,9 +279,15 @@ describe("data launcher V3 SPHA replica", () => {
     assert.match(site, /mc-world-/);
     assert.match(site, /mc-hud/);
     assert.match(site, /mc-specs/);
+    assert.match(site, /mc-menu-btn/);
+    assert.match(site, /mc-drawer/);
+    assert.match(site, /mc-nav-socials/);
     const css = read("src/components/meme-site.css");
     assert.match(css, /mc-world-vice/);
     assert.match(css, /mc-hud-stars/);
+    assert.match(css, /mc-menu-btn/);
+    assert.match(css, /env\(safe-area-inset-top/);
+    assert.match(css, /100dvh/);
     const project = read("src/lib/tools/v3/project.ts");
     assert.match(project, /dressSitePack/);
     assert.match(project, /export async function patchBrand/);

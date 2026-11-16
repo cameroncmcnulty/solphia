@@ -2,6 +2,19 @@
 @tailwind components;
 @tailwind utilities;
 
+html.mc-doc,
+body.mc-doc-body {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+  background: #050505;
+  overflow-x: hidden;
+  -webkit-text-size-adjust: 100%;
+}
+body.mc-doc-body {
+  min-height: 100dvh;
+}
+
 :root {
   --void: #04000a;
   --sol: #14f195;

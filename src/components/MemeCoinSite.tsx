@@ -151,6 +151,7 @@ export function MemeCoinSite({ initial, ticker }: { initial: MemePack; ticker: s
   const [copied, setCopied] = useState("");
   const [now, setNow] = useState(() => Date.now());
   const [spy, setSpy] = useState("top");
+  const [menu, setMenu] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const tilt = useRef<HTMLImageElement>(null);
 
@@ -200,6 +201,7 @@ export function MemeCoinSite({ initial, ticker }: { initial: MemePack; ticker: s
     const el = root.current;
     if (!el) return;
     const onMove = (e: PointerEvent) => {
+      if (e.pointerType === "touch") return;
       el.style.setProperty("--mx", `${e.clientX}px`);
       el.style.setProperty("--my", `${e.clientY}px`);
       const img = tilt.current;
@@ -216,6 +218,13 @@ export function MemeCoinSite({ initial, ticker }: { initial: MemePack; ticker: s
     window.addEventListener("pointermove", onMove);
     return () => window.removeEventListener("pointermove", onMove);
   }, []);
+
+  useEffect(() => {
+    document.body.style.overflow = menu ? "hidden" : "";
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [menu]);
 
   useEffect(() => {
     const ids = ["top", "story", "split", "acquire", "path", "faq", "join"];
@@ -305,6 +314,7 @@ export function MemeCoinSite({ initial, ticker }: { initial: MemePack; ticker: s
   }
 
   function magnet(e: React.PointerEvent<HTMLAnchorElement | HTMLButtonElement>) {
+    if (e.pointerType === "touch") return;
     const node = e.currentTarget;
     const r = node.getBoundingClientRect();
     const x = e.clientX - r.left - r.width / 2;
@@ -324,7 +334,7 @@ export function MemeCoinSite({ initial, ticker }: { initial: MemePack; ticker: s
   ] as const;
 
   return (
-    <div ref={root} className={`mc mc-${layout} mc-world-${worldId} mc-motion-${motion}`} style={vars}>
+    <div ref={root} className={`mc mc-${layout} mc-world-${worldId} mc-motion-${motion}${menu ? " mc-menu-on" : ""}`} style={vars}>
       <div className="mc-motion">
         <MotionLayer motion={motion} accent={c.accent} />
       </div>
@@ -344,7 +354,7 @@ export function MemeCoinSite({ initial, ticker }: { initial: MemePack; ticker: s
       ) : null}
       <div className="mc-shell">
         <header className="mc-nav">
-          <a href="#top" className="mc-brand">
+          <a href="#top" className="mc-brand" onClick={() => setMenu(false)}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={logo} alt="" />
             <div>
@@ -352,24 +362,73 @@ export function MemeCoinSite({ initial, ticker }: { initial: MemePack; ticker: s
               <b>{pack.name}</b>
             </div>
           </a>
-          <nav className="mc-nav-links" aria-label="Page">
-            {nav.map(([id, label]) => (
-              <a key={id} href={`#${id}`} data-on={spy === id ? "1" : "0"}>
-                {label}
-              </a>
-            ))}
-            {pack.x ? (
-              <a href={pack.x} target="_blank" rel="noreferrer">
-                X
-              </a>
-            ) : null}
-            {pack.telegram ? (
-              <a href={pack.telegram} target="_blank" rel="noreferrer">
-                TG
-              </a>
-            ) : null}
-          </nav>
+          <div className="mc-nav-end">
+            <div className="mc-nav-socials">
+              {pack.x ? (
+                <a className="mc-soc" href={pack.x} target="_blank" rel="noreferrer">
+                  X
+                </a>
+              ) : null}
+              {pack.telegram ? (
+                <a className="mc-soc" href={pack.telegram} target="_blank" rel="noreferrer">
+                  TG
+                </a>
+              ) : null}
+            </div>
+            <nav className="mc-nav-links" aria-label="Page">
+              {nav.map(([id, label]) => (
+                <a key={id} href={`#${id}`} data-on={spy === id ? "1" : "0"}>
+                  {label}
+                </a>
+              ))}
+            </nav>
+            <button
+              type="button"
+              className="mc-menu-btn"
+              aria-label={menu ? "Close menu" : "Open menu"}
+              aria-expanded={menu}
+              onClick={() => setMenu((v) => !v)}
+            >
+              <i />
+              <i />
+              <i />
+            </button>
+          </div>
         </header>
+        {menu ? (
+          <div className="mc-drawer" role="dialog" aria-label="Site menu">
+            <div className="mc-drawer-id">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={logo} alt="" />
+              <div>
+                <span className="mc-mono">{tick}</span>
+                <b>{pack.name}</b>
+              </div>
+            </div>
+            <div className="mc-drawer-socials">
+              {pack.x ? (
+                <a className="mc-soc" href={pack.x} target="_blank" rel="noreferrer">
+                  X
+                </a>
+              ) : null}
+              {pack.telegram ? (
+                <a className="mc-soc" href={pack.telegram} target="_blank" rel="noreferrer">
+                  Telegram
+                </a>
+              ) : null}
+            </div>
+            <nav className="mc-drawer-links" aria-label="Page">
+              {nav.map(([id, label]) => (
+                <a key={id} href={`#${id}`} onClick={() => setMenu(false)}>
+                  {label}
+                </a>
+              ))}
+              <a href="#join" onClick={() => setMenu(false)}>
+                {labels.join}
+              </a>
+            </nav>
+          </div>
+        ) : null}
 
         <section className="mc-hero" id="top">
           <div className="mc-hero-media">

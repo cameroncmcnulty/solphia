@@ -80,8 +80,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const memeHost = Boolean(sub && !isReservedV3Host(sub) && !sub.includes("."));
   if (memeHost) {
     return (
-      <html lang="en">
-        <body className="antialiased">{children}</body>
+      <html lang="en" className="mc-doc">
+        <body className="mc-doc-body antialiased">{children}</body>
       </html>
     );
   }
