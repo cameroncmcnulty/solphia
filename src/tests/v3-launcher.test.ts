@@ -8,6 +8,7 @@ import { isReservedV3Host, v3HandleOf, v3HostFromHeader, v3WebsiteOf } from "../
 import { detectWorldId, dressSitePack, looksWarmBrown, worldOf } from "../lib/tools/v3/world";
 import { SNIPER_CREATED_ON } from "../lib/tools/identities";
 import { SPHA_MINT_LEAD_MS } from "../lib/token/countdown";
+import { imageExt, sniffImageMime } from "../lib/image/sniff";
 
 function read(rel: string) {
   return readFileSync(path.join(process.cwd(), rel), "utf8");
@@ -300,5 +301,32 @@ describe("data launcher V3 SPHA replica", () => {
     assert.match(meta, /findProjectByHandle/);
     const art = read("src/app/api/admin/tools/launcher-v3/art/route.ts");
     assert.match(art, /patchBrand/);
+    assert.match(art, /sniffImageMime/);
+    assert.match(ui, /prepareSiteImage/);
+    const serve = read("src/app/api/m/[ticker]/art/route.ts");
+    assert.match(serve, /sniffImageMime/);
+    const pinata = read("src/lib/pinata.ts");
+    assert.match(pinata, /imageExt/);
+  });
+
+  it("sniffs jpeg png gif webp avif heic and svg so the site can serve the real type", () => {
+    assert.equal(sniffImageMime(Uint8Array.from([0xff, 0xd8, 0xff, 0xe0])), "image/jpeg");
+    assert.equal(sniffImageMime(Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])), "image/png");
+    assert.equal(sniffImageMime(Uint8Array.from([0x47, 0x49, 0x46, 0x38, 0x39, 0x61])), "image/gif");
+    const webp = new Uint8Array(12);
+    webp.set([0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x45, 0x42, 0x50]);
+    assert.equal(sniffImageMime(webp), "image/webp");
+    const avif = new Uint8Array(12);
+    avif.set([0, 0, 0, 0, 0x66, 0x74, 0x79, 0x70, 0x61, 0x76, 0x69, 0x66]);
+    assert.equal(sniffImageMime(avif), "image/avif");
+    const heic = new Uint8Array(12);
+    heic.set([0, 0, 0, 0, 0x66, 0x74, 0x79, 0x70, 0x68, 0x65, 0x69, 0x63]);
+    assert.equal(sniffImageMime(heic), "image/heic");
+    assert.equal(sniffImageMime(new TextEncoder().encode("<svg xmlns='http://www.w3.org/2000/svg'></svg>")), "image/svg+xml");
+    assert.equal(imageExt("image/jpeg"), "jpg");
+    assert.equal(imageExt("image/jpg"), "jpg");
+    assert.equal(imageExt("image/webp"), "webp");
+    assert.equal(imageExt("image/svg+xml"), "svg");
+    assert.equal(imageExt("image/heic"), "heic");
   });
 });

@@ -86,13 +86,17 @@ export function createMetadataV3Ix(opts: {
   });
 }
 
-function imageExt(url: string, mime?: string): "png" | "jpg" | "webp" | "gif" {
+function imageExt(url: string, mime?: string): "png" | "jpg" | "webp" | "gif" | "avif" | "svg" {
   const m = (mime || "").toLowerCase();
+  if (m.includes("svg")) return "svg";
+  if (m.includes("avif")) return "avif";
   if (m.includes("png")) return "png";
   if (m.includes("webp")) return "webp";
   if (m.includes("gif")) return "gif";
   if (m.includes("jpeg") || m.includes("jpg")) return "jpg";
   const path = url.split("?")[0].toLowerCase();
+  if (path.endsWith(".svg")) return "svg";
+  if (path.endsWith(".avif")) return "avif";
   if (path.endsWith(".png")) return "png";
   if (path.endsWith(".webp")) return "webp";
   if (path.endsWith(".gif")) return "gif";
@@ -104,6 +108,8 @@ function imageMime(ext: string): string {
   if (ext === "jpg") return "image/jpeg";
   if (ext === "webp") return "image/webp";
   if (ext === "gif") return "image/gif";
+  if (ext === "avif") return "image/avif";
+  if (ext === "svg") return "image/svg+xml";
   return "image/png";
 }
 

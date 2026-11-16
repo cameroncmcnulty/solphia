@@ -788,7 +788,7 @@ export async function patchBrand(opts: {
   if (opts.image != null) {
     const img = String(opts.image).trim();
     if (img && (img.startsWith("http") || img.startsWith("data:image") || img.startsWith("/"))) {
-      p.image = img.slice(0, 2400);
+      p.image = img.startsWith("data:image") ? img.slice(0, 1_400_000) : img.slice(0, 4000);
     }
   }
   p.identityLocked = true;

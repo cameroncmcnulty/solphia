@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { CopyCa } from "@/components/CopyCa";
 import { SwapWidget } from "@/components/SwapWidget";
+import { prepareSiteImage } from "@/lib/image/prepareUpload";
 import { copyText } from "@/lib/copyText";
 import { pad2, splitRemaining, toDatetimeLocalValue } from "@/lib/token/countdown";
 import { Mini, Panel, solAmt } from "../ui";
@@ -294,16 +295,16 @@ export function DataLauncherV3() {
             </p>
             <div className="mt-4 flex flex-wrap items-center gap-3">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={p.image} alt="" className="h-20 w-20 rounded-2xl object-cover" />
+              <img src={`/api/m/${encodeURIComponent(p.handle)}/art?v=${encodeURIComponent((p.image || "").slice(-32))}`} alt="" className="h-20 w-20 rounded-2xl object-cover" />
               {p.heroImage ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={p.heroImage} alt="" className="h-20 w-32 rounded-2xl object-cover" />
+                <img src={`/api/m/${encodeURIComponent(p.handle)}/art?kind=hero&v=${encodeURIComponent((p.heroImage || "").slice(-32))}`} alt="" className="h-20 w-32 rounded-2xl object-cover" />
               ) : null}
               <label className="btn-ghost cursor-pointer rounded-full px-4 py-2 text-sm">
                 {busy ? "Saving logo…" : "Replace logo"}
                 <input
                   type="file"
-                  accept="image/*"
+                  accept="image/*,.heic,.heif,.webp,.avif,.gif,.bmp,.tif,.tiff,.svg,.ico,.jpg,.jpeg,.png"
                   hidden
                   disabled={busy}
                   onChange={async (e) => {
@@ -313,8 +314,9 @@ export function DataLauncherV3() {
                     setBusy(true);
                     setErr("");
                     try {
+                      const ready = await prepareSiteImage(f);
                       const fd = new FormData();
-                      fd.append("file", f, "logo.png");
+                      fd.append("file", ready, ready.name);
                       const r = await fetch("/api/admin/tools/launcher-v3/art", { method: "POST", body: fd });
                       const j = await r.json();
                       if (!r.ok) throw new Error(j.message || j.error || "Logo failed.");

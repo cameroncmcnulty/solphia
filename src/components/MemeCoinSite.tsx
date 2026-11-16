@@ -73,15 +73,9 @@ function asLayout(v?: string): Layout {
 }
 
 function artOf(pack: MemePack, kind: "art" | "hero") {
-  if (kind === "hero") {
-    const src = pack.heroImage || pack.image;
-    if (src && (src.startsWith("http") || src.startsWith("data:image") || src.startsWith("/"))) return src;
-    return `/api/m/${encodeURIComponent(pack.handle)}/art?kind=hero`;
-  }
-  if (pack.image && (pack.image.startsWith("http") || pack.image.startsWith("data:image") || pack.image.startsWith("/"))) {
-    return pack.image;
-  }
-  return `/api/m/${encodeURIComponent(pack.handle)}/art`;
+  const handle = encodeURIComponent(pack.handle);
+  if (kind === "hero") return `/api/m/${handle}/art?kind=hero`;
+  return `/api/m/${handle}/art`;
 }
 
 function MotionLayer({ motion, accent }: { motion: string; accent: string }) {

@@ -1,4 +1,5 @@
 import { XAI_API_KEY, XAI_BASE } from "../../config";
+import { sniffImageMime } from "../../image/sniff";
 import { pinBytes, pinataConfigured } from "../../pinata";
 
 export const IMAGINE_MODEL = "grok-imagine-image-2.0";
@@ -31,16 +32,16 @@ async function imagineTry(opts: {
   if (row.b64_json) {
     const bytes = Buffer.from(row.b64_json, "base64");
     if (bytes.length < 32) return null;
-    return { bytes, mime: "image/png" };
+    return { bytes, mime: sniffImageMime(bytes, "image/png") || "image/png" };
   }
   const url = (row.url || "").trim();
   if (!url.startsWith("http")) return null;
   const img = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(20_000) });
   if (!img.ok) return null;
-  const mime = (img.headers.get("content-type") || "image/png").split(";")[0].trim() || "image/png";
+  const declared = (img.headers.get("content-type") || "image/png").split(";")[0].trim() || "image/png";
   const bytes = Buffer.from(await img.arrayBuffer());
   if (bytes.length < 32) return null;
-  return { bytes, mime };
+  return { bytes, mime: sniffImageMime(bytes, declared) || declared || "image/png" };
 }
 
 async function imagineOnce(opts: {

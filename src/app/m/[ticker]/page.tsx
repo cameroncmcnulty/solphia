@@ -15,9 +15,9 @@ export async function generateMetadata({ params }: { params: Promise<{ ticker: s
   const symbol = p?.id ? p.symbol : handle.toUpperCase();
   const title = `$${symbol} · ${name}`;
   const description = p?.tagline || p?.blurb || `${name} on Solana.`;
-  const image = p?.image || `/api/m/${handle}/art`;
-  const hero = p?.heroImage && p.heroImage.startsWith("http") ? p.heroImage : image;
-  const wide = hero !== image;
+  const image = `/api/m/${handle}/art`;
+  const hero = `/api/m/${handle}/art?kind=hero`;
+  const wide = Boolean(p?.heroImage);
   return {
     title: { absolute: title },
     description,

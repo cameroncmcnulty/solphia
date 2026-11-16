@@ -4,6 +4,7 @@
  */
 
 import { publicImage, rewriteImageUrl } from "./token/art";
+import { imageExt } from "./image/sniff";
 
 const PIN_URL = "https://api.pinata.cloud/pinning/pinFileToIPFS";
 const USAGE_URL = "https://api.pinata.cloud/data/userPinnedDataTotal";
@@ -96,7 +97,7 @@ export async function pinataUsage(): Promise<PinataUsage> {
 }
 
 function fileName(name: string, type: string) {
-  const ext = type.includes("json") ? "json" : type.includes("png") ? "png" : type.includes("webp") ? "webp" : "jpg";
+  const ext = imageExt(type);
   return `${name.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 24) || "token"}.${ext}`;
 }
 
