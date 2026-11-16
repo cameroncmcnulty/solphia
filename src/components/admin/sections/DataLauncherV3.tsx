@@ -5,7 +5,16 @@ import { CopyCa } from "@/components/CopyCa";
 import { SwapWidget } from "@/components/SwapWidget";
 import { prepareSiteImage } from "@/lib/image/prepareUpload";
 import { copyText } from "@/lib/copyText";
-import { pad2, splitRemaining, toDatetimeLocalValue } from "@/lib/token/countdown";
+import { LaunchWhenPicker } from "@/components/admin/LaunchWhenPicker";
+import {
+  countdownLeadOk,
+  defaultLaunchAt,
+  fromLocalDateTime,
+  pad2,
+  splitRemaining,
+  toLocalDateValue,
+  toLocalTimeValue,
+} from "@/lib/token/countdown";
 import { Mini, Panel, solAmt } from "../ui";
 
 type Slice = { id: string; label: string; pct: string; bps: number; tokens: number; note: string; wallet: string };
@@ -75,7 +84,8 @@ export function DataLauncherV3() {
   const [symbol, setSymbol] = useState("");
   const [x, setX] = useState("");
   const [telegram, setTelegram] = useState("");
-  const [when, setWhen] = useState("");
+  const [date, setDate] = useState("");
+  const [time, setTime] = useState("");
   const [dest, setDest] = useState("");
   const [sendAmt, setSendAmt] = useState("");
   const [walletTab, setWalletTab] = useState<"swap" | "receive" | "send">("swap");
@@ -105,7 +115,8 @@ export function DataLauncherV3() {
       setSymbol("");
       setX("");
       setTelegram("");
-      setWhen("");
+      setDate("");
+      setTime("");
       return;
     }
     setName(desk.project.name || "");
@@ -115,7 +126,10 @@ export function DataLauncherV3() {
   }, [desk?.project?.id, desk?.project?.status]);
 
   useEffect(() => {
-    setWhen(desk?.countdown?.launchAt ? toDatetimeLocalValue(desk.countdown.launchAt) : "");
+    const launchAt = desk?.countdown?.launchAt || 0;
+    const ms = launchAt > 0 ? launchAt : defaultLaunchAt();
+    setDate(toLocalDateValue(ms));
+    setTime(toLocalTimeValue(ms));
   }, [desk?.countdown?.launchAt, desk?.project?.id]);
 
   async function act(action: string, extra?: Record<string, unknown>) {
@@ -140,7 +154,8 @@ export function DataLauncherV3() {
         setSymbol("");
         setX("");
         setTelegram("");
-        setWhen("");
+        setDate("");
+        setTime("");
       }
     }
     try {
@@ -477,28 +492,33 @@ export function DataLauncherV3() {
                 </div>
               </div>
             ) : (
-              <div className="mt-4 flex flex-wrap items-end gap-3">
-                <label className="block">
-                  <span className="font-mono text-[10px] tracking-[0.16em] text-mute">T-0 LAUNCH TIME</span>
-                  <input
-                    type="datetime-local"
-                    value={when}
-                    onChange={(e) => setWhen(e.target.value)}
-                    className="mt-1 block rounded-full border border-violet/30 bg-void px-4 py-2 text-sm text-ghost outline-none"
-                  />
-                  <span className="mt-1 block font-mono text-[10px] text-mute">Mint 30 minutes earlier. Same T-30 window as $SPHA.</span>
-                </label>
-                <button
-                  type="button"
-                  disabled={busy || !when || !fuel?.enough}
-                  onClick={() => {
-                    const launchAt = new Date(when).getTime();
-                    void act("arm", { launchAt });
-                  }}
-                  className="btn-acid rounded-full px-5 py-2 text-sm disabled:opacity-40"
-                >
-                  {busy ? "Arming…" : "Arm countdown"}
-                </button>
+              <div className="mt-4">
+                <p className="text-sm text-mute">
+                  Pick T-0 in your local time. Mint fires 30 minutes earlier. Same T-30 window as $SPHA.
+                </p>
+                <div className="mt-3">
+                  <LaunchWhenPicker date={date} time={time} onChange={(nextDate, nextTime) => {
+                    setDate(nextDate);
+                    setTime(nextTime);
+                  }} />
+                </div>
+                <div className="mt-4 flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    disabled={busy || !countdownLeadOk(fromLocalDateTime(date, time)) || !fuel?.enough}
+                    onClick={() => {
+                      const launchAt = fromLocalDateTime(date, time);
+                      if (!countdownLeadOk(launchAt)) return;
+                      void act("arm", { launchAt });
+                    }}
+                    className="btn-acid rounded-full px-5 py-2 text-sm disabled:opacity-40"
+                  >
+                    {busy ? "Arming…" : "Arm countdown"}
+                  </button>
+                  {!fuel?.enough ? (
+                    <span className="font-mono text-[11px] text-mute">Fund the launch wallet above, then Arm. You can still pick T-0 now.</span>
+                  ) : null}
+                </div>
               </div>
             )}
           </Panel>

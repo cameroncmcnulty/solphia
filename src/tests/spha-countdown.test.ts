@@ -7,8 +7,12 @@ import {
   SPHA_MINT_LEAD_MS,
   SPHA_REHEARSAL_LEAD_MS,
   SPHA_REHEARSAL_MS,
+  applyLaunchPreset,
+  countdownLeadOk,
+  defaultLaunchAt,
   emptySphaCountdown,
   formatSphaLaunchWhen,
+  fromLocalDateTime,
   mergeSphaCountdown,
   pad2,
   parseSphaCountdown,
@@ -20,6 +24,8 @@ import {
   sphaTimedOut,
   splitRemaining,
   toDatetimeLocalValue,
+  toLocalDateValue,
+  toLocalTimeValue,
 } from "../lib/token/countdown";
 import { applyOpsConfig, emptyState } from "../lib/store";
 import { SPHA_BLURB, SPHA_DEFAULT_IMAGE, SPHA_TELEGRAM, SPHA_TGE_LAUNCH_AT_MS, SPHA_WEBSITE, SPHA_X, sphaLaunchMints } from "../lib/token/omics";
@@ -154,6 +160,30 @@ describe("spha countdown", () => {
     assert.deepEqual(splitRemaining(90_000), { d: 0, h: 0, m: 1, s: 30 });
     const parsed = parseSphaCountdown({ sphaCountdown: { launchAt: 5, status: "armed", at: 2 } });
     assert.equal(parsed?.launchAt, 5);
+  });
+
+  it("round-trips local date and time without datetime-local parsing", () => {
+    const local = new Date(2026, 10, 16, 16, 5, 0, 0).getTime();
+    assert.equal(toLocalDateValue(local), "2026-11-16");
+    assert.equal(toLocalTimeValue(local), "16:05");
+    assert.equal(toDatetimeLocalValue(local), "2026-11-16T16:05");
+    assert.equal(fromLocalDateTime("2026-11-16", "16:05"), local);
+    assert.equal(fromLocalDateTime("2026-11-16", "16:05:00"), local);
+    assert.equal(fromLocalDateTime("bad", "16:05"), 0);
+    assert.equal(fromLocalDateTime("2026-11-16", ""), 0);
+    assert.equal(fromLocalDateTime("2026-02-31", "12:00"), 0);
+    const now = new Date(2026, 10, 16, 16, 0, 0, 0).getTime();
+    const def = defaultLaunchAt(now);
+    assert.ok(def >= now + SPHA_COUNTDOWN_MIN_MS);
+    assert.equal(def % (5 * 60_000), 0);
+    assert.equal(countdownLeadOk(def, now), true);
+    assert.equal(countdownLeadOk(now + SPHA_COUNTDOWN_MIN_MS - 2_000, now), false);
+    assert.equal(applyLaunchPreset("1h", now), now + 60 * 60_000);
+    assert.equal(toLocalTimeValue(applyLaunchPreset("tonight", now)), "20:00");
+    assert.equal(toLocalDateValue(applyLaunchPreset("tonight", now)), "2026-11-16");
+    const late = new Date(2026, 10, 16, 19, 40, 0, 0).getTime();
+    assert.equal(toLocalDateValue(applyLaunchPreset("tonight", late)), "2026-11-17");
+    assert.equal(toLocalTimeValue(applyLaunchPreset("tomorrow", now)), "12:00");
   });
 
   it("pins the official TGE to Thursday Nov 12 2026 4pm MST with mint at 3:30pm MST", () => {

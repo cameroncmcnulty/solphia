@@ -266,10 +266,99 @@ export function formatSphaLaunchWhen(ms: number, timeZone = "America/Denver"): s
   }
 }
 
-/** Browser-local value for <input type="datetime-local">. */
-export function toDatetimeLocalValue(ms: number): string {
+const LOCAL_DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
+const LOCAL_TIME_RE = /^(\d{1,2}):(\d{2})(?::(\d{2}))?$/;
+const LAUNCH_STEP_MS = 5 * 60_000;
+
+export type LaunchPresetId = "1h" | "2h" | "6h" | "tonight" | "tomorrow" | "1d" | "3d";
+
+export function toLocalDateValue(ms: number): string {
   const d = new Date(ms);
   if (!Number.isFinite(d.getTime())) return "";
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+}
+
+export function toLocalTimeValue(ms: number): string {
+  const d = new Date(ms);
+  if (!Number.isFinite(d.getTime())) return "";
+  return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+
+/** Browser-local value for <input type="datetime-local">. */
+export function toDatetimeLocalValue(ms: number): string {
+  const date = toLocalDateValue(ms);
+  const time = toLocalTimeValue(ms);
+  return date && time ? `${date}T${time}` : "";
+}
+
+/** Local wall clock. Avoids `new Date("YYYY-MM-DDTHH:MM")` Safari / TZ parsing. */
+export function fromLocalDateTime(date: string, time: string): number {
+  const d = LOCAL_DATE_RE.exec((date || "").trim());
+  const t = LOCAL_TIME_RE.exec((time || "").trim());
+  if (!d || !t) return 0;
+  const y = Number(d[1]);
+  const mo = Number(d[2]);
+  const day = Number(d[3]);
+  const h = Number(t[1]);
+  const mi = Number(t[2]);
+  if (mo < 1 || mo > 12 || day < 1 || day > 31 || h > 23 || mi > 59) return 0;
+  const dt = new Date(y, mo - 1, day, h, mi, 0, 0);
+  if (
+    !Number.isFinite(dt.getTime()) ||
+    dt.getFullYear() !== y ||
+    dt.getMonth() !== mo - 1 ||
+    dt.getDate() !== day ||
+    dt.getHours() !== h ||
+    dt.getMinutes() !== mi
+  ) {
+    return 0;
+  }
+  return dt.getTime();
+}
+
+/** Next 5-minute mark at least `minLeadMs` from now so T-30 has a window. */
+export function defaultLaunchAt(now = Date.now(), minLeadMs = SPHA_COUNTDOWN_MIN_MS): number {
+  const floor = Math.max(0, now) + Math.max(0, minLeadMs);
+  return Math.ceil(floor / LAUNCH_STEP_MS) * LAUNCH_STEP_MS;
+}
+
+export function countdownLeadOk(launchAt: number, now = Date.now(), minLeadMs = SPHA_COUNTDOWN_MIN_MS): boolean {
+  return launchAt > now + minLeadMs - 1_000;
+}
+
+export function localTimeZoneShort(now = Date.now(), timeZone?: string): string {
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      timeZoneName: "short",
+    }).formatToParts(new Date(now));
+    return parts.find((p) => p.type === "timeZoneName")?.value || "";
+  } catch {
+    return "";
+  }
+}
+
+function dropSeconds(ms: number): number {
+  const d = new Date(ms);
+  d.setSeconds(0, 0);
+  return d.getTime();
+}
+
+export function applyLaunchPreset(id: LaunchPresetId, now = Date.now(), minLeadMs = SPHA_COUNTDOWN_MIN_MS): number {
+  const d = new Date(now);
+  const y = d.getFullYear();
+  const mo = d.getMonth();
+  const day = d.getDate();
+  const atLeast = now + minLeadMs - 1_000;
+  if (id === "1h") return dropSeconds(now + 60 * 60_000);
+  if (id === "2h") return dropSeconds(now + 2 * 60 * 60_000);
+  if (id === "6h") return dropSeconds(now + 6 * 60 * 60_000);
+  if (id === "1d") return dropSeconds(now + 24 * 60 * 60_000);
+  if (id === "3d") return dropSeconds(now + 3 * 24 * 60 * 60_000);
+  if (id === "tonight") {
+    const tonight = new Date(y, mo, day, 20, 0, 0, 0).getTime();
+    return tonight > atLeast ? tonight : tonight + 86_400_000;
+  }
+  const noon = new Date(y, mo, day + 1, 12, 0, 0, 0).getTime();
+  return noon > atLeast ? noon : noon + 86_400_000;
 }

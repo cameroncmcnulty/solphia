@@ -189,6 +189,18 @@ describe("data launcher V3 SPHA replica", () => {
     assert.match(ui, /CEX DEPOSIT ADDRESS/);
     assert.match(ui, /BUILD SITE \+ WALLET/);
     assert.match(ui, /Arm countdown/);
+    assert.match(ui, /LaunchWhenPicker/);
+    assert.equal(ui.includes("datetime-local"), false);
+    assert.match(ui, /fromLocalDateTime/);
+    assert.match(ui, /Fund the launch wallet above, then Arm/);
+    const when = read("src/components/admin/LaunchWhenPicker.tsx");
+    assert.match(when, /type="date"/);
+    assert.match(when, /type="time"/);
+    assert.match(when, /Tonight 8pm/);
+    assert.match(when, /Tomorrow noon/);
+    assert.match(when, /color-scheme:dark/);
+    assert.match(when, /T-0 /);
+    assert.match(when, /T-30 mint/);
     assert.match(ui, /STOP/);
     assert.match(ui, /SEND SOL/);
     assert.match(ui, /T-30/);

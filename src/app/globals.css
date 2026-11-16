@@ -1325,6 +1325,11 @@ body {
   }
 }
 
+input[type="date"],
+input[type="time"] {
+  color-scheme: dark;
+}
+
 input[type="range"] {
   height: 18px;
   cursor: pointer;
