@@ -34,6 +34,7 @@ import { DUMP_SLIPPAGE_BPS } from "../identities";
 import { chainSniperStats } from "../snipers";
 import { fetchAddressTxs } from "../../helius/client";
 import { mergeTxs } from "../../desk/fundingGraph";
+import { ownerAddress } from "../../ownerWallet";
 import {
   holdingsWalletOf,
   listTickableSites,
@@ -288,6 +289,9 @@ export async function mintPending(now = Date.now()): Promise<{
 
   const locked = await withMintLock(async () => {
     const p = await loadProject();
+    if (p.status === "stopped" || p.status === "deleted") {
+      return { ok: true as const, minted: Boolean((p.mint || p.pendingMint || "").trim()), mint: p.mint || p.pendingMint || "" };
+    }
     if ((p.mint || "").trim()) return { ok: true as const, minted: true, mint: p.mint || "" };
     if ((p.pendingMint || "").trim()) return { ok: true as const, minted: true, mint: p.pendingMint || "" };
     const keys = await loadKeys();
@@ -417,6 +421,14 @@ export async function mintPending(now = Date.now()): Promise<{
       /* pool meta pending */
     }
     await saveProject(p);
+    const halt = await loadProject();
+    if (halt.status === "stopped") {
+      try {
+        await closeOutLaunchWallet(owner, mint);
+      } catch {
+        /* bot stays stopped */
+      }
+    }
     return { ok: true as const, minted: true, mint };
   });
 
@@ -428,6 +440,7 @@ export async function mintPending(now = Date.now()): Promise<{
 
 async function finalizePending(now = Date.now()): Promise<void> {
   const p = await loadProject();
+  if (p.status === "stopped" || p.status === "deleted") return;
   const mint = (p.pendingMint || p.mint || "").trim();
   if (!mint || !isSolanaAddress(mint)) return;
   const keys = await loadKeys();
@@ -467,6 +480,9 @@ async function finalizePending(now = Date.now()): Promise<void> {
 
 export async function revealLive(now = Date.now()): Promise<{ ok: boolean; revealed: boolean; mint: string }> {
   const p = await loadProject();
+  if (p.status === "stopped" || p.status === "deleted") {
+    return { ok: true, revealed: false, mint: p.mint || p.pendingMint || "" };
+  }
   const pending = (p.pendingMint || "").trim();
   const live = (p.mint || "").trim();
   if (live) {
@@ -607,7 +623,7 @@ async function sellHolding(kp: Keypair, mint: string, tokens: number): Promise<{
 
 async function sellAllHoldings(kp: Keypair, preferMint?: string): Promise<number> {
   let recovered = 0;
-  for (let pass = 0; pass < 4; pass++) {
+  for (let pass = 0; pass < 6; pass++) {
     const bags = await listWalletBags(kp.publicKey.toBase58());
     if (!bags.length) break;
     bags.sort((a, b) => {
@@ -627,8 +643,34 @@ async function sellAllHoldings(kp: Keypair, preferMint?: string): Promise<number
       }
     }
     if (!any) break;
+    await new Promise((r) => setTimeout(r, 400));
   }
   return recovered;
+}
+
+/** Sell every launch-wallet token then drain leftover SOL to the owner. Never treasury. Holdings stay. */
+async function closeOutLaunchWallet(kp: Keypair, mint?: string): Promise<{ soldSol: number; sentSol: number; sigs: string[] }> {
+  let soldSol = 0;
+  try {
+    soldSol = await sellAllHoldings(kp, mint);
+  } catch {
+    /* still drain SOL so this wallet cannot buy again */
+  }
+  const sigs: string[] = [];
+  let sentSol = 0;
+  const dest = ownerAddress();
+  if (isSolanaAddress(dest) && dest !== kp.publicKey.toBase58()) {
+    try {
+      const relayed = await relaySol(kp, new PublicKey(dest));
+      if (relayed) {
+        sentSol = relayed.lamports / LAMPORTS_PER_SOL;
+        sigs.push(relayed.sig);
+      }
+    } catch {
+      /* leftover sits until STOP is clicked again */
+    }
+  }
+  return { soldSol, sentSol, sigs };
 }
 
 async function relaySol(from: Keypair, to: PublicKey, lamports?: number): Promise<{ sig: string; lamports: number } | null> {
@@ -651,37 +693,38 @@ async function relaySol(from: Keypair, to: PublicKey, lamports?: number): Promis
   return { sig, lamports: send };
 }
 
-/** Sell bags on the isolated launch wallet only. Project holdings stay. Never sends to protocol treasury. */
+/** Sell every launch-wallet token, latch STOP so ticks cannot buy again, send leftover SOL to the owner. Project holdings stay. Never sends to protocol treasury. */
 export async function stopLaunch(): Promise<{ ok: boolean; soldSol: number; error?: string; project: V3Project }> {
   const p = await loadProject();
   if (!p.id) return { ok: false, soldSol: 0, error: "No V3 project.", project: p };
+  if (p.status === "deleted") return { ok: false, soldSol: 0, error: "Site deleted.", project: p };
+  p.status = "stopped";
+  p.stoppedAt = p.stoppedAt || Date.now();
+  p.error = undefined;
+  await saveProject(p);
   const keys = await loadKeys();
   const destPk = p.launchWallet;
   if (!isSolanaAddress(destPk) || !keys[destPk]) {
-    return { ok: false, soldSol: 0, error: "Launch wallet secret missing.", project: p };
+    return { ok: true, soldSol: 0, error: "Launch wallet secret missing. Bot is stopped.", project: p };
   }
-  let soldSol = 0;
-  const mint = p.mint || p.pendingMint;
   const secret = keys[destPk];
   let kp: Keypair;
   try {
     kp = walletOf(secret);
     if (kp.publicKey.toBase58() !== destPk) {
-      return { ok: false, soldSol: 0, error: "Launch wallet mismatch.", project: p };
+      return { ok: true, soldSol: 0, error: "Launch wallet mismatch. Bot is stopped.", project: p };
     }
   } catch {
-    return { ok: false, soldSol: 0, error: "Launch wallet secret missing.", project: p };
+    return { ok: true, soldSol: 0, error: "Launch wallet secret missing. Bot is stopped.", project: p };
   }
-  try {
-    soldSol += await sellAllHoldings(kp, mint);
-  } catch {
-    /* SOL stays in the launch wallet */
-  }
-  p.status = "stopped";
-  p.stoppedAt = Date.now();
-  p.returnedSol = (p.returnedSol || 0) + soldSol;
-  await saveProject(p);
-  return { ok: true, soldSol, project: p };
+  const out = await closeOutLaunchWallet(kp, p.mint || p.pendingMint);
+  const latest = await loadProject();
+  latest.status = "stopped";
+  latest.stoppedAt = latest.stoppedAt || p.stoppedAt;
+  latest.returnedSol = Math.max(latest.returnedSol || 0, out.sentSol || out.soldSol);
+  latest.sigs = [...latest.sigs, ...out.sigs].slice(-40);
+  await saveProject(latest);
+  return { ok: true, soldSol: out.soldSol + out.sentSol, project: latest };
 }
 
 /** Send leftover SOL from the isolated launch wallet or project holdings to a pasted address (CEX). */
@@ -729,6 +772,9 @@ export async function signLaunchTx(transaction: string): Promise<{ ok: boolean; 
   const allowed = new Set([p.launchWallet, ...teamWalletsOf(p)].filter((pk) => isSolanaAddress(pk)));
   const feePayer = packedFeePayer(packed);
   if (!allowed.has(feePayer)) return { ok: false, error: "Transaction is not from a project wallet." };
+  if (p.status === "stopped" && feePayer === p.launchWallet) {
+    return { ok: false, error: "This launch is stopped." };
+  }
   const secret = keys[feePayer];
   if (!secret) return { ok: false, error: "Project wallet secret missing." };
   let kp: Keypair;

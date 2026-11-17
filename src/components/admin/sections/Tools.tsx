@@ -76,7 +76,8 @@ export function ToolsSection() {
               <div className="mt-1 font-display text-2xl text-ghost">DATA LAUNCHER V3</div>
               <p className="mt-2 text-sm text-mute">
                 One idea becomes a full memecoin website at ticker.solphia.io. Isolated launch wallet you fund from a CEX.
-                One 8–11% project bag you control from the dashboard. STOP leaves that bag.
+                One 8–11% project bag you control from the dashboard. STOP sells the launch wallet, ends the bot, and
+                sends SOL to the owner. The project bag stays.
               </p>
             </button>
           </div>

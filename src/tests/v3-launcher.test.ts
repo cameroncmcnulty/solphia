@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, it } from "node:test";
 import { buildV3Brand, buildV3Tokenomics, V3_SUPPLIES } from "../lib/tools/v3/idea";
+import { applyStoppedLatch, emptyProject } from "../lib/tools/v3/project";
 import { chainSniperStats, DBC_POOL_AUTHORITY } from "../lib/tools/snipers";
 import { buildV3SiteKit, V3_LAYOUTS } from "../lib/tools/v3/site";
 import { isReservedV3Host, v3HandleOf, v3HostFromHeader, v3WebsiteOf } from "../lib/tools/v3/host";
@@ -177,7 +178,7 @@ describe("data launcher V3 SPHA replica", () => {
     assert.match(project, /status: "deleted"/);
     assert.match(project, /function livingId/);
     assert.match(project, /if \(!p \|\| p.status === "deleted"\) return emptyProject/);
-    assert.match(project, /prev\?\.status === "deleted" && slim.status !== "deleted"\) return/);
+    assert.match(project, /prev\?\.status === "deleted" && incoming.status !== "deleted"\) return/);
     assert.match(project, /rows.filter\(\(r\) => r.id !== id\)/);
     assert.equal(project.includes("saveKeys({})"), false);
     assert.match(project, /findProjectByHandle/);
@@ -243,8 +244,20 @@ describe("data launcher V3 SPHA replica", () => {
     const launch = read("src/lib/tools/v3/launch.ts");
     assert.match(launch, /export async function signLaunchTx/);
     assert.match(launch, /Transaction is not from a project wallet/);
+    assert.match(launch, /This launch is stopped/);
+    assert.match(launch, /closeOutLaunchWallet/);
+    assert.match(launch, /ownerAddress/);
+    assert.equal(launch.includes("treasuryAddress"), false);
+    assert.match(launch, /Never sends to protocol treasury/);
+    assert.match(launch, /Project holdings stay/);
+    assert.match(ui, /ends this bot/);
+    assert.match(ui, /owner wallet/);
+    assert.match(ui, /Bot ended/);
+    assert.match(picker, /sends SOL to the owner/);
     assert.match(launch, /export async function holdingsFuel/);
     const project = read("src/lib/tools/v3/project.ts");
+    assert.match(project, /export function applyStoppedLatch/);
+    assert.match(project, /p\.status !== "stopped"/);
     assert.match(project, /export async function isV3LaunchWallet/);
     assert.match(project, /teamWalletsOf\(p\)\.includes\(clean\)/);
     const build = read("src/app/api/swap/build/route.ts");
@@ -346,6 +359,19 @@ describe("data launcher V3 SPHA replica", () => {
     assert.match(serve, /sniffImageMime/);
     const pinata = read("src/lib/pinata.ts");
     assert.match(pinata, /imageExt/);
+  });
+
+  it("STOP latches so a stale live save cannot restart the bot", () => {
+    const prev = { ...emptyProject(), id: "site-1", status: "stopped" as const, stoppedAt: 9, returnedSol: 1.2 };
+    const stale = { ...prev, status: "live" as const, stoppedAt: 0, returnedSol: 0 };
+    const latched = applyStoppedLatch(prev, stale);
+    assert.equal(latched.status, "stopped");
+    assert.equal(latched.stoppedAt, 9);
+    assert.equal(latched.returnedSol, 1.2);
+    const gone = applyStoppedLatch(prev, { ...stale, status: "deleted" });
+    assert.equal(gone.status, "deleted");
+    const live = { ...emptyProject(), id: "site-1", status: "live" as const };
+    assert.equal(applyStoppedLatch(live, { ...live, status: "minted" }).status, "minted");
   });
 
   it("counts unique DBC snipers from the on-chain tape and skips project wallets", () => {

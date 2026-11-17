@@ -239,8 +239,8 @@ export function DataLauncherV3() {
         <p className="mt-2 max-w-3xl text-sm text-mute">
           Enter a token idea. Grok Imagine generates a niche mascot and cinematic hero, then V3 builds a unique
           high-tech memecoin website at ticker.solphia.io. One isolated project wallet holds a random 8–11%. The rest
-          sits on the curve. Fresh wallets and a unique DBC config per site. STOP leaves the project bag. Keys stay
-          saved.
+          sits on the curve. Fresh wallets and a unique DBC config per site. STOP sells the launch wallet, ends the bot,
+          and sends leftover SOL to the owner. The 8–11% project bag stays. Keys stay saved.
         </p>
       </section>
 
@@ -428,7 +428,7 @@ export function DataLauncherV3() {
             <p className="mt-3 text-sm text-mute">
               Total supply {fmtSupply(p.supply)}. Project bag {fmtSupply(p.teamTokens)} (8–11%) · curve{" "}
               {fmtSupply(p.curveTokens)}. T-30 mints the project slice into one isolated holdings wallet. STOP does not
-              sell it.
+              sell that bag.
             </p>
             <div className="mt-4 grid gap-3 md:grid-cols-2">
               {p.slices.map((s) => (
@@ -590,21 +590,27 @@ export function DataLauncherV3() {
 
           <Panel kicker="6 · STOP">
             <p className="mt-3 max-w-3xl text-sm text-mute">
-              STOP sells bags on the isolated launch wallet at 99% slippage. The 8–11% project holdings stay. SOL from
-              the launch wallet sits there until you send it to a CEX.
+              STOP sells every token on the launch wallet at 99% slippage, ends this bot so it cannot buy again, and
+              sends leftover SOL to the owner wallet. The 8–11% project holdings stay.
             </p>
-            {p.returnedSol ? <p className="mt-2 font-mono text-[12px] text-acid">Sold {solAmt(p.returnedSol)}</p> : null}
+            {p.status === "stopped" ? (
+              <p className="mt-2 font-mono text-[12px] text-acid">
+                Bot ended.{p.returnedSol ? ` ${solAmt(p.returnedSol)} to owner.` : ""}
+              </p>
+            ) : p.returnedSol ? (
+              <p className="mt-2 font-mono text-[12px] text-acid">Sold {solAmt(p.returnedSol)}</p>
+            ) : null}
             <div className="mt-4 flex flex-wrap gap-3">
               <button
                 type="button"
                 disabled={busy || !ca}
                 onClick={() => {
-                  if (!window.confirm("STOP? This sells the launch-wallet bag only. Project holdings stay.")) return;
+                  if (!window.confirm("STOP? This sells the launch-wallet bag, ends this bot, and sends leftover SOL to the owner. Project holdings stay.")) return;
                   void act("stop");
                 }}
                 className="btn-acid rounded-full px-8 py-3 text-sm tracking-[0.2em] disabled:opacity-40"
               >
-                STOP
+                {p.status === "stopped" ? "STOPPED · DRAIN AGAIN" : "STOP"}
               </button>
             </div>
           </Panel>
@@ -612,8 +618,8 @@ export function DataLauncherV3() {
           {launched ? (
             <Panel kicker="7 · SWAP + SEND">
               <p className="mt-3 max-w-3xl text-sm text-mute">
-                Launch wallet is for CEX fuel and STOP. Project holdings is the 8–11% bag. Swap and send from the wallet
-                you pick.
+                Launch wallet is for CEX fuel. STOP sells it and sends leftover SOL to the owner. Project holdings is the
+                8–11% bag.
               </p>
               <div className="mt-4 flex flex-wrap gap-1">
                 {(["launch", "holdings"] as const).map((w) => (
@@ -639,7 +645,11 @@ export function DataLauncherV3() {
                   </button>
                 ))}
               </div>
-              {walletTab === "swap" && (walletDesk === "launch" ? p.launchWallet : desk?.holdings?.wallet) ? (
+              {walletTab === "swap" && walletDesk === "launch" && p.status === "stopped" ? (
+                <p className="mt-3 text-sm text-mute">
+                  This bot is ended. Launch-wallet tokens sold. Leftover SOL sent to the owner wallet.
+                </p>
+              ) : walletTab === "swap" && (walletDesk === "launch" ? p.launchWallet : desk?.holdings?.wallet) ? (
                 <div className="mt-3">
                   <SwapWidget
                     key={`${walletDesk === "launch" ? p.launchWallet : desk?.holdings?.wallet}-${ca}`}
@@ -654,7 +664,7 @@ export function DataLauncherV3() {
                     note={
                       walletDesk === "holdings"
                         ? "Project holdings. STOP leaves this bag. Fund a little SOL to swap."
-                        : "Isolated launch wallet. STOP sells this bag. Send leftover SOL to a CEX."
+                        : "Isolated launch wallet. STOP sells this bag and sends leftover SOL to the owner."
                     }
                     signTx={signLaunchSwap}
                     onDone={() => load().catch(() => {})}
@@ -681,7 +691,9 @@ export function DataLauncherV3() {
                   <p className="mt-2 font-mono text-[11px] text-mute">
                     {walletDesk === "holdings"
                       ? "8–11% bag lands here at T-30. Fund a little SOL to swap."
-                      : "Fund from a CEX. SOL after STOP sits here."}
+                      : p.status === "stopped"
+                        ? "Bot ended. Leftover SOL went to the owner wallet."
+                        : "Fund from a CEX. STOP sends leftover SOL to the owner."}
                   </p>
                 </div>
               ) : null}

@@ -466,8 +466,25 @@ export async function listSites(): Promise<V3Project[]> {
 export async function listTickableSites(): Promise<V3Project[]> {
   const book = await loadBook();
   return Object.values(book.sites).filter(
-    (p) => p.id && p.status !== "deleted" && p.status !== "idle" && (p.launchAt > 0 || p.status === "live" || p.status === "armed" || p.status === "minting" || p.status === "minted"),
+    (p) =>
+      p.id &&
+      p.status !== "deleted" &&
+      p.status !== "idle" &&
+      p.status !== "stopped" &&
+      (p.launchAt > 0 || p.status === "live" || p.status === "armed" || p.status === "minting" || p.status === "minted"),
   );
+}
+
+/** STOP is sticky. A stale live/minted save from a concurrent tick cannot restart the bot. */
+export function applyStoppedLatch(prev: V3Project | undefined, next: V3Project): V3Project {
+  if (!prev || prev.status !== "stopped") return next;
+  if (next.status === "deleted") return next;
+  return {
+    ...next,
+    status: "stopped",
+    stoppedAt: prev.stoppedAt || next.stoppedAt,
+    returnedSol: Math.max(Number(prev.returnedSol) || 0, Number(next.returnedSol) || 0),
+  };
 }
 
 export async function openSite(id: string): Promise<V3Project> {
@@ -535,12 +552,14 @@ export async function isV3LaunchWallet(pk: string): Promise<boolean> {
 }
 
 export async function saveProject(p: V3Project): Promise<void> {
-  const slim = publicProject(p);
-  slim.at = Date.now();
+  const incoming = publicProject(p);
+  incoming.at = Date.now();
   const book = await loadBook();
-  if (slim.id) {
-    const prev = book.sites[slim.id];
-    if (prev?.status === "deleted" && slim.status !== "deleted") return;
+  let slim = incoming;
+  if (incoming.id) {
+    const prev = book.sites[incoming.id];
+    if (prev?.status === "deleted" && incoming.status !== "deleted") return;
+    slim = applyStoppedLatch(prev, incoming);
     book.sites[slim.id] = slim.status === "deleted" ? tombstoneOf(slim) : slim;
     book.activeId = livingId(book.sites, slim.status === "deleted" ? book.activeId : slim.id || book.activeId);
   }
