@@ -118,7 +118,7 @@ export function buildV3SiteKit(brand: V3Brand): V3SiteKit {
     { k: "Curve", v: curvePct },
     { k: "Network", v: "Solana" },
     { k: "Venue", v: "Meteora DBC" },
-    { k: "Opening", v: "0.05 SOL" },
+    { k: "Mint", v: "T-30" },
   ];
   const features = world.features.map((f, i) =>
     i === 3 ? { ...f, body: `${curvePct} of supply sits on the curve for anyone with a Solana wallet.` } : f,

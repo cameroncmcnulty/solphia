@@ -31,7 +31,9 @@ import { dbcEnabled } from "../../launch/dbcIds";
 import { durableConfigured, kvDel, kvGetJson, kvSetEx, kvSetNxEx, KEYS } from "../../persist";
 import { SPHA_COUNTDOWN_MIN_MS } from "../../token/countdown";
 import { DUMP_SLIPPAGE_BPS } from "../identities";
-import { emptySnipers } from "../snipers";
+import { chainSniperStats } from "../snipers";
+import { fetchAddressTxs } from "../../helius/client";
+import { mergeTxs } from "../../desk/fundingGraph";
 import {
   holdingsWalletOf,
   listTickableSites,
@@ -41,7 +43,6 @@ import {
   saveProject,
   teamWalletsOf,
   withActiveId,
-  V3_FIRST_BUY_SOL,
   V3_KEEP_LAMPORTS,
   V3_MIN_LAUNCH_SOL,
   V3_MINT_LEAD_MS,
@@ -273,16 +274,6 @@ async function buildTeamMintTx(opts: {
   return { transaction: tx, legs: minted.length ? minted : legs };
 }
 
-async function maybeFirstBuy(payer: string, mint: string, owner: Keypair, tries: number): Promise<void> {
-  const held = await tokenUiAmount(connection(), payer, mint);
-  if (held.amount > 0) return;
-  const dbc = await import("../../launch/dbc");
-  const pool = await dbc.waitForDbcPool(mint, tries);
-  if (!pool) return;
-  const buy = await dbc.buildDbcTradeTx({ mint, owner: payer, side: "buy", sol: V3_FIRST_BUY_SOL });
-  if (buy.ok) await signSend(buy.transaction, [owner]);
-}
-
 export async function mintPending(now = Date.now()): Promise<{
   ok: boolean;
   minted: boolean;
@@ -322,7 +313,7 @@ export async function mintPending(now = Date.now()): Promise<{
       p.status = "armed";
       p.error = "owner_sol";
       await saveProject(p);
-      return { ok: false as const, minted: false, mint: "", error: "Launch wallet needs SOL for rent and the 0.05 opening buy." };
+      return { ok: false as const, minted: false, mint: "", error: "Launch wallet needs SOL for rent." };
     }
     p.status = "minting";
     p.error = undefined;
@@ -425,11 +416,6 @@ export async function mintPending(now = Date.now()): Promise<{
     } catch {
       /* pool meta pending */
     }
-    try {
-      await maybeFirstBuy(payer, mint, owner, 16);
-    } catch {
-      /* first buy pending */
-    }
     await saveProject(p);
     return { ok: true as const, minted: true, mint };
   });
@@ -474,11 +460,6 @@ async function finalizePending(now = Date.now()): Promise<void> {
     await signSend(meta.transaction, [owner]);
   } catch {
     /* pool meta may already exist */
-  }
-  try {
-    await maybeFirstBuy(payer, mint, owner, 8);
-  } catch {
-    /* first buy may already have landed */
   }
   p.at = now;
   await saveProject(p);
@@ -766,47 +747,21 @@ export async function signLaunchTx(transaction: string): Promise<{ ok: boolean; 
   }
 }
 
-async function dexPairStats(mint: string): Promise<{ buys: number; sells: number; volumeSol: number; buySol: number } | null> {
-  if (!isSolanaAddress(mint)) return null;
-  try {
-    const r = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mint}`, {
-      cache: "no-store",
-      signal: AbortSignal.timeout(6_000),
-      headers: { accept: "application/json" },
-    });
-    if (!r.ok) return null;
-    const j = (await r.json()) as {
-      pairs?: {
-        chainId?: string;
-        pairAddress?: string;
-        txns?: { h24?: { buys?: number; sells?: number }; m5?: { buys?: number; sells?: number } };
-        volume?: { h24?: number };
-        priceUsd?: string | number;
-        priceNative?: string | number;
-      }[];
-    };
-    const pairs = Array.isArray(j.pairs) ? j.pairs : [];
-    const pair = pairs.find((row) => String(row.chainId || "").toLowerCase().startsWith("sol")) || pairs[0];
-    if (!pair) return null;
-    const tx = pair.txns?.h24 || pair.txns?.m5 || {};
-    const buys = Number(tx.buys) || 0;
-    const sells = Number(tx.sells) || 0;
-    const volUsd = Number(pair.volume?.h24) || 0;
-    const priceUsd = Number(pair.priceUsd) || 0;
-    const priceNative = Number(pair.priceNative) || 0;
-    const solUsd = priceNative > 0 && priceUsd > 0 ? priceUsd / priceNative : 0;
-    const volumeSol = solUsd > 0 ? volUsd / solUsd : 0;
-    const flow = buys + sells;
-    return { buys, sells, volumeSol, buySol: flow > 0 ? volumeSol * (buys / flow) : volumeSol };
-  } catch {
-    return null;
-  }
-}
+let sniperRefresh: Promise<void> | null = null;
 
 export async function refreshSnipers(): Promise<void> {
+  if (sniperRefresh) return sniperRefresh;
+  sniperRefresh = refreshSnipersNow().finally(() => {
+    sniperRefresh = null;
+  });
+  return sniperRefresh;
+}
+
+async function refreshSnipersNow(): Promise<void> {
   const p = await loadProject();
   const mint = p.mint || p.pendingMint;
   if (!isSolanaAddress(mint || "")) return;
+  if ((p.snipers.at || 0) > 0 && Date.now() - (p.snipers.at || 0) < 1500) return;
   let curveSol = p.snipers.curveSol || 0;
   try {
     const dbc = await import("../../launch/dbc");
@@ -818,16 +773,24 @@ export async function refreshSnipers(): Promise<void> {
   } catch {
     /* keep last */
   }
-  const dex = await dexPairStats(mint!);
-  p.snipers = {
-    ...emptySnipers(),
-    buys: dex?.buys || 0,
-    sells: dex?.sells || 0,
-    volumeSol: dex?.volumeSol || 0,
-    buySol: dex?.buySol || 0,
-    snipers: (dex?.buys || 0) + (dex?.sells || 0) ? Math.max(1, dex?.buys || 0) : 0,
-    curveSol,
-  };
+  const skip = [p.launchWallet, holdingsWalletOf(p), ...teamWalletsOf(p)];
+  let txs: Awaited<ReturnType<typeof fetchAddressTxs>> = [];
+  try {
+    const [mintTxs, poolTxs] = await Promise.all([
+      fetchAddressTxs(mint!, 100),
+      p.pool && isSolanaAddress(p.pool) ? fetchAddressTxs(p.pool, 100) : Promise.resolve([]),
+    ]);
+    txs = mergeTxs(mintTxs, poolTxs);
+  } catch {
+    txs = [];
+  }
+  const tape = chainSniperStats({ mint: mint!, txs, skip, curveSol });
+  const prev = p.snipers;
+  const landed = tape.buys > 0 || tape.sells > 0 || tape.snipers > 0;
+  const keepPrev = !landed && (prev.buys > 0 || prev.snipers > 0);
+  p.snipers = keepPrev
+    ? { ...prev, curveSol, at: Date.now() }
+    : { ...tape, at: Date.now() };
   if (p.launchWallet) {
     try {
       const bags = await listWalletBags(p.launchWallet);

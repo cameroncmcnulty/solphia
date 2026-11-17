@@ -136,7 +136,7 @@ function viceWorld(): World {
       "Fund a Solana wallet with SOL. Stay on this page until T-0. The contract address publishes here. Paste it, swap SOL for $TICK on the bonding curve, keep a little extra for fees.",
     warning: "Memecoins can go to zero. This is not financial advice. You can lose the SOL you swap. Do your own research.",
     roadmap: [
-      { title: "Ignition", body: "Mint, unique curve config, crew slices, metadata, and a 0.05 SOL opening buy." },
+      { title: "Ignition", body: "Mint, unique curve config, crew slices, and metadata. The curve opens empty for snipers." },
       { title: "T-0 Drop", body: "The contract address publishes on this site. The strip opens. Community trading starts." },
       { title: "Afterglow", body: "Curve fees through graduate. Partner LP permanently locked. The city stays open." },
     ],
@@ -151,7 +151,7 @@ function viceWorld(): World {
       { q: "When does the CA go live?", a: "The contract address appears on this page at T-0. Until then the clock is the only public signal." },
       { q: "How do I buy?", a: "Fund a Solana wallet with SOL. At T-0 copy the CA from this site and swap on the bonding curve." },
       { q: "Who holds the crew slice?", a: "One isolated project wallet holds 8–11% at T-30. The rest sits on the curve. The bars on this page are the mint." },
-      { q: "Is liquidity locked?", a: "Unique curve config. Partner LP permanently locked at graduate. Opening buy is 0.05 SOL after pool metadata." },
+      { q: "Is liquidity locked?", a: "Unique curve config. Partner LP permanently locked at graduate. No opening buy — the curve is empty at T-30." },
     ],
     buySteps: [
       { n: "01", title: "Get SOL", body: "Fund a Solana wallet from an exchange. Keep a little extra for fees." },
@@ -185,7 +185,7 @@ function frogWorld(): World {
     howToBuy: "Fund a Solana wallet with SOL. This page publishes the CA at T-0. Swap SOL for $TICK on the bonding curve.",
     warning: "Memecoins can go to zero. This is not financial advice. You can lose the SOL you swap. Do your own research.",
     roadmap: [
-      { title: "Ignition", body: "Mint, unique curve, team slices, metadata, 0.05 SOL opening buy." },
+      { title: "Ignition", body: "Mint, unique curve, team slices, and metadata. No opening buy." },
       { title: "Public T-0", body: "CA publishes on this website. Trading opens." },
       { title: "Afterglow", body: "Fees through graduate. Partner LP locked." },
     ],
@@ -232,7 +232,7 @@ function dogWorld(): World {
     howToBuy: "Fund a Solana wallet with SOL. This page publishes the CA at T-0. Swap SOL for $TICK on the bonding curve.",
     warning: "Memecoins can go to zero. This is not financial advice. You can lose the SOL you swap. Do your own research.",
     roadmap: [
-      { title: "Ignition", body: "Mint, unique curve, team slices, metadata, 0.05 SOL opening buy." },
+      { title: "Ignition", body: "Mint, unique curve, team slices, and metadata. No opening buy." },
       { title: "Public T-0", body: "CA publishes on this website. Trading opens." },
       { title: "Afterglow", body: "Fees through graduate. Partner LP locked." },
     ],
@@ -279,7 +279,7 @@ function catWorld(): World {
     howToBuy: "Fund a Solana wallet with SOL. This page publishes the CA at T-0. Swap SOL for $TICK on the bonding curve.",
     warning: "Memecoins can go to zero. This is not financial advice. You can lose the SOL you swap. Do your own research.",
     roadmap: [
-      { title: "Ignition", body: "Mint, unique curve, team slices, metadata, 0.05 SOL opening buy." },
+      { title: "Ignition", body: "Mint, unique curve, team slices, and metadata. No opening buy." },
       { title: "Public T-0", body: "CA publishes on this website." },
       { title: "Afterglow", body: "Partner LP locked at graduate." },
     ],
@@ -326,7 +326,7 @@ function aiWorld(): World {
     howToBuy: "Fund a Solana wallet with SOL. This page publishes the CA at T-0. Swap SOL for $TICK on the bonding curve.",
     warning: "Memecoins can go to zero. This is not financial advice. You can lose the SOL you swap. Do your own research.",
     roadmap: [
-      { title: "Boot", body: "Mint, unique curve, team slices, metadata, 0.05 SOL opening buy." },
+      { title: "Boot", body: "Mint, unique curve, team slices, and metadata. No opening buy." },
       { title: "Public T-0", body: "CA prints on this terminal." },
       { title: "Runtime", body: "Partner LP locked at graduate." },
     ],
@@ -373,7 +373,7 @@ function spaceWorld(): World {
     howToBuy: "Fund a Solana wallet with SOL. This page publishes the CA at T-0. Swap SOL for $TICK on the bonding curve.",
     warning: "Memecoins can go to zero. This is not financial advice. You can lose the SOL you swap. Do your own research.",
     roadmap: [
-      { title: "Ignition", body: "Mint, unique curve, team slices, metadata, 0.05 SOL opening buy." },
+      { title: "Ignition", body: "Mint, unique curve, team slices, and metadata. No opening buy." },
       { title: "Public T-0", body: "CA publishes on this website." },
       { title: "Afterglow", body: "Partner LP locked at graduate." },
     ],
@@ -420,7 +420,7 @@ function animeWorld(): World {
     howToBuy: "Fund a Solana wallet with SOL. This page publishes the CA at T-0. Swap SOL for $TICK on the bonding curve.",
     warning: "Memecoins can go to zero. This is not financial advice. You can lose the SOL you swap. Do your own research.",
     roadmap: [
-      { title: "Ignition", body: "Mint, unique curve, team slices, metadata, 0.05 SOL opening buy." },
+      { title: "Ignition", body: "Mint, unique curve, team slices, and metadata. No opening buy." },
       { title: "Public T-0", body: "CA publishes on this website." },
       { title: "Afterglow", body: "Partner LP locked at graduate." },
     ],
@@ -467,7 +467,7 @@ function goldWorld(): World {
     howToBuy: "Fund a Solana wallet with SOL. This page publishes the CA at T-0. Swap SOL for $TICK on the bonding curve.",
     warning: "Memecoins can go to zero. This is not financial advice. You can lose the SOL you swap. Do your own research.",
     roadmap: [
-      { title: "Ignition", body: "Mint, unique curve, team slices, metadata, 0.05 SOL opening buy." },
+      { title: "Ignition", body: "Mint, unique curve, team slices, and metadata. No opening buy." },
       { title: "Public T-0", body: "CA publishes on this website." },
       { title: "Afterglow", body: "Partner LP locked at graduate." },
     ],
@@ -514,7 +514,7 @@ function fireWorld(): World {
     howToBuy: "Fund a Solana wallet with SOL. This page publishes the CA at T-0. Swap SOL for $TICK on the bonding curve.",
     warning: "Memecoins can go to zero. This is not financial advice. You can lose the SOL you swap. Do your own research.",
     roadmap: [
-      { title: "Ignition", body: "Mint, unique curve, team slices, metadata, 0.05 SOL opening buy." },
+      { title: "Ignition", body: "Mint, unique curve, team slices, and metadata. No opening buy." },
       { title: "Public T-0", body: "CA publishes on this website." },
       { title: "Afterglow", body: "Partner LP locked at graduate." },
     ],
@@ -561,7 +561,7 @@ function oceanWorld(): World {
     howToBuy: "Fund a Solana wallet with SOL. This page publishes the CA at T-0. Swap SOL for $TICK on the bonding curve.",
     warning: "Memecoins can go to zero. This is not financial advice. You can lose the SOL you swap. Do your own research.",
     roadmap: [
-      { title: "Ignition", body: "Mint, unique curve, team slices, metadata, 0.05 SOL opening buy." },
+      { title: "Ignition", body: "Mint, unique curve, team slices, and metadata. No opening buy." },
       { title: "Public T-0", body: "CA publishes on this website." },
       { title: "Afterglow", body: "Partner LP locked at graduate." },
     ],
@@ -608,7 +608,7 @@ function skullWorld(): World {
     howToBuy: "Fund a Solana wallet with SOL. This page publishes the CA at T-0. Swap SOL for $TICK on the bonding curve.",
     warning: "Memecoins can go to zero. This is not financial advice. You can lose the SOL you swap. Do your own research.",
     roadmap: [
-      { title: "Ignition", body: "Mint, unique curve, team slices, metadata, 0.05 SOL opening buy." },
+      { title: "Ignition", body: "Mint, unique curve, team slices, and metadata. No opening buy." },
       { title: "Public T-0", body: "CA publishes on this website." },
       { title: "Afterglow", body: "Partner LP locked at graduate." },
     ],
@@ -655,7 +655,7 @@ function apeWorld(): World {
     howToBuy: "Fund a Solana wallet with SOL. This page publishes the CA at T-0. Swap SOL for $TICK on the bonding curve.",
     warning: "Memecoins can go to zero. This is not financial advice. You can lose the SOL you swap. Do your own research.",
     roadmap: [
-      { title: "Ignition", body: "Mint, unique curve, team slices, metadata, 0.05 SOL opening buy." },
+      { title: "Ignition", body: "Mint, unique curve, team slices, and metadata. No opening buy." },
       { title: "Public T-0", body: "CA publishes on this website." },
       { title: "Afterglow", body: "Partner LP locked at graduate." },
     ],
@@ -714,7 +714,7 @@ function genericWorld(seed: string): World {
     howToBuy: "Fund a Solana wallet with SOL. This page publishes the CA at T-0. Swap SOL for $TICK on the bonding curve.",
     warning: "Memecoins can go to zero. This is not financial advice. You can lose the SOL you swap. Do your own research.",
     roadmap: [
-      { title: "Ignition", body: "Mint, unique curve config, team slices, metadata, and a 0.05 SOL opening buy." },
+      { title: "Ignition", body: "Mint, unique curve config, team slices, and metadata. No opening buy." },
       { title: "Public T-0", body: "The contract address publishes on this website and community trading opens." },
       { title: "Afterglow", body: "1% fee through graduate. Partner LP permanently locked." },
     ],
@@ -729,7 +729,7 @@ function genericWorld(seed: string): World {
       { q: "When does the CA go live?", a: "The contract address appears on this page at T-0. Until then the clock is the only public signal." },
       { q: "How do I buy?", a: "Fund a Solana wallet with SOL. At T-0 copy the CA from this site and swap on the bonding curve." },
       { q: "Who holds the team slice?", a: "One isolated project wallet holds 8–11% at T-30. The rest sits on the curve. Percentages on this page match the mint." },
-      { q: "Is liquidity locked?", a: "The curve uses a unique config. Partner LP is permanently locked at graduate. Opening buy is 0.05 SOL after pool metadata." },
+      { q: "Is liquidity locked?", a: "The curve uses a unique config. Partner LP is permanently locked at graduate. No opening buy — the curve is empty at T-30." },
     ],
     buySteps: [
       { n: "01", title: "Get SOL", body: "Fund a Solana wallet from an exchange. Keep a little extra for fees." },

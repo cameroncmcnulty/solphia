@@ -18,7 +18,7 @@ import {
 import { Mini, Panel, solAmt } from "../ui";
 
 type Slice = { id: string; label: string; pct: string; bps: number; tokens: number; note: string; wallet: string };
-type Snipers = { buys: number; sells: number; volumeSol: number; buySol: number; snipers: number; curveSol: number };
+type Snipers = { buys: number; sells: number; volumeSol: number; buySol: number; snipers: number; curveSol: number; at?: number };
 
 type Project = {
   id: string;
@@ -94,6 +94,7 @@ export function DataLauncherV3() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [copied, setCopied] = useState("");
+  const [now, setNow] = useState(() => Date.now());
 
   const load = useCallback(async () => {
     const r = await fetch("/api/admin/tools/launcher-v3", { cache: "no-store" });
@@ -103,13 +104,34 @@ export function DataLauncherV3() {
   }, []);
 
   useEffect(() => {
-    load().catch((e) => setErr(e instanceof Error ? e.message : "Could not load V3."));
+    let inflight = false;
+    let stopped = false;
+    const run = (report: boolean) => {
+      if (inflight || stopped) return;
+      inflight = true;
+      load()
+        .catch((e) => {
+          if (report && !stopped) setErr(e instanceof Error ? e.message : "Could not load V3.");
+        })
+        .finally(() => {
+          inflight = false;
+        });
+    };
+    run(true);
     const id = window.setInterval(() => {
       if (document.hidden) return;
-      load().catch(() => {});
-    }, 4_000);
-    return () => window.clearInterval(id);
+      run(false);
+    }, 2_000);
+    return () => {
+      stopped = true;
+      window.clearInterval(id);
+    };
   }, [load]);
+
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 1_000);
+    return () => window.clearInterval(id);
+  }, []);
 
   useEffect(() => {
     if (!desk?.project?.id || desk.project.status === "deleted") {
@@ -431,7 +453,7 @@ export function DataLauncherV3() {
           <Panel kicker="3 · ISOLATED LAUNCH WALLET · FUND FROM A CEX">
             <p className="mt-3 max-w-3xl text-sm text-mute">
               Fresh keypair. No hop from treasury, owner, V1, or V2. Load at least {fuel?.needSol ?? 0.2} SOL from a CEX
-              for rent plus the 0.05 opening buy. Secrets stay on the server.
+              for rent. No opening buy — the pool stays empty for snipers, same as $SPHA. Secrets stay on the server.
             </p>
             <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
               <Mini k="Launch SOL" v={solAmt(fuel?.sol || 0)} />
@@ -499,7 +521,7 @@ export function DataLauncherV3() {
                   <p className="mt-2 text-sm text-mute">Cron and this desk mint at T-30 with the isolated launch wallet.</p>
                 )}
                 {p.error === "owner_sol" ? (
-                  <p className="mt-2 text-sm text-acid">Launch wallet needs SOL for rent plus 0.05 SOL for the opening buy before T-30.</p>
+                  <p className="mt-2 text-sm text-acid">Launch wallet needs SOL for rent before T-30.</p>
                 ) : null}
                 {!p.pendingMint ? (
                   <button
@@ -551,7 +573,11 @@ export function DataLauncherV3() {
             )}
           </Panel>
 
-          <Panel kicker="5 · SNIPER TAPE">
+          <Panel kicker="5 · SNIPER TAPE · ON-CHAIN LIVE">
+            <p className="mt-3 text-sm text-mute">
+              Unique wallets and SOL from the DBC pool tape, not Dexscreener. Curve SOL is the live quote vault.
+              {p.snipers?.at ? ` Updated ${Math.max(0, Math.round((now - p.snipers.at) / 1000))}s ago.` : ""}
+            </p>
             <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-5">
               <Mini k="Snipers" v={String(p.snipers?.snipers || 0)} />
               <Mini k="Buys" v={String(p.snipers?.buys || 0)} />
@@ -586,8 +612,8 @@ export function DataLauncherV3() {
           {launched ? (
             <Panel kicker="7 · SWAP + SEND">
               <p className="mt-3 max-w-3xl text-sm text-mute">
-                Launch wallet is for CEX fuel, the 0.05 opening buy, and STOP. Project holdings is the 8–11% bag. Swap
-                and send from the wallet you pick.
+                Launch wallet is for CEX fuel and STOP. Project holdings is the 8–11% bag. Swap and send from the wallet
+                you pick.
               </p>
               <div className="mt-4 flex flex-wrap gap-1">
                 {(["launch", "holdings"] as const).map((w) => (

@@ -18,7 +18,6 @@ const FILE = path.join(process.cwd(), "data", "batch-launch-v3.json");
 const KEYS_FILE = path.join(process.cwd(), "data", "batch-launch-v3-keys.json");
 const ARCHIVE_FILE = path.join(process.cwd(), "data", "batch-launch-v3-archive.json");
 
-export const V3_FIRST_BUY_SOL = 0.05;
 export const V3_MIN_LAUNCH_SOL = 0.2;
 export const V3_KEEP_LAMPORTS = 2_000_000;
 export const V3_MINT_LEAD_MS = SPHA_MINT_LEAD_MS;

@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, it } from "node:test";
 import { buildV3Brand, buildV3Tokenomics, V3_SUPPLIES } from "../lib/tools/v3/idea";
+import { chainSniperStats, DBC_POOL_AUTHORITY } from "../lib/tools/snipers";
 import { buildV3SiteKit, V3_LAYOUTS } from "../lib/tools/v3/site";
 import { isReservedV3Host, v3HandleOf, v3HostFromHeader, v3WebsiteOf } from "../lib/tools/v3/host";
 import { detectWorldId, dressSitePack, looksWarmBrown, worldOf } from "../lib/tools/v3/world";
@@ -83,16 +84,21 @@ describe("data launcher V3 SPHA replica", () => {
     const launch = read("src/lib/tools/v3/launch.ts");
     const project = read("src/lib/tools/v3/project.ts");
     assert.match(launch, /buildV3SphaDbcLaunchTx/);
-    assert.match(project, /V3_FIRST_BUY_SOL = 0\.05/);
+    assert.equal(project.includes("V3_FIRST_BUY_SOL"), false);
     assert.match(project, /V3_MIN_LAUNCH_SOL = 0\.2/);
     assert.match(project, /export function holdingsWalletOf/);
     assert.match(project, /const holdings = freshWallet/);
-    assert.match(launch, /maybeFirstBuy/);
+    assert.equal(launch.includes("maybeFirstBuy"), false);
     assert.match(launch, /buildDbcPoolMetadataTx/);
     assert.match(launch, /buildTeamMintTx/);
     assert.match(launch, /holdingsWalletOf/);
+    assert.match(launch, /chainSniperStats/);
+    assert.match(launch, /fetchAddressTxs/);
+    assert.match(launch, /Promise\.all/);
+    assert.match(launch, /sniperRefresh/);
     const mintFn = launch.slice(launch.indexOf("export async function mintPending"), launch.indexOf("async function finalizePending"));
-    assert.ok(mintFn.indexOf("buildDbcPoolMetadataTx") < mintFn.indexOf("maybeFirstBuy"));
+    assert.match(mintFn, /buildDbcPoolMetadataTx/);
+    assert.equal(mintFn.includes("buildDbcTradeTx"), false);
     assert.match(launch, /feeClaimer: payer/);
     assert.match(launch, /leftoverReceiver: isSolanaAddress\(holdings\) \? holdings : payer/);
     assert.equal(launch.includes("treasuryAddress"), false);
@@ -222,6 +228,10 @@ describe("data launcher V3 SPHA replica", () => {
     assert.match(ui, /action: "sign"/);
     assert.match(ui, /walletTab/);
     assert.match(ui, /walletDesk/);
+    assert.match(ui, /ON-CHAIN LIVE/);
+    assert.match(ui, /2_000/);
+    assert.equal(ui.includes("0.05 opening"), false);
+    assert.match(ui, /No opening buy/);
     const route = read("src/app/api/admin/tools/launcher-v3/route.ts");
     assert.match(route, /draftProject/);
     assert.match(route, /armCountdown/);
@@ -336,6 +346,45 @@ describe("data launcher V3 SPHA replica", () => {
     assert.match(serve, /sniffImageMime/);
     const pinata = read("src/lib/pinata.ts");
     assert.match(pinata, /imageExt/);
+  });
+
+  it("counts unique DBC snipers from the on-chain tape and skips project wallets", () => {
+    const mint = "Mint111111111111111111111111111111111111111";
+    const launch = "Launch1111111111111111111111111111111111111";
+    const holdings = "Hold111111111111111111111111111111111111111";
+    const wallets = Array.from({ length: 14 }, (_, i) => `Sniper${String(i).padStart(2, "0")}11111111111111111111111111111111`);
+    assert.equal(new Set(wallets).size, 14);
+    const buyTx = (who: string, sol: number, slot: number) => ({
+      slot,
+      feePayer: who,
+      nativeTransfers: [{ fromUserAccount: who, toUserAccount: DBC_POOL_AUTHORITY, amount: Math.round(sol * 1e9) }],
+      tokenTransfers: [{ fromUserAccount: DBC_POOL_AUTHORITY, toUserAccount: who, mint, tokenAmount: 1_998_000 }],
+    });
+    const tape = chainSniperStats({
+      mint,
+      skip: [launch, holdings],
+      curveSol: 8.12,
+      txs: [
+        {
+          slot: 1,
+          feePayer: holdings,
+          tokenTransfers: [{ fromUserAccount: launch, toUserAccount: holdings, mint, tokenAmount: 10_000_000 }],
+        },
+        buyTx(launch, 0.05, 2),
+        ...wallets.map((w, i) => buyTx(w, 0.5, 10 + i)),
+        {
+          slot: 40,
+          feePayer: wallets[0],
+          nativeTransfers: [{ fromUserAccount: DBC_POOL_AUTHORITY, toUserAccount: wallets[0], amount: 40_000_000 }],
+          tokenTransfers: [{ fromUserAccount: wallets[0], toUserAccount: DBC_POOL_AUTHORITY, mint, tokenAmount: 500_000 }],
+        },
+      ],
+    });
+    assert.equal(tape.snipers, 14);
+    assert.equal(tape.buys, 14);
+    assert.equal(tape.sells, 1);
+    assert.equal(tape.buySol, 7);
+    assert.equal(tape.curveSol, 8.12);
   });
 
   it("sniffs jpeg png gif webp avif heic and svg so the site can serve the real type", () => {
