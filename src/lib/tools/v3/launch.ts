@@ -33,13 +33,13 @@ import { SPHA_COUNTDOWN_MIN_MS } from "../../token/countdown";
 import { DUMP_SLIPPAGE_BPS } from "../identities";
 import { emptySnipers } from "../snipers";
 import {
-  allWalletsOf,
+  holdingsWalletOf,
   listTickableSites,
   loadKeys,
   loadProject,
   metaUrl,
-  saveKeys,
   saveProject,
+  teamWalletsOf,
   withActiveId,
   V3_FIRST_BUY_SOL,
   V3_KEEP_LAMPORTS,
@@ -139,6 +139,36 @@ export async function launchFuel(p?: V3Project): Promise<{
     }
   }
   return { wallet, sol, needSol: MIN_OWNER_SOL, enough: hot && sol >= MIN_OWNER_SOL, hot };
+}
+
+export async function holdingsFuel(p?: V3Project): Promise<{
+  wallet: string;
+  sol: number;
+  tokens: number;
+  hot: boolean;
+}> {
+  const project = p || (await loadProject());
+  const wallet = holdingsWalletOf(project);
+  const keys = await loadKeys();
+  const hot = Boolean(wallet && keys[wallet]);
+  let sol = 0;
+  let tokens = 0;
+  if (isSolanaAddress(wallet)) {
+    try {
+      sol = (await connection().getBalance(new PublicKey(wallet), "confirmed")) / LAMPORTS_PER_SOL;
+    } catch {
+      sol = 0;
+    }
+    const mint = project.mint || project.pendingMint;
+    if (isSolanaAddress(mint || "")) {
+      try {
+        tokens = (await tokenUiAmount(connection(), wallet, mint!)).amount || 0;
+      } catch {
+        tokens = 0;
+      }
+    }
+  }
+  return { wallet, sol, tokens, hot };
 }
 
 export async function armCountdown(launchAt: number): Promise<{ ok: boolean; project: V3Project; error?: string }> {
@@ -331,6 +361,7 @@ export async function mintPending(now = Date.now()): Promise<{
     await saveInflight({ mint, secret: bytesToB64(mintKp.secretKey), uri, image, at: Date.now() });
 
     const dbc = await import("../../launch/dbc");
+    const holdings = holdingsWalletOf(p);
     let built: Awaited<ReturnType<typeof dbc.buildV3SphaDbcLaunchTx>>;
     try {
       built = await dbc.buildV3SphaDbcLaunchTx({
@@ -340,7 +371,7 @@ export async function mintPending(now = Date.now()): Promise<{
         symbol: p.symbol,
         uri: uri.slice(0, 255),
         feeClaimer: payer,
-        leftoverReceiver: payer,
+        leftoverReceiver: isSolanaAddress(holdings) ? holdings : payer,
         curveTokens: p.curveTokens,
       });
     } catch (e) {
@@ -639,7 +670,7 @@ async function relaySol(from: Keypair, to: PublicKey, lamports?: number): Promis
   return { sig, lamports: send };
 }
 
-/** Sell every V3 bag. SOL stays in the isolated launch wallet. Never sends to protocol treasury. */
+/** Sell bags on the isolated launch wallet only. Project holdings stay. Never sends to protocol treasury. */
 export async function stopLaunch(): Promise<{ ok: boolean; soldSol: number; error?: string; project: V3Project }> {
   const p = await loadProject();
   if (!p.id) return { ok: false, soldSol: 0, error: "No V3 project.", project: p };
@@ -648,32 +679,22 @@ export async function stopLaunch(): Promise<{ ok: boolean; soldSol: number; erro
   if (!isSolanaAddress(destPk) || !keys[destPk]) {
     return { ok: false, soldSol: 0, error: "Launch wallet secret missing.", project: p };
   }
-  const dest = new PublicKey(destPk);
   let soldSol = 0;
   const mint = p.mint || p.pendingMint;
-  for (const pk of allWalletsOf(p)) {
-    const secret = keys[pk];
-    if (!secret) continue;
-    let kp: Keypair;
-    try {
-      kp = walletOf(secret);
-      if (kp.publicKey.toBase58() !== pk) continue;
-    } catch {
-      continue;
+  const secret = keys[destPk];
+  let kp: Keypair;
+  try {
+    kp = walletOf(secret);
+    if (kp.publicKey.toBase58() !== destPk) {
+      return { ok: false, soldSol: 0, error: "Launch wallet mismatch.", project: p };
     }
-    try {
-      soldSol += await sellAllHoldings(kp, mint);
-    } catch {
-      /* SOL still relocates */
-    }
-    if (pk !== destPk) {
-      try {
-        const relayed = await relaySol(kp, dest);
-        if (relayed) p.sigs.push(relayed.sig);
-      } catch {
-        /* leave it */
-      }
-    }
+  } catch {
+    return { ok: false, soldSol: 0, error: "Launch wallet secret missing.", project: p };
+  }
+  try {
+    soldSol += await sellAllHoldings(kp, mint);
+  } catch {
+    /* SOL stays in the launch wallet */
   }
   p.status = "stopped";
   p.stoppedAt = Date.now();
@@ -682,14 +703,20 @@ export async function stopLaunch(): Promise<{ ok: boolean; soldSol: number; erro
   return { ok: true, soldSol, project: p };
 }
 
-/** Send leftover SOL from the isolated launch wallet to a pasted address (CEX). Optional sol sends that amount and keeps the rest. */
-export async function sendLaunchSol(to: string, sol?: number): Promise<{ ok: boolean; movedSol: number; sig?: string; error?: string }> {
+/** Send leftover SOL from the isolated launch wallet or project holdings to a pasted address (CEX). */
+export async function sendLaunchSol(
+  to: string,
+  sol?: number,
+  from?: string,
+): Promise<{ ok: boolean; movedSol: number; sig?: string; error?: string }> {
   if (!isSolanaAddress(to)) return { ok: false, movedSol: 0, error: "Paste a valid Solana address." };
   const p = await loadProject();
   const keys = await loadKeys();
-  const secret = keys[p.launchWallet];
-  if (!secret) return { ok: false, movedSol: 0, error: "Launch wallet secret missing." };
-  if (to === p.launchWallet) return { ok: false, movedSol: 0, error: "Destination is the launch wallet." };
+  const holdings = holdingsWalletOf(p);
+  const fromPk = isSolanaAddress(from || "") && (from === p.launchWallet || from === holdings) ? from! : p.launchWallet;
+  const secret = keys[fromPk];
+  if (!secret) return { ok: false, movedSol: 0, error: "Wallet secret missing." };
+  if (to === fromPk) return { ok: false, movedSol: 0, error: "Destination is the same wallet." };
   const kp = walletOf(secret);
   try {
     const lamports = sol && sol > 0 ? Math.floor(sol * LAMPORTS_PER_SOL) : undefined;
@@ -712,25 +739,25 @@ function packedFeePayer(transaction: string): string {
   return keys[0]?.toBase58() || "";
 }
 
-/** Sign and broadcast a packed swap/send tx with the isolated launch wallet. Never returns the secret. */
+/** Sign and broadcast a packed swap/send tx with the isolated launch or holdings wallet. Never returns the secret. */
 export async function signLaunchTx(transaction: string): Promise<{ ok: boolean; signature?: string; error?: string }> {
   const packed = (transaction || "").trim();
   if (packed.length < 16) return { ok: false, error: "Missing transaction." };
   const p = await loadProject();
   const keys = await loadKeys();
-  const secret = keys[p.launchWallet];
-  if (!p.launchWallet || !secret) return { ok: false, error: "Launch wallet secret missing." };
+  const allowed = new Set([p.launchWallet, ...teamWalletsOf(p)].filter((pk) => isSolanaAddress(pk)));
+  const feePayer = packedFeePayer(packed);
+  if (!allowed.has(feePayer)) return { ok: false, error: "Transaction is not from a project wallet." };
+  const secret = keys[feePayer];
+  if (!secret) return { ok: false, error: "Project wallet secret missing." };
   let kp: Keypair;
   try {
     kp = walletOf(secret);
   } catch {
-    return { ok: false, error: "Launch wallet secret missing." };
+    return { ok: false, error: "Project wallet secret missing." };
   }
-  if (kp.publicKey.toBase58() !== p.launchWallet) return { ok: false, error: "Launch wallet mismatch." };
+  if (kp.publicKey.toBase58() !== feePayer) return { ok: false, error: "Project wallet mismatch." };
   try {
-    if (packedFeePayer(packed) !== p.launchWallet) {
-      return { ok: false, error: "Transaction is not from the launch wallet." };
-    }
     const signed = signPackedB64(packed, [kp]);
     const signature = await broadcastB64(signed, { skipPreflight: false });
     return { ok: true, signature };
@@ -823,12 +850,18 @@ export async function refreshSnipers(): Promise<void> {
 }
 
 /** Desk never returns secrets. */
-export function adminDeskShape(p: V3Project, fuel: Awaited<ReturnType<typeof launchFuel>>, now = Date.now()) {
+export function adminDeskShape(
+  p: V3Project,
+  fuel: Awaited<ReturnType<typeof launchFuel>>,
+  now = Date.now(),
+  holdings?: Awaited<ReturnType<typeof holdingsFuel>>,
+) {
   return {
     project: {
       ...p,
     },
     fuel,
+    holdings: holdings || { wallet: holdingsWalletOf(p), sol: 0, tokens: 0, hot: false },
     countdown: {
       launchAt: p.launchAt,
       mintAt: mintAtOf(p),

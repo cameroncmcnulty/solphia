@@ -39,7 +39,8 @@ export function ToolsSection() {
           <h2 className="mt-1 font-display text-3xl text-ghost">Select a data launcher</h2>
           <p className="mt-2 max-w-2xl text-sm text-mute">
             V1 is the original mashed launcher. V2 is the sniper scrambler. V3 builds a ticker.solphia.io site from an
-            idea and launches on the isolated $SPHA T-30 path. Wallet secrets are append-only and can never be wiped.
+            idea and launches with one 8–11% project bag on an isolated wallet. Wallet secrets are append-only and can
+            never be wiped.
           </p>
           <div className="mt-6 grid gap-4 md:grid-cols-3">
             <button
@@ -75,7 +76,7 @@ export function ToolsSection() {
               <div className="mt-1 font-display text-2xl text-ghost">DATA LAUNCHER V3</div>
               <p className="mt-2 text-sm text-mute">
                 One idea becomes a full memecoin website at ticker.solphia.io. Isolated launch wallet you fund from a CEX.
-                Exact $SPHA T-30 mint path. STOP liquidates into that wallet.
+                One 8–11% project bag you control from the dashboard. STOP leaves that bag.
               </p>
             </button>
           </div>

@@ -144,13 +144,13 @@ function viceWorld(): World {
       { title: "Street float", body: "Most of $TICK sits on a public Solana bonding curve. The supply on this page is the supply that mints." },
       { title: "Neon lock", body: "Curve fees stay on the pool. Partner LP locks on graduate. No silent mint switch after T-0." },
       { title: "Public drop", body: "The countdown on this HUD is the launch clock. The contract address publishes here at T-0." },
-      { title: "Crew on-chain", body: "Team, community, and treasury slices mint into isolated wallets at T-30. Percentages match this page." },
+      { title: "Crew on-chain", body: "An isolated project wallet holds 8–11% at T-30. The rest sits on the curve. Percentages match this page." },
     ],
     faq: [
       { q: "What is $TICK?", a: "$NAME is a Leonida-night memecoin on Solana. Neon HUD, public curve, published tokenomics, live countdown to the CA." },
       { q: "When does the CA go live?", a: "The contract address appears on this page at T-0. Until then the clock is the only public signal." },
       { q: "How do I buy?", a: "Fund a Solana wallet with SOL. At T-0 copy the CA from this site and swap on the bonding curve." },
-      { q: "Who holds the crew slice?", a: "Team, community, and treasury mint into isolated wallets at T-30. The bars on this page are the mint." },
+      { q: "Who holds the crew slice?", a: "One isolated project wallet holds 8–11% at T-30. The rest sits on the curve. The bars on this page are the mint." },
       { q: "Is liquidity locked?", a: "Unique curve config. Partner LP permanently locked at graduate. Opening buy is 0.05 SOL after pool metadata." },
     ],
     buySteps: [
@@ -199,7 +199,7 @@ function frogWorld(): World {
       { q: "What is $TICK?", a: "$NAME is a Solana memecoin with a public curve and a live countdown." },
       { q: "When does the CA go live?", a: "On this page at T-0." },
       { q: "How do I buy?", a: "Fund a Solana wallet. Copy the CA at T-0. Swap on the curve." },
-      { q: "Who holds team tokens?", a: "Isolated wallets at T-30. Bars on this page match the mint." },
+      { q: "Who holds team tokens?", a: "One isolated project wallet holds 8–11% at T-30. The rest sits on the curve. Bars on this page match the mint." },
       { q: "Is liquidity locked?", a: "Partner LP permanently locked at graduate." },
     ],
     buySteps: [
@@ -246,7 +246,7 @@ function dogWorld(): World {
       { q: "What is $TICK?", a: "$NAME is a Solana memecoin with a public curve and a live countdown." },
       { q: "When does the CA go live?", a: "On this page at T-0." },
       { q: "How do I buy?", a: "Fund a Solana wallet. Copy the CA at T-0. Swap on the curve." },
-      { q: "Who holds team tokens?", a: "Isolated wallets at T-30." },
+      { q: "Who holds team tokens?", a: "One isolated project wallet holds 8–11% at T-30. The rest sits on the curve." },
       { q: "Is liquidity locked?", a: "Partner LP permanently locked at graduate." },
     ],
     buySteps: [
@@ -293,7 +293,7 @@ function catWorld(): World {
       { q: "What is $TICK?", a: "$NAME is a Solana memecoin with a public curve and a live countdown." },
       { q: "When does the CA go live?", a: "On this page at T-0." },
       { q: "How do I buy?", a: "Fund a Solana wallet. Copy the CA at T-0. Swap on the curve." },
-      { q: "Who holds team tokens?", a: "Isolated wallets at T-30." },
+      { q: "Who holds team tokens?", a: "One isolated project wallet holds 8–11% at T-30. The rest sits on the curve." },
       { q: "Is liquidity locked?", a: "Partner LP permanently locked at graduate." },
     ],
     buySteps: [
@@ -340,7 +340,7 @@ function aiWorld(): World {
       { q: "What is $TICK?", a: "$NAME is a Solana memecoin with a public curve and a live countdown." },
       { q: "When does the CA go live?", a: "On this page at T-0." },
       { q: "How do I buy?", a: "Fund a Solana wallet. Copy the CA at T-0. Swap on the curve." },
-      { q: "Who holds team tokens?", a: "Isolated wallets at T-30." },
+      { q: "Who holds team tokens?", a: "One isolated project wallet holds 8–11% at T-30. The rest sits on the curve." },
       { q: "Is liquidity locked?", a: "Partner LP permanently locked at graduate." },
     ],
     buySteps: [
@@ -387,7 +387,7 @@ function spaceWorld(): World {
       { q: "What is $TICK?", a: "$NAME is a Solana memecoin with a public curve and a live countdown." },
       { q: "When does the CA go live?", a: "On this page at T-0." },
       { q: "How do I buy?", a: "Fund a Solana wallet. Copy the CA at T-0. Swap on the curve." },
-      { q: "Who holds team tokens?", a: "Isolated wallets at T-30." },
+      { q: "Who holds team tokens?", a: "One isolated project wallet holds 8–11% at T-30. The rest sits on the curve." },
       { q: "Is liquidity locked?", a: "Partner LP permanently locked at graduate." },
     ],
     buySteps: [
@@ -434,7 +434,7 @@ function animeWorld(): World {
       { q: "What is $TICK?", a: "$NAME is a Solana memecoin with a public curve and a live countdown." },
       { q: "When does the CA go live?", a: "On this page at T-0." },
       { q: "How do I buy?", a: "Fund a Solana wallet. Copy the CA at T-0. Swap on the curve." },
-      { q: "Who holds team tokens?", a: "Isolated wallets at T-30." },
+      { q: "Who holds team tokens?", a: "One isolated project wallet holds 8–11% at T-30. The rest sits on the curve." },
       { q: "Is liquidity locked?", a: "Partner LP permanently locked at graduate." },
     ],
     buySteps: [
@@ -481,7 +481,7 @@ function goldWorld(): World {
       { q: "What is $TICK?", a: "$NAME is a Solana memecoin with a public curve and a live countdown." },
       { q: "When does the CA go live?", a: "On this page at T-0." },
       { q: "How do I buy?", a: "Fund a Solana wallet. Copy the CA at T-0. Swap on the curve." },
-      { q: "Who holds team tokens?", a: "Isolated wallets at T-30." },
+      { q: "Who holds team tokens?", a: "One isolated project wallet holds 8–11% at T-30. The rest sits on the curve." },
       { q: "Is liquidity locked?", a: "Partner LP permanently locked at graduate." },
     ],
     buySteps: [
@@ -528,7 +528,7 @@ function fireWorld(): World {
       { q: "What is $TICK?", a: "$NAME is a Solana memecoin with a public curve and a live countdown." },
       { q: "When does the CA go live?", a: "On this page at T-0." },
       { q: "How do I buy?", a: "Fund a Solana wallet. Copy the CA at T-0. Swap on the curve." },
-      { q: "Who holds team tokens?", a: "Isolated wallets at T-30." },
+      { q: "Who holds team tokens?", a: "One isolated project wallet holds 8–11% at T-30. The rest sits on the curve." },
       { q: "Is liquidity locked?", a: "Partner LP permanently locked at graduate." },
     ],
     buySteps: [
@@ -575,7 +575,7 @@ function oceanWorld(): World {
       { q: "What is $TICK?", a: "$NAME is a Solana memecoin with a public curve and a live countdown." },
       { q: "When does the CA go live?", a: "On this page at T-0." },
       { q: "How do I buy?", a: "Fund a Solana wallet. Copy the CA at T-0. Swap on the curve." },
-      { q: "Who holds team tokens?", a: "Isolated wallets at T-30." },
+      { q: "Who holds team tokens?", a: "One isolated project wallet holds 8–11% at T-30. The rest sits on the curve." },
       { q: "Is liquidity locked?", a: "Partner LP permanently locked at graduate." },
     ],
     buySteps: [
@@ -622,7 +622,7 @@ function skullWorld(): World {
       { q: "What is $TICK?", a: "$NAME is a Solana memecoin with a public curve and a live countdown." },
       { q: "When does the CA go live?", a: "On this page at T-0." },
       { q: "How do I buy?", a: "Fund a Solana wallet. Copy the CA at T-0. Swap on the curve." },
-      { q: "Who holds team tokens?", a: "Isolated wallets at T-30." },
+      { q: "Who holds team tokens?", a: "One isolated project wallet holds 8–11% at T-30. The rest sits on the curve." },
       { q: "Is liquidity locked?", a: "Partner LP permanently locked at graduate." },
     ],
     buySteps: [
@@ -669,7 +669,7 @@ function apeWorld(): World {
       { q: "What is $TICK?", a: "$NAME is a Solana memecoin with a public curve and a live countdown." },
       { q: "When does the CA go live?", a: "On this page at T-0." },
       { q: "How do I buy?", a: "Fund a Solana wallet. Copy the CA at T-0. Swap on the curve." },
-      { q: "Who holds team tokens?", a: "Isolated wallets at T-30." },
+      { q: "Who holds team tokens?", a: "One isolated project wallet holds 8–11% at T-30. The rest sits on the curve." },
       { q: "Is liquidity locked?", a: "Partner LP permanently locked at graduate." },
     ],
     buySteps: [
@@ -728,7 +728,7 @@ function genericWorld(seed: string): World {
       { q: "What is $TICK?", a: "$NAME is a Solana memecoin with published tokenomics and a live countdown to the public CA." },
       { q: "When does the CA go live?", a: "The contract address appears on this page at T-0. Until then the clock is the only public signal." },
       { q: "How do I buy?", a: "Fund a Solana wallet with SOL. At T-0 copy the CA from this site and swap on the bonding curve." },
-      { q: "Who holds the team slice?", a: "Team, community, and treasury slices mint into isolated wallets at T-30. Percentages on this page match the mint." },
+      { q: "Who holds the team slice?", a: "One isolated project wallet holds 8–11% at T-30. The rest sits on the curve. Percentages on this page match the mint." },
       { q: "Is liquidity locked?", a: "The curve uses a unique config. Partner LP is permanently locked at graduate. Opening buy is 0.05 SOL after pool metadata." },
     ],
     buySteps: [

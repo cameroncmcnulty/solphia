@@ -619,9 +619,9 @@ export async function buildSphaDbcLaunchTx(opts: {
 }
 
 /**
- * V3 isolated replica of official $SPHA DBC create.
- * Same Token-2022 hook, 1% / 50% creator, 40→585 MC, unique config.
- * feeClaimer is the isolated launch wallet so fees are not traced to protocol treasury.
+ * V3 isolated DBC create. Token-2022 hook so T-30 can mint the 8–11% project bag, then revoke.
+ * Unique config, 1% flat, creator fee 0 (100% to isolated feeClaimer). 40→585 MC.
+ * leftoverReceiver is the project holdings wallet (post-grad leftover only).
  * Never writes the shared pad dbcConfig.
  */
 export async function buildV3SphaDbcLaunchTx(opts: {
@@ -703,7 +703,7 @@ async function v3SphaCurveConfig(curveTokens: number) {
       },
       dynamicFeeEnabled: false,
       collectFeeMode: m.CollectFeeMode.QuoteToken,
-      creatorTradingFeePercentage: 50,
+      creatorTradingFeePercentage: 0,
       poolCreationFee: 0,
       enableFirstSwapWithMinFee: false,
     },

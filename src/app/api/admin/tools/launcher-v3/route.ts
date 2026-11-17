@@ -7,6 +7,7 @@ import {
   adminDeskShape,
   armCountdown,
   clearCountdown,
+  holdingsFuel,
   launchFuel,
   refreshSnipers,
   sendLaunchSol,
@@ -29,6 +30,7 @@ const Body = z.object({
   telegram: z.string().max(120).optional(),
   launchAt: z.number().optional(),
   dest: z.string().max(44).optional(),
+  from: z.string().max(44).optional(),
   sol: z.number().positive().max(10_000).optional(),
   transaction: z.string().min(16).max(80_000).optional(),
 });
@@ -46,6 +48,12 @@ async function desk() {
     enough: false,
     hot: false,
   }));
+  const holdings = await holdingsFuel(project).catch(() => ({
+    wallet: "",
+    sol: 0,
+    tokens: 0,
+    hot: false,
+  }));
   const archive = (await loadArchive().catch(() => [])).filter((r) => r.status !== "deleted");
   const sites = sitesList.map((s) => ({
     id: s.id,
@@ -61,7 +69,7 @@ async function desk() {
     launchAt: s.launchAt,
     layout: s.layout,
   }));
-  return { ...adminDeskShape(project, fuel), archive, sites, version: "v3" as const };
+  return { ...adminDeskShape(project, fuel, Date.now(), holdings), archive, sites, version: "v3" as const };
 }
 
 export async function GET(req: NextRequest) {
@@ -127,7 +135,7 @@ export async function POST(req: NextRequest) {
     if (b.action === "send") {
       const dest = (b.dest || "").trim();
       if (!isSolanaAddress(dest)) return NextResponse.json({ error: "bad_dest" }, { status: 400 });
-      const sent = await sendLaunchSol(dest, b.sol);
+      const sent = await sendLaunchSol(dest, b.sol, b.from);
       if (!sent.ok) {
         return NextResponse.json({ error: "send_failed", message: sent.error, sendResult: sent, ...(await desk()) }, { status: 400 });
       }

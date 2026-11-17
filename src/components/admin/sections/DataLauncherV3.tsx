@@ -66,6 +66,7 @@ type SiteRow = {
 type Desk = {
   project: Project;
   fuel: { wallet: string; sol: number; needSol: number; enough: boolean; hot: boolean };
+  holdings?: { wallet: string; sol: number; tokens: number; hot: boolean };
   countdown: { launchAt: number; mintAt: number; remainingMs: number; inMintWindow: boolean; timedOut: boolean };
   archive?: { id: string; symbol: string; mint?: string; status: string; snipers: Snipers }[];
   sites?: SiteRow[];
@@ -89,6 +90,7 @@ export function DataLauncherV3() {
   const [dest, setDest] = useState("");
   const [sendAmt, setSendAmt] = useState("");
   const [walletTab, setWalletTab] = useState<"swap" | "receive" | "send">("swap");
+  const [walletDesk, setWalletDesk] = useState<"launch" | "holdings">("launch");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [copied, setCopied] = useState("");
@@ -210,20 +212,20 @@ export function DataLauncherV3() {
     <div className="tools-desk space-y-6">
       <section className="panel relative overflow-hidden rounded-2xl p-6">
         <div className="tools-scan" aria-hidden />
-        <div className="font-mono text-[10px] tracking-[0.3em] text-acid">DATA LAUNCHER V3 · SPHA REPLICA</div>
-        <h2 className="mt-1 font-display text-3xl text-ghost">Idea → unique site → isolated $SPHA-path launch</h2>
+        <div className="font-mono text-[10px] tracking-[0.3em] text-acid">DATA LAUNCHER V3 · 8–11% PROJECT BAG</div>
+        <h2 className="mt-1 font-display text-3xl text-ghost">Idea → unique site → isolated launch</h2>
         <p className="mt-2 max-w-3xl text-sm text-mute">
           Enter a token idea. Grok Imagine generates a niche mascot and cinematic hero, then V3 builds a unique
-          high-tech memecoin website (randomized layout, type, motion, copy) at ticker.solphia.io. Tokenomics match the
-          mint. Launch path is the official $SPHA T-30 replica on an isolated wallet. Open any site dashboard or
-          unpublish it. Keys stay saved.
+          high-tech memecoin website at ticker.solphia.io. One isolated project wallet holds a random 8–11%. The rest
+          sits on the curve. Fresh wallets and a unique DBC config per site. STOP leaves the project bag. Keys stay
+          saved.
         </p>
       </section>
 
       <Panel kicker="SITES · OPEN DASHBOARD OR DELETE">
         <p className="mt-3 text-sm text-mute">
-          Every drafted website lives here. OPEN DASHBOARD loads its wallet, countdown, and swap widget. DELETE
-          unpublishes the public site. Launch wallet keys are never wiped.
+          Every drafted website lives here. OPEN DASHBOARD loads its launch wallet, project holdings, countdown, and
+          swap widget. DELETE unpublishes the public site. Launch wallet keys stay saved.
         </p>
         {sites.length ? (
           <div className="mt-4 grid gap-3 md:grid-cols-2">
@@ -402,8 +404,9 @@ export function DataLauncherV3() {
 
           <Panel kicker="TOKENOMICS · MATCHES THE MINT">
             <p className="mt-3 text-sm text-mute">
-              Total supply {fmtSupply(p.supply)}. Team {fmtSupply(p.teamTokens)} · curve {fmtSupply(p.curveTokens)}. These
-              numbers are what T-30 mints.
+              Total supply {fmtSupply(p.supply)}. Project bag {fmtSupply(p.teamTokens)} (8–11%) · curve{" "}
+              {fmtSupply(p.curveTokens)}. T-30 mints the project slice into one isolated holdings wallet. STOP does not
+              sell it.
             </p>
             <div className="mt-4 grid gap-3 md:grid-cols-2">
               {p.slices.map((s) => (
@@ -448,6 +451,31 @@ export function DataLauncherV3() {
             </div>
             {copied ? <p className="mt-2 font-mono text-[11px] text-acid">{copied} copied</p> : null}
           </Panel>
+
+          {desk?.holdings?.wallet ? (
+            <Panel kicker="3B · PROJECT HOLDINGS · 8–11% · DASHBOARD CONTROL">
+              <p className="mt-3 max-w-3xl text-sm text-mute">
+                Isolated project bag. Lands at T-30. Swap and send from panel 7. STOP leaves this wallet alone. Fund a
+                little SOL here if you want to swap the bag.
+              </p>
+              <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+                <Mini k="Holdings SOL" v={solAmt(desk.holdings.sol || 0)} />
+                <Mini k="Token bag" v={fmtSupply(desk.holdings.tokens || 0)} />
+                <Mini k="Hot key" v={desk.holdings.hot ? "yes" : "no"} />
+                <Mini k="Share" v={p.slices.find((s) => s.id !== "lp")?.pct || "8–11%"} />
+              </div>
+              <div className="mt-4 rounded-2xl border border-acid/30 bg-acid/5 px-4 py-3">
+                <div className="font-mono text-[10px] tracking-[0.2em] text-acid">HOLDINGS WALLET</div>
+                <button
+                  type="button"
+                  className="mt-2 break-all text-left font-mono text-sm text-ghost"
+                  onClick={() => copy("holdings wallet", desk.holdings?.wallet)}
+                >
+                  {desk.holdings.wallet}
+                </button>
+              </div>
+            </Panel>
+          ) : null}
 
           <Panel kicker="4 · COUNTDOWN · T-30 MINT · T-0 PUBLIC CA">
             {armed ? (
@@ -536,8 +564,8 @@ export function DataLauncherV3() {
 
           <Panel kicker="6 · STOP">
             <p className="mt-3 max-w-3xl text-sm text-mute">
-              STOP sells every bag on the launch wallet and isolated team wallets at 99% slippage. SOL stays in that
-              launch wallet until you send it from the swap widget to a CEX.
+              STOP sells bags on the isolated launch wallet at 99% slippage. The 8–11% project holdings stay. SOL from
+              the launch wallet sits there until you send it to a CEX.
             </p>
             {p.returnedSol ? <p className="mt-2 font-mono text-[12px] text-acid">Sold {solAmt(p.returnedSol)}</p> : null}
             <div className="mt-4 flex flex-wrap gap-3">
@@ -545,7 +573,7 @@ export function DataLauncherV3() {
                 type="button"
                 disabled={busy || !ca}
                 onClick={() => {
-                  if (!window.confirm("STOP? This sells every V3 bag and leaves SOL in the isolated launch wallet.")) return;
+                  if (!window.confirm("STOP? This sells the launch-wallet bag only. Project holdings stay.")) return;
                   void act("stop");
                 }}
                 className="btn-acid rounded-full px-8 py-3 text-sm tracking-[0.2em] disabled:opacity-40"
@@ -556,12 +584,24 @@ export function DataLauncherV3() {
           </Panel>
 
           {launched ? (
-            <Panel kicker="7 · LAUNCH WALLET · SWAP + SEND">
+            <Panel kicker="7 · SWAP + SEND">
               <p className="mt-3 max-w-3xl text-sm text-mute">
-                This widget is preloaded with the isolated launch wallet for this site. Swap and send from here. After
-                STOP, SOL stays in this wallet until you send it to a CEX so you can fund the next launch.
+                Launch wallet is for CEX fuel, the 0.05 opening buy, and STOP. Project holdings is the 8–11% bag. Swap
+                and send from the wallet you pick.
               </p>
               <div className="mt-4 flex flex-wrap gap-1">
+                {(["launch", "holdings"] as const).map((w) => (
+                  <button
+                    key={w}
+                    type="button"
+                    onClick={() => setWalletDesk(w)}
+                    className={`rounded-full px-3 py-1.5 font-mono text-[10px] ${walletDesk === w ? "bg-acid text-void" : "bg-white/8 text-white/50"}`}
+                  >
+                    {w === "launch" ? "launch wallet" : "project holdings"}
+                  </button>
+                ))}
+              </div>
+              <div className="mt-2 flex flex-wrap gap-1">
                 {(["swap", "receive", "send"] as const).map((t) => (
                   <button
                     key={t}
@@ -573,19 +613,23 @@ export function DataLauncherV3() {
                   </button>
                 ))}
               </div>
-              {walletTab === "swap" ? (
+              {walletTab === "swap" && (walletDesk === "launch" ? p.launchWallet : desk?.holdings?.wallet) ? (
                 <div className="mt-3">
                   <SwapWidget
-                    key={`${p.launchWallet}-${ca}`}
-                    owner={p.launchWallet}
+                    key={`${walletDesk === "launch" ? p.launchWallet : desk?.holdings?.wallet}-${ca}`}
+                    owner={(walletDesk === "launch" ? p.launchWallet : desk?.holdings?.wallet) || p.launchWallet}
                     defaultMint={ca}
                     defaultSymbol={p.symbol}
                     defaultName={p.name}
                     defaultImage={p.image}
-                    defaultSide={p.status === "live" || p.status === "stopped" ? "sell" : "buy"}
-                    widgetId={`v3-swap-${p.launchWallet}`}
+                    defaultSide={walletDesk === "holdings" || p.status === "live" || p.status === "stopped" ? "sell" : "buy"}
+                    widgetId={`v3-swap-${walletDesk === "launch" ? p.launchWallet : desk?.holdings?.wallet}`}
                     tokens={ca ? [{ mint: ca, symbol: p.symbol, name: p.name, image: p.image }] : undefined}
-                    note="Isolated launch wallet. Liquidation stays here until you send it to a CEX."
+                    note={
+                      walletDesk === "holdings"
+                        ? "Project holdings. STOP leaves this bag. Fund a little SOL to swap."
+                        : "Isolated launch wallet. STOP sells this bag. Send leftover SOL to a CEX."
+                    }
                     signTx={signLaunchSwap}
                     onDone={() => load().catch(() => {})}
                   />
@@ -593,15 +637,26 @@ export function DataLauncherV3() {
               ) : null}
               {walletTab === "receive" ? (
                 <div className="mt-4 rounded-2xl border border-acid/30 bg-acid/5 px-4 py-3">
-                  <div className="font-mono text-[10px] tracking-[0.2em] text-acid">LAUNCH WALLET</div>
+                  <div className="font-mono text-[10px] tracking-[0.2em] text-acid">
+                    {walletDesk === "holdings" ? "HOLDINGS WALLET" : "LAUNCH WALLET"}
+                  </div>
                   <button
                     type="button"
                     className="mt-2 break-all text-left font-mono text-sm text-ghost"
-                    onClick={() => copy("launch wallet", p.launchWallet)}
+                    onClick={() =>
+                      copy(
+                        walletDesk === "holdings" ? "holdings wallet" : "launch wallet",
+                        walletDesk === "holdings" ? desk?.holdings?.wallet : p.launchWallet,
+                      )
+                    }
                   >
-                    {p.launchWallet}
+                    {walletDesk === "holdings" ? desk?.holdings?.wallet : p.launchWallet}
                   </button>
-                  <p className="mt-2 font-mono text-[11px] text-mute">Fund from a CEX. SOL after STOP sits here.</p>
+                  <p className="mt-2 font-mono text-[11px] text-mute">
+                    {walletDesk === "holdings"
+                      ? "8–11% bag lands here at T-30. Fund a little SOL to swap."
+                      : "Fund from a CEX. SOL after STOP sits here."}
+                  </p>
                 </div>
               ) : null}
               {walletTab === "send" ? (
@@ -629,7 +684,8 @@ export function DataLauncherV3() {
                     disabled={busy || dest.length < 32}
                     onClick={() => {
                       const n = Number(sendAmt);
-                      void act("send", Number.isFinite(n) && n > 0 ? { dest, sol: n } : { dest });
+                      const from = walletDesk === "holdings" ? desk?.holdings?.wallet : p.launchWallet;
+                      void act("send", Number.isFinite(n) && n > 0 ? { dest, sol: n, from } : { dest, from });
                     }}
                     className="btn-ghost rounded-full px-5 py-2 text-sm disabled:opacity-40"
                   >

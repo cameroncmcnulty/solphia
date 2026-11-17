@@ -24,7 +24,14 @@ describe("data launcher V3 SPHA replica", () => {
     assert.equal(tokens, omics.supply);
     assert.equal(omics.curveTokens + omics.teamTokens, omics.supply);
     assert.ok(omics.slices.some((s) => s.id === "lp"));
-    assert.ok(omics.slices.some((s) => s.id === "dev"));
+    assert.ok(omics.slices.some((s) => s.id === "project"));
+    assert.equal(omics.slices.length, 2);
+    const project = omics.slices.find((s) => s.id === "project")!;
+    assert.ok(project.bps >= 800 && project.bps <= 1100);
+    for (const seed of ["alpha", "beta", "gta 6", "frog", "dogwifhat", "sol cat"]) {
+      const row = buildV3Tokenomics(seed).slices.find((s) => s.id === "project")!;
+      assert.ok(row.bps >= 800 && row.bps <= 1100, seed);
+    }
   });
 
   it("turns an idea into a ticker.solphia.io website and matching name", () => {
@@ -72,30 +79,35 @@ describe("data launcher V3 SPHA replica", () => {
     assert.equal(project.includes("ownerAddress"), false);
   });
 
-  it("replicas the official $SPHA T-30 mint path on an isolated wallet", () => {
+  it("mints an 8-11% project bag into one isolated holdings wallet at T-30", () => {
     const launch = read("src/lib/tools/v3/launch.ts");
     const project = read("src/lib/tools/v3/project.ts");
     assert.match(launch, /buildV3SphaDbcLaunchTx/);
     assert.match(project, /V3_FIRST_BUY_SOL = 0\.05/);
     assert.match(project, /V3_MIN_LAUNCH_SOL = 0\.2/);
+    assert.match(project, /export function holdingsWalletOf/);
+    assert.match(project, /const holdings = freshWallet/);
     assert.match(launch, /maybeFirstBuy/);
     assert.match(launch, /buildDbcPoolMetadataTx/);
     assert.match(launch, /buildTeamMintTx/);
+    assert.match(launch, /holdingsWalletOf/);
     const mintFn = launch.slice(launch.indexOf("export async function mintPending"), launch.indexOf("async function finalizePending"));
     assert.ok(mintFn.indexOf("buildDbcPoolMetadataTx") < mintFn.indexOf("maybeFirstBuy"));
     assert.match(launch, /feeClaimer: payer/);
-    assert.match(launch, /leftoverReceiver: payer/);
+    assert.match(launch, /leftoverReceiver: isSolanaAddress\(holdings\) \? holdings : payer/);
     assert.equal(launch.includes("treasuryAddress"), false);
     assert.equal(launch.includes("createCoin"), false);
     assert.equal(launch.includes("withLaunch"), false);
     assert.equal(launch.includes("sphaMint"), false);
     assert.equal(launch.includes("loadProjectServerKeypair"), false);
     assert.match(launch, /Never sends to protocol treasury/);
+    assert.match(launch, /Project holdings stay/);
+    assert.match(launch, /Transaction is not from a project wallet/);
     const dbc = read("src/lib/launch/dbc.ts");
     assert.match(dbc, /buildV3SphaDbcLaunchTx/);
     assert.match(dbc, /createConfigAndPoolWithTransferHook/);
     assert.match(dbc, /SPHA_TRANSFER_HOOK/);
-    assert.match(dbc, /creatorTradingFeePercentage: 50/);
+    assert.match(dbc, /creatorTradingFeePercentage: 0/);
     assert.match(dbc, /initialMarketCap: 40/);
     assert.match(dbc, /migrationMarketCap: 585/);
     assert.equal(dbc.includes("book.dbcConfig"), false);
@@ -205,21 +217,26 @@ describe("data launcher V3 SPHA replica", () => {
     assert.match(ui, /SEND SOL/);
     assert.match(ui, /T-30/);
     assert.match(ui, /<SwapWidget/);
-    assert.match(ui, /owner=\{p\.launchWallet\}/);
+    assert.match(ui, /p\.launchWallet/);
+    assert.match(ui, /project holdings/i);
     assert.match(ui, /action: "sign"/);
     assert.match(ui, /walletTab/);
+    assert.match(ui, /walletDesk/);
     const route = read("src/app/api/admin/tools/launcher-v3/route.ts");
     assert.match(route, /draftProject/);
     assert.match(route, /armCountdown/);
     assert.match(route, /stopLaunch/);
     assert.match(route, /sendLaunchSol/);
     assert.match(route, /signLaunchTx/);
+    assert.match(route, /holdingsFuel/);
     assert.match(route, /tickV3/);
     const launch = read("src/lib/tools/v3/launch.ts");
     assert.match(launch, /export async function signLaunchTx/);
-    assert.match(launch, /Transaction is not from the launch wallet/);
+    assert.match(launch, /Transaction is not from a project wallet/);
+    assert.match(launch, /export async function holdingsFuel/);
     const project = read("src/lib/tools/v3/project.ts");
     assert.match(project, /export async function isV3LaunchWallet/);
+    assert.match(project, /teamWalletsOf\(p\)\.includes\(clean\)/);
     const build = read("src/app/api/swap/build/route.ts");
     assert.match(build, /isV3LaunchWallet/);
     const quote = read("src/app/api/swap/quote/route.ts");

@@ -6,7 +6,7 @@ import { worldOf, type WorldLabels, type WorldTheme } from "./world";
 export const V3_SUPPLIES = [100_000_000, 200_000_000, 420_000_000, 690_000_000, 1_000_000_000] as const;
 export const V3_DECIMALS = 6;
 
-export type V3SliceId = "dev" | "community" | "treasury" | "lp";
+export type V3SliceId = "project" | "dev" | "community" | "treasury" | "lp";
 
 export type V3Slice = {
   id: V3SliceId;
@@ -98,39 +98,20 @@ function tokensFor(bps: number, supply: number): number {
   return Math.floor((supply * bps) / 10_000);
 }
 
-/** SPHA-shaped tokenomics (dev / community / treasury / curve) with randomized supply and slice sizes. */
+/** One dashboard-controlled project bag at 8.00–11.00%. Rest on the curve. */
 export function buildV3Tokenomics(seed: string): { supply: number; slices: V3Slice[]; curveTokens: number; teamTokens: number } {
   const r = rng(`omics:${seed}`);
   const supply = V3_SUPPLIES[Math.floor(r() * V3_SUPPLIES.length)]!;
-  const dev = 700 + Math.floor(r() * 251);
-  const community = 800 + Math.floor(r() * 301);
-  const treasury = 350 + Math.floor(r() * 201);
-  const team = dev + community + treasury;
-  const curve = 10_000 - team;
+  const project = 800 + Math.min(300, Math.floor(r() * 301));
+  const curve = 10_000 - project;
   const slices: V3Slice[] = [
     {
-      id: "dev",
-      label: "Dev team",
-      bps: dev,
-      pct: pctLabel(dev),
-      tokens: tokensFor(dev, supply),
-      note: "Team allocation. Minted into an isolated team wallet at T-30.",
-    },
-    {
-      id: "community",
-      label: "Community",
-      bps: community,
-      pct: pctLabel(community),
-      tokens: tokensFor(community, supply),
-      note: "Community, ecosystem, and rewards. Minted at T-30.",
-    },
-    {
-      id: "treasury",
-      label: "Treasury",
-      bps: treasury,
-      pct: pctLabel(treasury),
-      tokens: tokensFor(treasury, supply),
-      note: "Growth and marketing. Minted at T-30 into an isolated treasury wallet.",
+      id: "project",
+      label: "Project",
+      bps: project,
+      pct: pctLabel(project),
+      tokens: tokensFor(project, supply),
+      note: "Dashboard-controlled project wallet. Lands at T-30. STOP leaves this bag alone.",
     },
     {
       id: "lp",

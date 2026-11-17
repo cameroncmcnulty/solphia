@@ -264,7 +264,9 @@ export function normalizeProject(raw: unknown): V3Project {
         .map((s) => {
           const row = s as Record<string, unknown>;
           return {
-            id: (row.id === "dev" || row.id === "community" || row.id === "treasury" || row.id === "lp" ? row.id : "lp") as V3SliceRow["id"],
+            id: (row.id === "project" || row.id === "dev" || row.id === "community" || row.id === "treasury" || row.id === "lp"
+              ? row.id
+              : "lp") as V3SliceRow["id"],
             label: str(row.label) || "Slice",
             pct: str(row.pct) || "0%",
             bps: Math.max(0, Math.floor(num(row.bps))),
@@ -521,13 +523,13 @@ export async function withActiveId<T>(id: string, fn: () => Promise<T>): Promise
   }
 }
 
-/** True when this pubkey is an isolated V3 launch wallet. Skip house 1% so swaps do not skim into protocol. */
+/** Isolated V3 launch or project-holdings wallet, including deleted-site tombstones. Skip house 1%. */
 export async function isV3LaunchWallet(pk: string): Promise<boolean> {
   const clean = (pk || "").trim();
   if (!isSolanaAddress(clean)) return false;
   try {
     const book = await loadBook();
-    return Object.values(book.sites).some((p) => p.launchWallet === clean && p.status !== "deleted");
+    return Object.values(book.sites).some((p) => p.launchWallet === clean || teamWalletsOf(p).includes(clean));
   } catch {
     return false;
   }
@@ -615,16 +617,10 @@ export async function archiveProject(p: V3Project): Promise<V3ArchiveRow[]> {
   return next;
 }
 
-function applyBrand(
-  p: V3Project,
-  brand: V3Brand,
-  kit: V3SiteKit,
-  launchPk: string,
-  team: Record<Exclude<V3Slice["id"], "lp">, string>,
-): V3Project {
+function applyBrand(p: V3Project, brand: V3Brand, kit: V3SiteKit, launchPk: string, holdingsPk: string): V3Project {
   const slices: V3SliceRow[] = brand.slices.map((s) => ({
     ...s,
-    wallet: s.id === "lp" ? "" : team[s.id as Exclude<V3Slice["id"], "lp">] || launchPk,
+    wallet: s.id === "lp" ? "" : holdingsPk || launchPk,
   }));
   return {
     ...p,
@@ -679,9 +675,7 @@ export async function draftProject(idea: string): Promise<{ ok: true; project: V
   let kit = buildV3SiteKit(brand);
   kit = await enrichSiteKit(brand, kit).catch(() => kit);
   const launch = freshWallet();
-  const dev = freshWallet();
-  const community = freshWallet();
-  const treasury = freshWallet();
+  const holdings = freshWallet();
   const now = Date.now();
   let project: V3Project = applyBrand(
     {
@@ -693,13 +687,11 @@ export async function draftProject(idea: string): Promise<{ ok: true; project: V
     brand,
     kit,
     launch.pk,
-    { dev: dev.pk, community: community.pk, treasury: treasury.pk },
+    holdings.pk,
   );
   await saveKeys({
     [launch.pk]: launch.secret,
-    [dev.pk]: dev.secret,
-    [community.pk]: community.secret,
-    [treasury.pk]: treasury.secret,
+    [holdings.pk]: holdings.secret,
   });
   const art = await generateV3Art({ artPrompt: kit.artPrompt, heroPrompt: kit.heroPrompt, handle: brand.handle }).catch(
     () => ({ image: "", heroImage: "" as string, artCid: undefined as string | undefined, heroCid: undefined as string | undefined }),
@@ -798,6 +790,12 @@ export async function patchBrand(opts: {
 
 export function teamWalletsOf(p: V3Project): string[] {
   return [...new Set(p.slices.filter((s) => s.id !== "lp" && isSolanaAddress(s.wallet)).map((s) => s.wallet))];
+}
+
+export function holdingsWalletOf(p: V3Project): string {
+  const project = p.slices.find((s) => s.id === "project" && isSolanaAddress(s.wallet));
+  if (project) return project.wallet;
+  return teamWalletsOf(p)[0] || "";
 }
 
 export function allWalletsOf(p: V3Project): string[] {
